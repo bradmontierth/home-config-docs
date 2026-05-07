@@ -7,7 +7,7 @@ services:
       HOME_AGENT_HOME_CONFIG: /home/pi/home_config
       HOME_AGENT_SESSION_ROOT: /home/pi/home_config/home-agent/sessions
       HOME_AGENT_RUNNER_URL: http://127.0.0.1:8766
-      HOME_AGENT_PARAKEET_URL: http://jetson-tts:8090
+      HOME_AGENT_PARAKEET_URL: http://192.168.10.197:8090
       # Set this before exposing the service to normal LAN use.
       # HOME_AGENT_TOKEN: change-me
     volumes:

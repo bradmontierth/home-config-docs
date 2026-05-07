@@ -1,6 +1,7 @@
 import asyncio
 import json
 import os
+import re
 import shutil
 import subprocess
 import time
@@ -94,9 +95,15 @@ async def run_ffmpeg(input_path: Path, output_path: Path) -> None:
 
 async def transcribe_wav(wav_path: Path) -> dict:
     url = f"{PARAKEET_URL.rstrip('/')}/parakeet/transcribe?chunk_seconds=120&context_seconds=2"
+    wav_bytes = wav_path.read_bytes()
     async with httpx.AsyncClient(timeout=300.0) as client:
-        with wav_path.open("rb") as fh:
-            response = await client.post(url, content=fh, headers={"Content-Type": "audio/wav"})
+        try:
+            response = await client.post(url, content=wav_bytes, headers={"Content-Type": "audio/wav"})
+        except httpx.RequestError as exc:
+            raise HTTPException(
+                status_code=502,
+                detail={"message": "Parakeet transcription request failed", "url": url, "error": str(exc)},
+            ) from exc
     if response.status_code >= 400:
         raise HTTPException(
             status_code=502,
@@ -110,10 +117,10 @@ async def transcribe_wav(wav_path: Path) -> dict:
 
 
 def extract_text(payload: dict) -> str:
-    for key in ("text", "transcript", "result"):
+    for key in ("text", "transcript", "transcript_text", "result"):
         value = payload.get(key)
         if isinstance(value, str) and value.strip():
-            return value.strip()
+            return normalize_transcript_text(value)
     if isinstance(payload.get("segments"), list):
         parts = []
         for segment in payload["segments"]:
@@ -122,6 +129,14 @@ def extract_text(payload: dict) -> str:
         if parts:
             return " ".join(parts).strip()
     return json.dumps(payload, indent=2)
+
+
+def normalize_transcript_text(value: str) -> str:
+    value = value.strip()
+    match = re.search(r"\btext='([^']*)'", value)
+    if match:
+        return match.group(1).strip()
+    return value
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -144,7 +159,7 @@ async def transcribe(request: Request, audio: UploadFile = File(...)) -> dict:
     sid = uuid.uuid4().hex[:12]
     path = session_dir(sid)
     suffix = Path(audio.filename or "input.webm").suffix or ".webm"
-    original = path / f"input{suffix}"
+    original = path / f"source{suffix}"
     wav = path / "input.wav"
     original.write_bytes(await audio.read())
     await run_ffmpeg(original, wav)
@@ -152,7 +167,7 @@ async def transcribe(request: Request, audio: UploadFile = File(...)) -> dict:
     text = extract_text(payload)
     (path / "transcript.txt").write_text(text + "\n", encoding="utf-8")
     (path / "parakeet.json").write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
-    return {"session_seed": sid, "text": text, "raw": payload}
+    return {"session_seed": sid, "text": text}
 
 
 @app.post("/api/sessions")

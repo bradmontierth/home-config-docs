@@ -50,7 +50,7 @@ docker compose up -d --build
 The compose file uses `network_mode: host` so the container can reach:
 
 - `http://127.0.0.1:8766` for the runner
-- `http://jetson-tts:8090` for Parakeet
+- `http://192.168.10.197:8090` for Parakeet
 
 ## Systemd
 
