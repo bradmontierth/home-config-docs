@@ -2,6 +2,7 @@ import asyncio
 import json
 import os
 import pty
+import re
 import select
 import signal
 import subprocess
@@ -26,6 +27,7 @@ CODEX_SANDBOX = os.environ.get("HOME_AGENT_CODEX_SANDBOX", "workspace-write")
 CODEX_APPROVALS = os.environ.get("HOME_AGENT_CODEX_APPROVALS", "never")
 CODEX_DANGER_BYPASS = os.environ.get("HOME_AGENT_CODEX_DANGER_BYPASS", "0") == "1"
 CODEX_MODE = os.environ.get("HOME_AGENT_CODEX_MODE", "exec")
+MAX_COMMAND_OUTPUT_CHARS = int(os.environ.get("HOME_AGENT_MAX_COMMAND_OUTPUT_CHARS", "1800"))
 
 
 class StartRequest(BaseModel):
@@ -271,6 +273,13 @@ def format_exec_event(line: str) -> str:
         if output_tokens is None:
             return "[codex] done\n"
         return f"[codex] done ({output_tokens} output tokens)\n"
+    if event_type == "error":
+        message = event.get("message") or "unknown error"
+        return f"[codex error] {message}\n"
+    if event_type == "turn.failed":
+        error = event.get("error") or {}
+        message = error.get("message") or "turn failed"
+        return f"[codex failed] {message}\n"
     if event_type == "item.started":
         item = event.get("item") or {}
         return format_item_started(item)
@@ -296,11 +305,12 @@ def format_item_completed(item: dict) -> str:
         text = item.get("text") or ""
         return f"\n{text.strip()}\n" if text.strip() else ""
     if item_type == "command_execution":
+        command = item.get("command") or item.get("cmd") or ""
         output = item.get("aggregated_output") or item.get("output") or item.get("stdout") or ""
         exit_code = item.get("exit_code")
         chunks = []
         if output:
-            chunks.append(str(output).rstrip())
+            chunks.append(format_command_output(command, str(output)))
         if exit_code not in (None, 0):
             chunks.append(f"[exit {exit_code}]")
         return "\n".join(chunks).rstrip() + "\n" if chunks else ""
@@ -308,6 +318,60 @@ def format_item_completed(item: dict) -> str:
         text = item.get("text") or item.get("summary") or ""
         return f"{text.strip()}\n" if isinstance(text, str) and text.strip() else ""
     return ""
+
+
+def format_command_output(command: str, output: str) -> str:
+    output = output.rstrip()
+    if not output:
+        return ""
+
+    read_targets = read_command_targets(command)
+    if read_targets:
+        line_count = len(output.splitlines())
+        target_label = ", ".join(read_targets[:3])
+        if len(read_targets) > 3:
+            target_label += f", +{len(read_targets) - 3} more"
+        return f"[read {target_label}; {line_count} lines hidden]"
+
+    if len(output) <= MAX_COMMAND_OUTPUT_CHARS:
+        return output
+
+    line_count = len(output.splitlines())
+    return f"{output[:MAX_COMMAND_OUTPUT_CHARS].rstrip()}\n[output truncated: {line_count} lines, {len(output)} chars]"
+
+
+def read_command_targets(command: str) -> list[str]:
+    targets: list[str] = []
+    patterns = [
+        r"(?:^|[\s;&|])cat\s+((?:[^\s|;&]+(?:\s+|$))+)",
+        r"(?:^|[\s;&|])sed\s+-n\s+(?:['\"][^'\"]+['\"]|[^\s]+)\s+([^\s|;&]+)",
+        r"(?:^|[\s;&|])head\s+(?:-[^\s]+\s+)?([^\s|;&]+)",
+        r"(?:^|[\s;&|])tail\s+(?:-[^\s]+\s+)?([^\s|;&]+)",
+    ]
+    for pattern in patterns:
+        for match in re.finditer(pattern, command):
+            raw = match.group(1)
+            for token in re.split(r"\s+", raw.strip()):
+                token = token.strip("'\"")
+                if token and not token.startswith("-") and looks_like_file_target(token):
+                    targets.append(token)
+    return dedupe_preserving_order(targets)
+
+
+def looks_like_file_target(token: str) -> bool:
+    if token in {"/dev/null", "-"}:
+        return False
+    return bool(re.search(r"[/.\w-]+\.(md|txt|yaml|yml|json|toml|ini|conf|service|py|kt|kts|js|ts|css|html|sh)$", token))
+
+
+def dedupe_preserving_order(values: list[str]) -> list[str]:
+    seen: set[str] = set()
+    result: list[str] = []
+    for value in values:
+        if value not in seen:
+            seen.add(value)
+            result.append(value)
+    return result
 
 
 app = FastAPI(title=APP_NAME)
