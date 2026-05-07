@@ -296,7 +296,7 @@ def format_item_completed(item: dict) -> str:
         text = item.get("text") or ""
         return f"\n{text.strip()}\n" if text.strip() else ""
     if item_type == "command_execution":
-        output = item.get("output") or item.get("stdout") or ""
+        output = item.get("aggregated_output") or item.get("output") or item.get("stdout") or ""
         exit_code = item.get("exit_code")
         chunks = []
         if output:
@@ -369,9 +369,15 @@ async def session_ws(websocket: WebSocket, session_id: str) -> None:
                 text = str(event.get("data", ""))
                 if not text.endswith("\n"):
                     text += "\n"
-                await session.send_input(text)
+                try:
+                    await session.send_input(text)
+                except HTTPException as exc:
+                    await websocket.send_json({"type": "output", "data": f"\n[input ignored: {exc.detail}]\n"})
             elif event_type == "raw":
-                await session.send_input(str(event.get("data", "")))
+                try:
+                    await session.send_input(str(event.get("data", "")))
+                except HTTPException as exc:
+                    await websocket.send_json({"type": "output", "data": f"\n[input ignored: {exc.detail}]\n"})
             elif event_type == "stop":
                 await session.stop()
 

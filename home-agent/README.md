@@ -110,15 +110,12 @@ The runner defaults to:
 HOME_AGENT_CODEX_SANDBOX=workspace-write
 HOME_AGENT_CODEX_APPROVALS=never
 HOME_AGENT_CODEX_MODE=exec
-```
-
-`HOME_AGENT_CODEX_MODE=exec` uses clean non-interactive JSON output for phone readability. The older interactive TUI mode can be enabled with `HOME_AGENT_CODEX_MODE=interactive`, but Android needs a real terminal renderer for that output. The prompt wrapper still tells Codex to pause before disruptive actions and wait for phone approval. For a higher-risk mode, the runner also supports:
-
-```text
 HOME_AGENT_CODEX_DANGER_BYPASS=1
 ```
 
-Only use that when the host account and network boundary are intentionally constrained.
+`HOME_AGENT_CODEX_MODE=exec` uses clean non-interactive JSON output for phone readability. `HOME_AGENT_CODEX_DANGER_BYPASS=1` launches Codex with `--dangerously-bypass-approvals-and-sandbox`; this is intentionally broad and should stay LAN-only until a safer app toggle exists. The older interactive TUI mode can be enabled with `HOME_AGENT_CODEX_MODE=interactive`, but Android needs a real terminal renderer for that output.
+
+Only use danger bypass when the host account and network boundary are intentionally constrained.
 
 ## Parakeet
 
