@@ -8,6 +8,7 @@ WorkingDirectory=/home/pi/home_config/home-agent/runner
 Environment=HOME_AGENT_HOME_CONFIG=/home/pi/home_config
 Environment=HOME_AGENT_SESSION_ROOT=/home/pi/home_config/home-agent/sessions
 Environment=HOME_AGENT_CODEX_BIN=/usr/bin/codex
+Environment=HOME_AGENT_CODEX_MODE=exec
 Environment=HOME_AGENT_CODEX_SANDBOX=workspace-write
 Environment=HOME_AGENT_CODEX_APPROVALS=never
 ExecStart=/home/pi/home_config/home-agent/.venv-runner/bin/uvicorn app:app --host 127.0.0.1 --port 8766

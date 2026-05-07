@@ -109,9 +109,10 @@ The runner defaults to:
 ```text
 HOME_AGENT_CODEX_SANDBOX=workspace-write
 HOME_AGENT_CODEX_APPROVALS=never
+HOME_AGENT_CODEX_MODE=exec
 ```
 
-That avoids native terminal approval prompts, but the prompt wrapper tells Codex to pause before disruptive actions and wait for phone approval. For a higher-risk mode, the runner also supports:
+`HOME_AGENT_CODEX_MODE=exec` uses clean non-interactive JSON output for phone readability. The older interactive TUI mode can be enabled with `HOME_AGENT_CODEX_MODE=interactive`, but Android needs a real terminal renderer for that output. The prompt wrapper still tells Codex to pause before disruptive actions and wait for phone approval. For a higher-risk mode, the runner also supports:
 
 ```text
 HOME_AGENT_CODEX_DANGER_BYPASS=1

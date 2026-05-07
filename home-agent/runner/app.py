@@ -25,6 +25,7 @@ CODEX_MODEL = os.environ.get("HOME_AGENT_CODEX_MODEL")
 CODEX_SANDBOX = os.environ.get("HOME_AGENT_CODEX_SANDBOX", "workspace-write")
 CODEX_APPROVALS = os.environ.get("HOME_AGENT_CODEX_APPROVALS", "never")
 CODEX_DANGER_BYPASS = os.environ.get("HOME_AGENT_CODEX_DANGER_BYPASS", "0") == "1"
+CODEX_MODE = os.environ.get("HOME_AGENT_CODEX_MODE", "exec")
 
 
 class StartRequest(BaseModel):
@@ -54,6 +55,7 @@ class CodexSession:
         self.loop = asyncio.get_running_loop()
         self.proc: Optional[subprocess.Popen] = None
         self.master_fd: Optional[int] = None
+        self.use_pty = CODEX_MODE == "interactive"
         self.session_dir = DEFAULT_SESSION_ROOT / time.strftime("%Y-%m-%d") / session_id
         self.session_dir.mkdir(parents=True, exist_ok=True)
         self.log_path = self.session_dir / "codex.log"
@@ -62,11 +64,25 @@ class CodexSession:
         self.prompt_path.write_text(request.prompt, encoding="utf-8")
 
     def command(self, prompt: str) -> list[str]:
-        cmd = [CODEX_BIN, "--no-alt-screen", "-C", str(self.cwd)]
+        if CODEX_MODE == "exec":
+            cmd = [
+                CODEX_BIN,
+                "exec",
+                "--json",
+                "--color",
+                "never",
+                "-C",
+                str(self.cwd),
+                "--skip-git-repo-check",
+            ]
+        else:
+            cmd = [CODEX_BIN, "--no-alt-screen", "-C", str(self.cwd)]
         if CODEX_DANGER_BYPASS:
             cmd.append("--dangerously-bypass-approvals-and-sandbox")
         else:
-            cmd.extend(["-s", CODEX_SANDBOX, "-a", CODEX_APPROVALS])
+            cmd.extend(["-s", CODEX_SANDBOX])
+            if CODEX_MODE != "exec":
+                cmd.extend(["-a", CODEX_APPROVALS])
         if CODEX_MODEL:
             cmd.extend(["-m", CODEX_MODEL])
         cmd.append(prompt)
@@ -76,8 +92,6 @@ class CodexSession:
         if not self.cwd.exists():
             raise HTTPException(status_code=400, detail=f"cwd does not exist: {self.cwd}")
 
-        master_fd, slave_fd = pty.openpty()
-        self.master_fd = master_fd
         cmd = self.command(prompt)
         env = os.environ.copy()
         env.setdefault("TERM", "xterm-256color")
@@ -92,10 +106,13 @@ class CodexSession:
             "danger_bypass": CODEX_DANGER_BYPASS,
             "sandbox": CODEX_SANDBOX,
             "approvals": CODEX_APPROVALS,
+            "mode": CODEX_MODE,
         }
         self.meta_path.write_text(json.dumps(metadata, indent=2) + "\n", encoding="utf-8")
 
-        try:
+        if self.use_pty:
+            master_fd, slave_fd = pty.openpty()
+            self.master_fd = master_fd
             self.proc = subprocess.Popen(
                 cmd,
                 cwd=str(self.cwd),
@@ -106,15 +123,29 @@ class CodexSession:
                 close_fds=True,
                 preexec_fn=os.setsid,
             )
-        finally:
             os.close(slave_fd)
+            read_target = self._read_pty_loop
+        else:
+            self.proc = subprocess.Popen(
+                cmd,
+                cwd=str(self.cwd),
+                env=env,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                bufsize=1,
+                close_fds=True,
+                preexec_fn=os.setsid,
+            )
+            read_target = self._read_exec_loop
 
         self.status = "running"
-        threading.Thread(target=self._read_loop, name=f"reader-{self.session_id}", daemon=True).start()
+        threading.Thread(target=read_target, name=f"reader-{self.session_id}", daemon=True).start()
         threading.Thread(target=self._wait_loop, name=f"wait-{self.session_id}", daemon=True).start()
         await self.broadcast({"type": "status", "status": self.status, "session_id": self.session_id})
 
-    def _read_loop(self) -> None:
+    def _read_pty_loop(self) -> None:
         assert self.master_fd is not None
         with self.log_path.open("ab") as log:
             while True:
@@ -136,6 +167,21 @@ class CodexSession:
                     )
                 except OSError:
                     break
+
+    def _read_exec_loop(self) -> None:
+        assert self.proc is not None
+        assert self.proc.stdout is not None
+        with self.log_path.open("a", encoding="utf-8") as log:
+            for line in self.proc.stdout:
+                log.write(line)
+                log.flush()
+                text = format_exec_event(line)
+                if not text:
+                    continue
+                self.loop.call_soon_threadsafe(
+                    asyncio.create_task,
+                    self.broadcast({"type": "output", "data": text}),
+                )
 
     def _wait_loop(self) -> None:
         assert self.proc is not None
@@ -164,7 +210,17 @@ class CodexSession:
             self.subscribers.discard(queue)
 
     async def send_input(self, text: str) -> None:
-        if self.status != "running" or self.master_fd is None:
+        if self.status != "running":
+            raise HTTPException(status_code=409, detail="session is not running")
+        if not self.use_pty:
+            await self.broadcast(
+                {
+                    "type": "output",
+                    "data": "\n[input queued for future sessions; this Codex exec run cannot receive live steering]\n",
+                }
+            )
+            return
+        if self.master_fd is None:
             raise HTTPException(status_code=409, detail="session is not running")
         os.write(self.master_fd, text.encode("utf-8"))
 
@@ -194,6 +250,64 @@ def redact_prompt(cmd: list[str]) -> list[str]:
     if not cmd:
         return cmd
     return [*cmd[:-1], "<prompt>"]
+
+
+def format_exec_event(line: str) -> str:
+    if line.startswith("Reading additional input from stdin"):
+        return ""
+    try:
+        event = json.loads(line)
+    except json.JSONDecodeError:
+        return line
+
+    event_type = event.get("type")
+    if event_type == "thread.started":
+        return "[codex] session started\n"
+    if event_type == "turn.started":
+        return "[codex] working...\n"
+    if event_type == "turn.completed":
+        usage = event.get("usage") or {}
+        output_tokens = usage.get("output_tokens")
+        if output_tokens is None:
+            return "[codex] done\n"
+        return f"[codex] done ({output_tokens} output tokens)\n"
+    if event_type == "item.started":
+        item = event.get("item") or {}
+        return format_item_started(item)
+    if event_type == "item.completed":
+        item = event.get("item") or {}
+        return format_item_completed(item)
+    return ""
+
+
+def format_item_started(item: dict) -> str:
+    item_type = item.get("type")
+    if item_type == "command_execution":
+        command = item.get("command") or item.get("cmd") or ""
+        return f"\n$ {command}\n" if command else "\n[codex] running command\n"
+    if item_type == "reasoning":
+        return "\n[codex] reasoning\n"
+    return ""
+
+
+def format_item_completed(item: dict) -> str:
+    item_type = item.get("type")
+    if item_type == "agent_message":
+        text = item.get("text") or ""
+        return f"\n{text.strip()}\n" if text.strip() else ""
+    if item_type == "command_execution":
+        output = item.get("output") or item.get("stdout") or ""
+        exit_code = item.get("exit_code")
+        chunks = []
+        if output:
+            chunks.append(str(output).rstrip())
+        if exit_code not in (None, 0):
+            chunks.append(f"[exit {exit_code}]")
+        return "\n".join(chunks).rstrip() + "\n" if chunks else ""
+    if item_type == "reasoning":
+        text = item.get("text") or item.get("summary") or ""
+        return f"{text.strip()}\n" if isinstance(text, str) and text.strip() else ""
+    return ""
 
 
 app = FastAPI(title=APP_NAME)
