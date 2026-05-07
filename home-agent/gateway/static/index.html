@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Home Agent</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <section class="topbar">
+        <div>
+          <h1>Home Agent</h1>
+          <p id="status">Ready</p>
+        </div>
+        <button id="stopBtn" class="icon danger" type="button" disabled title="Stop session">Stop</button>
+      </section>
+
+      <section class="talk">
+        <button id="talkBtn" class="talk-button" type="button" aria-label="Push to talk">
+          <span>Hold</span>
+          <strong>Talk</strong>
+        </button>
+      </section>
+
+      <section class="transcript-panel">
+        <label for="transcript">Transcript</label>
+        <textarea id="transcript" rows="4" placeholder="Your transcribed request will appear here."></textarea>
+        <div class="actions">
+          <button id="runBtn" type="button" disabled>Run Codex</button>
+          <button id="clearBtn" type="button">Clear</button>
+        </div>
+      </section>
+
+      <section class="terminal-panel">
+        <div id="terminal" class="terminal" aria-live="polite"></div>
+      </section>
+
+      <section class="control-panel">
+        <div class="quick-actions">
+          <button data-send="Approved. Proceed with the proposed action.">Approve</button>
+          <button data-send="Do not proceed with that action. Explain a safer alternative.">Reject</button>
+          <button data-send="Pause and summarize what you have found so far.">Summarize</button>
+        </div>
+        <form id="sendForm" class="send-form">
+          <input id="message" type="text" autocomplete="off" placeholder="Steer the session..." />
+          <button type="submit">Send</button>
+        </form>
+      </section>
+    </main>
+    <script src="/static/app.js"></script>
+  </body>
+</html>

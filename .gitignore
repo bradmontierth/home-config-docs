@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv*/
+
+# Home Agent sessions/logs
+home-agent/sessions/
+
+# Android / Gradle
+.gradle/
+**/build/
+local.properties
+*.apk
+*.aab
+
+# Editors / OS
+.DS_Store
+.idea/
+*.iml

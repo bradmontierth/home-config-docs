@@ -1,0 +1,21 @@
+[Unit]
+Description=Home Agent Gateway
+After=network-online.target home-agent-runner.service
+Wants=network-online.target
+Requires=home-agent-runner.service
+
+[Service]
+Type=simple
+User=pi
+Group=pi
+WorkingDirectory=/home/pi/home_config/home-agent/gateway
+Environment=HOME_AGENT_HOME_CONFIG=/home/pi/home_config
+Environment=HOME_AGENT_SESSION_ROOT=/home/pi/home_config/home-agent/sessions
+Environment=HOME_AGENT_RUNNER_URL=http://127.0.0.1:8766
+Environment=HOME_AGENT_PARAKEET_URL=http://jetson-tts:8090
+ExecStart=/home/pi/home_config/home-agent/.venv-gateway/bin/uvicorn app:app --host 0.0.0.0 --port 8767
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

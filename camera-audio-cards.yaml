@@ -1,0 +1,79 @@
+type: picture-elements
+camera_image: camera.simon_cam
+camera_view: live
+elements:
+  - type: icon
+    icon: mdi:volume-high
+    title: Listen
+    tap_action:
+      action: perform-action
+      perform_action: media_player.play_media
+      target:
+        entity_id: media_player.gmediarender_on_kitchen_big_speakers
+      data:
+        media_content_id: "http://192.168.10.250:8099/simon.mp3"
+        media_content_type: music
+    style:
+      top: 10%
+      left: 86%
+      color: white
+      background: "rgba(0, 0, 0, 0.45)"
+      border-radius: 50%
+      padding: 8px
+
+  - type: icon
+    icon: mdi:volume-off
+    title: Stop
+    tap_action:
+      action: perform-action
+      perform_action: media_player.media_stop
+      target:
+        entity_id: media_player.gmediarender_on_kitchen_big_speakers
+    style:
+      top: 10%
+      left: 95%
+      color: white
+      background: "rgba(0, 0, 0, 0.45)"
+      border-radius: 50%
+      padding: 8px
+
+---
+
+type: picture-elements
+camera_image: camera.claire_cam_master
+camera_view: live
+elements:
+  - type: icon
+    icon: mdi:volume-high
+    title: Listen
+    tap_action:
+      action: perform-action
+      perform_action: media_player.play_media
+      target:
+        entity_id: media_player.gmediarender_on_kitchen_big_speakers
+      data:
+        media_content_id: "http://192.168.10.250:8099/claire.mp3"
+        media_content_type: music
+    style:
+      top: 10%
+      left: 86%
+      color: white
+      background: "rgba(0, 0, 0, 0.45)"
+      border-radius: 50%
+      padding: 8px
+
+  - type: icon
+    icon: mdi:volume-off
+    title: Stop
+    tap_action:
+      action: perform-action
+      perform_action: media_player.media_stop
+      target:
+        entity_id: media_player.gmediarender_on_kitchen_big_speakers
+    style:
+      top: 10%
+      left: 95%
+      color: white
+      background: "rgba(0, 0, 0, 0.45)"
+      border-radius: 50%
+      padding: 8px
