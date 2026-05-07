@@ -54,7 +54,27 @@ The compose file uses `network_mode: host` so the container can reach:
 
 ## Systemd
 
-Install Python dependencies:
+Without root, run the Codex runner as a user service and the gateway through Docker Compose:
+
+```bash
+mkdir -p ~/.config/systemd/user
+cp deploy/systemd/home-agent-runner.user.service ~/.config/systemd/user/home-agent-runner.service
+systemctl --user daemon-reload
+systemctl --user enable --now home-agent-runner
+docker compose up -d --build
+```
+
+Check status:
+
+```bash
+systemctl --user status home-agent-runner
+docker compose ps
+curl http://127.0.0.1:8767/health
+```
+
+The user service remains available while the user's systemd manager is running. To make it survive reboots before login, enable lingering with `loginctl enable-linger pi`, which requires root.
+
+For system-level services, install Python dependencies:
 
 ```bash
 cd /home/pi/home_config/home-agent
