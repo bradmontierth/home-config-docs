@@ -42,6 +42,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -461,12 +463,13 @@ fun PushToTalkButton(isRecording: Boolean, targetLabel: String, onStart: () -> U
 @Composable
 fun Terminal(text: String, modifier: Modifier = Modifier) {
     val scrollState = rememberScrollState()
+    val terminalText = remember(text) { terminalAnnotatedString(text) }
     LaunchedEffect(text.length) {
         scrollState.scrollTo(scrollState.maxValue)
     }
     SelectionContainer {
         Text(
-            text = text.ifBlank { "Terminal output will appear here." },
+            text = terminalText,
             modifier = modifier
                 .fillMaxWidth()
                 .background(Color(0xFF070908), RoundedCornerShape(8.dp))
@@ -474,6 +477,61 @@ fun Terminal(text: String, modifier: Modifier = Modifier) {
                 .verticalScroll(scrollState),
             color = Color(0xFFF4F2ED),
             fontFamily = FontFamily.Monospace
+        )
+    }
+}
+
+
+fun terminalAnnotatedString(text: String) = buildAnnotatedString {
+    val value = text.ifBlank { "Terminal output will appear here." }
+    val lines = value.split('\n')
+    lines.forEachIndexed { index, line ->
+        val style = terminalLineStyle(line)
+        pushStyle(style)
+        append(line)
+        pop()
+        if (index < lines.lastIndex) {
+            append("\n")
+        }
+    }
+}
+
+
+fun terminalLineStyle(line: String): SpanStyle {
+    val trimmed = line.trim()
+    return when {
+        trimmed.contains("AWAITING_PHONE_APPROVAL:") -> SpanStyle(
+            color = Color(0xFFFFD27A),
+            fontWeight = FontWeight.Bold
+        )
+        trimmed.startsWith("[codex error]") ||
+            trimmed.startsWith("[codex failed]") ||
+            trimmed.contains(" error]") -> SpanStyle(
+                color = Color(0xFFFF9A90),
+                fontWeight = FontWeight.Medium
+            )
+        trimmed.startsWith("$ ") -> SpanStyle(
+            color = Color(0xFFA8BEDA),
+            fontWeight = FontWeight.Medium
+        )
+        trimmed.startsWith("[read ") ||
+            trimmed.contains(" output hidden:") ||
+            trimmed.startsWith("[search output hidden:") ||
+            trimmed.startsWith("[query output hidden:") ||
+            trimmed.startsWith("[request output hidden:") ||
+            trimmed.startsWith("[logs output hidden:") -> SpanStyle(
+                color = Color(0xFF7F8A82)
+            )
+        trimmed.startsWith("[codex]") ||
+            trimmed.startsWith("[resume]") -> SpanStyle(
+                color = Color(0xFFB7C7B8)
+            )
+        trimmed.startsWith("[") && trimmed.endsWith("]") -> SpanStyle(
+            color = Color(0xFF9AA49C)
+        )
+        else -> SpanStyle(
+            color = Color(0xFFF4F2ED),
+            fontWeight = FontWeight.Normal
         )
     }
 }

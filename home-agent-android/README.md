@@ -11,6 +11,7 @@ Basic native Android client for the LAN Home Agent gateway.
 - Lists saved sessions through `/api/sessions`.
 - Resumes an archived session through `/api/sessions/{session_id}/resume` when you send clarification after the prior run has exited.
 - Streams terminal output through `/ws/sessions/{session_id}`.
+- Renders terminal output with subtle styling so agent messages, commands, hidden output summaries, approvals, and errors are easier to scan.
 - Sends Approve, Reject, Summary, Stop, and free-text Reply messages.
 
 The app intentionally does not talk to Parakeet or Codex directly. Those stay behind the gateway/runner services in `/home/pi/home_config/home-agent`.
