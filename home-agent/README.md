@@ -124,6 +124,8 @@ HOME_AGENT_CODEX_DANGER_BYPASS=1
 
 `HOME_AGENT_CODEX_MODE=exec` uses clean non-interactive JSON output for phone readability. `HOME_AGENT_CODEX_DANGER_BYPASS=1` launches Codex with `--dangerously-bypass-approvals-and-sandbox`; this is intentionally broad and should stay LAN-only until a safer app toggle exists. The older interactive TUI mode can be enabled with `HOME_AGENT_CODEX_MODE=interactive`, but Android needs a real terminal renderer for that output.
 
+By default, successful command output is collapsed in the phone stream so file reads, searches, API JSON, and log scans do not overwhelm the terminal. Raw JSONL still remains in each session `codex.log`. Set `HOME_AGENT_SHOW_COMMAND_OUTPUT=1` on the runner only when you want successful command stdout streamed to the phone.
+
 Only use danger bypass when the host account and network boundary are intentionally constrained.
 
 ## Parakeet

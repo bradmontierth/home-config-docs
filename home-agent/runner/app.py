@@ -28,6 +28,7 @@ CODEX_APPROVALS = os.environ.get("HOME_AGENT_CODEX_APPROVALS", "never")
 CODEX_DANGER_BYPASS = os.environ.get("HOME_AGENT_CODEX_DANGER_BYPASS", "0") == "1"
 CODEX_MODE = os.environ.get("HOME_AGENT_CODEX_MODE", "exec")
 MAX_COMMAND_OUTPUT_CHARS = int(os.environ.get("HOME_AGENT_MAX_COMMAND_OUTPUT_CHARS", "1800"))
+SHOW_SUCCESSFUL_COMMAND_OUTPUT = os.environ.get("HOME_AGENT_SHOW_COMMAND_OUTPUT", "0") == "1"
 
 
 class StartRequest(BaseModel):
@@ -361,45 +362,83 @@ def format_item_completed(item: dict) -> str:
         command = item.get("command") or item.get("cmd") or ""
         output = item.get("aggregated_output") or item.get("output") or item.get("stdout") or ""
         exit_code = item.get("exit_code")
-        chunks = []
-        if output:
-            chunks.append(format_command_output(command, str(output)))
-        if exit_code not in (None, 0):
-            chunks.append(f"[exit {exit_code}]")
-        return "\n".join(chunks).rstrip() + "\n" if chunks else ""
+        text = format_command_result(command, str(output), exit_code)
+        return f"{text.rstrip()}\n" if text else ""
     if item_type == "reasoning":
         text = item.get("text") or item.get("summary") or ""
         return f"{text.strip()}\n" if isinstance(text, str) and text.strip() else ""
     return ""
 
 
-def format_command_output(command: str, output: str) -> str:
+def format_command_result(command: str, output: str, exit_code: Optional[int]) -> str:
+    output = output.rstrip()
+    if exit_code not in (None, 0):
+        chunks = [f"[exit {exit_code}]"]
+        if output:
+            chunks.append(format_command_output(command, output, force_show=True))
+        return "\n".join(chunks)
+
+    read_targets = read_command_targets(command)
+    if read_targets:
+        return summarize_hidden_output("read", read_targets, output)
+
+    action = command_action(command)
+    if not output:
+        return f"[{action} completed]"
+
+    if SHOW_SUCCESSFUL_COMMAND_OUTPUT:
+        return format_command_output(command, output, force_show=False)
+
+    line_count = len(output.splitlines())
+    return f"[{action} output hidden: {line_count} lines, {len(output)} chars]"
+
+
+def format_command_output(command: str, output: str, force_show: bool = False) -> str:
     output = output.rstrip()
     if not output:
         return ""
 
     read_targets = read_command_targets(command)
     if read_targets:
-        line_count = len(output.splitlines())
-        target_label = ", ".join(read_targets[:3])
-        if len(read_targets) > 3:
-            target_label += f", +{len(read_targets) - 3} more"
-        return f"[read {target_label}; {line_count} lines hidden]"
+        return summarize_hidden_output("read", read_targets, output)
 
-    if len(output) <= MAX_COMMAND_OUTPUT_CHARS:
+    if not force_show and len(output) <= MAX_COMMAND_OUTPUT_CHARS:
         return output
 
     line_count = len(output.splitlines())
     return f"{output[:MAX_COMMAND_OUTPUT_CHARS].rstrip()}\n[output truncated: {line_count} lines, {len(output)} chars]"
 
 
+def summarize_hidden_output(action: str, targets: list[str], output: str) -> str:
+    line_count = len(output.splitlines())
+    target_label = ", ".join(targets[:3])
+    if len(targets) > 3:
+        target_label += f", +{len(targets) - 3} more"
+    return f"[{action} {target_label}; {line_count} lines hidden]"
+
+
+def command_action(command: str) -> str:
+    lowered = command.lower()
+    if re.search(r"(^|[\s;&|\"'])rg\s+", lowered):
+        return "search"
+    if re.search(r"(^|[\s;&|\"'])jq\s+", lowered):
+        return "query"
+    if re.search(r"(^|[\s;&|\"'])curl\s+", lowered):
+        return "request"
+    if re.search(r"(^|[\s;&|\"'])docker\s+logs\s+", lowered):
+        return "logs"
+    if re.search(r"(^|[\s;&|\"'])ls(\s|$)", lowered):
+        return "list"
+    return "command"
+
+
 def read_command_targets(command: str) -> list[str]:
     targets: list[str] = []
     patterns = [
-        r"(?:^|[\s;&|])cat\s+((?:[^\s|;&]+(?:\s+|$))+)",
-        r"(?:^|[\s;&|])sed\s+-n\s+(?:['\"][^'\"]+['\"]|[^\s]+)\s+([^\s|;&]+)",
-        r"(?:^|[\s;&|])head\s+(?:-[^\s]+\s+)?([^\s|;&]+)",
-        r"(?:^|[\s;&|])tail\s+(?:-[^\s]+\s+)?([^\s|;&]+)",
+        r"(?:^|[\s;&|\"'])cat\s+((?:[^\s|;&]+(?:\s+|$))+)",
+        r"(?:^|[\s;&|\"'])sed\s+-n\s+(?:['\"][^'\"]+['\"]|[^\s]+)\s+([^\s|;&]+)",
+        r"(?:^|[\s;&|\"'])head\s+(?:-[^\s]+\s+)?([^\s|;&]+)",
+        r"(?:^|[\s;&|\"'])tail\s+(?:-[^\s]+\s+)?([^\s|;&]+)",
     ]
     for pattern in patterns:
         for match in re.finditer(pattern, command):

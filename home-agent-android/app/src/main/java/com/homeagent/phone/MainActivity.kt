@@ -135,7 +135,7 @@ fun HomeAgentApp() {
 
     fun resumeOrSend(text: String) {
         val liveSocket = socket
-        if (sessionRunning && liveSocket != null) {
+        if (sessionRunning && liveSocket != null && status != "Waiting for approval") {
             liveSocket.send(JSONObject(mapOf("type" to "input", "data" to text)).toString())
             return
         }
