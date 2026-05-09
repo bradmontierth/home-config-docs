@@ -73,9 +73,11 @@ import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
 import org.json.JSONArray
+import org.json.JSONException
 import org.json.JSONObject
 import java.io.File
 import java.io.IOException
+import java.util.concurrent.TimeUnit
 
 
 private val AppBackground = Color(0xFFF6F7F4)
@@ -127,7 +129,14 @@ data class AgentSession(
 fun HomeAgentApp() {
     val context = LocalContext.current
     val prefs = remember { context.getSharedPreferences("home-agent", Context.MODE_PRIVATE) }
-    val client = remember { OkHttpClient() }
+    val client = remember {
+        OkHttpClient.Builder()
+            .connectTimeout(20, TimeUnit.SECONDS)
+            .writeTimeout(5, TimeUnit.MINUTES)
+            .readTimeout(5, TimeUnit.MINUTES)
+            .callTimeout(6, TimeUnit.MINUTES)
+            .build()
+    }
     val recorderState = remember { RecorderState(context) }
 
     var gatewayUrl by remember { mutableStateOf(prefs.getString("gateway_url", "http://192.168.10.217:8767") ?: "") }
@@ -145,6 +154,10 @@ fun HomeAgentApp() {
     var terminalExpanded by remember { mutableStateOf(false) }
     var selectedSessionId by remember { mutableStateOf<String?>(null) }
     var selectedSessionTitle by remember { mutableStateOf<String?>(null) }
+    var lastRecordingFile by remember { mutableStateOf<File?>(null) }
+    var canRetryTranscription by remember { mutableStateOf(false) }
+    var isTranscribing by remember { mutableStateOf(false) }
+    var isSubmittingSession by remember { mutableStateOf(false) }
     val hasCurrentSession = selectedSessionId != null || sessionId != null
 
     fun attachSession(id: String, title: String = id) {
@@ -215,23 +228,43 @@ fun HomeAgentApp() {
         }
     }
 
+    fun transcribeRecording(file: File) {
+        if (!file.exists()) {
+            status = "Recording unavailable"
+            terminal += "\n[transcription error] The last recording is no longer available.\n"
+            lastRecordingFile = null
+            canRetryTranscription = false
+            return
+        }
+        isTranscribing = true
+        canRetryTranscription = false
+        status = "Transcribing"
+        transcribe(client, gatewayUrl, token, file) { result ->
+            isTranscribing = false
+            result.onSuccess {
+                if (hasCurrentSession) {
+                    replyText = it
+                } else {
+                    transcript = it
+                }
+                lastRecordingFile = file
+                canRetryTranscription = false
+                status = "Transcript ready"
+            }.onFailure {
+                status = "Transcription failed"
+                lastRecordingFile = file
+                canRetryTranscription = true
+                terminal += "\n[transcription error] ${it.friendlyMessage()}\n"
+            }
+        }
+    }
+
     fun finishRecording() {
         try {
             val file = recorderState.stop()
+            lastRecordingFile = file
             status = "Transcribing"
-            transcribe(client, gatewayUrl, token, file) { result ->
-                result.onSuccess {
-                    if (hasCurrentSession) {
-                        replyText = it
-                    } else {
-                        transcript = it
-                    }
-                    status = "Transcript ready"
-                }.onFailure {
-                    status = "Transcription failed"
-                    terminal += "\n[transcription error] ${it.message}\n"
-                }
-            }
+            transcribeRecording(file)
         } catch (error: Exception) {
             status = "Recorder failed"
             terminal += "\n[recorder error] ${error.message}\n"
@@ -249,12 +282,15 @@ fun HomeAgentApp() {
     }
 
     fun runCodex() {
+        if (isSubmittingSession) return
         val target = selectedSessionId
+        isSubmittingSession = true
         status = if (target == null) "Starting Codex" else "Resuming $target"
         if (target == null) {
             terminal = ""
         }
         val callback: (Result<String>) -> Unit = { result ->
+            isSubmittingSession = false
             result.onSuccess { id ->
                 attachSession(id)
             }.onFailure {
@@ -309,8 +345,17 @@ fun HomeAgentApp() {
                 compact = true,
                 targetLabel = if (hasCurrentSession) "Reply" else "Task",
                 onClick = {
-                    if (recorderState.isRecording.value) finishRecording() else startRecording()
+                    if (!isTranscribing) {
+                        if (recorderState.isRecording.value) finishRecording() else startRecording()
+                    }
                 }
+            )
+
+            RetryTranscribeButton(
+                visible = canRetryTranscription && lastRecordingFile != null && !recorderState.isRecording.value,
+                isTranscribing = isTranscribing,
+                enabled = gatewayUrl.isNotBlank(),
+                onRetry = { lastRecordingFile?.let(::transcribeRecording) }
             )
 
             Terminal(
@@ -385,8 +430,17 @@ fun HomeAgentApp() {
             isRecording = recorderState.isRecording.value,
             targetLabel = if (hasCurrentSession) "Reply" else "Task",
             onClick = {
-                if (recorderState.isRecording.value) finishRecording() else startRecording()
+                if (!isTranscribing) {
+                    if (recorderState.isRecording.value) finishRecording() else startRecording()
+                }
             }
+        )
+
+        RetryTranscribeButton(
+            visible = canRetryTranscription && lastRecordingFile != null && !recorderState.isRecording.value,
+            isTranscribing = isTranscribing,
+            enabled = gatewayUrl.isNotBlank(),
+            onRetry = { lastRecordingFile?.let(::transcribeRecording) }
         )
 
         OutlinedTextField(
@@ -401,17 +455,25 @@ fun HomeAgentApp() {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(
                 onClick = ::runCodex,
-                enabled = transcript.isNotBlank() && gatewayUrl.isNotBlank(),
+                enabled = transcript.isNotBlank() && gatewayUrl.isNotBlank() && !isSubmittingSession,
                 modifier = Modifier.weight(1f),
                 colors = ButtonDefaults.buttonColors(containerColor = Primary)
             ) {
-                Text(if (selectedSessionId == null) "Run Codex" else "Resume Codex")
+                Text(
+                    when {
+                        isSubmittingSession -> "Sending"
+                        selectedSessionId == null -> "Run Codex"
+                        else -> "Resume Codex"
+                    }
+                )
             }
 
             OutlinedButton(onClick = {
                 transcript = ""
                 replyText = ""
                 terminal = ""
+                lastRecordingFile = null
+                canRetryTranscription = false
                 selectedSessionId = null
                 selectedSessionTitle = null
                 status = "Ready"
@@ -616,6 +678,24 @@ fun TalkButton(
                 Text(subtext, color = Muted, style = MaterialTheme.typography.bodySmall)
             }
         }
+    }
+}
+
+
+@Composable
+fun RetryTranscribeButton(
+    visible: Boolean,
+    isTranscribing: Boolean,
+    enabled: Boolean,
+    onRetry: () -> Unit
+) {
+    if (!visible) return
+    OutlinedButton(
+        onClick = onRetry,
+        enabled = enabled && !isTranscribing,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Text(if (isTranscribing) "Transcribing" else "Retry Transcribe Last Recording")
     }
 }
 
@@ -952,7 +1032,18 @@ fun connectWebSocket(
     return client.newWebSocket(request, object : WebSocketListener() {
         override fun onMessage(webSocket: WebSocket, text: String) {
             onMainThread {
-                onEvent(JSONObject(text))
+                try {
+                    onEvent(JSONObject(text))
+                } catch (error: JSONException) {
+                    onEvent(
+                        JSONObject(
+                            mapOf(
+                                "type" to "output",
+                                "data" to "\n[websocket error] invalid gateway message: ${error.message}\n"
+                            )
+                        )
+                    )
+                }
             }
         }
 
@@ -998,4 +1089,15 @@ fun tokenQuery(token: String): String {
 
 fun onMainThread(block: () -> Unit) {
     android.os.Handler(android.os.Looper.getMainLooper()).post(block)
+}
+
+
+fun Throwable.friendlyMessage(): String {
+    val message = message.orEmpty()
+    return when {
+        this is java.net.SocketTimeoutException || message.contains("timeout", ignoreCase = true) ->
+            "Transcription timed out. Tap Retry Transcribe Last Recording to send the saved audio again."
+        message.isNotBlank() -> message
+        else -> this::class.java.simpleName
+    }
 }

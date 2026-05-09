@@ -562,7 +562,13 @@ async def health() -> dict:
 @app.post("/sessions", response_model=SessionInfo)
 async def start_session(request: StartRequest) -> SessionInfo:
     session_id = uuid.uuid4().hex[:12]
-    session = CodexSession(session_id, request)
+    try:
+        session = CodexSession(session_id, request)
+    except OSError as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"session storage is not writable: {exc}",
+        ) from exc
     sessions[session_id] = session
     await session.start(request.prompt)
     return session.info()
@@ -620,7 +626,13 @@ async def resume_session(session_id: str, request: ResumeRequest) -> SessionInfo
         codex_thread_id=thread_id,
     )
     child_id = uuid.uuid4().hex[:12]
-    child = CodexSession(child_id, child_request)
+    try:
+        child = CodexSession(child_id, child_request)
+    except OSError as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"session storage is not writable: {exc}",
+        ) from exc
     sessions[child_id] = child
     await child.start(request.prompt)
     return child.info()
