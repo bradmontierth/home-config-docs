@@ -6,12 +6,12 @@ Basic native Android client for the LAN Home Agent gateway.
 
 - Records push-to-talk audio with Android microphone permission.
 - Uploads the recording to the gateway at `/api/transcribe`.
-- Shows the returned transcript for editing.
+- Shows the returned transcript for editing. Before a session exists, voice fills the main task field; after a session exists, voice fills the Reply field for continuing that session.
 - Starts a Codex session through `/api/sessions`.
 - Lists saved sessions through `/api/sessions`.
 - Resumes an archived session through `/api/sessions/{session_id}/resume` when you send clarification after the prior run has exited.
 - Streams terminal output through `/ws/sessions/{session_id}`.
-- Sends Approve, Reject, Summary, Stop, and free-text steering messages.
+- Sends Approve, Reject, Summary, Stop, and free-text Reply messages.
 
 The app intentionally does not talk to Parakeet or Codex directly. Those stay behind the gateway/runner services in `/home/pi/home_config/home-agent`.
 

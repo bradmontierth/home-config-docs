@@ -97,6 +97,7 @@ fun HomeAgentApp() {
     var gatewayUrl by remember { mutableStateOf(prefs.getString("gateway_url", "http://192.168.10.217:8767") ?: "") }
     var token by remember { mutableStateOf(prefs.getString("token", "") ?: "") }
     var transcript by remember { mutableStateOf("") }
+    var replyText by remember { mutableStateOf("") }
     var terminal by remember { mutableStateOf("") }
     var status by remember { mutableStateOf("Ready") }
     var sessionId by remember { mutableStateOf<String?>(null) }
@@ -230,6 +231,7 @@ fun HomeAgentApp() {
 
         PushToTalkButton(
             isRecording = recorderState.isRecording.value,
+            targetLabel = if (selectedSessionId == null && sessionId == null) "Task" else "Reply",
             onStart = {
                 try {
                     recorderState.start()
@@ -245,7 +247,11 @@ fun HomeAgentApp() {
                     status = "Transcribing"
                     transcribe(client, gatewayUrl, token, file) { result ->
                         result.onSuccess {
-                            transcript = it
+                            if (selectedSessionId == null && sessionId == null) {
+                                transcript = it
+                            } else {
+                                replyText = it
+                            }
                             status = "Transcript ready"
                         }.onFailure {
                             status = "Transcription failed"
@@ -297,6 +303,7 @@ fun HomeAgentApp() {
 
             TextButton(onClick = {
                 transcript = ""
+                replyText = ""
                 terminal = ""
                 selectedSessionId = null
                 selectedSessionTitle = null
@@ -309,6 +316,8 @@ fun HomeAgentApp() {
         Terminal(terminal, Modifier.weight(1f))
 
         QuickActions(
+            replyText = replyText,
+            onReplyTextChange = { replyText = it },
             onSend = { text ->
                 resumeOrSend(text)
             }
@@ -422,7 +431,7 @@ fun SessionDrawer(
 
 
 @Composable
-fun PushToTalkButton(isRecording: Boolean, onStart: () -> Unit, onStop: () -> Unit) {
+fun PushToTalkButton(isRecording: Boolean, targetLabel: String, onStart: () -> Unit, onStop: () -> Unit) {
     val color = if (isRecording) Color(0xFFFF7067) else Color(0xFFE23B2F)
     Button(
         onClick = {},
@@ -443,7 +452,7 @@ fun PushToTalkButton(isRecording: Boolean, onStart: () -> Unit, onStop: () -> Un
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text(if (isRecording) "Recording" else "Hold", color = Color.White)
-            Text("Talk", color = Color.White, fontWeight = FontWeight.Bold)
+            Text(targetLabel, color = Color.White, fontWeight = FontWeight.Bold)
         }
     }
 }
@@ -471,8 +480,11 @@ fun Terminal(text: String, modifier: Modifier = Modifier) {
 
 
 @Composable
-fun QuickActions(onSend: (String) -> Unit) {
-    var message by remember { mutableStateOf("") }
+fun QuickActions(
+    replyText: String,
+    onReplyTextChange: (String) -> Unit,
+    onSend: (String) -> Unit
+) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(onClick = { onSend("Approved. Proceed with the proposed action.") }, modifier = Modifier.weight(1f)) {
@@ -487,16 +499,16 @@ fun QuickActions(onSend: (String) -> Unit) {
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedTextField(
-                value = message,
-                onValueChange = { message = it },
-                label = { Text("Steer") },
+                value = replyText,
+                onValueChange = onReplyTextChange,
+                label = { Text("Reply") },
                 singleLine = true,
                 modifier = Modifier.weight(1f)
             )
             Button(onClick = {
-                if (message.isNotBlank()) {
-                    onSend(message)
-                    message = ""
+                if (replyText.isNotBlank()) {
+                    onSend(replyText)
+                    onReplyTextChange("")
                 }
             }) {
                 Text("Send")
