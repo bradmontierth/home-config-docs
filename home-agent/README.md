@@ -10,6 +10,15 @@ LAN-only phone gateway for voice-triggered Codex sessions.
 
 The gateway can run in Docker. The runner is intended to run directly on the host so Codex sees the same filesystem, SSH config, keys, and local tools it already uses.
 
+## Session Flow
+
+- `POST /api/sessions`: start a Codex run from transcript text.
+- `GET /api/sessions`: list recent saved sessions for the phone session drawer.
+- `POST /api/sessions/{session_id}/resume`: continue a saved Codex thread with new text.
+- `WS /ws/sessions/{session_id}`: stream output and send live input while a run is active.
+
+Resume requires a Codex thread id. New runs record it from the `thread.started` JSON event; older runs can still resume when the id is present in their saved `codex.log`.
+
 ## Local Development
 
 Create the runner environment:

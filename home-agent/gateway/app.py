@@ -188,6 +188,43 @@ async def start_session(request: Request) -> dict:
     return response.json()
 
 
+@app.get("/api/sessions")
+async def list_sessions(request: Request, limit: int = 50) -> list[dict]:
+    require_token(request)
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        response = await client.get(f"{RUNNER_URL.rstrip('/')}/sessions", params={"limit": limit})
+    if response.status_code >= 400:
+        raise HTTPException(status_code=502, detail=response.text)
+    return response.json()
+
+
+@app.get("/api/sessions/{session_id}")
+async def get_session(request: Request, session_id: str) -> dict:
+    require_token(request)
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        response = await client.get(f"{RUNNER_URL.rstrip('/')}/sessions/{session_id}")
+    if response.status_code >= 400:
+        raise HTTPException(status_code=502, detail=response.text)
+    return response.json()
+
+
+@app.post("/api/sessions/{session_id}/resume")
+async def resume_session(request: Request, session_id: str) -> dict:
+    require_token(request)
+    body = await request.json()
+    prompt = str(body.get("text") or body.get("prompt") or "").strip()
+    if not prompt:
+        raise HTTPException(status_code=400, detail="text is required")
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        response = await client.post(
+            f"{RUNNER_URL.rstrip('/')}/sessions/{session_id}/resume",
+            json={"prompt": prompt, "title": prompt[:80]},
+        )
+    if response.status_code >= 400:
+        raise HTTPException(status_code=502, detail=response.text)
+    return response.json()
+
+
 @app.post("/api/sessions/{session_id}/stop")
 async def stop_session(request: Request, session_id: str) -> dict:
     require_token(request)

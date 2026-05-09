@@ -34,6 +34,13 @@ class StartRequest(BaseModel):
     prompt: str = Field(min_length=1)
     cwd: str = str(DEFAULT_HOME_CONFIG)
     title: Optional[str] = None
+    resume_from: Optional[str] = None
+    codex_thread_id: Optional[str] = None
+
+
+class ResumeRequest(BaseModel):
+    prompt: str = Field(min_length=1)
+    title: Optional[str] = None
 
 
 class SessionInfo(BaseModel):
@@ -43,6 +50,9 @@ class SessionInfo(BaseModel):
     log_path: str
     started_at: float
     returncode: Optional[int] = None
+    title: Optional[str] = None
+    codex_thread_id: Optional[str] = None
+    resume_from: Optional[str] = None
 
 
 class CodexSession:
@@ -50,6 +60,8 @@ class CodexSession:
         self.session_id = session_id
         self.cwd = Path(request.cwd).resolve()
         self.title = request.title or "Voice Codex session"
+        self.resume_from = request.resume_from
+        self.codex_thread_id = request.codex_thread_id
         self.started_at = time.time()
         self.returncode: Optional[int] = None
         self.status = "starting"
@@ -67,16 +79,26 @@ class CodexSession:
 
     def command(self, prompt: str) -> list[str]:
         if CODEX_MODE == "exec":
-            cmd = [
-                CODEX_BIN,
-                "exec",
-                "--json",
-                "--color",
-                "never",
-                "-C",
-                str(self.cwd),
-                "--skip-git-repo-check",
-            ]
+            if self.codex_thread_id:
+                cmd = [
+                    CODEX_BIN,
+                    "exec",
+                    "resume",
+                    "--json",
+                    "--all",
+                    "--skip-git-repo-check",
+                ]
+            else:
+                cmd = [
+                    CODEX_BIN,
+                    "exec",
+                    "--json",
+                    "--color",
+                    "never",
+                    "-C",
+                    str(self.cwd),
+                    "--skip-git-repo-check",
+                ]
         else:
             cmd = [CODEX_BIN, "--no-alt-screen", "-C", str(self.cwd)]
         if CODEX_DANGER_BYPASS:
@@ -87,6 +109,8 @@ class CodexSession:
                 cmd.extend(["-a", CODEX_APPROVALS])
         if CODEX_MODEL:
             cmd.extend(["-m", CODEX_MODEL])
+        if CODEX_MODE == "exec" and self.codex_thread_id:
+            cmd.append(self.codex_thread_id)
         cmd.append(prompt)
         return cmd
 
@@ -109,6 +133,8 @@ class CodexSession:
             "sandbox": CODEX_SANDBOX,
             "approvals": CODEX_APPROVALS,
             "mode": CODEX_MODE,
+            "codex_thread_id": self.codex_thread_id,
+            "resume_from": self.resume_from,
         }
         self.meta_path.write_text(json.dumps(metadata, indent=2) + "\n", encoding="utf-8")
 
@@ -177,6 +203,7 @@ class CodexSession:
             for line in self.proc.stdout:
                 log.write(line)
                 log.flush()
+                self.record_exec_metadata(line)
                 text = format_exec_event(line)
                 if not text:
                     continue
@@ -184,6 +211,18 @@ class CodexSession:
                     asyncio.create_task,
                     self.broadcast({"type": "output", "data": text}),
                 )
+
+    def record_exec_metadata(self, line: str) -> None:
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            return
+        if event.get("type") != "thread.started":
+            return
+        thread_id = event.get("thread_id")
+        if isinstance(thread_id, str) and thread_id:
+            self.codex_thread_id = thread_id
+            self.update_metadata({"codex_thread_id": thread_id})
 
     def _wait_loop(self) -> None:
         assert self.proc is not None
@@ -210,6 +249,14 @@ class CodexSession:
                 stale.append(queue)
         for queue in stale:
             self.subscribers.discard(queue)
+
+    def update_metadata(self, updates: dict) -> None:
+        try:
+            metadata = json.loads(self.meta_path.read_text(encoding="utf-8"))
+        except (FileNotFoundError, json.JSONDecodeError):
+            metadata = {}
+        metadata.update(updates)
+        self.meta_path.write_text(json.dumps(metadata, indent=2) + "\n", encoding="utf-8")
 
     async def send_input(self, text: str) -> None:
         if self.status != "running":
@@ -245,6 +292,9 @@ class CodexSession:
             log_path=str(self.log_path),
             started_at=self.started_at,
             returncode=self.returncode,
+            title=self.title,
+            codex_thread_id=self.codex_thread_id,
+            resume_from=self.resume_from,
         )
 
 
@@ -264,6 +314,9 @@ def format_exec_event(line: str) -> str:
 
     event_type = event.get("type")
     if event_type == "thread.started":
+        thread_id = event.get("thread_id")
+        if thread_id:
+            return f"[codex] session started ({thread_id})\n"
         return "[codex] session started\n"
     if event_type == "turn.started":
         return "[codex] working...\n"
@@ -374,6 +427,52 @@ def dedupe_preserving_order(values: list[str]) -> list[str]:
     return result
 
 
+def session_info_from_metadata(path: Path) -> Optional[SessionInfo]:
+    try:
+        metadata = json.loads(path.read_text(encoding="utf-8"))
+    except (FileNotFoundError, json.JSONDecodeError):
+        return None
+    session_id = str(metadata.get("session_id") or path.parent.name)
+    log_path = str(path.parent / "codex.log")
+    return SessionInfo(
+        session_id=session_id,
+        status="archived",
+        cwd=str(metadata.get("cwd") or DEFAULT_HOME_CONFIG),
+        log_path=log_path,
+        started_at=float(metadata.get("started_at") or path.stat().st_mtime),
+        returncode=None,
+        title=metadata.get("title"),
+        codex_thread_id=metadata.get("codex_thread_id") or find_codex_thread_id(session_id),
+        resume_from=metadata.get("resume_from"),
+    )
+
+
+def find_session_info(session_id: str) -> Optional[SessionInfo]:
+    for path in DEFAULT_SESSION_ROOT.glob(f"*/{session_id}/metadata.json"):
+        return session_info_from_metadata(path)
+    return None
+
+
+def find_codex_thread_id(session_id: str) -> Optional[str]:
+    log_path = next(DEFAULT_SESSION_ROOT.glob(f"*/{session_id}/codex.log"), None)
+    if not log_path:
+        return None
+    try:
+        with log_path.open("r", encoding="utf-8", errors="replace") as log:
+            for line in log:
+                try:
+                    event = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if event.get("type") == "thread.started":
+                    thread_id = event.get("thread_id")
+                    if isinstance(thread_id, str) and thread_id:
+                        return thread_id
+    except FileNotFoundError:
+        return None
+    return None
+
+
 app = FastAPI(title=APP_NAME)
 sessions: dict[str, CodexSession] = {}
 
@@ -392,12 +491,53 @@ async def start_session(request: StartRequest) -> SessionInfo:
     return session.info()
 
 
+@app.get("/sessions", response_model=list[SessionInfo])
+async def list_sessions(limit: int = 50) -> list[SessionInfo]:
+    records: list[SessionInfo] = []
+    for path in sorted(DEFAULT_SESSION_ROOT.glob("*/*/metadata.json"), reverse=True):
+        info = session_info_from_metadata(path)
+        if info:
+            live = sessions.get(info.session_id)
+            records.append(live.info() if live else info)
+        if len(records) >= limit:
+            break
+    return records
+
+
 @app.get("/sessions/{session_id}", response_model=SessionInfo)
 async def get_session(session_id: str) -> SessionInfo:
     session = sessions.get(session_id)
-    if not session:
+    if session:
+        return session.info()
+    info = find_session_info(session_id)
+    if not info:
         raise HTTPException(status_code=404, detail="unknown session")
-    return session.info()
+    return info
+
+
+@app.post("/sessions/{session_id}/resume", response_model=SessionInfo)
+async def resume_session(session_id: str, request: ResumeRequest) -> SessionInfo:
+    source = sessions.get(session_id)
+    source_info = source.info() if source else find_session_info(session_id)
+    if not source_info:
+        raise HTTPException(status_code=404, detail="unknown session")
+
+    thread_id = source_info.codex_thread_id or find_codex_thread_id(session_id)
+    if not thread_id:
+        raise HTTPException(status_code=409, detail="session has no Codex thread id yet")
+
+    child_request = StartRequest(
+        prompt=request.prompt,
+        cwd=source_info.cwd,
+        title=request.title or f"Resume: {source_info.title or session_id}",
+        resume_from=session_id,
+        codex_thread_id=thread_id,
+    )
+    child_id = uuid.uuid4().hex[:12]
+    child = CodexSession(child_id, child_request)
+    sessions[child_id] = child
+    await child.start(request.prompt)
+    return child.info()
 
 
 @app.post("/sessions/{session_id}/stop")

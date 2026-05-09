@@ -8,6 +8,8 @@ Basic native Android client for the LAN Home Agent gateway.
 - Uploads the recording to the gateway at `/api/transcribe`.
 - Shows the returned transcript for editing.
 - Starts a Codex session through `/api/sessions`.
+- Lists saved sessions through `/api/sessions`.
+- Resumes an archived session through `/api/sessions/{session_id}/resume` when you send clarification after the prior run has exited.
 - Streams terminal output through `/ws/sessions/{session_id}`.
 - Sends Approve, Reject, Summary, Stop, and free-text steering messages.
 

@@ -57,6 +57,7 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
+import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 import java.io.IOException
@@ -77,6 +78,15 @@ class MainActivity : ComponentActivity() {
 }
 
 
+data class AgentSession(
+    val sessionId: String,
+    val title: String,
+    val status: String,
+    val startedAt: Double,
+    val resumeFrom: String?
+)
+
+
 @Composable
 fun HomeAgentApp() {
     val context = LocalContext.current
@@ -91,6 +101,61 @@ fun HomeAgentApp() {
     var status by remember { mutableStateOf("Ready") }
     var sessionId by remember { mutableStateOf<String?>(null) }
     var socket by remember { mutableStateOf<WebSocket?>(null) }
+    var sessionRunning by remember { mutableStateOf(false) }
+    var sessions by remember { mutableStateOf<List<AgentSession>>(emptyList()) }
+    var showSessions by remember { mutableStateOf(false) }
+    var selectedSessionId by remember { mutableStateOf<String?>(null) }
+    var selectedSessionTitle by remember { mutableStateOf<String?>(null) }
+
+    fun attachSession(id: String) {
+        sessionId = id
+        selectedSessionId = id
+        selectedSessionTitle = id
+        sessionRunning = true
+        status = "Session $id"
+        socket = connectWebSocket(client, gatewayUrl, token, id) { event ->
+            when (event.optString("type")) {
+                "output" -> {
+                    val data = event.optString("data")
+                    terminal += data
+                    if (data.contains("AWAITING_PHONE_APPROVAL:")) {
+                        status = "Waiting for approval"
+                    }
+                }
+                "status" -> {
+                    val nextStatus = event.optString("status", status)
+                    status = nextStatus
+                    if (nextStatus == "exited" || nextStatus == "closed") {
+                        sessionRunning = false
+                    }
+                }
+            }
+        }
+    }
+
+    fun resumeOrSend(text: String) {
+        val liveSocket = socket
+        if (sessionRunning && liveSocket != null) {
+            liveSocket.send(JSONObject(mapOf("type" to "input", "data" to text)).toString())
+            return
+        }
+        val target = selectedSessionId ?: sessionId
+        if (target == null) {
+            terminal += "\n[steer error] No session selected to resume.\n"
+            status = "No session selected"
+            return
+        }
+        status = "Resuming $target"
+        resumeSession(client, gatewayUrl, token, target, text) { result ->
+            result.onSuccess { id ->
+                terminal += "\n[resume] Continuing $target as $id\n"
+                attachSession(id)
+            }.onFailure {
+                status = "Resume failed"
+                terminal += "\n[resume error] ${it.message}\n"
+            }
+        }
+    }
 
     val requestPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         status = if (granted) "Microphone ready" else "Microphone denied"
@@ -108,9 +173,21 @@ fun HomeAgentApp() {
             .padding(14.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        Header(status = status, onStop = {
+        Header(status = status, onSessions = {
+            showSessions = !showSessions
+            if (showSessions) {
+                listSessions(client, gatewayUrl, token) { result ->
+                    result.onSuccess {
+                        sessions = it
+                    }.onFailure {
+                        terminal += "\n[sessions error] ${it.message}\n"
+                    }
+                }
+            }
+        }, onStop = {
             socket?.send("""{"type":"stop"}""")
             sessionId?.let { stopSession(client, gatewayUrl, token, it) }
+            sessionRunning = false
             status = "Stopping"
         })
 
@@ -126,6 +203,30 @@ fun HomeAgentApp() {
                 prefs.edit().putString("token", token).apply()
             }
         )
+
+        if (showSessions) {
+            SessionDrawer(
+                sessions = sessions,
+                selectedSessionId = selectedSessionId,
+                onRefresh = {
+                    listSessions(client, gatewayUrl, token) { result ->
+                        result.onSuccess { sessions = it }
+                            .onFailure { terminal += "\n[sessions error] ${it.message}\n" }
+                    }
+                },
+                onSelect = {
+                    selectedSessionId = it.sessionId
+                    selectedSessionTitle = it.title
+                    sessionId = it.sessionId
+                    status = "Selected ${it.sessionId}"
+                    showSessions = false
+                }
+            )
+        }
+
+        selectedSessionTitle?.let {
+            Text("Selected: $it", color = Color(0xFFA9B2AA))
+        }
 
         PushToTalkButton(
             isRecording = recorderState.isRecording.value,
@@ -170,40 +271,35 @@ fun HomeAgentApp() {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(
                 onClick = {
-                    status = "Starting Codex"
-                    terminal = ""
-                    startSession(client, gatewayUrl, token, transcript) { result ->
+                    val target = selectedSessionId
+                    status = if (target == null) "Starting Codex" else "Resuming $target"
+                    if (target == null) {
+                        terminal = ""
+                    }
+                    val callback: (Result<String>) -> Unit = { result ->
                         result.onSuccess { id ->
-                            sessionId = id
-                            status = "Session $id"
-                            socket = connectWebSocket(client, gatewayUrl, token, id) { event ->
-                                when (event.optString("type")) {
-                                    "output" -> {
-                                        val data = event.optString("data")
-                                        terminal += data
-                                        if (data.contains("AWAITING_PHONE_APPROVAL:")) {
-                                            status = "Waiting for approval"
-                                        }
-                                    }
-                                    "status" -> {
-                                        status = event.optString("status", status)
-                                    }
-                                }
-                            }
+                            attachSession(id)
                         }.onFailure {
-                            status = "Start failed"
-                            terminal += "\n[start error] ${it.message}\n"
+                            status = if (target == null) "Start failed" else "Resume failed"
+                            terminal += "\n[session error] ${it.message}\n"
                         }
+                    }
+                    if (target == null) {
+                        startSession(client, gatewayUrl, token, transcript, callback)
+                    } else {
+                        resumeSession(client, gatewayUrl, token, target, transcript, callback)
                     }
                 },
                 enabled = transcript.isNotBlank() && gatewayUrl.isNotBlank()
             ) {
-                Text("Run Codex")
+                Text(if (selectedSessionId == null) "Run Codex" else "Resume Codex")
             }
 
             TextButton(onClick = {
                 transcript = ""
                 terminal = ""
+                selectedSessionId = null
+                selectedSessionTitle = null
                 status = "Ready"
             }) {
                 Text("Clear")
@@ -214,7 +310,7 @@ fun HomeAgentApp() {
 
         QuickActions(
             onSend = { text ->
-                socket?.send(JSONObject(mapOf("type" to "input", "data" to text)).toString())
+                resumeOrSend(text)
             }
         )
     }
@@ -222,7 +318,7 @@ fun HomeAgentApp() {
 
 
 @Composable
-fun Header(status: String, onStop: () -> Unit) {
+fun Header(status: String, onSessions: () -> Unit, onStop: () -> Unit) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -232,11 +328,16 @@ fun Header(status: String, onStop: () -> Unit) {
             Text("Home Agent", color = Color.White, fontWeight = FontWeight.Bold)
             Text(status, color = Color(0xFFA9B2AA))
         }
-        Button(
-            onClick = onStop,
-            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF351A18))
-        ) {
-            Text("Stop")
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(onClick = onSessions) {
+                Text("Sessions")
+            }
+            Button(
+                onClick = onStop,
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF351A18))
+            ) {
+                Text("Stop")
+            }
         }
     }
 }
@@ -264,6 +365,58 @@ fun ConnectionFields(
             singleLine = true,
             modifier = Modifier.fillMaxWidth()
         )
+    }
+}
+
+
+@Composable
+fun SessionDrawer(
+    sessions: List<AgentSession>,
+    selectedSessionId: String?,
+    onRefresh: () -> Unit,
+    onSelect: (AgentSession) -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Color(0xFF1B201D), RoundedCornerShape(8.dp))
+            .padding(10.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("Sessions", color = Color.White, fontWeight = FontWeight.Bold)
+            TextButton(onClick = onRefresh) {
+                Text("Refresh")
+            }
+        }
+        if (sessions.isEmpty()) {
+            Text("No sessions found.", color = Color(0xFFA9B2AA))
+        } else {
+            Column(
+                modifier = Modifier.heightIn(max = 220.dp).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                sessions.forEach { session ->
+                    val selected = session.sessionId == selectedSessionId
+                    Button(
+                        onClick = { onSelect(session) },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (selected) Color(0xFF315B45) else Color(0xFF26302A)
+                        )
+                    ) {
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                            Text(session.title.ifBlank { session.sessionId }, color = Color.White)
+                            Text("${session.sessionId} · ${session.status}", color = Color(0xFFC7CEC8))
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -429,6 +582,51 @@ fun startSession(
 }
 
 
+fun resumeSession(
+    client: OkHttpClient,
+    gatewayUrl: String,
+    token: String,
+    sessionId: String,
+    text: String,
+    callback: (Result<String>) -> Unit
+) {
+    val json = JSONObject(mapOf("text" to text)).toString()
+    val request = Request.Builder()
+        .url("${gatewayUrl.trimEnd('/')}/api/sessions/$sessionId/resume${tokenQuery(token)}")
+        .post(json.toRequestBody("application/json".toMediaType()))
+        .build()
+    client.newCall(request).enqueue(resultCallback(callback) { response ->
+        JSONObject(response.body?.string().orEmpty()).getString("session_id")
+    })
+}
+
+
+fun listSessions(
+    client: OkHttpClient,
+    gatewayUrl: String,
+    token: String,
+    callback: (Result<List<AgentSession>>) -> Unit
+) {
+    val request = Request.Builder()
+        .url("${gatewayUrl.trimEnd('/')}/api/sessions${tokenQuery(token)}")
+        .get()
+        .build()
+    client.newCall(request).enqueue(resultCallback(callback) { response ->
+        val array = JSONArray(response.body?.string().orEmpty())
+        (0 until array.length()).map { index ->
+            val item = array.getJSONObject(index)
+            AgentSession(
+                sessionId = item.getString("session_id"),
+                title = item.optString("title", item.getString("session_id")),
+                status = item.optString("status", "archived"),
+                startedAt = item.optDouble("started_at", 0.0),
+                resumeFrom = item.optString("resume_from").takeIf { it.isNotBlank() && it != "null" }
+            )
+        }
+    })
+}
+
+
 fun stopSession(client: OkHttpClient, gatewayUrl: String, token: String, sessionId: String) {
     val request = Request.Builder()
         .url("${gatewayUrl.trimEnd('/')}/api/sessions/$sessionId/stop${tokenQuery(token)}")
@@ -467,6 +665,12 @@ fun connectWebSocket(
         override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
             onMainThread {
                 onEvent(JSONObject(mapOf("type" to "output", "data" to "\n[websocket error] ${t.message}\n")))
+            }
+        }
+
+        override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
+            onMainThread {
+                onEvent(JSONObject(mapOf("type" to "status", "status" to "closed")))
             }
         }
     })
