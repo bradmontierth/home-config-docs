@@ -8,6 +8,7 @@ home-agent/sessions/
 
 # Android / Gradle
 .gradle/
+.kotlin/
 **/build/
 local.properties
 *.apk

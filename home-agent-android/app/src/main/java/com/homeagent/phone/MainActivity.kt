@@ -10,26 +10,39 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
@@ -40,8 +53,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
@@ -65,13 +78,34 @@ import java.io.File
 import java.io.IOException
 
 
+private val AppBackground = Color(0xFFF6F7F4)
+private val Panel = Color(0xFFFFFFFF)
+private val Ink = Color(0xFF1E2A26)
+private val Muted = Color(0xFF62716B)
+private val Primary = Color(0xFF1F7A6B)
+private val PrimaryDark = Color(0xFF15594F)
+private val Accent = Color(0xFFE4F2ED)
+private val Danger = Color(0xFFC84132)
+private val DangerSoft = Color(0xFFFFE9E4)
+
+
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         setContent {
-            MaterialTheme {
-                Surface(modifier = Modifier.fillMaxSize(), color = Color(0xFF111312)) {
+            MaterialTheme(
+                colorScheme = lightColorScheme(
+                    primary = Primary,
+                    onPrimary = Color.White,
+                    secondary = Color(0xFF45665D),
+                    background = AppBackground,
+                    surface = Panel,
+                    onSurface = Ink,
+                    error = Danger
+                )
+            ) {
+                Surface(modifier = Modifier.fillMaxSize(), color = AppBackground) {
                     HomeAgentApp()
                 }
             }
@@ -107,8 +141,11 @@ fun HomeAgentApp() {
     var sessionRunning by remember { mutableStateOf(false) }
     var sessions by remember { mutableStateOf<List<AgentSession>>(emptyList()) }
     var showSessions by remember { mutableStateOf(false) }
+    var showSettings by remember { mutableStateOf(false) }
+    var terminalExpanded by remember { mutableStateOf(false) }
     var selectedSessionId by remember { mutableStateOf<String?>(null) }
     var selectedSessionTitle by remember { mutableStateOf<String?>(null) }
+    val hasCurrentSession = selectedSessionId != null || sessionId != null
 
     fun attachSession(id: String, title: String = id) {
         socket?.close(1000, "switch session")
@@ -137,6 +174,23 @@ fun HomeAgentApp() {
         }
     }
 
+    fun refreshSessions() {
+        listSessions(client, gatewayUrl, token) { result ->
+            result.onSuccess {
+                sessions = it
+            }.onFailure {
+                terminal += "\n[sessions error] ${it.message}\n"
+            }
+        }
+    }
+
+    fun stopAgent() {
+        socket?.send("""{"type":"stop"}""")
+        sessionId?.let { stopSession(client, gatewayUrl, token, it) }
+        sessionRunning = false
+        status = "Stopping agent"
+    }
+
     fun resumeOrSend(text: String) {
         val liveSocket = socket
         if (sessionRunning && liveSocket != null && status != "Waiting for approval") {
@@ -161,6 +215,60 @@ fun HomeAgentApp() {
         }
     }
 
+    fun finishRecording() {
+        try {
+            val file = recorderState.stop()
+            status = "Transcribing"
+            transcribe(client, gatewayUrl, token, file) { result ->
+                result.onSuccess {
+                    if (hasCurrentSession) {
+                        replyText = it
+                    } else {
+                        transcript = it
+                    }
+                    status = "Transcript ready"
+                }.onFailure {
+                    status = "Transcription failed"
+                    terminal += "\n[transcription error] ${it.message}\n"
+                }
+            }
+        } catch (error: Exception) {
+            status = "Recorder failed"
+            terminal += "\n[recorder error] ${error.message}\n"
+        }
+    }
+
+    fun startRecording() {
+        try {
+            recorderState.start()
+            status = "Recording"
+        } catch (error: Exception) {
+            status = "Recorder failed"
+            terminal += "\n[recorder error] ${error.message}\n"
+        }
+    }
+
+    fun runCodex() {
+        val target = selectedSessionId
+        status = if (target == null) "Starting Codex" else "Resuming $target"
+        if (target == null) {
+            terminal = ""
+        }
+        val callback: (Result<String>) -> Unit = { result ->
+            result.onSuccess { id ->
+                attachSession(id)
+            }.onFailure {
+                status = if (target == null) "Start failed" else "Resume failed"
+                terminal += "\n[session error] ${it.message}\n"
+            }
+        }
+        if (target == null) {
+            startSession(client, gatewayUrl, token, transcript, callback)
+        } else {
+            resumeSession(client, gatewayUrl, token, target, transcript, callback)
+        }
+    }
+
     val requestPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         status = if (granted) "Microphone ready" else "Microphone denied"
     }
@@ -171,31 +279,8 @@ fun HomeAgentApp() {
         }
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(14.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
-    ) {
-        Header(status = status, onSessions = {
-            showSessions = !showSessions
-            if (showSessions) {
-                listSessions(client, gatewayUrl, token) { result ->
-                    result.onSuccess {
-                        sessions = it
-                    }.onFailure {
-                        terminal += "\n[sessions error] ${it.message}\n"
-                    }
-                }
-            }
-        }, onStop = {
-            socket?.send("""{"type":"stop"}""")
-            sessionId?.let { stopSession(client, gatewayUrl, token, it) }
-            sessionRunning = false
-            status = "Stopping"
-        })
-
-        ConnectionFields(
+    if (showSettings) {
+        SettingsDialog(
             gatewayUrl = gatewayUrl,
             token = token,
             onGatewayUrl = {
@@ -205,19 +290,62 @@ fun HomeAgentApp() {
             onToken = {
                 token = it.trim()
                 prefs.edit().putString("token", token).apply()
-            }
+            },
+            onDismiss = { showSettings = false }
+        )
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .statusBarsPadding()
+            .navigationBarsPadding()
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        if (terminalExpanded) {
+            TalkButton(
+                isRecording = recorderState.isRecording.value,
+                compact = true,
+                targetLabel = if (hasCurrentSession) "Reply" else "Task",
+                onClick = {
+                    if (recorderState.isRecording.value) finishRecording() else startRecording()
+                }
+            )
+
+            Terminal(
+                text = terminal,
+                expanded = true,
+                onExpand = { terminalExpanded = true },
+                onCollapse = { terminalExpanded = false },
+                modifier = Modifier.weight(1f)
+            )
+
+            StopAgentButton(onStop = ::stopAgent)
+
+            QuickActions(
+                replyText = replyText,
+                onReplyTextChange = { replyText = it },
+                onSend = ::resumeOrSend
+            )
+
+            return@Column
+        }
+
+        Header(
+            status = status,
+            onSessions = {
+                showSessions = !showSessions
+                if (showSessions) refreshSessions()
+            },
+            onSettings = { showSettings = true }
         )
 
         if (showSessions) {
             SessionDrawer(
                 sessions = sessions,
                 selectedSessionId = selectedSessionId,
-                onRefresh = {
-                    listSessions(client, gatewayUrl, token) { result ->
-                        result.onSuccess { sessions = it }
-                            .onFailure { terminal += "\n[sessions error] ${it.message}\n" }
-                    }
-                },
+                onRefresh = ::refreshSessions,
                 onSelect = {
                     selectedSessionId = it.sessionId
                     selectedSessionTitle = it.title
@@ -250,42 +378,14 @@ fun HomeAgentApp() {
         }
 
         selectedSessionTitle?.let {
-            Text("Selected: $it", color = Color(0xFFA9B2AA))
+            Text("Selected: $it", color = Muted, style = MaterialTheme.typography.bodySmall)
         }
 
-        PushToTalkButton(
+        TalkButton(
             isRecording = recorderState.isRecording.value,
-            targetLabel = if (selectedSessionId == null && sessionId == null) "Task" else "Reply",
-            onStart = {
-                try {
-                    recorderState.start()
-                    status = "Recording"
-                } catch (error: Exception) {
-                    status = "Recorder failed"
-                    terminal += "\n[recorder error] ${error.message}\n"
-                }
-            },
-            onStop = {
-                try {
-                    val file = recorderState.stop()
-                    status = "Transcribing"
-                    transcribe(client, gatewayUrl, token, file) { result ->
-                        result.onSuccess {
-                            if (selectedSessionId == null && sessionId == null) {
-                                transcript = it
-                            } else {
-                                replyText = it
-                            }
-                            status = "Transcript ready"
-                        }.onFailure {
-                            status = "Transcription failed"
-                            terminal += "\n[transcription error] ${it.message}\n"
-                        }
-                    }
-                } catch (error: Exception) {
-                    status = "Recorder failed"
-                    terminal += "\n[recorder error] ${error.message}\n"
-                }
+            targetLabel = if (hasCurrentSession) "Reply" else "Task",
+            onClick = {
+                if (recorderState.isRecording.value) finishRecording() else startRecording()
             }
         )
 
@@ -300,32 +400,15 @@ fun HomeAgentApp() {
 
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(
-                onClick = {
-                    val target = selectedSessionId
-                    status = if (target == null) "Starting Codex" else "Resuming $target"
-                    if (target == null) {
-                        terminal = ""
-                    }
-                    val callback: (Result<String>) -> Unit = { result ->
-                        result.onSuccess { id ->
-                            attachSession(id)
-                        }.onFailure {
-                            status = if (target == null) "Start failed" else "Resume failed"
-                            terminal += "\n[session error] ${it.message}\n"
-                        }
-                    }
-                    if (target == null) {
-                        startSession(client, gatewayUrl, token, transcript, callback)
-                    } else {
-                        resumeSession(client, gatewayUrl, token, target, transcript, callback)
-                    }
-                },
-                enabled = transcript.isNotBlank() && gatewayUrl.isNotBlank()
+                onClick = ::runCodex,
+                enabled = transcript.isNotBlank() && gatewayUrl.isNotBlank(),
+                modifier = Modifier.weight(1f),
+                colors = ButtonDefaults.buttonColors(containerColor = Primary)
             ) {
                 Text(if (selectedSessionId == null) "Run Codex" else "Resume Codex")
             }
 
-            TextButton(onClick = {
+            OutlinedButton(onClick = {
                 transcript = ""
                 replyText = ""
                 terminal = ""
@@ -337,39 +420,44 @@ fun HomeAgentApp() {
             }
         }
 
-        Terminal(terminal, Modifier.weight(1f))
+        StopAgentButton(onStop = ::stopAgent)
+
+        Terminal(
+            text = terminal,
+            expanded = false,
+            onExpand = { terminalExpanded = true },
+            onCollapse = { terminalExpanded = false },
+            modifier = Modifier.weight(1f)
+        )
 
         QuickActions(
             replyText = replyText,
             onReplyTextChange = { replyText = it },
-            onSend = { text ->
-                resumeOrSend(text)
-            }
+            onSend = ::resumeOrSend
         )
     }
 }
 
 
 @Composable
-fun Header(status: String, onSessions: () -> Unit, onStop: () -> Unit) {
+fun Header(status: String, onSessions: () -> Unit, onSettings: () -> Unit) {
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 44.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Column {
-            Text("Home Agent", color = Color.White, fontWeight = FontWeight.Bold)
-            Text(status, color = Color(0xFFA9B2AA))
+        Column(modifier = Modifier.weight(1f)) {
+            Text("Home Agent", color = Ink, fontWeight = FontWeight.Bold)
+            Text(status, color = Muted, style = MaterialTheme.typography.bodySmall)
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = onSessions) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            OutlinedButton(onClick = onSessions) {
                 Text("Sessions")
             }
-            Button(
-                onClick = onStop,
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF351A18))
-            ) {
-                Text("Stop")
+            IconButton(onClick = onSettings) {
+                Icon(painterResource(R.drawable.ic_settings_24), contentDescription = "Settings", tint = PrimaryDark)
             }
         }
     }
@@ -377,28 +465,41 @@ fun Header(status: String, onSessions: () -> Unit, onStop: () -> Unit) {
 
 
 @Composable
-fun ConnectionFields(
+fun SettingsDialog(
     gatewayUrl: String,
     token: String,
     onGatewayUrl: (String) -> Unit,
-    onToken: (String) -> Unit
+    onToken: (String) -> Unit,
+    onDismiss: () -> Unit
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        OutlinedTextField(
-            value = gatewayUrl,
-            onValueChange = onGatewayUrl,
-            label = { Text("Gateway URL") },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth()
-        )
-        OutlinedTextField(
-            value = token,
-            onValueChange = onToken,
-            label = { Text("Token") },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth()
-        )
-    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Settings") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                OutlinedTextField(
+                    value = gatewayUrl,
+                    onValueChange = onGatewayUrl,
+                    label = { Text("Gateway URL") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = token,
+                    onValueChange = onToken,
+                    label = { Text("Token") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        },
+        confirmButton = {
+            Button(onClick = onDismiss, colors = ButtonDefaults.buttonColors(containerColor = Primary)) {
+                Text("Done")
+            }
+        },
+        containerColor = Panel
+    )
 }
 
 
@@ -409,42 +510,49 @@ fun SessionDrawer(
     onRefresh: () -> Unit,
     onSelect: (AgentSession) -> Unit
 ) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(Color(0xFF1B201D), RoundedCornerShape(8.dp))
-            .padding(10.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(8.dp),
+        colors = CardDefaults.cardColors(containerColor = Panel),
+        border = BorderStroke(1.dp, Color(0xFFD7E2DD))
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+        Column(
+            modifier = Modifier.padding(10.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Text("Sessions", color = Color.White, fontWeight = FontWeight.Bold)
-            TextButton(onClick = onRefresh) {
-                Text("Refresh")
-            }
-        }
-        if (sessions.isEmpty()) {
-            Text("No sessions found.", color = Color(0xFFA9B2AA))
-        } else {
-            Column(
-                modifier = Modifier.heightIn(max = 220.dp).verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                sessions.forEach { session ->
-                    val selected = session.sessionId == selectedSessionId
-                    Button(
-                        onClick = { onSelect(session) },
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = if (selected) Color(0xFF315B45) else Color(0xFF26302A)
-                        )
-                    ) {
-                        Column(modifier = Modifier.fillMaxWidth()) {
-                            Text(session.title.ifBlank { session.sessionId }, color = Color.White)
-                            Text("${session.sessionId} · ${session.status}", color = Color(0xFFC7CEC8))
+                Text("Sessions", color = Ink, fontWeight = FontWeight.Bold)
+                TextButton(onClick = onRefresh) {
+                    Text("Refresh", color = Primary)
+                }
+            }
+            if (sessions.isEmpty()) {
+                Text("No sessions found.", color = Muted)
+            } else {
+                Column(
+                    modifier = Modifier
+                        .heightIn(max = 220.dp)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    sessions.forEach { session ->
+                        val selected = session.sessionId == selectedSessionId
+                        Button(
+                            onClick = { onSelect(session) },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = if (selected) Primary else Accent,
+                                contentColor = if (selected) Color.White else Ink
+                            )
+                        ) {
+                            Column(modifier = Modifier.fillMaxWidth()) {
+                                Text(session.title.ifBlank { session.sessionId }, fontWeight = FontWeight.Bold)
+                                Text("${session.sessionId} - ${session.status}", style = MaterialTheme.typography.bodySmall)
+                            }
                         }
                     }
                 }
@@ -455,51 +563,128 @@ fun SessionDrawer(
 
 
 @Composable
-fun PushToTalkButton(isRecording: Boolean, targetLabel: String, onStart: () -> Unit, onStop: () -> Unit) {
-    val color = if (isRecording) Color(0xFFFF7067) else Color(0xFFE23B2F)
-    Button(
-        onClick = {},
+fun TalkButton(
+    isRecording: Boolean,
+    targetLabel: String,
+    compact: Boolean = false,
+    onClick: () -> Unit
+) {
+    val borderColor = if (isRecording) Danger else Primary
+    val iconBackground = if (isRecording) DangerSoft else Accent
+    val text = if (isRecording) "Tap to Finish" else "Press to Talk"
+    val subtext = if (isRecording) "Recording $targetLabel" else "Tap once to dictate $targetLabel"
+    val controlHeight = if (compact) 82.dp else 126.dp
+    val iconSize = if (compact) 48.dp else 76.dp
+    val micSize = if (compact) 28.dp else 42.dp
+
+    Card(
+        onClick = onClick,
         modifier = Modifier
             .fillMaxWidth()
-            .heightIn(min = 140.dp)
-            .pointerInput(Unit) {
-                detectTapGestures(
-                    onPress = {
-                        onStart()
-                        tryAwaitRelease()
-                        onStop()
-                    }
-                )
-            },
+            .height(controlHeight),
         shape = RoundedCornerShape(8.dp),
-        colors = ButtonDefaults.buttonColors(containerColor = color)
+        colors = CardDefaults.cardColors(containerColor = Panel),
+        border = BorderStroke(1.dp, borderColor)
     ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(if (isRecording) "Recording" else "Hold", color = Color.White)
-            Text(targetLabel, color = Color.White, fontWeight = FontWeight.Bold)
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(18.dp),
+            horizontalArrangement = Arrangement.spacedBy(18.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(iconSize)
+                    .background(iconBackground, CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    painterResource(R.drawable.ic_mic_24),
+                    contentDescription = null,
+                    tint = borderColor,
+                    modifier = Modifier.size(micSize)
+                )
+            }
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(
+                    text,
+                    color = Ink,
+                    fontWeight = FontWeight.Bold,
+                    style = if (compact) MaterialTheme.typography.titleMedium else MaterialTheme.typography.titleLarge
+                )
+                Text(subtext, color = Muted, style = MaterialTheme.typography.bodySmall)
+            }
         }
+    }
+}
+
+@Composable
+fun StopAgentButton(onStop: () -> Unit) {
+    Button(
+        onClick = onStop,
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(58.dp),
+        shape = RoundedCornerShape(8.dp),
+        colors = ButtonDefaults.buttonColors(containerColor = Danger)
+    ) {
+        Icon(painterResource(R.drawable.ic_stop_24), contentDescription = null, modifier = Modifier.size(24.dp))
+        Text(" Stop Agent Now", fontWeight = FontWeight.Bold)
     }
 }
 
 
 @Composable
-fun Terminal(text: String, modifier: Modifier = Modifier) {
+fun Terminal(
+    text: String,
+    expanded: Boolean,
+    onExpand: () -> Unit,
+    onCollapse: () -> Unit,
+    modifier: Modifier = Modifier
+) {
     val scrollState = rememberScrollState()
     val terminalText = remember(text) { terminalAnnotatedString(text) }
     LaunchedEffect(text.length) {
         scrollState.scrollTo(scrollState.maxValue)
     }
-    SelectionContainer {
-        Text(
-            text = terminalText,
-            modifier = modifier
-                .fillMaxWidth()
-                .background(Color(0xFF070908), RoundedCornerShape(8.dp))
-                .padding(10.dp)
-                .verticalScroll(scrollState),
-            color = Color(0xFFF4F2ED),
-            fontFamily = FontFamily.Monospace
-        )
+
+    Card(
+        onClick = onExpand,
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(8.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF22312D))
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(10.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("Terminal", color = Color(0xFFDCE8E1), fontWeight = FontWeight.Bold)
+                TextButton(onClick = if (expanded) onCollapse else onExpand) {
+                    Text(if (expanded) "Collapse" else "Expand", color = Color(0xFFB7E3D4))
+                }
+            }
+            SelectionContainer(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+            ) {
+                Text(
+                    text = terminalText,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(scrollState),
+                    fontFamily = FontFamily.Monospace
+                )
+            }
+        }
     }
 }
 
@@ -567,17 +752,17 @@ fun QuickActions(
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = { onSend("Approved. Proceed with the proposed action.") }, modifier = Modifier.weight(1f)) {
+            Button(onClick = { onSend("Approved. Proceed with the proposed action.") }, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = Primary)) {
                 Text("Approve")
             }
-            Button(onClick = { onSend("Do not proceed with that action. Explain a safer alternative.") }, modifier = Modifier.weight(1f)) {
+            OutlinedButton(onClick = { onSend("Do not proceed with that action. Explain a safer alternative.") }, modifier = Modifier.weight(1f)) {
                 Text("Reject")
             }
-            Button(onClick = { onSend("Pause and summarize what you have found so far.") }, modifier = Modifier.weight(1f)) {
+            OutlinedButton(onClick = { onSend("Pause and summarize what you have found so far.") }, modifier = Modifier.weight(1f)) {
                 Text("Summary")
             }
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
             OutlinedTextField(
                 value = replyText,
                 onValueChange = onReplyTextChange,
@@ -590,7 +775,7 @@ fun QuickActions(
                     onSend(replyText)
                     onReplyTextChange("")
                 }
-            }) {
+            }, colors = ButtonDefaults.buttonColors(containerColor = Primary)) {
                 Text("Send")
             }
         }

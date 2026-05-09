@@ -17,21 +17,20 @@ Basic native Android client for the LAN Home Agent gateway.
 
 The app intentionally does not talk to Parakeet or Codex directly. Those stay behind the gateway/runner services in `/home/pi/home_config/home-agent`.
 
-## Build On PC / WSL
+## Build On This PC / WSL
 
-This Pi does not currently have Java, Gradle, or the Android SDK installed. On a machine with Android Studio or Android command-line tools:
+This WSL checkout has a local Android build toolchain installed at:
 
-```bash
-cd home-agent-android
-gradle assembleDebug
+```text
+/home/brad/.local/android-build-tools/jdk-17.0.19+10
+/home/brad/.android-sdk
 ```
 
-If you want a checked-in wrapper later:
+Build with:
 
 ```bash
 cd home-agent-android
-gradle wrapper
-./gradlew assembleDebug
+./build-debug-wsl.sh
 ```
 
 Debug APK path:
@@ -43,7 +42,8 @@ app/build/outputs/apk/debug/app-debug.apk
 Install with adb:
 
 ```bash
-adb install app/build/outputs/apk/debug/app-debug.apk
+export PATH=/home/brad/.android-sdk/platform-tools:$PATH
+adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
 ## Defaults
