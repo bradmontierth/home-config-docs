@@ -56,6 +56,12 @@ class SessionInfo(BaseModel):
     resume_from: Optional[str] = None
 
 
+class SessionLog(BaseModel):
+    session_id: str
+    text: str
+    truncated: bool = False
+
+
 class CodexSession:
     def __init__(self, session_id: str, request: StartRequest):
         self.session_id = session_id
@@ -512,6 +518,38 @@ def find_codex_thread_id(session_id: str) -> Optional[str]:
     return None
 
 
+def find_session_log_path(session_id: str) -> Optional[Path]:
+    session = sessions.get(session_id)
+    if session:
+        return session.log_path
+    info = find_session_info(session_id)
+    if info:
+        return Path(info.log_path)
+    return None
+
+
+def format_session_log(path: Path, max_chars: int) -> tuple[str, bool]:
+    if not path.exists():
+        return "", False
+    try:
+        raw = path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return "", False
+
+    formatted_parts: list[str] = []
+    parsed_any = False
+    for line in raw.splitlines(keepends=True):
+        text = format_exec_event(line)
+        if text:
+            formatted_parts.append(text)
+            parsed_any = True
+
+    text = "".join(formatted_parts) if parsed_any else raw
+    if max_chars > 0 and len(text) > max_chars:
+        return "[history truncated]\n" + text[-max_chars:], True
+    return text, False
+
+
 app = FastAPI(title=APP_NAME)
 sessions: dict[str, CodexSession] = {}
 
@@ -552,6 +590,15 @@ async def get_session(session_id: str) -> SessionInfo:
     if not info:
         raise HTTPException(status_code=404, detail="unknown session")
     return info
+
+
+@app.get("/sessions/{session_id}/log", response_model=SessionLog)
+async def get_session_log(session_id: str, max_chars: int = 200000) -> SessionLog:
+    path = find_session_log_path(session_id)
+    if not path:
+        raise HTTPException(status_code=404, detail="unknown session")
+    text, truncated = format_session_log(path, max_chars=max_chars)
+    return SessionLog(session_id=session_id, text=text, truncated=truncated)
 
 
 @app.post("/sessions/{session_id}/resume", response_model=SessionInfo)

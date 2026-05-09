@@ -9,6 +9,7 @@ Basic native Android client for the LAN Home Agent gateway.
 - Shows the returned transcript for editing. Before a session exists, voice fills the main task field; after a session exists, voice fills the Reply field for continuing that session.
 - Starts a Codex session through `/api/sessions`.
 - Lists saved sessions through `/api/sessions`.
+- Loads formatted terminal history through `/api/sessions/{session_id}/log` when reopening or selecting a session.
 - Resumes an archived session through `/api/sessions/{session_id}/resume` when you send clarification after the prior run has exited.
 - Streams terminal output through `/ws/sessions/{session_id}`.
 - Renders terminal output with subtle styling so agent messages, commands, hidden output summaries, approvals, and errors are easier to scan.

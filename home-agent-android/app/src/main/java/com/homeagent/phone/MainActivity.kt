@@ -110,10 +110,11 @@ fun HomeAgentApp() {
     var selectedSessionId by remember { mutableStateOf<String?>(null) }
     var selectedSessionTitle by remember { mutableStateOf<String?>(null) }
 
-    fun attachSession(id: String) {
+    fun attachSession(id: String, title: String = id) {
+        socket?.close(1000, "switch session")
         sessionId = id
         selectedSessionId = id
-        selectedSessionTitle = id
+        selectedSessionTitle = title
         sessionRunning = true
         status = "Session $id"
         socket = connectWebSocket(client, gatewayUrl, token, id) { event ->
@@ -221,7 +222,28 @@ fun HomeAgentApp() {
                     selectedSessionId = it.sessionId
                     selectedSessionTitle = it.title
                     sessionId = it.sessionId
-                    status = "Selected ${it.sessionId}"
+                    status = "Loading ${it.sessionId}"
+                    socket?.close(1000, "select archived session")
+                    sessionRunning = false
+                    fetchSessionLog(client, gatewayUrl, token, it.sessionId) { result ->
+                        result.onSuccess { history ->
+                            terminal = history
+                            status = if (it.status == "running") {
+                                "Session ${it.sessionId}"
+                            } else {
+                                "Selected ${it.sessionId}"
+                            }
+                            if (it.status == "running") {
+                                attachSession(it.sessionId, it.title)
+                            }
+                        }.onFailure { error ->
+                            terminal += "\n[history error] ${error.message}\n"
+                            status = "History load failed"
+                            if (it.status == "running") {
+                                attachSession(it.sessionId, it.title)
+                            }
+                        }
+                    }
                     showSessions = false
                 }
             )
@@ -693,6 +715,23 @@ fun listSessions(
                 resumeFrom = item.optString("resume_from").takeIf { it.isNotBlank() && it != "null" }
             )
         }
+    })
+}
+
+
+fun fetchSessionLog(
+    client: OkHttpClient,
+    gatewayUrl: String,
+    token: String,
+    sessionId: String,
+    callback: (Result<String>) -> Unit
+) {
+    val request = Request.Builder()
+        .url("${gatewayUrl.trimEnd('/')}/api/sessions/$sessionId/log${tokenQuery(token)}")
+        .get()
+        .build()
+    client.newCall(request).enqueue(resultCallback(callback) { response ->
+        JSONObject(response.body?.string().orEmpty()).optString("text")
     })
 }
 

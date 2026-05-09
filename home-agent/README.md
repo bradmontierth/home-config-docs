@@ -14,6 +14,7 @@ The gateway can run in Docker. The runner is intended to run directly on the hos
 
 - `POST /api/sessions`: start a Codex run from transcript text.
 - `GET /api/sessions`: list recent saved sessions for the phone session drawer.
+- `GET /api/sessions/{session_id}/log`: return formatted terminal history from the saved `codex.log`.
 - `POST /api/sessions/{session_id}/resume`: continue a saved Codex thread with new text.
 - `WS /ws/sessions/{session_id}`: stream output and send live input while a run is active.
 

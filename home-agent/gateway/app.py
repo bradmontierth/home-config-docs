@@ -208,6 +208,19 @@ async def get_session(request: Request, session_id: str) -> dict:
     return response.json()
 
 
+@app.get("/api/sessions/{session_id}/log")
+async def get_session_log(request: Request, session_id: str, max_chars: int = 200000) -> dict:
+    require_token(request)
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        response = await client.get(
+            f"{RUNNER_URL.rstrip('/')}/sessions/{session_id}/log",
+            params={"max_chars": max_chars},
+        )
+    if response.status_code >= 400:
+        raise HTTPException(status_code=502, detail=response.text)
+    return response.json()
+
+
 @app.post("/api/sessions/{session_id}/resume")
 async def resume_session(request: Request, session_id: str) -> dict:
     require_token(request)
