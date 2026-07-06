@@ -78,3 +78,64 @@ Amplifier
         ↓
 Five audio zones
 ```
+
+
+## Adapter Snapcast self-heal
+
+The local `home-audio-adapter` service is configured with the Snapcast control
+API for `home-audio-pi`:
+
+```text
+SNAPCAST_HOST=192.168.10.140
+SNAPCAST_CONTROL_PORT=1705
+```
+
+When AntennaPod or Tempo asks the adapter to play through Music Assistant,
+Music Assistant may occasionally fail because Snapserver still has a stale idle
+dynamic stream such as `Music Assistant - shower`. In that case Music Assistant
+reports errors like:
+
+```text
+Unable to create stream - No free port found?
+Stream with name 'Music Assistant - shower' already exists
+```
+
+The adapter treats that as recoverable. It queries Snapserver, removes only the
+matching idle `Music Assistant - <player>` stream with no connected clients, and
+retries the original play request once. It also retries when Music Assistant
+accepts the play request but remains idle because the target stream was stale.
+
+Manual fallback, if automatic repair does not clear it:
+
+```bash
+python3 - <<'PY'
+import json, socket
+
+stream_id = "Music Assistant - shower"
+host = "192.168.10.140"
+port = 1705
+
+def rpc(method, params=None):
+    payload = {"id": 1, "jsonrpc": "2.0", "method": method}
+    if params is not None:
+        payload["params"] = params
+    with socket.create_connection((host, port), timeout=3) as sock:
+        sock.sendall((json.dumps(payload) + "\n").encode())
+        sock.settimeout(3)
+        return json.loads(sock.recv(1024 * 1024).decode())
+
+status = rpc("Server.GetStatus")["result"]["server"]
+stream = next((item for item in status["streams"] if item["id"] == stream_id), None)
+attached = [
+    client
+    for group in status["groups"]
+    if group.get("stream_id") == stream_id
+    for client in group.get("clients", [])
+    if client.get("connected")
+]
+if stream and stream.get("status") == "idle" and not attached:
+    print(rpc("Stream.RemoveStream", {"id": stream_id}))
+else:
+    print("Not removing active or missing stream", stream)
+PY
+```

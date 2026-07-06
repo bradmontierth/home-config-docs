@@ -15,6 +15,10 @@ Environment=HOME_AGENT_CODEX_MODE=exec
 Environment=HOME_AGENT_CODEX_DANGER_BYPASS=1
 Environment=HOME_AGENT_CODEX_SANDBOX=workspace-write
 Environment=HOME_AGENT_CODEX_APPROVALS=never
+Environment=HOME_AGENT_CODEX_ACCOUNTS_ROOT=/home/pi/cecret_lake/home-agent/codex-accounts
+Environment="HOME_AGENT_CODEX_ACCOUNTS=account1:Account 1,account2:Account 2,account3:Account 3,machine:Machine Login"
+Environment=HOME_AGENT_CODEX_DEFAULT_ACCOUNT=account1
+Environment=HOME_AGENT_CODEX_ACCOUNT_LABELS=/home/pi/cecret_lake/home-agent/codex-account-labels.json
 ExecStart=/home/pi/home_config/home-agent/.venv-runner/bin/uvicorn app:app --host 127.0.0.1 --port 8766
 Restart=on-failure
 RestartSec=3

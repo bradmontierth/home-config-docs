@@ -25,18 +25,27 @@ body {
 }
 
 button,
+a.button-link,
 input,
 textarea {
   font: inherit;
 }
 
-button {
+button,
+a.button-link {
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--panel-2);
   color: var(--text);
   min-height: 44px;
   padding: 0 14px;
+}
+
+a.button-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
 }
 
 button:disabled {
@@ -58,6 +67,12 @@ button:disabled {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+}
+
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 h1 {
@@ -152,6 +167,7 @@ textarea {
 
 .actions {
   margin-top: 10px;
+  flex-wrap: wrap;
 }
 
 #runBtn {
@@ -159,9 +175,18 @@ textarea {
   border-color: #276d3d;
 }
 
+#runBtn,
+#newConversationBtn {
+  flex: 1 1 150px;
+}
+
 .terminal-panel {
   min-height: 260px;
   overflow: hidden;
+}
+
+.terminal-expanded .terminal-panel {
+  min-height: min(68svh, 720px);
 }
 
 .terminal {
@@ -213,6 +238,11 @@ textarea {
   }
 
   .quick-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .actions {
+    display: grid;
     grid-template-columns: 1fr;
   }
 }

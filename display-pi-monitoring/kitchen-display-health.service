@@ -1,0 +1,6 @@
+[Unit]
+Description=Kitchen display health evidence sample
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/kitchen-display-health

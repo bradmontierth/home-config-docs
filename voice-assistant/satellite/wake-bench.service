@@ -1,0 +1,14 @@
+[Unit]
+Description=Wake-word shadow bench (livekit-wakeword score logger)
+After=network-online.target sound.target
+
+[Service]
+User=pi
+WorkingDirectory=/home/pi/wake-bench
+EnvironmentFile=/home/pi/wake-bench/.env
+ExecStart=/home/pi/wake-bench/.venv/bin/python /home/pi/wake-bench/shadow_wake.py
+Restart=always
+RestartSec=60
+
+[Install]
+WantedBy=multi-user.target

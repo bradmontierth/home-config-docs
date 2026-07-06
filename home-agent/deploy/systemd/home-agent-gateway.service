@@ -12,7 +12,7 @@ WorkingDirectory=/home/pi/home_config/home-agent/gateway
 Environment=HOME_AGENT_HOME_CONFIG=/home/pi/home_config
 Environment=HOME_AGENT_SESSION_ROOT=/home/pi/home_config/home-agent/sessions
 Environment=HOME_AGENT_RUNNER_URL=http://127.0.0.1:8766
-Environment=HOME_AGENT_PARAKEET_URL=http://jetson-tts:8090
+Environment=HOME_AGENT_PARAKEET_URL=http://192.168.10.187:8090
 ExecStart=/home/pi/home_config/home-agent/.venv-gateway/bin/uvicorn app:app --host 0.0.0.0 --port 8767
 Restart=on-failure
 RestartSec=3

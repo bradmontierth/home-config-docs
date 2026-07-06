@@ -13,6 +13,21 @@ home-agent/sessions/
 local.properties
 *.apk
 *.aab
+home-agent-android/app/google-services.json
+home-agent/secrets/
+home-agent/firebase-service-account*.json
+home-agent/*service-account*.json
+home-agent-android/.android-sdk/
+home-agent-android/.android-user-home/
+home-agent-android/.build-tools/
+home-agent-android/.gradle-home/
+
+# Local diagnostics / restore scratch data
+diagnostics/
+tmp/
+*.bak
+*.bak-*
+*.bak.*
 
 # Editors / OS
 .DS_Store

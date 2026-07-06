@@ -13,7 +13,10 @@
           <h1>Home Agent</h1>
           <p id="status">Ready</p>
         </div>
-        <button id="stopBtn" class="icon danger" type="button" disabled title="Stop session">Stop</button>
+        <div class="topbar-actions">
+          <a id="apkDownloadLink" class="button-link" href="/api/android-apk" download>APK</a>
+          <button id="stopBtn" class="icon danger" type="button" disabled title="Stop session">Stop</button>
+        </div>
       </section>
 
       <section class="talk">
@@ -29,6 +32,7 @@
         <div class="actions">
           <button id="runBtn" type="button" disabled>Run Codex</button>
           <button id="clearBtn" type="button">Clear</button>
+          <button id="newConversationBtn" type="button">New Conversation</button>
         </div>
       </section>
 

@@ -1,8 +1,10 @@
 const statusEl = document.getElementById("status");
+const apkDownloadLink = document.getElementById("apkDownloadLink");
 const talkBtn = document.getElementById("talkBtn");
 const transcriptEl = document.getElementById("transcript");
 const runBtn = document.getElementById("runBtn");
 const clearBtn = document.getElementById("clearBtn");
+const newConversationBtn = document.getElementById("newConversationBtn");
 const terminalEl = document.getElementById("terminal");
 const stopBtn = document.getElementById("stopBtn");
 const sendForm = document.getElementById("sendForm");
@@ -31,6 +33,10 @@ function authQuery() {
   const token = params.get("token");
   return token ? `?token=${encodeURIComponent(token)}` : "";
 }
+
+apkDownloadLink.href = `/api/android-apk${authQuery()}`;
+
+apkDownloadLink.href = `/api/android-apk${authQuery()}`;
 
 async function apiFetch(url, options = {}) {
   const response = await fetch(`${url}${authQuery()}`, options);
@@ -86,6 +92,7 @@ async function startSession() {
   const text = transcriptEl.value.trim();
   if (!text) return;
   setStatus("Starting Codex");
+  document.body.classList.add("terminal-expanded");
   terminalEl.textContent = "";
   terminalEl.classList.remove("awaiting");
   const response = await apiFetch("/api/sessions", {
@@ -149,6 +156,22 @@ runBtn.addEventListener("click", startSession);
 clearBtn.addEventListener("click", () => {
   transcriptEl.value = "";
   runBtn.disabled = true;
+  setStatus("Ready");
+});
+
+newConversationBtn.addEventListener("click", () => {
+  if (socket) {
+    socket.close(1000, "new conversation");
+    socket = null;
+  }
+  sessionId = null;
+  transcriptEl.value = "";
+  messageEl.value = "";
+  terminalEl.textContent = "";
+  terminalEl.classList.remove("awaiting");
+  document.body.classList.remove("terminal-expanded");
+  runBtn.disabled = true;
+  stopBtn.disabled = true;
   setStatus("Ready");
 });
 

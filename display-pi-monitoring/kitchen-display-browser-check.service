@@ -1,0 +1,6 @@
+[Unit]
+Description=Kitchen display bounded browser check
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/kitchen-display-browser-check

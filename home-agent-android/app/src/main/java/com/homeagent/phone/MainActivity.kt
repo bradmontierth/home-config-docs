@@ -1,9 +1,18 @@
 package com.homeagent.phone
 
 import android.Manifest
+import android.content.ActivityNotFoundException
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.media.MediaRecorder
+import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
@@ -16,6 +25,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -24,6 +35,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -44,6 +56,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
@@ -59,8 +72,14 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.google.firebase.messaging.FirebaseMessaging
 import okhttp3.Call
 import okhttp3.Callback
 import okhttp3.MediaType.Companion.toMediaType
@@ -77,7 +96,11 @@ import org.json.JSONException
 import org.json.JSONObject
 import java.io.File
 import java.io.IOException
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.delay
 
 
 private val AppBackground = Color(0xFFF6F7F4)
@@ -89,11 +112,18 @@ private val PrimaryDark = Color(0xFF15594F)
 private val Accent = Color(0xFFE4F2ED)
 private val Danger = Color(0xFFC84132)
 private val DangerSoft = Color(0xFFFFE9E4)
+private const val EXTRA_SESSION_ID = "com.homeagent.phone.SESSION_ID"
+private const val FCM_DATA_SESSION_ID = "session_id"
+private const val NOTIFICATION_CHANNEL_ID = "home_agent_sessions"
+private const val SESSION_NOTIFICATION_ID = 4107
 
 
 class MainActivity : ComponentActivity() {
+    private val launchSessionId = mutableStateOf<String?>(null)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        launchSessionId.value = intent.homeAgentSessionId()
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         setContent {
             MaterialTheme(
@@ -108,26 +138,85 @@ class MainActivity : ComponentActivity() {
                 )
             ) {
                 Surface(modifier = Modifier.fillMaxSize(), color = AppBackground) {
-                    HomeAgentApp()
+                    HomeAgentApp(launchSessionId)
                 }
             }
         }
     }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        launchSessionId.value = intent.homeAgentSessionId()
+    }
+}
+
+
+private fun Intent.homeAgentSessionId(): String? {
+    return getStringExtra(EXTRA_SESSION_ID) ?: getStringExtra(FCM_DATA_SESSION_ID)
 }
 
 
 data class AgentSession(
     val sessionId: String,
     val title: String,
+    val displayTitle: String,
+    val latestTitle: String,
+    val preview: String,
     val status: String,
     val startedAt: Double,
+    val rootSessionId: String?,
+    val reasoningEffort: String,
+    val codexAccount: String,
+    val codexModel: String,
     val resumeFrom: String?
 )
 
 
+data class ReasoningEffort(val value: String, val label: String)
+
+
+data class CodexAccount(
+    val accountId: String,
+    val label: String,
+    val authenticated: Boolean,
+    val isDefault: Boolean
+)
+
+
+data class CodexModel(
+    val modelId: String,
+    val label: String,
+    val description: String,
+    val isDefault: Boolean,
+    val deprecated: Boolean,
+    val replacement: String?
+)
+
+
+data class CodexLoginSession(
+    val loginSessionId: String,
+    val accountId: String,
+    val status: String,
+    val verificationUri: String?,
+    val userCode: String?,
+    val output: String,
+    val returncode: Int?,
+    val error: String?
+)
+
+
+private val ReasoningOptions = listOf(
+    ReasoningEffort("low", "Low"),
+    ReasoningEffort("medium", "Medium"),
+    ReasoningEffort("high", "High"),
+    ReasoningEffort("xhigh", "XHigh")
+)
+
+
 @Composable
-fun HomeAgentApp() {
+fun HomeAgentApp(launchSessionId: MutableState<String?>) {
     val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
     val prefs = remember { context.getSharedPreferences("home-agent", Context.MODE_PRIVATE) }
     val client = remember {
         OkHttpClient.Builder()
@@ -141,6 +230,11 @@ fun HomeAgentApp() {
 
     var gatewayUrl by remember { mutableStateOf(prefs.getString("gateway_url", "http://192.168.10.217:8767") ?: "") }
     var token by remember { mutableStateOf(prefs.getString("token", "") ?: "") }
+    var reasoningEffort by remember { mutableStateOf(prefs.getString("reasoning_effort", "medium") ?: "medium") }
+    var codexAccount by remember { mutableStateOf(prefs.getString("codex_account", "account1") ?: "account1") }
+    var codexModel by remember { mutableStateOf(prefs.getString("codex_model", "") ?: "") }
+    var codexAccounts by remember { mutableStateOf<List<CodexAccount>>(emptyList()) }
+    var codexModels by remember { mutableStateOf<List<CodexModel>>(emptyList()) }
     var transcript by remember { mutableStateOf("") }
     var replyText by remember { mutableStateOf("") }
     var terminal by remember { mutableStateOf("") }
@@ -154,17 +248,44 @@ fun HomeAgentApp() {
     var terminalExpanded by remember { mutableStateOf(false) }
     var selectedSessionId by remember { mutableStateOf<String?>(null) }
     var selectedSessionTitle by remember { mutableStateOf<String?>(null) }
+    var selectedSessionReasoning by remember { mutableStateOf<String?>(null) }
+    var selectedSessionAccount by remember { mutableStateOf<String?>(null) }
+    var selectedSessionModel by remember { mutableStateOf<String?>(null) }
     var lastRecordingFile by remember { mutableStateOf<File?>(null) }
     var canRetryTranscription by remember { mutableStateOf(false) }
     var isTranscribing by remember { mutableStateOf(false) }
     var isSubmittingSession by remember { mutableStateOf(false) }
+    var reconnectSessionId by remember { mutableStateOf<String?>(null) }
+    var reconnectAttempt by remember { mutableStateOf(0) }
+    var reconnectTrigger by remember { mutableStateOf(0) }
+    var authDialogAccount by remember { mutableStateOf<CodexAccount?>(null) }
+    var authLoginSession by remember { mutableStateOf<CodexLoginSession?>(null) }
+    var authPollTrigger by remember { mutableStateOf(0) }
+    var pendingAuthAccount by remember { mutableStateOf<CodexAccount?>(null) }
     val hasCurrentSession = selectedSessionId != null || sessionId != null
 
+    fun activeSessionId(): String? = selectedSessionId ?: sessionId
+
+    fun resetReconnect() {
+        reconnectSessionId = null
+        reconnectAttempt = 0
+    }
+
+    fun requestReconnect(id: String) {
+        if (activeSessionId() != id) return
+        reconnectSessionId = id
+        reconnectTrigger += 1
+    }
+
     fun attachSession(id: String, title: String = id) {
+        resetReconnect()
         socket?.close(1000, "switch session")
         sessionId = id
         selectedSessionId = id
         selectedSessionTitle = title
+        selectedSessionReasoning = reasoningEffort
+        selectedSessionAccount = codexAccount
+        selectedSessionModel = codexModel
         sessionRunning = true
         status = "Session $id"
         socket = connectWebSocket(client, gatewayUrl, token, id) { event ->
@@ -176,15 +297,81 @@ fun HomeAgentApp() {
                         status = "Waiting for approval"
                     }
                 }
+                "auth_required" -> {
+                    val accountId = event.optString("account_id", selectedSessionAccount ?: codexAccount)
+                    val data = event.optString("data")
+                    if (data.isNotBlank()) terminal += data
+                    status = "Login needed"
+                    val account = codexAccounts.firstOrNull { it.accountId == accountId }
+                        ?: CodexAccount(accountId, codexAccountLabel(accountId, codexAccounts), false, false)
+                    authDialogAccount = account
+                }
                 "status" -> {
                     val nextStatus = event.optString("status", status)
                     status = nextStatus
-                    if (nextStatus == "exited" || nextStatus == "closed") {
-                        sessionRunning = false
+                    when (nextStatus) {
+                        "running" -> {
+                            sessionRunning = true
+                            resetReconnect()
+                        }
+                        "exited" -> {
+                            sessionRunning = false
+                            if (activeSessionId() == id) socket = null
+                        }
+                        "closed", "Disconnected" -> {
+                            sessionRunning = false
+                            if (activeSessionId() == id) {
+                                socket = null
+                                requestReconnect(id)
+                            }
+                        }
                     }
                 }
             }
         }
+    }
+
+    fun loadSession(id: String, expandTerminal: Boolean) {
+        resetReconnect()
+        selectedSessionId = id
+        sessionId = id
+        status = "Loading $id"
+        terminalExpanded = terminalExpanded || expandTerminal
+        socket?.close(1000, "notification session")
+        socket = null
+        sessionRunning = false
+        fun loadInfoAndMaybeReconnect() {
+            fetchSessionInfo(client, gatewayUrl, token, id) { infoResult ->
+                infoResult.onSuccess { info ->
+                    selectedSessionTitle = info.displayTitle.ifBlank { info.title }
+                    selectedSessionReasoning = info.reasoningEffort
+                    selectedSessionAccount = info.codexAccount
+                    selectedSessionModel = info.codexModel
+                    if (info.status == "running") {
+                        attachSession(id, selectedSessionTitle ?: info.title)
+                    } else {
+                        status = "Selected $id"
+                    }
+                }.onFailure { error ->
+                    terminal += "\n[session info error] ${error.message}\n"
+                }
+            }
+        }
+        fetchSessionLog(client, gatewayUrl, token, id) { result ->
+            result.onSuccess { history ->
+                terminal = history
+                status = "Selected $id"
+                loadInfoAndMaybeReconnect()
+            }.onFailure { error ->
+                terminal += "\n[history error] ${error.message}\n"
+                status = "History load failed"
+                loadInfoAndMaybeReconnect()
+            }
+        }
+    }
+
+    fun loadSessionFromNotification(id: String) {
+        loadSession(id, expandTerminal = true)
     }
 
     fun refreshSessions() {
@@ -197,11 +384,133 @@ fun HomeAgentApp() {
         }
     }
 
+    fun refreshCodexAccounts() {
+        listCodexAccounts(client, gatewayUrl, token) { result ->
+            result.onSuccess { accounts ->
+                codexAccounts = accounts
+                val accountIds = accounts.map { it.accountId }.toSet()
+                if (codexAccount !in accountIds) {
+                    val next = accounts.firstOrNull { it.isDefault } ?: accounts.firstOrNull()
+                    if (next != null) {
+                        codexAccount = next.accountId
+                        prefs.edit().putString("codex_account", next.accountId).apply()
+                    }
+                }
+            }.onFailure {
+                terminal += "\n[account warning] ${it.message}\n"
+            }
+        }
+    }
+
+    fun refreshCodexModels() {
+        listCodexModels(client, gatewayUrl, token) { result ->
+            result.onSuccess { models ->
+                codexModels = models
+                val modelIds = models.map { it.modelId }.toSet()
+                if (codexModel.isBlank() || codexModel !in modelIds || models.any { it.modelId == codexModel && it.deprecated }) {
+                    val replacement = models.firstOrNull { it.modelId == codexModel }?.replacement
+                    val next = models.firstOrNull { it.modelId == replacement }
+                        ?: models.firstOrNull { it.isDefault && !it.deprecated }
+                        ?: models.firstOrNull { !it.deprecated }
+                        ?: models.firstOrNull()
+                    if (next != null) {
+                        codexModel = next.modelId
+                        prefs.edit().putString("codex_model", next.modelId).apply()
+                    }
+                }
+            }.onFailure {
+                terminal += "\n[model warning] ${it.message}\n"
+            }
+        }
+    }
+
+    fun saveCodexLabel(accountId: String, label: String) {
+        saveCodexAccountLabel(client, gatewayUrl, token, accountId, label) { result ->
+            result.onSuccess { updated ->
+                codexAccounts = codexAccounts.map {
+                    if (it.accountId == updated.accountId) updated else it
+                }
+                refreshCodexAccounts()
+            }.onFailure {
+                terminal += "\n[account label warning] ${it.message}\n"
+            }
+        }
+    }
+
+    fun openCodexLogin(account: CodexAccount) {
+        authDialogAccount = account
+        authLoginSession = null
+        showSettings = false
+    }
+
+    fun startCodexLogin(account: CodexAccount) {
+        authDialogAccount = account
+        status = "Starting login"
+        startCodexAccountLogin(client, gatewayUrl, token, account.accountId) { result ->
+            result.onSuccess { login ->
+                authLoginSession = login
+                status = if (login.status == "running") "Login pending" else "Login ${login.status}"
+                authPollTrigger += 1
+            }.onFailure {
+                status = "Login failed"
+                terminal += "\n[login error] ${it.message}\n"
+            }
+        }
+    }
+
+    fun refreshCodexLogin(login: CodexLoginSession) {
+        getCodexAccountLogin(client, gatewayUrl, token, login.accountId, login.loginSessionId) { result ->
+            result.onSuccess { updated ->
+                authLoginSession = updated
+                status = if (updated.status == "running") "Login pending" else "Login ${updated.status}"
+                if (updated.status == "running") {
+                    authPollTrigger += 1
+                } else {
+                    refreshCodexAccounts()
+                }
+            }.onFailure {
+                terminal += "\n[login status error] ${it.message}\n"
+            }
+        }
+    }
+
+    fun cancelCodexLogin(login: CodexLoginSession?) {
+        if (login != null && login.status == "running") {
+            cancelCodexAccountLogin(client, gatewayUrl, token, login.accountId, login.loginSessionId) { result ->
+                result.onSuccess { authLoginSession = it }
+            }
+        }
+        authDialogAccount = null
+        authLoginSession = null
+        refreshCodexAccounts()
+    }
+
     fun stopAgent() {
+        resetReconnect()
         socket?.send("""{"type":"stop"}""")
         sessionId?.let { stopSession(client, gatewayUrl, token, it) }
         sessionRunning = false
         status = "Stopping agent"
+    }
+
+    fun startNewConversation() {
+        resetReconnect()
+        socket?.close(1000, "new conversation")
+        socket = null
+        sessionId = null
+        selectedSessionId = null
+        selectedSessionTitle = null
+        selectedSessionReasoning = null
+        selectedSessionAccount = null
+        selectedSessionModel = null
+        sessionRunning = false
+        transcript = ""
+        replyText = ""
+        terminal = ""
+        terminalExpanded = false
+        lastRecordingFile = null
+        canRetryTranscription = false
+        status = "Ready"
     }
 
     fun resumeOrSend(text: String) {
@@ -217,7 +526,7 @@ fun HomeAgentApp() {
             return
         }
         status = "Resuming $target"
-        resumeSession(client, gatewayUrl, token, target, text) { result ->
+        resumeSession(client, gatewayUrl, token, target, text, reasoningEffort, codexAccount, codexModel) { result ->
             result.onSuccess { id ->
                 terminal += "\n[resume] Continuing $target as $id\n"
                 attachSession(id)
@@ -286,6 +595,7 @@ fun HomeAgentApp() {
         val target = selectedSessionId
         isSubmittingSession = true
         status = if (target == null) "Starting Codex" else "Resuming $target"
+        terminalExpanded = true
         if (target == null) {
             terminal = ""
         }
@@ -299,19 +609,112 @@ fun HomeAgentApp() {
             }
         }
         if (target == null) {
-            startSession(client, gatewayUrl, token, transcript, callback)
+            startSession(client, gatewayUrl, token, transcript, reasoningEffort, codexAccount, codexModel, callback)
         } else {
-            resumeSession(client, gatewayUrl, token, target, transcript, callback)
+            resumeSession(client, gatewayUrl, token, target, transcript, reasoningEffort, codexAccount, codexModel, callback)
         }
     }
 
     val requestPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         status = if (granted) "Microphone ready" else "Microphone denied"
     }
+    val requestNotificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (!granted) {
+            terminal += "\n[notification warning] Notifications are disabled for Home Agent.\n"
+        }
+    }
 
     LaunchedEffect(Unit) {
+        ensureNotificationChannel(context)
+        refreshCodexAccounts()
+        refreshCodexModels()
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             requestPermission.launch(Manifest.permission.RECORD_AUDIO)
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            requestNotificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
+
+    LaunchedEffect(gatewayUrl, token) {
+        if (gatewayUrl.isBlank()) return@LaunchedEffect
+        registerCurrentFcmToken(context, client, gatewayUrl, token) { result ->
+            result.onFailure { error ->
+                terminal += "\n[notification warning] FCM registration skipped: ${error.friendlyMessage()}\n"
+            }
+        }
+    }
+
+    LaunchedEffect(launchSessionId.value) {
+        val requestedSession = launchSessionId.value ?: return@LaunchedEffect
+        launchSessionId.value = null
+        loadSessionFromNotification(requestedSession)
+    }
+
+    LaunchedEffect(reconnectTrigger) {
+        val target = reconnectSessionId ?: return@LaunchedEffect
+        val delayMs = when (reconnectAttempt) {
+            0 -> 1_000L
+            1 -> 2_000L
+            2 -> 5_000L
+            3 -> 10_000L
+            else -> 15_000L
+        }
+        delay(delayMs)
+        if (activeSessionId() != target || reconnectSessionId != target) return@LaunchedEffect
+        status = "Reconnecting $target"
+        fetchSessionInfo(client, gatewayUrl, token, target) { result ->
+            result.onSuccess { info ->
+                if (activeSessionId() == target && reconnectSessionId == target) {
+                    if (info.status == "running") {
+                        fetchSessionLog(client, gatewayUrl, token, target) { historyResult ->
+                            historyResult.onSuccess { terminal = it }
+                            attachSession(target, info.displayTitle.ifBlank { info.title })
+                        }
+                    } else {
+                        reconnectSessionId = null
+                        sessionRunning = false
+                        status = "Selected $target"
+                    }
+                }
+            }.onFailure { error ->
+                if (activeSessionId() == target && reconnectSessionId == target) {
+                    reconnectAttempt = (reconnectAttempt + 1).coerceAtMost(8)
+                    reconnectTrigger += 1
+                    status = "Reconnect waiting"
+                    terminal += "\n[reconnect error] ${error.message}\n"
+                }
+            }
+        }
+    }
+
+    LaunchedEffect(authPollTrigger) {
+        val login = authLoginSession ?: return@LaunchedEffect
+        if (login.status != "running") return@LaunchedEffect
+        delay(1_500L)
+        refreshCodexLogin(login)
+    }
+
+    LaunchedEffect(pendingAuthAccount) {
+        val account = pendingAuthAccount ?: return@LaunchedEffect
+        pendingAuthAccount = null
+        openCodexLogin(account)
+    }
+
+    DisposableEffect(lifecycleOwner, selectedSessionId, sessionId, sessionRunning, status) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                val target = activeSessionId()
+                if (target != null && (!sessionRunning || status == "Disconnected" || status == "closed")) {
+                    loadSession(target, expandTerminal = false)
+                }
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
         }
     }
 
@@ -319,26 +722,74 @@ fun HomeAgentApp() {
         SettingsDialog(
             gatewayUrl = gatewayUrl,
             token = token,
+            reasoningEffort = reasoningEffort,
+            codexAccount = codexAccount,
+            codexAccounts = codexAccounts,
+            codexModel = codexModel,
+            codexModels = codexModels,
             onGatewayUrl = {
                 gatewayUrl = it.trim()
                 prefs.edit().putString("gateway_url", gatewayUrl).apply()
+                refreshCodexAccounts()
             },
             onToken = {
                 token = it.trim()
                 prefs.edit().putString("token", token).apply()
+                refreshCodexAccounts()
+            },
+            onReasoningEffort = {
+                reasoningEffort = it
+                prefs.edit().putString("reasoning_effort", it).apply()
+            },
+            onCodexAccount = {
+                codexAccount = it
+                prefs.edit().putString("codex_account", it).apply()
+            },
+            onCodexModel = {
+                codexModel = it
+                prefs.edit().putString("codex_model", it).apply()
+            },
+            onRefreshAccounts = ::refreshCodexAccounts,
+            onRefreshModels = ::refreshCodexModels,
+            onSaveCodexAccountLabel = ::saveCodexLabel,
+            onStartCodexLogin = {
+                showSettings = false
+                pendingAuthAccount = it
             },
             onDismiss = { showSettings = false }
         )
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .statusBarsPadding()
-            .navigationBarsPadding()
-            .padding(horizontal = 16.dp, vertical = 10.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
-    ) {
+    authDialogAccount?.let { account ->
+        CodexLoginDialog(
+            account = account,
+            loginSession = authLoginSession,
+            onStart = { startCodexLogin(account) },
+            onRefresh = { authLoginSession?.let(::refreshCodexLogin) ?: startCodexLogin(account) },
+            onCopyCode = { code -> copyToClipboard(context, "Codex device code", code) },
+            onOpenBrowser = { uri ->
+                openBrowser(context, uri) { error ->
+                    terminal += "\n[login browser error] ${error.message}\n"
+                }
+            },
+            onCancel = { cancelCodexLogin(authLoginSession) },
+            onDismiss = {
+                authDialogAccount = null
+                authLoginSession = null
+                refreshCodexAccounts()
+            }
+        )
+    }
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .statusBarsPadding()
+                .navigationBarsPadding()
+                .padding(horizontal = 16.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
         if (terminalExpanded) {
             TalkButton(
                 isRecording = recorderState.isRecording.value,
@@ -363,6 +814,7 @@ fun HomeAgentApp() {
                 expanded = true,
                 onExpand = { terminalExpanded = true },
                 onCollapse = { terminalExpanded = false },
+                onNewConversation = ::startNewConversation,
                 modifier = Modifier.weight(1f)
             )
 
@@ -386,44 +838,11 @@ fun HomeAgentApp() {
             onSettings = { showSettings = true }
         )
 
-        if (showSessions) {
-            SessionDrawer(
-                sessions = sessions,
-                selectedSessionId = selectedSessionId,
-                onRefresh = ::refreshSessions,
-                onSelect = {
-                    selectedSessionId = it.sessionId
-                    selectedSessionTitle = it.title
-                    sessionId = it.sessionId
-                    status = "Loading ${it.sessionId}"
-                    socket?.close(1000, "select archived session")
-                    sessionRunning = false
-                    fetchSessionLog(client, gatewayUrl, token, it.sessionId) { result ->
-                        result.onSuccess { history ->
-                            terminal = history
-                            status = if (it.status == "running") {
-                                "Session ${it.sessionId}"
-                            } else {
-                                "Selected ${it.sessionId}"
-                            }
-                            if (it.status == "running") {
-                                attachSession(it.sessionId, it.title)
-                            }
-                        }.onFailure { error ->
-                            terminal += "\n[history error] ${error.message}\n"
-                            status = "History load failed"
-                            if (it.status == "running") {
-                                attachSession(it.sessionId, it.title)
-                            }
-                        }
-                    }
-                    showSessions = false
-                }
-            )
-        }
-
         selectedSessionTitle?.let {
-            Text("Selected: $it", color = Muted, style = MaterialTheme.typography.bodySmall)
+            val effort = selectedSessionReasoning?.let { value -> " - ${reasoningLabel(value)}" }.orEmpty()
+            val account = selectedSessionAccount?.let { value -> " - ${codexAccountLabel(value, codexAccounts)}" }.orEmpty()
+            val model = selectedSessionModel?.let { value -> " - ${codexModelLabel(value, codexModels)}" }.orEmpty()
+            Text("Selected: $it$effort$account$model", color = Muted, style = MaterialTheme.typography.bodySmall)
         }
 
         TalkButton(
@@ -452,7 +871,10 @@ fun HomeAgentApp() {
             maxLines = 5
         )
 
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
             Button(
                 onClick = ::runCodex,
                 enabled = transcript.isNotBlank() && gatewayUrl.isNotBlank() && !isSubmittingSession,
@@ -468,17 +890,11 @@ fun HomeAgentApp() {
                 )
             }
 
-            OutlinedButton(onClick = {
-                transcript = ""
-                replyText = ""
-                terminal = ""
-                lastRecordingFile = null
-                canRetryTranscription = false
-                selectedSessionId = null
-                selectedSessionTitle = null
-                status = "Ready"
-            }) {
-                Text("Clear")
+            OutlinedButton(
+                onClick = ::startNewConversation,
+                modifier = Modifier.weight(1f)
+            ) {
+                Text("New Chat")
             }
         }
 
@@ -498,6 +914,98 @@ fun HomeAgentApp() {
             onSend = ::resumeOrSend
         )
     }
+
+        if (showSessions) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color(0x66000000))
+            ) {
+                SessionDrawer(
+                    sessions = sessions,
+                    selectedSessionId = selectedSessionId,
+                    onRefresh = ::refreshSessions,
+                    onDismiss = { showSessions = false },
+                    onSelect = { session ->
+                        selectedSessionTitle = session.displayTitle.ifBlank { session.title }
+                        selectedSessionReasoning = session.reasoningEffort.takeIf { value -> value.isNotBlank() }
+                        selectedSessionAccount = session.codexAccount.takeIf { value -> value.isNotBlank() }
+                        selectedSessionModel = session.codexModel.takeIf { value -> value.isNotBlank() }
+                        loadSession(session.sessionId, expandTerminal = true)
+                        showSessions = false
+                    }
+                )
+            }
+        }
+    }
+}
+
+
+@Composable
+fun ReasoningSelector(
+    selected: String,
+    sessionReasoning: String?,
+    onSelected: (String) -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        ReasoningOptions.chunked(2).forEach { row ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                row.forEach { option ->
+                    val active = option.value == selected
+                    val buttonColors = if (active) {
+                        ButtonDefaults.buttonColors(containerColor = Primary, contentColor = Color.White)
+                    } else {
+                        ButtonDefaults.outlinedButtonColors(contentColor = Ink)
+                    }
+                    OutlinedButton(
+                        onClick = { onSelected(option.value) },
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(44.dp),
+                        colors = buttonColors,
+                        border = BorderStroke(1.dp, if (active) Primary else Color(0xFFD7E2DD)),
+                        shape = RoundedCornerShape(8.dp),
+                        contentPadding = ButtonDefaults.ContentPadding
+                    ) {
+                        Text(option.label, maxLines = 1)
+                    }
+                }
+                if (row.size == 1) {
+                    Spacer(modifier = Modifier.weight(1f))
+                }
+            }
+        }
+        val current = sessionReasoning?.takeIf { it.isNotBlank() }
+        val label = if (current == null) {
+            "Reasoning for new/resumed sessions: ${reasoningLabel(selected)}"
+        } else {
+            "Reasoning: ${reasoningLabel(selected)}  Current session: ${reasoningLabel(current)}"
+        }
+        Text(
+            label,
+            color = Muted,
+            style = MaterialTheme.typography.bodySmall
+        )
+    }
+}
+
+
+fun reasoningLabel(value: String): String {
+    return ReasoningOptions.firstOrNull { it.value == value }?.label ?: value
+}
+
+
+fun codexAccountLabel(value: String, accounts: List<CodexAccount>): String {
+    return accounts.firstOrNull { it.accountId == value }?.label ?: value
+}
+
+
+fun codexModelLabel(value: String, models: List<CodexModel>): String {
+    return models.firstOrNull { it.modelId == value }?.label ?: value
 }
 
 
@@ -507,20 +1015,18 @@ fun Header(status: String, onSessions: () -> Unit, onSettings: () -> Unit) {
         modifier = Modifier
             .fillMaxWidth()
             .heightIn(min = 44.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
+        IconButton(onClick = onSessions) {
+            Icon(painterResource(R.drawable.ic_menu_24), contentDescription = "Sessions", tint = PrimaryDark)
+        }
         Column(modifier = Modifier.weight(1f)) {
             Text("Home Agent", color = Ink, fontWeight = FontWeight.Bold)
             Text(status, color = Muted, style = MaterialTheme.typography.bodySmall)
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            OutlinedButton(onClick = onSessions) {
-                Text("Sessions")
-            }
-            IconButton(onClick = onSettings) {
-                Icon(painterResource(R.drawable.ic_settings_24), contentDescription = "Settings", tint = PrimaryDark)
-            }
+        IconButton(onClick = onSettings) {
+            Icon(painterResource(R.drawable.ic_settings_24), contentDescription = "Settings", tint = PrimaryDark)
         }
     }
 }
@@ -530,15 +1036,34 @@ fun Header(status: String, onSessions: () -> Unit, onSettings: () -> Unit) {
 fun SettingsDialog(
     gatewayUrl: String,
     token: String,
+    reasoningEffort: String,
+    codexAccount: String,
+    codexAccounts: List<CodexAccount>,
+    codexModel: String,
+    codexModels: List<CodexModel>,
     onGatewayUrl: (String) -> Unit,
     onToken: (String) -> Unit,
+    onReasoningEffort: (String) -> Unit,
+    onCodexAccount: (String) -> Unit,
+    onCodexModel: (String) -> Unit,
+    onRefreshAccounts: () -> Unit,
+    onRefreshModels: () -> Unit,
+    onSaveCodexAccountLabel: (String, String) -> Unit,
+    onStartCodexLogin: (CodexAccount) -> Unit,
     onDismiss: () -> Unit
 ) {
+    val settingsScroll = rememberScrollState()
+    val maxDialogBodyHeight = (LocalConfiguration.current.screenHeightDp.dp * 0.72f).coerceAtLeast(360.dp)
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Settings") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(
+                modifier = Modifier
+                    .heightIn(max = maxDialogBodyHeight)
+                    .verticalScroll(settingsScroll),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
                 OutlinedTextField(
                     value = gatewayUrl,
                     onValueChange = onGatewayUrl,
@@ -553,6 +1078,25 @@ fun SettingsDialog(
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
+                ReasoningSelector(
+                    selected = reasoningEffort,
+                    sessionReasoning = null,
+                    onSelected = onReasoningEffort
+                )
+                CodexAccountSelector(
+                    selected = codexAccount,
+                    accounts = codexAccounts,
+                    onSelected = onCodexAccount,
+                    onRefresh = onRefreshAccounts,
+                    onSaveLabel = onSaveCodexAccountLabel,
+                    onStartLogin = onStartCodexLogin
+                )
+                CodexModelSelector(
+                    selected = codexModel,
+                    models = codexModels,
+                    onSelected = onCodexModel,
+                    onRefresh = onRefreshModels
+                )
             }
         },
         confirmButton = {
@@ -566,20 +1110,282 @@ fun SettingsDialog(
 
 
 @Composable
+fun CodexAccountSelector(
+    selected: String,
+    accounts: List<CodexAccount>,
+    onSelected: (String) -> Unit,
+    onRefresh: () -> Unit,
+    onSaveLabel: (String, String) -> Unit,
+    onStartLogin: (CodexAccount) -> Unit
+) {
+    var labelDraft by remember(selected, accounts) {
+        mutableStateOf(accounts.firstOrNull { it.accountId == selected }?.label ?: "")
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("Codex account", color = Ink, fontWeight = FontWeight.Medium)
+            TextButton(onClick = onRefresh) {
+                Text("Refresh", color = Primary)
+            }
+        }
+        val selectedAccount = accounts.firstOrNull { it.accountId == selected }
+        if (selectedAccount != null) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                OutlinedTextField(
+                    value = labelDraft,
+                    onValueChange = { labelDraft = it.take(80) },
+                    label = { Text("Label") },
+                    singleLine = true,
+                    modifier = Modifier.weight(1f)
+                )
+                Button(
+                    onClick = { onSaveLabel(selectedAccount.accountId, labelDraft.trim()) },
+                    enabled = labelDraft.trim().isNotEmpty() && labelDraft.trim() != selectedAccount.label,
+                    colors = ButtonDefaults.buttonColors(containerColor = Primary)
+                ) {
+                    Text("Save")
+                }
+            }
+        }
+        val options = if (accounts.isEmpty()) {
+            listOf(CodexAccount(selected.ifBlank { "account1" }, "Account", false, true))
+        } else {
+            accounts
+        }
+        options.forEach { account ->
+            val active = account.accountId == selected
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(46.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                OutlinedButton(
+                    onClick = { onSelected(account.accountId) },
+                    modifier = Modifier.weight(1f),
+                    colors = if (active) {
+                        ButtonDefaults.buttonColors(containerColor = Primary, contentColor = Color.White)
+                    } else {
+                        ButtonDefaults.outlinedButtonColors(contentColor = Ink)
+                    },
+                    border = BorderStroke(1.dp, if (active) Primary else Color(0xFFD7E2DD)),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(account.label, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                        Text(
+                            if (account.authenticated) "Ready" else "Login needed",
+                            style = MaterialTheme.typography.bodySmall,
+                            maxLines = 1
+                        )
+                    }
+                }
+                TextButton(
+                    onClick = { onStartLogin(account) },
+                    modifier = Modifier.height(46.dp)
+                ) {
+                    Text(if (account.authenticated) "Re-auth" else "Login", color = Primary)
+                }
+            }
+        }
+    }
+}
+
+
+@Composable
+fun CodexModelSelector(
+    selected: String,
+    models: List<CodexModel>,
+    onSelected: (String) -> Unit,
+    onRefresh: () -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("Codex model", color = Ink, fontWeight = FontWeight.Medium)
+            TextButton(onClick = onRefresh) {
+                Text("Refresh", color = Primary)
+            }
+        }
+        val options = if (models.isEmpty()) {
+            listOf(CodexModel(selected.ifBlank { "gpt-5.5" }, selected.ifBlank { "GPT-5.5" }, "", true, false, null))
+        } else {
+            models
+        }
+        options.forEach { model ->
+            val active = model.modelId == selected
+            val detail = when {
+                model.deprecated && !model.replacement.isNullOrBlank() -> "Deprecated -> ${model.replacement}"
+                model.deprecated -> "Deprecated"
+                !model.replacement.isNullOrBlank() -> "Upgrade -> ${model.replacement}"
+                model.isDefault -> "Default"
+                else -> model.description
+            }
+            OutlinedButton(
+                onClick = { onSelected(model.modelId) },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 46.dp),
+                colors = if (active) {
+                    ButtonDefaults.buttonColors(containerColor = Primary, contentColor = Color.White)
+                } else {
+                    ButtonDefaults.outlinedButtonColors(contentColor = Ink)
+                },
+                border = BorderStroke(1.dp, if (active) Primary else Color(0xFFD7E2DD)),
+                shape = RoundedCornerShape(8.dp)
+            ) {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Text(model.label, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    if (detail.isNotBlank()) {
+                        Text(
+                            detail,
+                            style = MaterialTheme.typography.bodySmall,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+
+@Composable
+fun CodexLoginDialog(
+    account: CodexAccount,
+    loginSession: CodexLoginSession?,
+    onStart: () -> Unit,
+    onRefresh: () -> Unit,
+    onCopyCode: (String) -> Unit,
+    onOpenBrowser: (String) -> Unit,
+    onCancel: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Codex login") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(account.label, color = Ink, fontWeight = FontWeight.Medium)
+                Text("Status: ${loginSession?.status ?: "not started"}", color = Muted)
+                loginSession?.verificationUri?.let { uri ->
+                    Text(
+                        uri,
+                        color = Primary,
+                        style = MaterialTheme.typography.bodySmall,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                loginSession?.userCode?.let { code ->
+                    SelectionContainer {
+                        Text(code, color = Ink, fontWeight = FontWeight.Bold)
+                    }
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    OutlinedButton(
+                        onClick = { loginSession?.userCode?.let(onCopyCode) },
+                        enabled = !loginSession?.userCode.isNullOrBlank(),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text("Copy Code", maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                    OutlinedButton(
+                        onClick = { loginSession?.verificationUri?.let(onOpenBrowser) },
+                        enabled = !loginSession?.verificationUri.isNullOrBlank(),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text("Open Browser", maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                }
+                if (!loginSession?.error.isNullOrBlank()) {
+                    Text(loginSession?.error.orEmpty(), color = Danger, style = MaterialTheme.typography.bodySmall)
+                }
+                if (!loginSession?.output.isNullOrBlank()) {
+                    SelectionContainer {
+                        Text(
+                            loginSession?.output.orEmpty().trim().ifBlank { "Waiting for device code..." },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .widthIn(max = 340.dp)
+                                .heightIn(max = 180.dp)
+                                .background(Color(0xFFF1F4F0), RoundedCornerShape(6.dp))
+                                .padding(8.dp),
+                            color = Ink,
+                            fontFamily = FontFamily.Monospace,
+                            style = MaterialTheme.typography.bodySmall,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    if (loginSession == null || loginSession.status != "running") onStart() else onRefresh()
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = Primary)
+            ) {
+                Text(if (loginSession == null) "Start Login" else "Refresh")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = if (loginSession?.status == "running") onCancel else onDismiss) {
+                Text(if (loginSession?.status == "running") "Cancel" else "Done", color = Primary)
+            }
+        },
+        containerColor = Panel
+    )
+}
+
+
+@Composable
 fun SessionDrawer(
     sessions: List<AgentSession>,
     selectedSessionId: String?,
     onRefresh: () -> Unit,
+    onDismiss: () -> Unit,
     onSelect: (AgentSession) -> Unit
 ) {
+    val groups = remember(sessions) { groupedSessions(sessions) }
+    var expandedGroups by remember(groups) { mutableStateOf<Set<String>>(emptySet()) }
     Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(8.dp),
+        modifier = Modifier
+            .fillMaxHeight()
+            .fillMaxWidth(0.92f)
+            .statusBarsPadding()
+            .navigationBarsPadding()
+            .padding(vertical = 8.dp),
+        shape = RoundedCornerShape(topEnd = 8.dp, bottomEnd = 8.dp),
         colors = CardDefaults.cardColors(containerColor = Panel),
         border = BorderStroke(1.dp, Color(0xFFD7E2DD))
     ) {
         Column(
-            modifier = Modifier.padding(10.dp),
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(10.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Row(
@@ -588,8 +1394,13 @@ fun SessionDrawer(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text("Sessions", color = Ink, fontWeight = FontWeight.Bold)
-                TextButton(onClick = onRefresh) {
-                    Text("Refresh", color = Primary)
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    TextButton(onClick = onRefresh) {
+                        Text("Refresh", color = Primary)
+                    }
+                    TextButton(onClick = onDismiss) {
+                        Text("Close", color = Muted)
+                    }
                 }
             }
             if (sessions.isEmpty()) {
@@ -597,30 +1408,168 @@ fun SessionDrawer(
             } else {
                 Column(
                     modifier = Modifier
-                        .heightIn(max = 220.dp)
+                        .fillMaxWidth()
+                        .weight(1f)
                         .verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    sessions.forEach { session ->
-                        val selected = session.sessionId == selectedSessionId
-                        Button(
-                            onClick = { onSelect(session) },
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = if (selected) Primary else Accent,
-                                contentColor = if (selected) Color.White else Ink
-                            )
-                        ) {
-                            Column(modifier = Modifier.fillMaxWidth()) {
-                                Text(session.title.ifBlank { session.sessionId }, fontWeight = FontWeight.Bold)
-                                Text("${session.sessionId} - ${session.status}", style = MaterialTheme.typography.bodySmall)
-                            }
-                        }
+                    groups.forEach { group ->
+                        val expanded = group.rootId in expandedGroups
+                        SessionGroupView(
+                            group = group,
+                            selectedSessionId = selectedSessionId,
+                            expanded = expanded,
+                            onToggle = {
+                                expandedGroups = if (expanded) {
+                                    expandedGroups - group.rootId
+                                } else {
+                                    expandedGroups + group.rootId
+                                }
+                            },
+                            onSelect = onSelect
+                        )
                     }
                 }
             }
         }
     }
+}
+
+
+data class ConversationGroup(
+    val rootId: String,
+    val title: String,
+    val sessions: List<AgentSession>
+)
+
+
+@Composable
+fun SessionGroupView(
+    group: ConversationGroup,
+    selectedSessionId: String?,
+    expanded: Boolean,
+    onToggle: () -> Unit,
+    onSelect: (AgentSession) -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        val latest = group.sessions.maxByOrNull { it.startedAt } ?: return
+        val countLabel = if (group.sessions.size == 1) "1 session" else "${group.sessions.size} sessions"
+        val selected = group.sessions.any { it.sessionId == selectedSessionId }
+        OutlinedButton(
+            onClick = {
+                if (group.sessions.size == 1) {
+                    onSelect(latest)
+                } else {
+                    onToggle()
+                }
+            },
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(8.dp),
+            border = BorderStroke(1.dp, if (selected) Primary else Color(0xFFD7E2DD)),
+            colors = ButtonDefaults.outlinedButtonColors(
+                containerColor = if (selected) Accent else Panel,
+                contentColor = Ink
+            )
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    if (group.sessions.size == 1) "" else if (expanded) "v" else ">",
+                    color = Muted,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.size(18.dp)
+                )
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        group.title,
+                        color = Ink,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        "$countLabel - ${formatSessionTime(latest.startedAt)} - ${latest.status} - ${reasoningLabel(latest.reasoningEffort)}",
+                        color = Muted,
+                        style = MaterialTheme.typography.bodySmall,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+        }
+        if (expanded && group.sessions.size > 1) {
+            group.sessions.sortedByDescending { it.startedAt }.forEach { session ->
+                SessionRow(session, session.sessionId == selectedSessionId, onSelect)
+            }
+        }
+    }
+}
+
+
+@Composable
+fun SessionRow(session: AgentSession, selected: Boolean, onSelect: (AgentSession) -> Unit) {
+    val title = session.latestTitle.ifBlank { session.title.ifBlank { session.sessionId } }
+    val detail = listOfNotNull(
+        session.status.takeIf { it.isNotBlank() },
+        formatSessionTime(session.startedAt).takeIf { it.isNotBlank() },
+        session.sessionId
+    ).joinToString(" - ")
+    Button(
+        onClick = { onSelect(session) },
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(8.dp),
+        colors = ButtonDefaults.buttonColors(
+            containerColor = if (selected) Primary else Accent,
+            contentColor = if (selected) Color.White else Ink
+        )
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            Text(
+                title,
+                fontWeight = FontWeight.Medium,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(detail, style = MaterialTheme.typography.bodySmall, maxLines = 1)
+            if (session.preview.isNotBlank()) {
+                Text(
+                    session.preview,
+                    style = MaterialTheme.typography.bodySmall,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+    }
+}
+
+
+fun groupedSessions(sessions: List<AgentSession>): List<ConversationGroup> {
+    return sessions
+        .groupBy { it.rootSessionId ?: it.sessionId }
+        .map { (rootId, items) ->
+            val root = items.firstOrNull { it.sessionId == rootId }
+            val latest = items.maxByOrNull { it.startedAt }
+            val titleSource = root ?: latest ?: items.first()
+            ConversationGroup(
+                rootId = rootId,
+                title = titleSource.displayTitle.ifBlank { titleSource.title.ifBlank { rootId } },
+                sessions = items
+            )
+        }
+        .sortedByDescending { group -> group.sessions.maxOfOrNull { it.startedAt } ?: 0.0 }
+}
+
+
+fun formatSessionTime(startedAt: Double): String {
+    if (startedAt <= 0.0) return ""
+    return SimpleDateFormat("MMM d h:mm a", Locale.US).format(Date((startedAt * 1000).toLong()))
 }
 
 
@@ -721,10 +1670,11 @@ fun Terminal(
     expanded: Boolean,
     onExpand: () -> Unit,
     onCollapse: () -> Unit,
+    onNewConversation: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val scrollState = rememberScrollState()
-    val terminalText = remember(text) { terminalAnnotatedString(text) }
+    val blocks = remember(text) { markdownBlocks(text.ifBlank { "Terminal output will appear here." }) }
     LaunchedEffect(text.length) {
         scrollState.scrollTo(scrollState.maxValue)
     }
@@ -747,8 +1697,15 @@ fun Terminal(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text("Terminal", color = Color(0xFFDCE8E1), fontWeight = FontWeight.Bold)
-                TextButton(onClick = if (expanded) onCollapse else onExpand) {
-                    Text(if (expanded) "Collapse" else "Expand", color = Color(0xFFB7E3D4))
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    if (expanded && onNewConversation != null) {
+                        TextButton(onClick = onNewConversation) {
+                            Text("New Chat", color = Color(0xFFB7E3D4))
+                        }
+                    }
+                    TextButton(onClick = if (expanded) onCollapse else onExpand) {
+                        Text(if (expanded) "Collapse" else "Expand", color = Color(0xFFB7E3D4))
+                    }
                 }
             }
             SelectionContainer(
@@ -756,16 +1713,143 @@ fun Terminal(
                     .fillMaxWidth()
                     .weight(1f)
             ) {
-                Text(
-                    text = terminalText,
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
                         .verticalScroll(scrollState),
-                    fontFamily = FontFamily.Monospace
-                )
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    blocks.forEach { block ->
+                        MarkdownTerminalBlock(block)
+                    }
+                }
             }
         }
     }
+}
+
+
+data class MarkdownBlock(val type: String, val text: String, val level: Int = 0)
+
+
+fun markdownBlocks(text: String): List<MarkdownBlock> {
+    val blocks = mutableListOf<MarkdownBlock>()
+    val paragraph = mutableListOf<String>()
+    val code = mutableListOf<String>()
+    var inCode = false
+
+    fun flushParagraph() {
+        if (paragraph.isNotEmpty()) {
+            blocks.add(MarkdownBlock("paragraph", paragraph.joinToString("\n").trimEnd()))
+            paragraph.clear()
+        }
+    }
+
+    fun flushCode() {
+        blocks.add(MarkdownBlock("code", code.joinToString("\n").trimEnd()))
+        code.clear()
+    }
+
+    text.lines().forEach { line ->
+        val trimmed = line.trimEnd()
+        if (trimmed.trimStart().startsWith("```")) {
+            if (inCode) {
+                flushCode()
+                inCode = false
+            } else {
+                flushParagraph()
+                inCode = true
+            }
+            return@forEach
+        }
+        if (inCode) {
+            code.add(line)
+            return@forEach
+        }
+        if (trimmed.isBlank()) {
+            flushParagraph()
+            return@forEach
+        }
+        val heading = Regex("^(#{1,4})\\s+(.+)$").matchEntire(trimmed)
+        if (heading != null) {
+            flushParagraph()
+            blocks.add(MarkdownBlock("heading", heading.groupValues[2], heading.groupValues[1].length))
+            return@forEach
+        }
+        if (trimmed.startsWith("- ") || trimmed.startsWith("* ")) {
+            flushParagraph()
+            blocks.add(MarkdownBlock("bullet", trimmed.drop(2).trim()))
+            return@forEach
+        }
+        if (trimmed.startsWith("$ ") || trimmed.startsWith("[") || trimmed.contains("AWAITING_PHONE_APPROVAL:")) {
+            flushParagraph()
+            blocks.add(MarkdownBlock("terminal", trimmed))
+            return@forEach
+        }
+        paragraph.add(trimmed)
+    }
+    if (inCode) flushCode()
+    flushParagraph()
+    return blocks
+}
+
+
+@Composable
+fun MarkdownTerminalBlock(block: MarkdownBlock) {
+    when (block.type) {
+        "heading" -> Text(
+            text = block.text,
+            color = Color(0xFFF4F2ED),
+            fontWeight = FontWeight.Bold,
+            style = if (block.level <= 2) MaterialTheme.typography.titleMedium else MaterialTheme.typography.bodyLarge
+        )
+        "bullet" -> Text(
+            text = terminalInlineAnnotated("- ${block.text}", terminalLineStyle(block.text)),
+            style = MaterialTheme.typography.bodyMedium
+        )
+        "code" -> Text(
+            text = block.text.ifBlank { " " },
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(Color(0xFF17221F), RoundedCornerShape(6.dp))
+                .padding(8.dp),
+            color = Color(0xFFE6EFE9),
+            fontFamily = FontFamily.Monospace,
+            style = MaterialTheme.typography.bodySmall
+        )
+        "terminal" -> Text(
+            text = terminalInlineAnnotated(block.text, terminalLineStyle(block.text)),
+            fontFamily = FontFamily.Monospace,
+            style = MaterialTheme.typography.bodySmall
+        )
+        else -> Text(
+            text = terminalInlineAnnotated(block.text, SpanStyle(color = Color(0xFFF4F2ED))),
+            style = MaterialTheme.typography.bodyMedium
+        )
+    }
+}
+
+
+fun terminalInlineAnnotated(text: String, baseStyle: SpanStyle) = buildAnnotatedString {
+    pushStyle(baseStyle)
+    val pattern = Regex("(`[^`]+`|\\*\\*[^*]+\\*\\*)")
+    var index = 0
+    pattern.findAll(text).forEach { match ->
+        append(text.substring(index, match.range.first))
+        val token = match.value
+        if (token.startsWith("`")) {
+            pushStyle(SpanStyle(color = Color(0xFFE6EFE9), background = Color(0xFF17221F), fontFamily = FontFamily.Monospace))
+            append(token.trim('`'))
+            pop()
+        } else {
+            pushStyle(SpanStyle(fontWeight = FontWeight.Bold))
+            append(token.removePrefix("**").removeSuffix("**"))
+            pop()
+        }
+        index = match.range.last + 1
+    }
+    append(text.substring(index))
+    pop()
 }
 
 
@@ -926,9 +2010,19 @@ fun startSession(
     gatewayUrl: String,
     token: String,
     transcript: String,
+    reasoningEffort: String,
+    codexAccount: String,
+    codexModel: String,
     callback: (Result<String>) -> Unit
 ) {
-    val json = JSONObject(mapOf("text" to transcript)).toString()
+    val json = JSONObject(
+        mapOf(
+            "text" to transcript,
+            "reasoning_effort" to reasoningEffort,
+            "codex_account" to codexAccount,
+            "codex_model" to codexModel
+        )
+    ).toString()
     val request = Request.Builder()
         .url("${gatewayUrl.trimEnd('/')}/api/sessions${tokenQuery(token)}")
         .post(json.toRequestBody("application/json".toMediaType()))
@@ -945,9 +2039,19 @@ fun resumeSession(
     token: String,
     sessionId: String,
     text: String,
+    reasoningEffort: String,
+    codexAccount: String,
+    codexModel: String,
     callback: (Result<String>) -> Unit
 ) {
-    val json = JSONObject(mapOf("text" to text)).toString()
+    val json = JSONObject(
+        mapOf(
+            "text" to text,
+            "reasoning_effort" to reasoningEffort,
+            "codex_account" to codexAccount,
+            "codex_model" to codexModel
+        )
+    ).toString()
     val request = Request.Builder()
         .url("${gatewayUrl.trimEnd('/')}/api/sessions/$sessionId/resume${tokenQuery(token)}")
         .post(json.toRequestBody("application/json".toMediaType()))
@@ -971,16 +2075,209 @@ fun listSessions(
     client.newCall(request).enqueue(resultCallback(callback) { response ->
         val array = JSONArray(response.body?.string().orEmpty())
         (0 until array.length()).map { index ->
-            val item = array.getJSONObject(index)
-            AgentSession(
-                sessionId = item.getString("session_id"),
-                title = item.optString("title", item.getString("session_id")),
-                status = item.optString("status", "archived"),
-                startedAt = item.optDouble("started_at", 0.0),
-                resumeFrom = item.optString("resume_from").takeIf { it.isNotBlank() && it != "null" }
-            )
+            parseAgentSession(array.getJSONObject(index))
         }
     })
+}
+
+
+fun listCodexAccounts(
+    client: OkHttpClient,
+    gatewayUrl: String,
+    token: String,
+    callback: (Result<List<CodexAccount>>) -> Unit
+) {
+    if (gatewayUrl.isBlank()) {
+        callback(Result.success(emptyList()))
+        return
+    }
+    val request = Request.Builder()
+        .url("${gatewayUrl.trimEnd('/')}/api/codex/accounts${tokenQuery(token)}")
+        .get()
+        .build()
+    client.newCall(request).enqueue(resultCallback(callback) { response ->
+        val array = JSONArray(response.body?.string().orEmpty())
+        (0 until array.length()).map { index ->
+            parseCodexAccount(array.getJSONObject(index))
+        }
+    })
+}
+
+
+fun listCodexModels(
+    client: OkHttpClient,
+    gatewayUrl: String,
+    token: String,
+    callback: (Result<List<CodexModel>>) -> Unit
+) {
+    if (gatewayUrl.isBlank()) {
+        callback(Result.success(emptyList()))
+        return
+    }
+    val request = Request.Builder()
+        .url("${gatewayUrl.trimEnd('/')}/api/codex/models${tokenQuery(token)}")
+        .get()
+        .build()
+    client.newCall(request).enqueue(resultCallback(callback) { response ->
+        val array = JSONArray(response.body?.string().orEmpty())
+        (0 until array.length()).map { index ->
+            parseCodexModel(array.getJSONObject(index))
+        }
+    })
+}
+
+
+fun saveCodexAccountLabel(
+    client: OkHttpClient,
+    gatewayUrl: String,
+    token: String,
+    accountId: String,
+    label: String,
+    callback: (Result<CodexAccount>) -> Unit
+) {
+    if (gatewayUrl.isBlank() || accountId.isBlank() || label.isBlank()) {
+        callback(Result.failure(IllegalArgumentException("account label is required")))
+        return
+    }
+    val json = JSONObject(mapOf("label" to label)).toString()
+    val request = Request.Builder()
+        .url("${gatewayUrl.trimEnd('/')}/api/codex/accounts/$accountId/label${tokenQuery(token)}")
+        .post(json.toRequestBody("application/json".toMediaType()))
+        .build()
+    client.newCall(request).enqueue(resultCallback(callback) { response ->
+        parseCodexAccount(JSONObject(response.body?.string().orEmpty()))
+    })
+}
+
+
+fun startCodexAccountLogin(
+    client: OkHttpClient,
+    gatewayUrl: String,
+    token: String,
+    accountId: String,
+    callback: (Result<CodexLoginSession>) -> Unit
+) {
+    if (gatewayUrl.isBlank() || accountId.isBlank()) {
+        callback(Result.failure(IllegalArgumentException("account is required")))
+        return
+    }
+    val request = Request.Builder()
+        .url("${gatewayUrl.trimEnd('/')}/api/codex/accounts/$accountId/login${tokenQuery(token)}")
+        .post(ByteArray(0).toRequestBody(null))
+        .build()
+    client.newCall(request).enqueue(resultCallback(callback) { response ->
+        parseCodexLoginSession(JSONObject(response.body?.string().orEmpty()))
+    })
+}
+
+
+fun getCodexAccountLogin(
+    client: OkHttpClient,
+    gatewayUrl: String,
+    token: String,
+    accountId: String,
+    loginSessionId: String,
+    callback: (Result<CodexLoginSession>) -> Unit
+) {
+    val request = Request.Builder()
+        .url("${gatewayUrl.trimEnd('/')}/api/codex/accounts/$accountId/login/$loginSessionId${tokenQuery(token)}")
+        .get()
+        .build()
+    client.newCall(request).enqueue(resultCallback(callback) { response ->
+        parseCodexLoginSession(JSONObject(response.body?.string().orEmpty()))
+    })
+}
+
+
+fun cancelCodexAccountLogin(
+    client: OkHttpClient,
+    gatewayUrl: String,
+    token: String,
+    accountId: String,
+    loginSessionId: String,
+    callback: (Result<CodexLoginSession>) -> Unit
+) {
+    val request = Request.Builder()
+        .url("${gatewayUrl.trimEnd('/')}/api/codex/accounts/$accountId/login/$loginSessionId/cancel${tokenQuery(token)}")
+        .post(ByteArray(0).toRequestBody(null))
+        .build()
+    client.newCall(request).enqueue(resultCallback(callback) { response ->
+        parseCodexLoginSession(JSONObject(response.body?.string().orEmpty()))
+    })
+}
+
+
+fun parseCodexAccount(item: JSONObject): CodexAccount {
+    val accountId = item.optString("account_id", "")
+    return CodexAccount(
+        accountId = accountId,
+        label = item.optString("label", accountId.ifBlank { "Account" }),
+        authenticated = item.optBoolean("authenticated", false),
+        isDefault = item.optBoolean("is_default", false)
+    )
+}
+
+
+fun parseCodexModel(item: JSONObject): CodexModel {
+    val modelId = item.optString("model_id", "")
+    return CodexModel(
+        modelId = modelId,
+        label = item.optString("label", modelId.ifBlank { "Model" }),
+        description = item.optString("description", ""),
+        isDefault = item.optBoolean("is_default", false),
+        deprecated = item.optBoolean("deprecated", false),
+        replacement = item.optString("replacement").takeIf { it.isNotBlank() && it != "null" }
+    )
+}
+
+
+fun parseCodexLoginSession(item: JSONObject): CodexLoginSession {
+    return CodexLoginSession(
+        loginSessionId = item.optString("login_session_id", ""),
+        accountId = item.optString("account_id", ""),
+        status = item.optString("status", "unknown"),
+        verificationUri = item.optString("verification_uri").takeIf { it.isNotBlank() && it != "null" },
+        userCode = item.optString("user_code").takeIf { it.isNotBlank() && it != "null" },
+        output = item.optString("output", ""),
+        returncode = if (item.has("returncode") && !item.isNull("returncode")) item.optInt("returncode") else null,
+        error = item.optString("error").takeIf { it.isNotBlank() && it != "null" }
+    )
+}
+
+
+fun fetchSessionInfo(
+    client: OkHttpClient,
+    gatewayUrl: String,
+    token: String,
+    sessionId: String,
+    callback: (Result<AgentSession>) -> Unit
+) {
+    val request = Request.Builder()
+        .url("${gatewayUrl.trimEnd('/')}/api/sessions/$sessionId${tokenQuery(token)}")
+        .get()
+        .build()
+    client.newCall(request).enqueue(resultCallback(callback) { response ->
+        parseAgentSession(JSONObject(response.body?.string().orEmpty()))
+    })
+}
+
+
+fun parseAgentSession(item: JSONObject): AgentSession {
+    val sessionId = item.getString("session_id")
+    return AgentSession(
+        sessionId = sessionId,
+        title = item.optString("title", sessionId),
+        displayTitle = item.optString("display_title", item.optString("title", sessionId)),
+        latestTitle = item.optString("latest_title", item.optString("title", "")),
+        preview = item.optString("preview", ""),
+        status = item.optString("status", "archived"),
+        startedAt = item.optDouble("started_at", 0.0),
+        rootSessionId = item.optString("root_session_id").takeIf { it.isNotBlank() && it != "null" },
+        reasoningEffort = item.optString("reasoning_effort", "medium"),
+        codexAccount = item.optString("codex_account", "account1"),
+        codexModel = item.optString("codex_model", ""),
+        resumeFrom = item.optString("resume_from").takeIf { it.isNotBlank() && it != "null" }
+    )
 }
 
 
@@ -1012,6 +2309,163 @@ fun stopSession(client: OkHttpClient, gatewayUrl: String, token: String, session
             response.close()
         }
     })
+}
+
+
+fun registerCurrentFcmToken(
+    context: Context,
+    client: OkHttpClient,
+    gatewayUrl: String,
+    token: String,
+    callback: (Result<Unit>) -> Unit = {}
+) {
+    if (gatewayUrl.isBlank()) {
+        callback(Result.success(Unit))
+        return
+    }
+    try {
+        FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
+            if (!task.isSuccessful) {
+                callback(Result.failure(task.exception ?: IOException("FCM token unavailable")))
+                return@addOnCompleteListener
+            }
+            val fcmToken = task.result.orEmpty()
+            if (fcmToken.isBlank()) {
+                callback(Result.failure(IOException("FCM token unavailable")))
+                return@addOnCompleteListener
+            }
+            context.getSharedPreferences("home-agent", Context.MODE_PRIVATE)
+                .edit()
+                .putString("fcm_token", fcmToken)
+                .apply()
+            registerDeviceToken(client, gatewayUrl, token, fcmToken, callback)
+        }
+    } catch (error: Throwable) {
+        callback(Result.failure(error))
+    }
+}
+
+
+fun registerDeviceToken(
+    client: OkHttpClient,
+    gatewayUrl: String,
+    token: String,
+    fcmToken: String,
+    callback: (Result<Unit>) -> Unit = {}
+) {
+    if (gatewayUrl.isBlank() || fcmToken.isBlank()) {
+        callback(Result.success(Unit))
+        return
+    }
+    val json = JSONObject(
+        mapOf(
+            "fcm_token" to fcmToken,
+            "platform" to "android",
+            "device_label" to deviceLabel()
+        )
+    ).toString()
+    val request = Request.Builder()
+        .url("${gatewayUrl.trimEnd('/')}/api/devices/register${tokenQuery(token)}")
+        .post(json.toRequestBody("application/json".toMediaType()))
+        .build()
+    client.newCall(request).enqueue(resultCallback(callback) { response ->
+        response.body?.string()
+        Unit
+    })
+}
+
+
+fun unregisterDeviceToken(
+    client: OkHttpClient,
+    gatewayUrl: String,
+    token: String,
+    fcmToken: String,
+    callback: (Result<Unit>) -> Unit = {}
+) {
+    if (gatewayUrl.isBlank() || fcmToken.isBlank()) {
+        callback(Result.success(Unit))
+        return
+    }
+    val json = JSONObject(mapOf("fcm_token" to fcmToken)).toString()
+    val request = Request.Builder()
+        .url("${gatewayUrl.trimEnd('/')}/api/devices/unregister${tokenQuery(token)}")
+        .post(json.toRequestBody("application/json".toMediaType()))
+        .build()
+    client.newCall(request).enqueue(resultCallback(callback) { response ->
+        response.body?.string()
+        Unit
+    })
+}
+
+
+fun deviceLabel(): String {
+    return listOf(Build.MANUFACTURER, Build.MODEL)
+        .joinToString(" ")
+        .trim()
+        .ifBlank { "Android device" }
+}
+
+
+fun copyToClipboard(context: Context, label: String, text: String) {
+    val manager = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+    manager.setPrimaryClip(ClipData.newPlainText(label, text))
+}
+
+
+fun openBrowser(context: Context, uri: String, onError: (Throwable) -> Unit) {
+    try {
+        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(uri)))
+    } catch (error: ActivityNotFoundException) {
+        onError(error)
+    }
+}
+
+
+fun ensureNotificationChannel(context: Context) {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+    val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+    val channel = NotificationChannel(
+        NOTIFICATION_CHANNEL_ID,
+        "Home Agent sessions",
+        NotificationManager.IMPORTANCE_DEFAULT
+    ).apply {
+        description = "Alerts when a disconnected Home Agent session needs attention."
+    }
+    manager.createNotificationChannel(channel)
+}
+
+
+fun postSessionNotification(context: Context, sessionId: String, title: String, message: String) {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+        ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+    ) {
+        return
+    }
+    ensureNotificationChannel(context)
+    val intent = Intent(context, MainActivity::class.java).apply {
+        flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+        putExtra(EXTRA_SESSION_ID, sessionId)
+    }
+    val pendingIntent = PendingIntent.getActivity(
+        context,
+        sessionId.hashCode(),
+        intent,
+        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+    )
+    val notification = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        android.app.Notification.Builder(context, NOTIFICATION_CHANNEL_ID)
+    } else {
+        @Suppress("DEPRECATION")
+        android.app.Notification.Builder(context)
+    }
+        .setSmallIcon(R.drawable.ic_settings_24)
+        .setContentTitle(title)
+        .setContentText(message)
+        .setContentIntent(pendingIntent)
+        .setAutoCancel(true)
+        .build()
+    val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+    manager.notify(SESSION_NOTIFICATION_ID + sessionId.hashCode(), notification)
 }
 
 
@@ -1050,6 +2504,7 @@ fun connectWebSocket(
         override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
             onMainThread {
                 onEvent(JSONObject(mapOf("type" to "output", "data" to "\n[websocket error] ${t.message}\n")))
+                onEvent(JSONObject(mapOf("type" to "status", "status" to "Disconnected")))
             }
         }
 
@@ -1071,7 +2526,8 @@ fun <T> resultCallback(callback: (Result<T>) -> Unit, parser: (Response) -> T): 
         override fun onResponse(call: Call, response: Response) {
             response.use {
                 if (!it.isSuccessful) {
-                    onMainThread { callback(Result.failure(IOException(it.body?.string().orEmpty()))) }
+                    val errorText = it.body?.string().orEmpty()
+                    onMainThread { callback(Result.failure(IOException(errorText))) }
                     return
                 }
                 val parsed = runCatching { parser(it) }

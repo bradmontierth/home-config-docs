@@ -27,8 +27,23 @@ CODEX_SANDBOX = os.environ.get("HOME_AGENT_CODEX_SANDBOX", "workspace-write")
 CODEX_APPROVALS = os.environ.get("HOME_AGENT_CODEX_APPROVALS", "never")
 CODEX_DANGER_BYPASS = os.environ.get("HOME_AGENT_CODEX_DANGER_BYPASS", "0") == "1"
 CODEX_MODE = os.environ.get("HOME_AGENT_CODEX_MODE", "exec")
+CODEX_REASONING_EFFORT = os.environ.get("HOME_AGENT_CODEX_REASONING_EFFORT", "medium")
+CODEX_ACCOUNTS_ROOT = Path(
+    os.environ.get("HOME_AGENT_CODEX_ACCOUNTS_ROOT", "/home/pi/cecret_lake/home-agent/codex-accounts")
+)
+CODEX_ACCOUNTS = os.environ.get(
+    "HOME_AGENT_CODEX_ACCOUNTS",
+    "account1:Account 1,account2:Account 2,account3:Account 3,machine:Machine Login",
+)
+CODEX_DEFAULT_ACCOUNT = os.environ.get("HOME_AGENT_CODEX_DEFAULT_ACCOUNT", "account1")
+CODEX_ACCOUNT_LABELS_PATH = Path(
+    os.environ.get("HOME_AGENT_CODEX_ACCOUNT_LABELS", "/home/pi/cecret_lake/home-agent/codex-account-labels.json")
+)
+MACHINE_CODEX_ACCOUNT_ID = "machine"
+ALLOWED_REASONING_EFFORTS = {"low", "medium", "high", "xhigh"}
 MAX_COMMAND_OUTPUT_CHARS = int(os.environ.get("HOME_AGENT_MAX_COMMAND_OUTPUT_CHARS", "1800"))
 SHOW_SUCCESSFUL_COMMAND_OUTPUT = os.environ.get("HOME_AGENT_SHOW_COMMAND_OUTPUT", "0") == "1"
+ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
 
 
 class StartRequest(BaseModel):
@@ -37,11 +52,49 @@ class StartRequest(BaseModel):
     title: Optional[str] = None
     resume_from: Optional[str] = None
     codex_thread_id: Optional[str] = None
+    reasoning_effort: Optional[str] = None
+    codex_account: Optional[str] = None
+    codex_model: Optional[str] = None
 
 
 class ResumeRequest(BaseModel):
     prompt: str = Field(min_length=1)
     title: Optional[str] = None
+    reasoning_effort: Optional[str] = None
+    codex_account: Optional[str] = None
+    codex_model: Optional[str] = None
+
+
+class CodexAccountInfo(BaseModel):
+    account_id: str
+    label: str
+    codex_home: str
+    is_default: bool = False
+    authenticated: bool = False
+
+
+class CodexAccountLabelRequest(BaseModel):
+    label: str = Field(min_length=1, max_length=80)
+
+
+class CodexLoginSessionInfo(BaseModel):
+    login_session_id: str
+    account_id: str
+    status: str
+    verification_uri: Optional[str] = None
+    user_code: Optional[str] = None
+    output: str = ""
+    returncode: Optional[int] = None
+    error: Optional[str] = None
+
+
+class CodexModelInfo(BaseModel):
+    model_id: str
+    label: str
+    description: str = ""
+    is_default: bool = False
+    deprecated: bool = False
+    replacement: Optional[str] = None
 
 
 class SessionInfo(BaseModel):
@@ -52,6 +105,13 @@ class SessionInfo(BaseModel):
     started_at: float
     returncode: Optional[int] = None
     title: Optional[str] = None
+    display_title: Optional[str] = None
+    latest_title: Optional[str] = None
+    preview: Optional[str] = None
+    root_session_id: Optional[str] = None
+    reasoning_effort: Optional[str] = None
+    codex_account: Optional[str] = None
+    codex_model: Optional[str] = None
     codex_thread_id: Optional[str] = None
     resume_from: Optional[str] = None
 
@@ -69,6 +129,10 @@ class CodexSession:
         self.title = request.title or "Voice Codex session"
         self.resume_from = request.resume_from
         self.codex_thread_id = request.codex_thread_id
+        self.reasoning_effort = normalize_reasoning_effort(request.reasoning_effort)
+        self.codex_account = normalize_codex_account(request.codex_account)
+        self.codex_home = codex_home_for_account(self.codex_account)
+        self.codex_model = resolve_codex_model(request.codex_model, self.codex_home)
         self.started_at = time.time()
         self.returncode: Optional[int] = None
         self.status = "starting"
@@ -77,6 +141,7 @@ class CodexSession:
         self.proc: Optional[subprocess.Popen] = None
         self.master_fd: Optional[int] = None
         self.use_pty = CODEX_MODE == "interactive"
+        self.auth_required_sent = False
         self.session_dir = DEFAULT_SESSION_ROOT / time.strftime("%Y-%m-%d") / session_id
         self.session_dir.mkdir(parents=True, exist_ok=True)
         self.log_path = self.session_dir / "codex.log"
@@ -114,8 +179,10 @@ class CodexSession:
             cmd.extend(["-s", CODEX_SANDBOX])
             if CODEX_MODE != "exec":
                 cmd.extend(["-a", CODEX_APPROVALS])
-        if CODEX_MODEL:
-            cmd.extend(["-m", CODEX_MODEL])
+        if self.codex_model:
+            cmd.extend(["-m", self.codex_model])
+        if self.reasoning_effort:
+            cmd.extend(["-c", f'model_reasoning_effort="{self.reasoning_effort}"'])
         if CODEX_MODE == "exec" and self.codex_thread_id:
             cmd.append(self.codex_thread_id)
         cmd.append(prompt)
@@ -129,6 +196,11 @@ class CodexSession:
         env = os.environ.copy()
         env.setdefault("TERM", "xterm-256color")
         env.setdefault("NO_COLOR", "1")
+        if uses_machine_codex_home(self.codex_account):
+            env.pop("CODEX_HOME", None)
+        else:
+            self.codex_home.mkdir(parents=True, exist_ok=True)
+            env["CODEX_HOME"] = str(self.codex_home)
 
         metadata = {
             "session_id": self.session_id,
@@ -140,6 +212,10 @@ class CodexSession:
             "sandbox": CODEX_SANDBOX,
             "approvals": CODEX_APPROVALS,
             "mode": CODEX_MODE,
+            "reasoning_effort": self.reasoning_effort,
+            "codex_account": self.codex_account,
+            "codex_model": self.codex_model,
+            "codex_home": str(self.codex_home),
             "codex_thread_id": self.codex_thread_id,
             "resume_from": self.resume_from,
         }
@@ -196,6 +272,7 @@ class CodexSession:
                     log.write(data)
                     log.flush()
                     text = data.decode("utf-8", errors="replace")
+                    self.maybe_broadcast_auth_required(text)
                     self.loop.call_soon_threadsafe(
                         asyncio.create_task,
                         self.broadcast({"type": "output", "data": text}),
@@ -211,6 +288,7 @@ class CodexSession:
                 log.write(line)
                 log.flush()
                 self.record_exec_metadata(line)
+                self.maybe_broadcast_auth_required(line)
                 text = format_exec_event(line)
                 if not text:
                     continue
@@ -230,6 +308,24 @@ class CodexSession:
         if isinstance(thread_id, str) and thread_id:
             self.codex_thread_id = thread_id
             self.update_metadata({"codex_thread_id": thread_id})
+
+    def maybe_broadcast_auth_required(self, line: str) -> None:
+        if self.auth_required_sent or not is_auth_required_text(line):
+            return
+        self.auth_required_sent = True
+        self.loop.call_soon_threadsafe(
+            asyncio.create_task,
+            self.broadcast(
+                {
+                    "type": "auth_required",
+                    "account_id": self.codex_account,
+                    "data": (
+                        f"\n[codex auth] Login needed for Codex account "
+                        f"{self.codex_account}. Open Settings and run Re-auth.\n"
+                    ),
+                }
+            ),
+        )
 
     def _wait_loop(self) -> None:
         assert self.proc is not None
@@ -292,6 +388,17 @@ class CodexSession:
             os.killpg(os.getpgid(self.proc.pid), signal.SIGKILL)
 
     def info(self) -> SessionInfo:
+        root_id, display_title, preview = session_display_context(
+            self.session_id,
+            {
+                "session_id": self.session_id,
+                "title": self.title,
+                "resume_from": self.resume_from,
+                "reasoning_effort": self.reasoning_effort,
+                "codex_account": self.codex_account,
+                "codex_model": self.codex_model,
+            },
+        )
         return SessionInfo(
             session_id=self.session_id,
             status=self.status,
@@ -300,8 +407,107 @@ class CodexSession:
             started_at=self.started_at,
             returncode=self.returncode,
             title=self.title,
+            display_title=display_title,
+            latest_title=self.title,
+            preview=preview,
+            root_session_id=root_id,
+            reasoning_effort=self.reasoning_effort,
+            codex_account=self.codex_account,
+            codex_model=self.codex_model,
             codex_thread_id=self.codex_thread_id,
             resume_from=self.resume_from,
+        )
+
+
+class CodexLoginSession:
+    def __init__(self, login_session_id: str, account_id: str):
+        self.login_session_id = login_session_id
+        self.account_id = normalize_codex_account(account_id)
+        self.codex_home = codex_home_for_account(self.account_id)
+        self.status = "starting"
+        self.output = ""
+        self.returncode: Optional[int] = None
+        self.error: Optional[str] = None
+        self.proc: Optional[subprocess.Popen] = None
+        self.lock = threading.Lock()
+
+    def start(self) -> None:
+        env = os.environ.copy()
+        env.setdefault("TERM", "xterm-256color")
+        env.setdefault("NO_COLOR", "1")
+        if uses_machine_codex_home(self.account_id):
+            env.pop("CODEX_HOME", None)
+        else:
+            self.codex_home.mkdir(parents=True, exist_ok=True)
+            env["CODEX_HOME"] = str(self.codex_home)
+
+        try:
+            self.proc = subprocess.Popen(
+                [CODEX_BIN, "login", "--device-auth"],
+                cwd=str(DEFAULT_HOME_CONFIG),
+                env=env,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                bufsize=1,
+                close_fds=True,
+                preexec_fn=os.setsid,
+            )
+        except OSError as exc:
+            self.status = "failed"
+            self.error = str(exc)
+            return
+
+        self.status = "running"
+        threading.Thread(target=self._read_loop, name=f"codex-login-{self.login_session_id}", daemon=True).start()
+        threading.Thread(target=self._wait_loop, name=f"codex-login-wait-{self.login_session_id}", daemon=True).start()
+
+    def _read_loop(self) -> None:
+        assert self.proc is not None
+        assert self.proc.stdout is not None
+        for line in self.proc.stdout:
+            line = strip_ansi(line)
+            with self.lock:
+                self.output += line
+                if len(self.output) > 12000:
+                    self.output = self.output[-12000:]
+
+    def _wait_loop(self) -> None:
+        assert self.proc is not None
+        self.returncode = self.proc.wait()
+        with self.lock:
+            if self.status == "cancelled":
+                return
+            self.status = "complete" if self.returncode == 0 else "failed"
+            if self.returncode != 0 and not self.error:
+                self.error = f"codex login exited with {self.returncode}"
+
+    def cancel(self) -> None:
+        proc = self.proc
+        if proc and proc.poll() is None:
+            try:
+                os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+            except ProcessLookupError:
+                pass
+        with self.lock:
+            self.status = "cancelled"
+
+    def info(self) -> CodexLoginSessionInfo:
+        with self.lock:
+            output = self.output
+            status = self.status
+            error = self.error
+        verification_uri, user_code = parse_device_auth_output(output)
+        return CodexLoginSessionInfo(
+            login_session_id=self.login_session_id,
+            account_id=self.account_id,
+            status=status,
+            verification_uri=verification_uri,
+            user_code=user_code,
+            output=output,
+            returncode=self.returncode,
+            error=error,
         )
 
 
@@ -309,6 +515,310 @@ def redact_prompt(cmd: list[str]) -> list[str]:
     if not cmd:
         return cmd
     return [*cmd[:-1], "<prompt>"]
+
+
+def normalize_reasoning_effort(value: Optional[str]) -> str:
+    effort = (value or CODEX_REASONING_EFFORT or "medium").strip().lower()
+    if effort == "extra_high":
+        effort = "xhigh"
+    if effort not in ALLOWED_REASONING_EFFORTS:
+        raise HTTPException(status_code=400, detail=f"invalid reasoning_effort: {value}")
+    return effort
+
+
+def normalize_codex_model(value: object) -> Optional[str]:
+    raw = value
+    model = str(raw or "").strip()
+    if not model:
+        return None
+    if not re.fullmatch(r"[A-Za-z0-9._:/+-]+", model):
+        raise HTTPException(status_code=400, detail=f"invalid codex_model: {value}")
+    return model
+
+
+def resolve_codex_model(value: object, codex_home: Path) -> Optional[str]:
+    requested = normalize_codex_model(value)
+    if requested:
+        return requested
+    if CODEX_MODEL:
+        return normalize_codex_model(CODEX_MODEL)
+    return read_codex_config_model(codex_home) or default_codex_model_from_config_only()
+
+
+def default_codex_model() -> Optional[str]:
+    current = default_codex_model_from_config_only()
+    if current:
+        return current
+    models = discover_codex_models()
+    first = next((model for model in models if model.is_default), None) or (models[0] if models else None)
+    return first.model_id if first else None
+
+
+def read_codex_config_model(codex_home: Path) -> Optional[str]:
+    config_path = codex_home / "config.toml"
+    try:
+        text = config_path.read_text(encoding="utf-8")
+    except OSError:
+        return None
+    match = re.search(r'(?m)^\s*model\s*=\s*["\']([^"\']+)["\']\s*$', text)
+    return normalize_codex_model(match.group(1)) if match else None
+
+
+def discover_codex_models() -> list[CodexModelInfo]:
+    for source in (codex_models_from_cli, codex_models_from_cache):
+        models = source()
+        if models:
+            return mark_default_codex_model(models)
+    fallback = default_codex_model()
+    if fallback:
+        return [CodexModelInfo(model_id=fallback, label=fallback, is_default=True)]
+    return []
+
+
+def codex_models_from_cli() -> list[CodexModelInfo]:
+    try:
+        proc = subprocess.run(
+            [CODEX_BIN, "debug", "models"],
+            cwd=str(DEFAULT_HOME_CONFIG),
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            timeout=15,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return []
+    if proc.returncode != 0:
+        return []
+    try:
+        payload = json.loads(proc.stdout)
+    except json.JSONDecodeError:
+        return []
+    return parse_codex_model_catalog(payload)
+
+
+def codex_models_from_cache() -> list[CodexModelInfo]:
+    cache_path = default_machine_codex_home() / "models_cache.json"
+    try:
+        payload = json.loads(cache_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return []
+    return parse_codex_model_catalog(payload)
+
+
+def parse_codex_model_catalog(payload: object) -> list[CodexModelInfo]:
+    if not isinstance(payload, dict):
+        return []
+    raw_models = payload.get("models")
+    if not isinstance(raw_models, list):
+        return []
+    models: list[CodexModelInfo] = []
+    seen: set[str] = set()
+    migrations = codex_model_migrations(default_machine_codex_home())
+    for item in raw_models:
+        if not isinstance(item, dict):
+            continue
+        visibility = str(item.get("visibility") or "")
+        if visibility and visibility != "list":
+            continue
+        model_id = normalize_codex_model(item.get("slug"))
+        if not model_id or model_id in seen:
+            continue
+        upgrade = item.get("upgrade") if isinstance(item.get("upgrade"), dict) else {}
+        replacement = migrations.get(model_id)
+        if not replacement and upgrade:
+            replacement = normalize_codex_model(upgrade.get("model") or upgrade.get("replacement"))
+        status = str(item.get("status") or "").lower()
+        seen.add(model_id)
+        models.append(
+            CodexModelInfo(
+                model_id=model_id,
+                label=str(item.get("display_name") or model_id),
+                description=str(item.get("description") or ""),
+                deprecated=model_id in migrations or bool(item.get("deprecated")) or status == "deprecated",
+                replacement=replacement,
+            )
+        )
+    models.sort(key=lambda model: model.model_id, reverse=True)
+    return models
+
+
+def mark_default_codex_model(models: list[CodexModelInfo]) -> list[CodexModelInfo]:
+    current = default_codex_model_from_config_only()
+    if not current and models:
+        current = models[0].model_id
+    for model in models:
+        model.is_default = model.model_id == current
+    return models
+
+
+def default_codex_model_from_config_only() -> Optional[str]:
+    if CODEX_MODEL:
+        return normalize_codex_model(CODEX_MODEL)
+    return read_codex_config_model(default_machine_codex_home())
+
+
+def codex_model_migrations(codex_home: Path) -> dict[str, str]:
+    config_path = codex_home / "config.toml"
+    try:
+        text = config_path.read_text(encoding="utf-8")
+    except OSError:
+        return {}
+    match = re.search(r"(?ms)^\s*\[notice\.model_migrations\]\s*(.*?)(?:^\s*\[|\Z)", text)
+    if not match:
+        return {}
+    migrations: dict[str, str] = {}
+    for old_model, new_model in re.findall(r'(?m)^\s*["\']([^"\']+)["\']\s*=\s*["\']([^"\']+)["\']\s*$', match.group(1)):
+        old = normalize_codex_model(old_model)
+        new = normalize_codex_model(new_model)
+        if old and new:
+            migrations[old] = new
+    return migrations
+
+
+def configured_codex_accounts() -> list[CodexAccountInfo]:
+    accounts: list[CodexAccountInfo] = []
+    seen: set[str] = set()
+    label_overrides = load_codex_account_labels()
+    for entry in CODEX_ACCOUNTS.split(","):
+        raw = entry.strip()
+        if not raw:
+            continue
+        account_id, _, label = raw.partition(":")
+        account_id = normalize_account_id(account_id)
+        if not account_id or account_id in seen:
+            continue
+        seen.add(account_id)
+        account_home = codex_home_for_account(account_id)
+        accounts.append(
+            CodexAccountInfo(
+                account_id=account_id,
+                label=label_overrides.get(account_id) or label.strip() or account_id,
+                codex_home=str(account_home),
+                is_default=account_id == normalize_account_id(CODEX_DEFAULT_ACCOUNT),
+                authenticated=(account_home / "auth.json").is_file(),
+            )
+        )
+    if not accounts:
+        account_id = "default"
+        account_home = codex_home_for_account(account_id)
+        accounts.append(
+            CodexAccountInfo(
+                account_id=account_id,
+                label="Default",
+                codex_home=str(account_home),
+                is_default=True,
+                authenticated=(account_home / "auth.json").is_file(),
+            )
+        )
+    if not any(account.is_default for account in accounts):
+        accounts[0].is_default = True
+    return accounts
+
+
+def load_codex_account_labels() -> dict[str, str]:
+    try:
+        data = json.loads(CODEX_ACCOUNT_LABELS_PATH.read_text(encoding="utf-8"))
+    except (FileNotFoundError, OSError, json.JSONDecodeError):
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    labels: dict[str, str] = {}
+    for raw_account_id, raw_label in data.items():
+        account_id = normalize_account_id(raw_account_id)
+        label = normalize_account_label(raw_label)
+        if account_id and label:
+            labels[account_id] = label
+    return labels
+
+
+def save_codex_account_label(account_id: str, label: str) -> CodexAccountInfo:
+    normalized_account_id = normalize_codex_account(account_id)
+    normalized_label = normalize_account_label(label)
+    if not normalized_label:
+        raise HTTPException(status_code=400, detail="label is required")
+    labels = load_codex_account_labels()
+    labels[normalized_account_id] = normalized_label
+    CODEX_ACCOUNT_LABELS_PATH.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = CODEX_ACCOUNT_LABELS_PATH.with_suffix(CODEX_ACCOUNT_LABELS_PATH.suffix + ".tmp")
+    tmp_path.write_text(json.dumps(labels, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    tmp_path.replace(CODEX_ACCOUNT_LABELS_PATH)
+    for account in configured_codex_accounts():
+        if account.account_id == normalized_account_id:
+            return account
+    raise HTTPException(status_code=404, detail="account not found")
+
+
+def normalize_account_id(value: object) -> str:
+    account_id = str(value or "").strip().lower()
+    account_id = re.sub(r"[^a-z0-9_-]+", "-", account_id).strip("-")
+    return account_id
+
+
+def normalize_account_label(value: object) -> str:
+    label = " ".join(str(value or "").split()).strip()
+    return label[:80]
+
+
+def default_codex_account() -> str:
+    for account in configured_codex_accounts():
+        if account.is_default:
+            return account.account_id
+    return configured_codex_accounts()[0].account_id
+
+
+def normalize_codex_account(value: object) -> str:
+    requested = normalize_account_id(value) if value is not None else ""
+    account_ids = {account.account_id for account in configured_codex_accounts()}
+    if not requested:
+        requested = default_codex_account()
+    if requested not in account_ids:
+        raise HTTPException(status_code=400, detail=f"invalid codex_account: {value}")
+    return requested
+
+
+def codex_home_for_account(account_id: str) -> Path:
+    safe_id = normalize_account_id(account_id)
+    if uses_machine_codex_home(safe_id):
+        return default_machine_codex_home()
+    if not safe_id:
+        safe_id = "default"
+    return CODEX_ACCOUNTS_ROOT / safe_id
+
+
+def uses_machine_codex_home(account_id: str) -> bool:
+    return normalize_account_id(account_id) == MACHINE_CODEX_ACCOUNT_ID
+
+
+def default_machine_codex_home() -> Path:
+    return Path(os.environ.get("CODEX_HOME") or Path.home() / ".codex")
+
+
+def parse_device_auth_output(output: str) -> tuple[Optional[str], Optional[str]]:
+    cleaned = strip_ansi(output)
+    uri_match = re.search(r"https?://[^\s)>\]]+", cleaned)
+    code_match = re.search(r"\b([A-Z0-9]{4}(?:-[A-Z0-9]{4,6})+)\b", cleaned)
+    user_code = code_match.group(1) if code_match else None
+    return (uri_match.group(0).rstrip(".,") if uri_match else None, user_code)
+
+
+def strip_ansi(text: str) -> str:
+    return ANSI_ESCAPE_RE.sub("", text)
+
+
+def is_auth_required_text(text: str) -> bool:
+    lowered = text.lower()
+    auth_markers = (
+        "token_invalidated",
+        "refresh_token_invalidated",
+        "refresh_token_reused",
+        "401 unauthorized",
+        "please log out and sign in again",
+        "please try signing in again",
+        "access token could not be refreshed",
+    )
+    return any(marker in lowered for marker in auth_markers)
 
 
 def format_exec_event(line: str) -> str:
@@ -329,10 +839,19 @@ def format_exec_event(line: str) -> str:
         return "[codex] working...\n"
     if event_type == "turn.completed":
         usage = event.get("usage") or {}
+        input_tokens = usage.get("input_tokens")
+        cached_input_tokens = usage.get("cached_input_tokens")
         output_tokens = usage.get("output_tokens")
-        if output_tokens is None:
+        parts = []
+        if input_tokens is not None:
+            parts.append(f"{input_tokens} input")
+        if cached_input_tokens is not None:
+            parts.append(f"{cached_input_tokens} cached")
+        if output_tokens is not None:
+            parts.append(f"{output_tokens} output")
+        if not parts:
             return "[codex] done\n"
-        return f"[codex] done ({output_tokens} output tokens)\n"
+        return f"[codex] done ({', '.join(parts)} tokens)\n"
     if event_type == "error":
         message = event.get("message") or "unknown error"
         return f"[codex error] {message}\n"
@@ -479,6 +998,8 @@ def session_info_from_metadata(path: Path) -> Optional[SessionInfo]:
         return None
     session_id = str(metadata.get("session_id") or path.parent.name)
     log_path = str(path.parent / "codex.log")
+    title = metadata.get("title")
+    root_id, display_title, preview = session_display_context(session_id, metadata)
     return SessionInfo(
         session_id=session_id,
         status="archived",
@@ -486,10 +1007,81 @@ def session_info_from_metadata(path: Path) -> Optional[SessionInfo]:
         log_path=log_path,
         started_at=float(metadata.get("started_at") or path.stat().st_mtime),
         returncode=None,
-        title=metadata.get("title"),
+        title=title,
+        display_title=display_title,
+        latest_title=title,
+        preview=preview,
+        root_session_id=root_id,
+        reasoning_effort=metadata.get("reasoning_effort") or CODEX_REASONING_EFFORT,
+        codex_account=metadata.get("codex_account") or default_codex_account(),
+        codex_model=metadata.get("codex_model") or default_codex_model(),
         codex_thread_id=metadata.get("codex_thread_id") or find_codex_thread_id(session_id),
         resume_from=metadata.get("resume_from"),
     )
+
+
+def session_display_context(session_id: str, metadata: dict) -> tuple[str, str, str]:
+    chain = session_metadata_chain(session_id, metadata)
+    root_metadata = chain[-1][1] if chain else metadata
+    root_id = str(root_metadata.get("session_id") or (chain[-1][0] if chain else session_id))
+    root_prompt = prompt_request_preview(session_dir_for_id(root_id))
+    root_title = root_prompt or clean_session_title(root_metadata.get("title"))
+
+    current_title = clean_session_title(metadata.get("title"))
+    display_title = root_title or current_title or session_id
+    preview_parts = []
+    if root_prompt and root_prompt != display_title:
+        preview_parts.append(root_prompt)
+    if current_title and not titles_match(current_title, display_title):
+        preview_parts.append(f"Latest: {current_title}")
+    return root_id, display_title, "  ".join(preview_parts[:2])
+
+
+def titles_match(first: str, second: str) -> bool:
+    return first == second or first.startswith(second[:80]) or second.startswith(first[:80])
+
+
+def session_metadata_chain(session_id: str, metadata: dict) -> list[tuple[str, dict]]:
+    chain: list[tuple[str, dict]] = [(session_id, metadata)]
+    seen = {session_id}
+    parent_id = metadata.get("resume_from")
+    while isinstance(parent_id, str) and parent_id and parent_id not in seen:
+        parent_path = next(DEFAULT_SESSION_ROOT.glob(f"*/{parent_id}/metadata.json"), None)
+        if not parent_path:
+            break
+        try:
+            parent_metadata = json.loads(parent_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            break
+        seen.add(parent_id)
+        chain.append((parent_id, parent_metadata))
+        parent_id = parent_metadata.get("resume_from")
+    return chain
+
+
+def session_dir_for_id(session_id: str) -> Optional[Path]:
+    meta_path = next(DEFAULT_SESSION_ROOT.glob(f"*/{session_id}/metadata.json"), None)
+    return meta_path.parent if meta_path else None
+
+
+def clean_session_title(value: object) -> str:
+    if not isinstance(value, str):
+        return ""
+    return " ".join(value.split()).strip()
+
+
+def prompt_request_preview(session_dir: Optional[Path]) -> str:
+    if not session_dir:
+        return ""
+    prompt_path = session_dir / "prompt.txt"
+    try:
+        text = prompt_path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return ""
+    marker = "User request transcribed from voice:"
+    if marker in text:
+        text = text.split(marker, 1)[1]
+    return clean_session_title(text)[:240]
 
 
 def find_session_info(session_id: str) -> Optional[SessionInfo]:
@@ -552,11 +1144,56 @@ def format_session_log(path: Path, max_chars: int) -> tuple[str, bool]:
 
 app = FastAPI(title=APP_NAME)
 sessions: dict[str, CodexSession] = {}
+login_sessions: dict[str, CodexLoginSession] = {}
 
 
 @app.get("/health")
 async def health() -> dict:
     return {"ok": True, "service": APP_NAME}
+
+
+@app.get("/codex/accounts", response_model=list[CodexAccountInfo])
+async def list_codex_accounts() -> list[CodexAccountInfo]:
+    return configured_codex_accounts()
+
+
+@app.get("/codex/models", response_model=list[CodexModelInfo])
+async def list_codex_models() -> list[CodexModelInfo]:
+    return discover_codex_models()
+
+
+@app.post("/codex/accounts/{account_id}/label", response_model=CodexAccountInfo)
+async def update_codex_account_label(account_id: str, request: CodexAccountLabelRequest) -> CodexAccountInfo:
+    return save_codex_account_label(account_id, request.label)
+
+
+@app.post("/codex/accounts/{account_id}/login", response_model=CodexLoginSessionInfo)
+async def start_codex_account_login(account_id: str) -> CodexLoginSessionInfo:
+    normalized_account_id = normalize_codex_account(account_id)
+    login_session_id = uuid.uuid4().hex[:12]
+    login_session = CodexLoginSession(login_session_id, normalized_account_id)
+    login_sessions[login_session_id] = login_session
+    login_session.start()
+    return login_session.info()
+
+
+@app.get("/codex/accounts/{account_id}/login/{login_session_id}", response_model=CodexLoginSessionInfo)
+async def get_codex_account_login(account_id: str, login_session_id: str) -> CodexLoginSessionInfo:
+    normalized_account_id = normalize_codex_account(account_id)
+    login_session = login_sessions.get(login_session_id)
+    if not login_session or login_session.account_id != normalized_account_id:
+        raise HTTPException(status_code=404, detail="unknown login session")
+    return login_session.info()
+
+
+@app.post("/codex/accounts/{account_id}/login/{login_session_id}/cancel", response_model=CodexLoginSessionInfo)
+async def cancel_codex_account_login(account_id: str, login_session_id: str) -> CodexLoginSessionInfo:
+    normalized_account_id = normalize_codex_account(account_id)
+    login_session = login_sessions.get(login_session_id)
+    if not login_session or login_session.account_id != normalized_account_id:
+        raise HTTPException(status_code=404, detail="unknown login session")
+    login_session.cancel()
+    return login_session.info()
 
 
 @app.post("/sessions", response_model=SessionInfo)
@@ -624,6 +1261,9 @@ async def resume_session(session_id: str, request: ResumeRequest) -> SessionInfo
         title=request.title or f"Resume: {source_info.title or session_id}",
         resume_from=session_id,
         codex_thread_id=thread_id,
+        reasoning_effort=request.reasoning_effort or source_info.reasoning_effort,
+        codex_account=request.codex_account or source_info.codex_account,
+        codex_model=request.codex_model or source_info.codex_model,
     )
     child_id = uuid.uuid4().hex[:12]
     try:

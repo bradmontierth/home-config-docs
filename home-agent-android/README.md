@@ -57,3 +57,24 @@ http://192.168.10.217:8767
 You can edit the gateway URL and token in the app. Values are stored in Android shared preferences.
 
 The manifest allows cleartext HTTP for LAN use. Keep the gateway LAN-only and set `HOME_AGENT_TOKEN` before routine use.
+
+## FCM Notifications
+
+Push notifications use Firebase Cloud Messaging for delivery, but Home Agent data and control still go through the LAN gateway.
+
+Setup:
+
+1. Create a Firebase project and add Android package `com.homeagent.phone`.
+2. Download `google-services.json` and place it at `/home/pi/cecret_lake/home-agent-android/google-services.json`.
+3. Create a Firebase service account JSON for the gateway host.
+4. Set gateway env vars:
+
+```text
+HOME_AGENT_FCM_PROJECT_ID=your-firebase-project-id
+HOME_AGENT_FCM_SERVICE_ACCOUNT_JSON=/home/pi/cecret_lake/home-agent/firebase-service-account.json
+HOME_AGENT_PUSH_REGISTRY=/home/pi/home_config/home-agent/sessions/push_tokens.json
+```
+
+The Android build copies `google-services.json` from `/home/pi/cecret_lake/home-agent-android/google-services.json` into the ignored app-local location when present. You can override that source with `HOME_AGENT_GOOGLE_SERVICES_JSON` or the Gradle property `homeAgentGoogleServicesJson`.
+
+`app/google-services.json` and service-account JSON files are ignored by git. Without `google-services.json`, the Android app still builds, but FCM token registration is skipped at runtime.

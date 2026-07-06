@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="home_agent_notification_channel_id">home_agent_sessions</string>
+</resources>

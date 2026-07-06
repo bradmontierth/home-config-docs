@@ -8,9 +8,15 @@ services:
       HOME_AGENT_HOME_CONFIG: /home/pi/home_config
       HOME_AGENT_SESSION_ROOT: /home/pi/home_config/home-agent/sessions
       HOME_AGENT_RUNNER_URL: http://127.0.0.1:8766
-      HOME_AGENT_PARAKEET_URL: http://192.168.10.197:8090
+      HOME_AGENT_PARAKEET_URL: http://192.168.10.187:8090
       # Set this before exposing the service to normal LAN use.
       # HOME_AGENT_TOKEN: change-me
+      # Optional FCM push notifications for the Android app.
+      # HOME_AGENT_FCM_PROJECT_ID: your-firebase-project-id
+      # HOME_AGENT_FCM_SERVICE_ACCOUNT_JSON: /home/pi/cecret_lake/home-agent/firebase-service-account.json
+      # HOME_AGENT_PUSH_REGISTRY: /home/pi/home_config/home-agent/sessions/push_tokens.json
     volumes:
       - /home/pi/home_config/home-agent/sessions:/home/pi/home_config/home-agent/sessions
+      - /home/pi/home_config/home-agent-android/app/build/outputs/apk/debug:/home/pi/home_config/home-agent-android/app/build/outputs/apk/debug:ro
+      - /home/pi/cecret_lake/home-agent:/home/pi/cecret_lake/home-agent:ro
     restart: unless-stopped

@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+set -u
+
+STATE_DIR="${STATE_DIR:-/home/pi/.local/state/kitchen-display}"
+LOG_FILE="${LOG_FILE:-${STATE_DIR}/chromium.log}"
+URL="${KITCHEN_DISPLAY_URL:-http://192.168.10.217:8123/photo-viewer/kitchen-display}"
+
+mkdir -p "$STATE_DIR"
+
+{
+  echo
+  echo "===== chromium start $(date -Is) ====="
+  echo "url=${URL}"
+  echo "user=$(id -un) uid=$(id -u)"
+  echo "display=${DISPLAY:-} wayland_display=${WAYLAND_DISPLAY:-}"
+} >>"$LOG_FILE" 2>&1
+
+exec chromium \
+  --ozone-platform=wayland \
+  --kiosk \
+  --password-store=basic \
+  --noerrdialogs \
+  --disable-infobars \
+  --no-first-run \
+  --force-device-scale-factor=1.25 \
+  "$URL" >>"$LOG_FILE" 2>&1
