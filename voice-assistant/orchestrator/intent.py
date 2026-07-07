@@ -13,7 +13,11 @@ from . import clients, config
 
 log = logging.getLogger("orchestrator.intent")
 
-INTENTS = ("set_timer", "timer_query", "timer_adjust", "timer_cancel", "ask", "none")
+INTENTS = (
+    "set_timer", "timer_query", "timer_adjust", "timer_cancel",
+    "add_items", "set_reminder", "show_todos", "show_shopping", "complete_item",
+    "ask", "none",
+)
 
 _SYSTEM = f"""You are the intent parser for a kitchen assistant. Convert the \
 user's command into a single strict JSON object and output ONLY that JSON — no \
@@ -26,7 +30,8 @@ Schema:
   "duration_seconds": integer total seconds for set_timer / timer_adjust (adjust may be negative to remove time), else null,
   "sound_theme": one of {list(config.SOUND_THEMES)},
   "scope": "one" or "all" — "all" only when the user clearly means every timer (e.g. "cancel all timers"), else "one",
-  "query": for intent "ask", the cleaned question text to send to the knowledge model; else null
+  "query": for intent "ask", the cleaned question text to send to the knowledge model; else null,
+  "item_text": for intent "complete_item", the short name of the list item to check off (e.g. "eggs", "call the dentist"); else null
 }}
 
 Rules:
@@ -40,7 +45,16 @@ Rules:
 - ask = a general knowledge or factual question NOT about timers: "how many tablespoons in a cup",
   "when do babies start walking", "what temperature is chicken done at", "how do I dice an onion".
   Put the cleaned question in "query". No keyword is needed — natural questions route here.
-- If the command is not a timer command and not a knowledge question, intent "none".
+- add_items = adding things to a shopping or todo list: "add eggs and milk to the shopping list",
+  "put paper towels on the list", "add a todo to call the plumber". Leave label/query/item_text null;
+  the full command is forwarded to the list service, which figures out the items itself.
+- set_reminder = a time-based reminder: "remind me to take the roast out at 5", "remind me to call mom
+  tomorrow morning". Also forwarded whole; leave item_text null.
+- show_todos = "show my todos", "what's on my to-do list". show_shopping = "show the shopping list",
+  "what do I need to buy". No other fields.
+- complete_item = checking something off: "mark eggs as done", "I bought the milk", "cross off call
+  the dentist". Put the item name in "item_text".
+- If the command is not a timer, list, or knowledge command, intent "none".
 Return JSON only."""
 
 
@@ -86,6 +100,12 @@ def _validate(data: dict) -> dict:
     else:
         query = None
 
+    item_text = data.get("item_text")
+    if isinstance(item_text, str):
+        item_text = item_text.strip() or None
+    else:
+        item_text = None
+
     return {
         "intent": intent,
         "label": label,
@@ -93,4 +113,5 @@ def _validate(data: dict) -> dict:
         "sound_theme": theme,
         "scope": scope,
         "query": query,
+        "item_text": item_text,
     }

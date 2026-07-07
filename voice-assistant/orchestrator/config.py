@@ -47,6 +47,18 @@ OPENROUTER_MAX_TOKENS = int(os.getenv("OPENROUTER_MAX_TOKENS", "700"))
 # Sentinel separating the short spoken answer from the full dashboard answer.
 ASK_SENTINEL = os.getenv("ASK_SENTINEL", "===MORE===")
 
+# --- lists (todo / shopping / reminders via voice-notes companion) --------
+# The companion is note-centric: sync a note then analyze it to extract typed
+# items. GET /api/items lists; /complete + DELETE mutate. See lists.py.
+COMPANION_URL = os.getenv("COMPANION_URL", "http://192.168.10.217:8768")
+# Lists are SHARED (the kitchen is one household) — reads span every companion
+# user. But the companion requires a valid owner on write, so newly added items
+# are filed under this account. It's attribution only; display never filters by
+# it. Must be a known companion user (brad/adrienne).
+LIST_OWNER = os.getenv("LIST_OWNER", "brad")
+# rapidfuzz score (0-100) an item must clear to be matched for completion.
+LIST_MATCH_THRESHOLD = float(os.getenv("LIST_MATCH_THRESHOLD", "70"))
+
 # --- wake stage-2 ----------------------------------------------------------
 WAKE_PHRASE = os.getenv("WAKE_PHRASE", "okay computer")
 # rapidfuzz partial_ratio (0-100) the wake phrase must clear in the transcript.

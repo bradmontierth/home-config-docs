@@ -352,14 +352,42 @@ parser + background full-stream task. (c) `handle_command` ask branch. (d)
 dashboard: consume `ask_stream`/`ask_full` → show streaming full answer under
 the spoken headline (reuse assistant popup, maybe an expandable body).
 
-## Lists (after ask-mode)
+## Lists — orchestrator BUILT + validated 2026-07-07 (dashboard views pending)
 
 todo/shopping/reminders reusing the voice-notes companion at
-`http://192.168.10.217:8768` (`/api/items`, reachable, has analyze prompt with
-confidence + due-date rules). Intents: `add_items` (→ companion analyze),
-`show_todos`, `show_shopping`, `complete_item`, `set_reminder`. Bigger than
-ask-mode because it needs NEW dashboard views (todo/shopping lists), not just
-the popup. Companion also does FCM reminder pushes.
+`http://192.168.10.217:8768`. Intents `add_items`, `set_reminder`, `show_todos`,
+`show_shopping`, `complete_item` added to `intent.py` (+ `item_text` field).
+Companion also does FCM reminder pushes.
+
+**Companion contract (ground truth = its `/openapi.json`; source at
+`/home/pi/voice-notes-android/companion/app/main.py`, container
+`voice-notes-companion`).** It is NOTE-centric, not item-centric — adding is a
+two-step reuse of its own analyze LLM:
+`POST /api/notes/sync` (create a note holding the raw text) then
+`POST /api/notes/{id}/analyze {source_text}` → it extracts typed items
+(reminder/todo/shopping), parses due dates, scores confidence, dedupes. So we
+forward the user's WHOLE command to analyze — its prompt keys off framing words
+("shopping list", "remind me", "todo") to pick each item's type; pre-parsing
+would break typing. Read: `GET /api/items?status=active` (per-row `type`).
+Mutate: `POST /api/items/{id}/complete`, `DELETE /api/items/{id}`. Valid users
+are `brad`/`adrienne` only.
+
+**Lists are SHARED** (2026-07-07 user call — one household, no good way to
+isolate by voice, reminders play on the shared device). Reads span all users (no
+`user` filter); new items are filed under `LIST_OWNER` (default brad) purely
+because the companion requires a valid owner on write — display never filters by
+it. `complete_item` fuzzy-matches (rapidfuzz partial/token_set, threshold 70)
+across the shared active list.
+
+Orchestrator files: `orchestrator/lists.py` (companion client), `config.py`
+(`COMPANION_URL`, `LIST_OWNER`, `LIST_MATCH_THRESHOLD`), `format.py` list
+phrasing (strips the companion's "Buy " prefix for speech), `app.py` branches.
+Emits dashboard events `show_list {list_type, items}` and
+`list_updated {items, added|completed}` — **no consumer yet; dashboard list
+views are the remaining work** (todo/shopping views, "show my todos" switches
+the kiosk view). NEEDS a container rebuild on Beelink `~/voice-pipeline` to
+deploy. Validated 2026-07-07 against the live companion: all 5 intents route
+(qwen), add/fetch/complete round-trip; timers + ask regressions intact.
 
 ## Latency Budget (measured where noted)
 

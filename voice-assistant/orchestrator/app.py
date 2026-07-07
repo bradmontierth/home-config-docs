@@ -25,6 +25,7 @@ from fastapi import Body, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse
 
 from . import ask as ask_mod
+from . import lists as lists_mod
 from . import clients, config, events, format as fmt, intent as intent_mod, verify
 from .timers import TimerEngine
 
@@ -81,6 +82,18 @@ async def _speak_reply(text: str) -> str | None:
     with open(os.path.join(config.ANNOUNCE_CACHE_DIR, name), "wb") as fh:
         fh.write(wav)
     return f"/audio/{name}"
+
+
+async def _broadcast_lists(event_type: str, **extra) -> None:
+    """Fan a fresh snapshot of the shared active lists to the dashboard so any
+    open list view refreshes. Best-effort; a lists-service hiccup here must not
+    fail the spoken confirmation the caller already built."""
+    try:
+        items = await lists_mod.fetch()
+    except Exception as exc:  # noqa: BLE001
+        log.warning("list snapshot for %s failed: %s", event_type, exc)
+        return
+    await events.emit(event_type, items=items, **extra)
 
 
 async def handle_command(command: str) -> dict:
@@ -152,6 +165,51 @@ async def handle_command(command: str) -> dict:
             else:
                 result["response"] = "I couldn't find that timer."
                 result["ok"] = False
+
+    elif intent in ("add_items", "set_reminder"):
+        try:
+            added = await lists_mod.add_from_text(command)
+        except Exception as exc:  # noqa: BLE001
+            log.warning("list add failed: %s", exc)
+            result["response"] = "Sorry, I couldn't reach the lists service."
+            result["ok"] = False
+        else:
+            result["added"] = added
+            result["response"] = fmt.summarize_added(added)
+            result["ok"] = bool(added)
+            await _broadcast_lists("list_updated", added=added)
+
+    elif intent in ("show_todos", "show_shopping"):
+        list_type = "todo" if intent == "show_todos" else "shopping"
+        try:
+            items = await lists_mod.fetch(types=(list_type,))
+        except Exception as exc:  # noqa: BLE001
+            log.warning("list fetch failed: %s", exc)
+            result["response"] = "Sorry, I couldn't reach the lists service."
+            result["ok"] = False
+        else:
+            result["items"] = items
+            result["response"] = fmt.summarize_list(list_type, items)
+            result["ok"] = True
+            await events.emit("show_list", list_type=list_type, items=items)
+
+    elif intent == "complete_item":
+        target = parsed.get("item_text") or command
+        try:
+            done = await lists_mod.complete_by_text(target)
+        except Exception as exc:  # noqa: BLE001
+            log.warning("list complete failed: %s", exc)
+            done = None
+            result["response"] = "Sorry, I couldn't reach the lists service."
+            result["ok"] = False
+        if done:
+            result["completed"] = done
+            result["response"] = fmt.confirm_complete(done)
+            result["ok"] = True
+            await _broadcast_lists("list_updated", completed=done)
+        elif "response" not in result:
+            result["response"] = "I couldn't find that on your list."
+            result["ok"] = False
 
     elif intent == "ask":
         query = parsed.get("query") or command
@@ -308,6 +366,34 @@ def announcement(timer_id: str) -> FileResponse:
     if not path or not os.path.exists(path):
         raise HTTPException(404, "no announcement for that timer")
     return FileResponse(path, media_type="audio/wav")
+
+
+# -- lists REST (dashboard) -------------------------------------------------
+@app.get("/lists")
+async def get_lists() -> dict:
+    """Shared active items, for the kiosk to render/restore a list view. The
+    dashboard proxies this (orchestrator sets no CORS headers)."""
+    try:
+        items = await lists_mod.fetch()
+    except Exception as exc:  # noqa: BLE001
+        log.warning("GET /lists failed: %s", exc)
+        raise HTTPException(502, f"lists service unreachable: {exc}")
+    return {"items": items}
+
+
+@app.post("/lists/items/{item_id}/complete")
+async def complete_list_item(item_id: int) -> dict:
+    """Check an item off from a touchscreen tap. Emits list_updated with a fresh
+    shared snapshot so every kiosk's open list view reconciles."""
+    try:
+        done = await lists_mod.complete_by_id(item_id)
+    except Exception as exc:  # noqa: BLE001
+        log.warning("complete list item %s failed: %s", item_id, exc)
+        raise HTTPException(502, f"lists service unreachable: {exc}")
+    if done is None:
+        raise HTTPException(404, "no active item with that id")
+    await _broadcast_lists("list_updated", completed=done)
+    return {"ok": True, "item": done}
 
 
 @app.get("/audio/{name}")

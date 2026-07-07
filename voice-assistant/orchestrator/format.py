@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import datetime
+
 
 def humanize_seconds(seconds: int) -> str:
     seconds = max(0, int(round(seconds)))
@@ -50,3 +52,107 @@ def report_query(timers: list[dict]) -> str:
         f"{timer_name(t)}, {humanize_seconds(t['remaining_seconds'])}" for t in timers
     ]
     return "You have " + "; ".join(parts) + "."
+
+
+# --- lists -----------------------------------------------------------------
+_LIST_LABEL = {"todo": "to-do list", "shopping": "shopping list", "reminder": "reminders"}
+
+
+def join_natural(words: list[str]) -> str:
+    """['a','b','c'] -> 'a, b, and c'."""
+    words = [w for w in words if w]
+    if not words:
+        return ""
+    if len(words) == 1:
+        return words[0]
+    if len(words) == 2:
+        return f"{words[0]} and {words[1]}"
+    return ", ".join(words[:-1]) + ", and " + words[-1]
+
+
+def humanize_due(due_at: str | None) -> str:
+    """ISO-8601 (with offset) -> ' tomorrow at 5:00 PM' style tail, or '' if
+    unparseable/absent. Leading space included so it drops cleanly into a
+    sentence."""
+    if not due_at:
+        return ""
+    try:
+        dt = datetime.fromisoformat(due_at)
+    except ValueError:
+        return ""
+    now = datetime.now(dt.tzinfo)
+    day_delta = (dt.date() - now.date()).days
+    if day_delta == 0:
+        day = "today"
+    elif day_delta == 1:
+        day = "tomorrow"
+    else:
+        day = "on " + dt.strftime("%A")
+    clock = dt.strftime("%I:%M %p").lstrip("0")
+    return f" {day} at {clock}"
+
+
+# Companion prefixes shopping items with an imperative ("Buy eggs"). Fine on the
+# dashboard, but "Added buy eggs" reads badly aloud — strip it for speech only.
+_SHOPPING_PREFIXES = ("buy ", "get ", "grab ", "pick up ", "purchase ")
+
+
+def _spoken_text(item: dict) -> str:
+    text = (item.get("text") or "").strip()
+    if item.get("type") == "shopping":
+        low = text.lower()
+        for pre in _SHOPPING_PREFIXES:
+            if low.startswith(pre):
+                return text[len(pre):].lstrip()
+    return text
+
+
+def _item_phrase(item: dict) -> str:
+    text = _spoken_text(item)
+    if item.get("type") == "reminder":
+        return text + humanize_due(item.get("due_at"))
+    return text
+
+
+def summarize_added(items: list[dict]) -> str:
+    """Confirmation for an add_items / set_reminder turn, grouped by type."""
+    if not items:
+        return "I didn't catch anything to add to your lists."
+    buckets: dict[str, list[str]] = {"reminder": [], "todo": [], "shopping": []}
+    for it in items:
+        buckets.setdefault(it.get("type", "todo"), []).append(_item_phrase(it))
+    clauses = []
+    if buckets["reminder"]:
+        clauses.append("I'll remind you to " + join_natural(buckets["reminder"]))
+    if buckets["shopping"]:
+        clauses.append("added " + join_natural(buckets["shopping"]) + " to the shopping list")
+    if buckets["todo"]:
+        clauses.append("added " + join_natural(buckets["todo"]) + " to your to-dos")
+    if not clauses:
+        return "Added to your lists."
+    sentence = clauses[0][0].upper() + clauses[0][1:]
+    if len(clauses) > 1:
+        sentence = "; ".join([sentence] + clauses[1:])
+    return sentence + "."
+
+
+def summarize_list(list_type: str, items: list[dict]) -> str:
+    """Spoken summary when showing a list on the dashboard."""
+    label = _LIST_LABEL.get(list_type, "list")
+    if not items:
+        return f"Your {label} is empty."
+    names = [_item_phrase(it) for it in items]
+    head = names[:5]
+    spoken = join_natural(head)
+    if len(names) > len(head):
+        spoken += f", and {len(names) - len(head)} more"
+    n = len(names)
+    noun = "item" if n == 1 else "items"
+    return f"You have {n} {noun} on your {label}: {spoken}."
+
+
+def confirm_complete(item: dict) -> str:
+    text = _spoken_text(item) or "that"
+    verb = "Checked off" if item.get("type") == "shopping" else "Marked"
+    tail = "" if item.get("type") == "shopping" else " as done"
+    return f"{verb} {text}{tail}."
