@@ -96,6 +96,32 @@ async def _broadcast_lists(event_type: str, **extra) -> None:
     await events.emit(event_type, items=items, **extra)
 
 
+# The overlay only has todo/shopping views; reminders are push-only.
+_VIEWABLE = ("shopping", "todo")
+
+
+def _view_type_for(items: list[dict]) -> str | None:
+    """Which list view to pop for a set of just-added items. Prefer shopping,
+    then todo (the kitchen's common cases); None if only reminders."""
+    types = {it.get("type") for it in items}
+    for t in _VIEWABLE:
+        if t in types:
+            return t
+    return None
+
+
+async def _pop_list(list_type: str) -> None:
+    """Open the shared list view on the kiosk showing the current state — so a
+    voice add/complete shows the LIST, not just a spoken read-back (a bare
+    'added it' on screen isn't useful)."""
+    try:
+        items = await lists_mod.fetch()
+    except Exception as exc:  # noqa: BLE001
+        log.warning("pop list %s failed: %s", list_type, exc)
+        return
+    await events.emit("show_list", list_type=list_type, items=items)
+
+
 async def handle_command(command: str) -> dict:
     """Parse a command and act on it. Emits thinking/response events; returns a
     structured result."""
@@ -177,7 +203,13 @@ async def handle_command(command: str) -> dict:
             result["added"] = added
             result["response"] = fmt.summarize_added(added)
             result["ok"] = bool(added)
-            await _broadcast_lists("list_updated", added=added)
+            # Pop the list so the kiosk shows the current state, not just the
+            # spoken "added it". Reminder-only adds have no view -> refresh only.
+            view = _view_type_for(added)
+            if view:
+                await _pop_list(view)
+            else:
+                await _broadcast_lists("list_updated", added=added)
 
     elif intent in ("show_todos", "show_shopping"):
         list_type = "todo" if intent == "show_todos" else "shopping"
@@ -206,7 +238,11 @@ async def handle_command(command: str) -> dict:
             result["completed"] = done
             result["response"] = fmt.confirm_complete(done)
             result["ok"] = True
-            await _broadcast_lists("list_updated", completed=done)
+            # Show the updated list after a voice complete, same as adds.
+            if done.get("type") in _VIEWABLE:
+                await _pop_list(done["type"])
+            else:
+                await _broadcast_lists("list_updated", completed=done)
         elif "response" not in result:
             result["response"] = "I couldn't find that on your list."
             result["ok"] = False
