@@ -45,13 +45,26 @@ ENGINE: TimerEngine
 # short summary of the last turn; a follow-up parse gets it as context so the
 # LLM can resolve references and, crucially, reject unrelated room chatter.
 SESSION_TTL_S = 90.0
-_SESSION: dict = {"ts": 0.0, "summary": ""}
+_SESSION: dict = {"ts": 0.0, "summary": "", "last_added": []}
 
 
 def session_note(summary: str) -> None:
     """Record a one-line summary of what the last actionable turn did."""
     _SESSION["summary"] = summary
     _SESSION["ts"] = time.time()
+
+
+def session_set_added(items: list[dict]) -> None:
+    """Remember the items the last add produced so a follow-up 'undo' / 'scratch
+    my last' can remove exactly them."""
+    _SESSION["last_added"] = items or []
+    _SESSION["ts"] = time.time()
+
+
+def session_last_added() -> list[dict]:
+    if time.time() - _SESSION["ts"] > SESSION_TTL_S:
+        return []
+    return _SESSION["last_added"]
 
 
 def session_context() -> str | None:
@@ -156,6 +169,9 @@ def _summarize_turn(intent: str, result: dict) -> str:
         return f"you added {names or 'items'} to your lists"
     if intent == "complete_item" and result.get("completed"):
         return f"you checked off {result['completed'].get('text', 'an item')}"
+    if intent == "remove_items" and result.get("removed"):
+        return "you removed " + ", ".join(
+            (i.get("text") or "").strip() for i in result["removed"])
     if intent == "timer_adjust" and result.get("timer"):
         return f"you adjusted the {fmt.timer_name(result['timer'])}"
     if intent == "timer_cancel":
@@ -265,6 +281,7 @@ async def handle_command(command: str, followup: bool = False) -> dict:
             result["added"] = added
             result["response"] = fmt.summarize_added(added)
             result["ok"] = bool(added)
+            session_set_added(added)   # enable a follow-up "scratch my last"
             # Pop the list so the kiosk shows the current state, not just the
             # spoken "added it". Reminder-only adds have no view -> refresh only.
             view = _view_type_for(added)
@@ -309,6 +326,33 @@ async def handle_command(command: str, followup: bool = False) -> dict:
             result["response"] = "I couldn't find that on your list."
             result["ok"] = False
 
+    elif intent == "remove_items":
+        try:
+            if parsed.get("item_text"):
+                removed = await lists_mod.delete_by_text(parsed["item_text"])
+                removed_list = [removed] if removed else []
+            else:  # "scratch my last" / "undo" -> remove what was just added
+                removed_list = await lists_mod.delete_ids(session_last_added())
+        except Exception as exc:  # noqa: BLE001
+            log.warning("list remove failed: %s", exc)
+            result["response"] = "Sorry, I couldn't reach the lists service."
+            result["ok"] = False
+        else:
+            if removed_list:
+                result["removed"] = removed_list
+                result["response"] = fmt.confirm_removed(removed_list)
+                result["ok"] = True
+                if not parsed.get("item_text"):
+                    session_set_added([])   # undo consumed; don't double-undo
+                view = _view_type_for(removed_list)
+                if view:
+                    await _pop_list(view)
+                else:
+                    await _broadcast_lists("list_updated", removed=removed_list)
+            else:
+                result["response"] = "I couldn't find anything to remove."
+                result["ok"] = False
+
     elif intent == "ask":
         query = parsed.get("query") or command
         await events.emit("ask_thinking", query=query)
@@ -317,8 +361,15 @@ async def handle_command(command: str, followup: bool = False) -> dict:
         result["full"] = ask_result.get("full", "")
         result["ok"] = ask_result["ok"]
 
+    elif intent == "unclear":
+        # Follow-up addressed to us but not mappable to an action. Give brief
+        # feedback and KEEP the session open (non-silent reply -> satellite
+        # re-arms) instead of dying silently like a background-chatter drop.
+        result["response"] = "Sorry, I didn't catch that."
+        result["ok"] = False
+
     else:  # none / out of scope
-        result["response"] = "Sorry, I can only handle timers and questions right now."
+        result["response"] = "Sorry, I can only handle timers, lists, and questions right now."
         result["ok"] = False
 
     result["audio_url"] = await _speak_reply(result["response"])
@@ -336,6 +387,15 @@ async def handle_command(command: str, followup: bool = False) -> dict:
 @app.get("/health")
 def health() -> dict:
     return {"ok": True, "active_timers": len(ENGINE.active())}
+
+
+@app.post("/session/listening")
+async def session_listening() -> dict:
+    """Satellite pings this when it opens a follow-up listen window (no wake
+    word). Emits a dashboard cue so the kiosk shows 'Listening…' — the user must
+    be able to tell the mic is still open without guessing."""
+    await events.emit("followup_listening")
+    return {"ok": True}
 
 
 @app.post("/wake")

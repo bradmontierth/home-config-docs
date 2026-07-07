@@ -68,8 +68,21 @@ async def add_from_text(text: str) -> list[dict]:
         r.raise_for_status()
         data = r.json()
     items = data.get("items") or []
-    log.info("add_from_text %r -> %d item(s)", text, len(items))
-    return items
+    if not items:
+        return []
+    # analyze returns items WITHOUT ids (type/text/due_at/confidence only). Match
+    # them back to the stored active rows so callers get ids (needed to delete on
+    # a follow-up "undo" / complete by tap). Companion stores the exact text, so
+    # match on (type, lowercased text).
+    active = await fetch(status="active")
+    resolved = []
+    for it in items:
+        key = (it.get("type"), (it.get("text") or "").strip().lower())
+        row = next((r for r in active
+                    if (r.get("type"), (r.get("text") or "").strip().lower()) == key), None)
+        resolved.append(row or it)
+    log.info("add_from_text %r -> %d item(s)", text, len(resolved))
+    return resolved
 
 
 async def fetch(types: tuple[str, ...] | None = None, status: str = "active") -> list[dict]:
@@ -116,6 +129,47 @@ async def complete_by_text(item_text: str) -> dict | None:
     log.info("complete_by_text %r -> #%s %r (score %.0f)",
              item_text, best["id"], best.get("text"), best_score)
     return best
+
+
+async def delete_by_text(item_text: str) -> dict | None:
+    """Find the best active item matching `item_text` and delete it (remove a
+    mistake, vs complete which marks done). Returns it, or None if no match."""
+    item_text = (item_text or "").strip()
+    if not item_text:
+        return None
+    items = await fetch(status="active")
+    best, best_score = None, 0.0
+    for it in items:
+        score = _match_score(item_text, it.get("text", ""))
+        if score > best_score:
+            best, best_score = it, score
+    if best is None or best_score < config.LIST_MATCH_THRESHOLD:
+        log.info("delete_by_text %r: no match (best=%.0f)", item_text, best_score)
+        return None
+    await _delete(best["id"])
+    log.info("delete_by_text %r -> #%s %r", item_text, best["id"], best.get("text"))
+    return best
+
+
+async def delete_ids(items: list[dict]) -> list[dict]:
+    """Delete a known set of items (undo of a just-completed add). Returns those
+    that were still active and got deleted."""
+    active_ids = {it.get("id") for it in await fetch(status="active")}
+    removed = []
+    for it in items:
+        if it.get("id") in active_ids:
+            await _delete(it["id"])
+            removed.append(it)
+    if removed:
+        log.info("delete_ids removed %s", [it.get("text") for it in removed])
+    return removed
+
+
+async def _delete(item_id: int) -> None:
+    async with httpx.AsyncClient(timeout=15, base_url=config.COMPANION_URL) as client:
+        r = await client.delete(f"/api/items/{item_id}")
+        if r.status_code != 404:
+            r.raise_for_status()
 
 
 async def complete_by_id(item_id: int) -> dict | None:

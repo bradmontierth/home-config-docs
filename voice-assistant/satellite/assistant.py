@@ -357,6 +357,12 @@ def run_followups(stdout, vad) -> None:
         # Drop the reply that just played (it bled into the mic) so we don't
         # transcribe our own voice as a follow-up. No AEC on this mic.
         drain_input(stdout)
+        # Cue the dashboard "Listening…" badge so it's clear the mic is open for
+        # a follow-up (no wake word) — fire-and-forget, never block the capture.
+        try:
+            post_json("/session/listening", {}, timeout=2)
+        except Exception:  # noqa: BLE001
+            pass
         cmd = capture_command(stdout, vad, min_capture_ms=FOLLOWUP_MIN_MS,
                               onset_ms=FOLLOWUP_WINDOW_MS)
         if not cmd:

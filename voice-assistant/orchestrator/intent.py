@@ -16,7 +16,7 @@ log = logging.getLogger("orchestrator.intent")
 INTENTS = (
     "set_timer", "timer_query", "timer_adjust", "timer_cancel",
     "add_items", "set_reminder", "show_todos", "show_shopping", "complete_item",
-    "ask", "none",
+    "remove_items", "ask", "unclear", "none",
 )
 
 _SYSTEM = f"""You are the intent parser for a kitchen assistant. Convert the \
@@ -54,6 +54,11 @@ Rules:
   "what do I need to buy". No other fields.
 - complete_item = checking something off: "mark eggs as done", "I bought the milk", "cross off call
   the dentist". Put the item name in "item_text".
+- remove_items = removing a list item or UNDOING the last add: "take the eggs off the list",
+  "remove milk", "scratch that", "undo", "never mind, remove it", "delete the last one". If they
+  name the item, put it in "item_text"; if they mean whatever was just added ("scratch my last",
+  "undo", "remove that"), leave "item_text" null. This is different from complete_item, which
+  marks something DONE rather than removing a mistake.
 - If the command is not a timer, list, or knowledge command, intent "none".
 Return JSON only."""
 
@@ -66,11 +71,15 @@ wake word, so it may be a continuation of the conversation OR unrelated \
 background speech / someone else's conversation / a stray fragment not addressed \
 to you.
 Recent context: {context}
-Only produce an action intent if the command is CLEARLY addressed to you and \
-actionable (e.g. "also add butter", "make that fifteen minutes", "and cancel the \
-rice"). If it is small talk, a fragment, someone else talking, or anything not \
-clearly a command to you, return intent "none" with all other fields null. When \
-in doubt, return "none"."""
+Choose the intent by whether the speech is addressed to you:
+- If it is a clear command to you, use the matching action intent (e.g. "also \
+add butter", "make that fifteen minutes", "and cancel the rice", "scratch my \
+last").
+- If it clearly seems addressed to you (a command, a request, second person) \
+but you cannot map it to any supported action, use intent "unclear".
+- If it is small talk, a fragment, someone else's conversation, or anything not \
+directed at you, use intent "none". When it is not clearly for you, prefer \
+"none" over "unclear" — do not talk back to the room."""
 
 
 async def parse(command: str, context: str | None = None) -> dict:

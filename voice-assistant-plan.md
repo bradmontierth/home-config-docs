@@ -334,14 +334,24 @@ after "set a timer" ("set a timer … also add eggs" is a real kitchen flow).
   `/command/audio` reads a `followup` flag and returns the intent so the
   satellite knows whether to continue.
 
-**Phasing:** Step 1 (this) = window + session context + silent none (covers
-"also add milk"). Step 2 = `remove_items` intent + reference resolution
-("take those off / undo") using the session's last items.
+**Built (2026-07-07):** window + session context + silent none; `remove_items`
+(delete by name OR "scratch my last"/"undo" via session's last-added item ids);
+`unclear` intent (addressed-but-unmapped follow-up → brief spoken retry, keeps
+session alive — vs `none` which drops silently and ends it); and the dashboard
+**"Listening…" badge** during every follow-up window (satellite pings
+`POST /session/listening` → orch emits `followup_listening` → kiosk shows the
+badge without clearing the last response). The `none`-ends-session-silently trap
+was the "scratch my last did nothing" bug: an addressed-but-unmapped utterance
+looked identical to background chatter; `unclear` + `remove_items` fix it.
 
-**Deferred fast-follows:** dashboard "Listening…" cue during the silent
-pre-speech window (needs a satellite→orch ping + a small frontend handler;
-skipped in Step 1 to avoid a frontend rebuild — a follow-up you actually use
-already lights the dashboard via the normal transcript/response events).
+**Gotcha fixed:** companion `analyze` returns items WITHOUT ids, so undo
+(delete-by-id from the session) matched nothing — `add_from_text` now resolves
+added items back to their stored active rows (match on type+lowercased text) so
+callers get ids. Note `unclear` is deliberately conservative (qwen biases to
+`none` — we do NOT want it talking back to the room), so many unsupported-but-
+addressed phrases still drop silently, Alexa-style.
+
+**Still TODO:** richer reference resolution ("take those off" mid-list).
 
 ## Knowledge / Ask Mode — BUILT + DEPLOYED 2026-07-07 (design locked 2026-07-06)
 

@@ -151,6 +151,13 @@ def summarize_list(list_type: str, items: list[dict]) -> str:
     return f"You have {n} {noun} on your {label}: {spoken}."
 
 
+def confirm_removed(items: list[dict]) -> str:
+    names = [_spoken_text(it) for it in items]
+    if not names:
+        return "Removed it."
+    return "Removed " + join_natural(names) + "."
+
+
 def confirm_complete(item: dict) -> str:
     text = _spoken_text(item) or "that"
     verb = "Checked off" if item.get("type") == "shopping" else "Marked"
