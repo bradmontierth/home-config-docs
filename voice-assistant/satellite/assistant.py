@@ -55,7 +55,16 @@ HTTP_PORT = int(os.getenv("HTTP_PORT", "8781"))
 START_MODE = os.getenv("MODE", "shadow")
 
 PREROLL_S = float(os.getenv("PREROLL_S", "2.5"))
-VAD_AGGRESSIVENESS = int(os.getenv("VAD_AGGRESSIVENESS", "2"))
+# Endpointing VAD. webrtcvad is energy/spectral and useless near steady noise
+# (an AC next to the mic reads as 100% voiced at every aggressiveness, so the
+# turn never endpoints and runs the full MAX_COMMAND_S). Silero is a tiny neural
+# VAD (~2MB ONNX, ~1.7ms/32ms-chunk on a Pi 4) that ignores that noise (0% vs
+# 100% on the same clip). Reuses the onnxruntime already loaded for wake.
+# Model: github.com/snakers4/silero-vad raw src/silero_vad/data/silero_vad.onnx
+# (~2.3MB, not in git — deploy alongside assistant.py like the wake .onnx).
+SILERO_MODEL = os.getenv("SILERO_MODEL", "/home/pi/voice-pipeline/silero_vad.onnx")
+SILERO_THRESHOLD = float(os.getenv("SILERO_THRESHOLD", "0.5"))
+VAD_FRAME_MS = 32   # Silero requires exactly 512-sample (32ms @ 16k) chunks
 # Command capture: keep grabbing the stream (like Echo/Nest — supports
 # "okay computer set a timer" run together) for a minimum window, THEN endpoint
 # on normal trailing silence. The min window is what stops the wake-chime bleed
@@ -261,7 +270,36 @@ def theme_sound(theme: str) -> Path:
     return p if p.exists() else SOUNDS_DIR / "themes" / "marimba.wav"
 
 
-# --- command capture (min window, then webrtcvad endpointing) --------------
+# --- Silero neural VAD -----------------------------------------------------
+class SileroVad:
+    """Streaming speech detector. Feed it consecutive 512-sample (32ms @ 16k)
+    int16 chunks; it carries recurrent state across a turn (reset() between
+    turns). is_speech() -> bool via a probability threshold."""
+
+    CHUNK = 512
+
+    def __init__(self, model_path: str, threshold: float = SILERO_THRESHOLD):
+        import onnxruntime as ort
+        so = ort.SessionOptions()
+        so.intra_op_num_threads = 1
+        so.inter_op_num_threads = 1
+        self.sess = ort.InferenceSession(model_path, sess_options=so)
+        self.threshold = threshold
+        self._sr = np.array(16000, dtype=np.int64)
+        self.reset()
+
+    def reset(self) -> None:
+        self._state = np.zeros((2, 1, 128), dtype=np.float32)
+
+    def is_speech(self, frame_bytes: bytes) -> bool:
+        chunk = (np.frombuffer(frame_bytes, dtype=np.int16).astype(np.float32)
+                 / 32768.0).reshape(1, -1)
+        out = self.sess.run(None, {"input": chunk, "state": self._state, "sr": self._sr})
+        self._state = out[1]
+        return float(out[0].ravel()[0]) >= self.threshold
+
+
+# --- command capture (min window, then Silero endpointing) -----------------
 def capture_command(stdout, vad, min_capture_ms: int = MIN_CAPTURE_MS,
                     onset_ms: int | None = None) -> bytes:
     """Capture one utterance. Two independent windows:
@@ -272,34 +310,48 @@ def capture_command(stdout, vad, min_capture_ms: int = MIN_CAPTURE_MS,
     After speech, endpoint on SILENCE_MS trailing silence."""
     if onset_ms is None:
         onset_ms = min_capture_ms
-    frame_bytes = VAD_FRAME_SAMPLES * 2
+    frame_bytes = SileroVad.CHUNK * 2   # 512 samples * int16
+    vad.reset()                         # fresh recurrent state per utterance
     frames: list[bytes] = []
     speech = False
     silence_ms = voiced_ms = total_ms = 0
+    reason = "max_command"
+    t0 = time.time()
     while total_ms < MAX_COMMAND_S * 1000:
         b = stdout.read(frame_bytes)
         if len(b) < frame_bytes:
+            reason = "stream_end"
             break
-        total_ms += 20
+        total_ms += VAD_FRAME_MS
         frames.append(b)
         try:
-            is_speech = vad.is_speech(b, SAMPLE_RATE)
+            is_speech = vad.is_speech(b)
         except Exception:  # noqa: BLE001
             is_speech = False
         if is_speech:
             speech = True
             silence_ms = 0
-            voiced_ms += 20
+            voiced_ms += VAD_FRAME_MS
         elif speech:
-            silence_ms += 20
+            silence_ms += VAD_FRAME_MS
         if not speech:
             if total_ms >= onset_ms:
+                reason = "no_speech_onset"
                 break                       # no speech onset in window -> abort
             continue                        # keep waiting for speech to start
         if total_ms < min_capture_ms:
             continue                        # never endpoint inside the min window
         if silence_ms >= SILENCE_MS:
+            reason = "silence_endpoint"
             break                           # normal endpoint after speech
+    # Diagnostics for endpoint tuning: how long capture ran, how much of it
+    # webrtcvad called "voiced" (a high ratio during quiet = noise fooling the
+    # VAD), the trailing silence at cutoff, and any inference overhead vs frames.
+    wall_ms = round((time.time() - t0) * 1000)
+    voiced_pct = round(100 * voiced_ms / total_ms) if total_ms else 0
+    log(f"capture reason={reason} total={total_ms}ms voiced={voiced_ms}ms "
+        f"({voiced_pct}%) tail_silence={silence_ms}ms wall={wall_ms}ms "
+        f"min={min_capture_ms} onset={onset_ms} thr={SILERO_THRESHOLD}")
     return b"".join(frames) if voiced_ms >= MIN_VOICED_MS else b""
 
 
@@ -552,17 +604,20 @@ def main() -> int:
 
     ort.InferenceSession = _capped
 
-    import webrtcvad
     from livekit.wakeword import WakeWordModel
 
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     if not Path(MODEL_PATH).is_file():
         log(f"model missing: {MODEL_PATH}")
         return 3
+    if not Path(SILERO_MODEL).is_file():
+        log(f"silero VAD model missing: {SILERO_MODEL}")
+        return 3
 
     model = WakeWordModel(models=[MODEL_PATH])
     model_key = next(iter(model.predict(np.zeros(WINDOW_SAMPLES, dtype=np.int16)).keys()))
-    vad = webrtcvad.Vad(VAD_AGGRESSIVENESS)
+    vad = SileroVad(SILERO_MODEL)
+    log(f"Silero VAD loaded ({SILERO_MODEL}, threshold {SILERO_THRESHOLD})")
 
     server = http.server.ThreadingHTTPServer(("0.0.0.0", HTTP_PORT), Handler)
     threading.Thread(target=server.serve_forever, daemon=True).start()
