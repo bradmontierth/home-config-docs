@@ -16,7 +16,7 @@ log = logging.getLogger("orchestrator.intent")
 INTENTS = (
     "set_timer", "timer_query", "timer_adjust", "timer_cancel",
     "add_items", "set_reminder", "show_todos", "show_shopping", "complete_item",
-    "remove_items", "ask", "unclear", "none",
+    "remove_items", "clear_list", "ask", "unclear", "none",
 )
 
 _SYSTEM = f"""You are the intent parser for a kitchen assistant. Convert the \
@@ -31,7 +31,8 @@ Schema:
   "sound_theme": one of {list(config.SOUND_THEMES)},
   "scope": "one" or "all" — "all" only when the user clearly means every timer (e.g. "cancel all timers"), else "one",
   "query": for intent "ask", the cleaned question text to send to the knowledge model; else null,
-  "item_text": for intent "complete_item", the short name of the list item to check off (e.g. "eggs", "call the dentist"); else null
+  "item_text": for complete_item / remove_items, a phrase describing WHICH item(s) to act on — one item ("eggs"), several ("milk and bread"), a category ("the dairy", "produce"), or a property ("everything orange", "all of it"); else null,
+  "list_type": for clear_list / show, which list — "shopping", "todo", or "all"; else null
 }}
 
 Rules:
@@ -53,12 +54,15 @@ Rules:
 - show_todos = "show my todos", "what's on my to-do list". show_shopping = "show the shopping list",
   "what do I need to buy". No other fields.
 - complete_item = checking something off: "mark eggs as done", "I bought the milk", "cross off call
-  the dentist". Put the item name in "item_text".
-- remove_items = removing a list item or UNDOING the last add: "take the eggs off the list",
-  "remove milk", "scratch that", "undo", "never mind, remove it", "delete the last one". If they
-  name the item, put it in "item_text"; if they mean whatever was just added ("scratch my last",
-  "undo", "remove that"), leave "item_text" null. This is different from complete_item, which
-  marks something DONE rather than removing a mistake.
+  the dentist", "I got the dairy". Put the description in "item_text" (may name one item or many).
+- remove_items = removing item(s) or UNDOING the last add: "take the eggs off the list", "remove milk
+  and bread", "remove everything orange", "take off the produce", "scratch that", "undo". Put the
+  target description in "item_text" — including categories ("the dairy") and properties ("everything
+  orange"). If they mean whatever was just added ("scratch my last", "undo", "remove that"), leave
+  "item_text" null. Different from complete_item, which marks something DONE rather than removing it.
+- clear_list = emptying a whole list: "clear the shopping list", "clear my todos", "delete everything
+  on the list", "empty the list". Set "list_type" to "shopping", "todo", or "all". NOT the same as
+  remove_items (which targets specific items); clear_list wipes the entire list.
 - If the command is not a timer, list, or knowledge command, intent "none".
 Return JSON only."""
 
@@ -135,6 +139,10 @@ def _validate(data: dict) -> dict:
     else:
         item_text = None
 
+    list_type = data.get("list_type")
+    if list_type not in ("shopping", "todo", "all"):
+        list_type = None
+
     return {
         "intent": intent,
         "label": label,
@@ -143,4 +151,5 @@ def _validate(data: dict) -> dict:
         "scope": scope,
         "query": query,
         "item_text": item_text,
+        "list_type": list_type,
     }

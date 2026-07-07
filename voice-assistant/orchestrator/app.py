@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import time
 import uuid
 
@@ -45,7 +46,47 @@ ENGINE: TimerEngine
 # short summary of the last turn; a follow-up parse gets it as context so the
 # LLM can resolve references and, crucially, reject unrelated room chatter.
 SESSION_TTL_S = 90.0
-_SESSION: dict = {"ts": 0.0, "summary": "", "last_added": []}
+_SESSION: dict = {"ts": 0.0, "summary": "", "last_added": [], "pending": None}
+
+
+def session_set_pending(op: str, items: list[dict], list_type: str | None = None) -> None:
+    """Stash a destructive bulk op awaiting a spoken yes/no."""
+    _SESSION["pending"] = {"op": op, "items": items, "list_type": list_type}
+    _SESSION["ts"] = time.time()
+
+
+def session_pending() -> dict | None:
+    if _SESSION.get("pending") and time.time() - _SESSION["ts"] <= SESSION_TTL_S:
+        return _SESSION["pending"]
+    return None
+
+
+def session_clear_pending() -> None:
+    _SESSION["pending"] = None
+
+
+_YES_WORDS = {"yes", "yeah", "yep", "yup", "yea", "sure", "confirm", "confirmed",
+              "correct", "affirmative", "ok", "okay", "okey"}
+_YES_PHRASES = {"do it", "go ahead", "please do", "yes please", "sounds good",
+                "go for it", "that's right", "thats right"}
+_NO_WORDS = {"no", "nope", "nah", "cancel", "stop", "dont", "don't"}
+_NO_PHRASES = {"never mind", "nevermind", "forget it", "leave it", "do not",
+               "no thanks", "no thank you"}
+
+
+def _affirmation(text: str) -> str | None:
+    """Classify a reply to a yes/no confirmation as 'yes', 'no', or None (the
+    user said something else and the pending op should be dropped)."""
+    t = re.sub(r"[^a-z' ]", "", text.lower()).strip()
+    if not t:
+        return None
+    words = t.split()
+    first, two = words[0], " ".join(words[:2])
+    if first in _YES_WORDS or two in _YES_PHRASES:
+        return "yes"
+    if first in _NO_WORDS or two in _NO_PHRASES:
+        return "no"
+    return None
 
 
 def session_note(summary: str) -> None:
@@ -168,8 +209,9 @@ def _summarize_turn(intent: str, result: dict) -> str:
         names = ", ".join((i.get("text") or "").strip() for i in result.get("added") or [])
         return f"you added {names or 'items'} to your lists"
     if intent == "complete_item" and result.get("completed"):
-        return f"you checked off {result['completed'].get('text', 'an item')}"
-    if intent == "remove_items" and result.get("removed"):
+        return "you checked off " + ", ".join(
+            (i.get("text") or "").strip() for i in result["completed"])
+    if intent in ("remove_items", "clear_list") and result.get("removed"):
         return "you removed " + ", ".join(
             (i.get("text") or "").strip() for i in result["removed"])
     if intent == "timer_adjust" and result.get("timer"):
@@ -185,6 +227,40 @@ def _summarize_turn(intent: str, result: dict) -> str:
     return (result.get("response") or "")[:120]
 
 
+async def _finalize(result: dict, intent: str) -> dict:
+    """Common tail: render the spoken reply, emit the response event, and record
+    the turn for follow-up context."""
+    result["audio_url"] = await _speak_reply(result["response"])
+    await events.emit(
+        "response", text=result["response"], audio_url=result["audio_url"], intent=intent
+    )
+    session_note(_summarize_turn(intent, result))
+    return result
+
+
+async def _after_list_change(items: list[dict]) -> None:
+    """Pop the affected list view (or just refresh) after a bulk change."""
+    view = _view_type_for(items)
+    if view:
+        await _pop_list(view)
+    else:
+        await _broadcast_lists("list_updated")
+
+
+async def _run_pending(pending: dict) -> dict:
+    """Execute a confirmed destructive bulk op."""
+    op = pending["op"]
+    if op == "clear":
+        removed = await lists_mod.clear(pending.get("list_type"))
+        await _after_list_change(removed)
+        return {"intent": "clear_list", "removed": removed, "ok": True,
+                "response": fmt.confirm_cleared(pending.get("list_type"), removed)}
+    removed = await lists_mod.delete_ids(pending["items"])
+    await _after_list_change(removed)
+    return {"intent": "remove_items", "removed": removed, "ok": True,
+            "response": fmt.confirm_removed(removed)}
+
+
 async def handle_command(command: str, followup: bool = False) -> dict:
     """Parse a command and act on it. Emits thinking/response events; returns a
     structured result. `followup` = a continued-conversation turn (no wake word):
@@ -192,6 +268,21 @@ async def handle_command(command: str, followup: bool = False) -> dict:
     command = command.strip()
     if not command:
         return {"intent": "none", "response": "I didn't catch that.", "ok": False}
+
+    # A destructive bulk op is awaiting a yes/no? Resolve that first.
+    pending = session_pending()
+    if pending:
+        decision = _affirmation(command)
+        if decision is not None:
+            session_clear_pending()
+            if followup:
+                await events.emit("transcript", text=command)
+            if decision == "no":
+                return await _finalize(
+                    {"intent": "none", "response": "Okay, I left it.", "ok": True}, "none")
+            result = await _run_pending(pending)
+            return await _finalize(result, result["intent"])
+        session_clear_pending()   # user moved on -> abandon the pending op
 
     context = session_context() if followup else None
     if not followup:
@@ -307,21 +398,19 @@ async def handle_command(command: str, followup: bool = False) -> dict:
     elif intent == "complete_item":
         target = parsed.get("item_text") or command
         try:
-            done = await lists_mod.complete_by_text(target)
+            items = await lists_mod.fetch(status="active")
+            targets = await lists_mod.resolve_targets(target, items)
+            done = await lists_mod.complete_ids(targets)
         except Exception as exc:  # noqa: BLE001
             log.warning("list complete failed: %s", exc)
-            done = None
+            done = []
             result["response"] = "Sorry, I couldn't reach the lists service."
             result["ok"] = False
         if done:
             result["completed"] = done
-            result["response"] = fmt.confirm_complete(done)
+            result["response"] = fmt.confirm_completed(done)
             result["ok"] = True
-            # Show the updated list after a voice complete, same as adds.
-            if done.get("type") in _VIEWABLE:
-                await _pop_list(done["type"])
-            else:
-                await _broadcast_lists("list_updated", completed=done)
+            await _after_list_change(done)   # completing isn't destructive -> just do it
         elif "response" not in result:
             result["response"] = "I couldn't find that on your list."
             result["ok"] = False
@@ -329,29 +418,51 @@ async def handle_command(command: str, followup: bool = False) -> dict:
     elif intent == "remove_items":
         try:
             if parsed.get("item_text"):
-                removed = await lists_mod.delete_by_text(parsed["item_text"])
-                removed_list = [removed] if removed else []
-            else:  # "scratch my last" / "undo" -> remove what was just added
-                removed_list = await lists_mod.delete_ids(session_last_added())
+                items = await lists_mod.fetch(status="active")
+                targets = await lists_mod.resolve_targets(parsed["item_text"], items)
+            else:  # "scratch my last" / "undo" -> whatever was just added
+                targets = session_last_added()
         except Exception as exc:  # noqa: BLE001
-            log.warning("list remove failed: %s", exc)
+            log.warning("list resolve failed: %s", exc)
+            targets = []
+            result["response"] = "Sorry, I couldn't reach the lists service."
+            result["ok"] = False
+        if targets and len(targets) > 1 and parsed.get("item_text"):
+            # Named a target that hit MULTIPLE items -> confirm before wiping.
+            # (Undo of a just-made add skips this — you clearly meant those.)
+            session_set_pending("remove", targets)
+            result["response"] = fmt.confirm_bulk_question("remove", targets)
+            result["ok"] = True
+        elif targets:
+            removed = await lists_mod.delete_ids(targets)
+            if not parsed.get("item_text"):
+                session_set_added([])   # undo consumed; don't double-undo
+            result["removed"] = removed
+            result["response"] = fmt.confirm_removed(removed)
+            result["ok"] = True
+            await _after_list_change(removed)
+        elif "response" not in result:
+            result["response"] = "I couldn't find anything to remove."
+            result["ok"] = False
+
+    elif intent == "clear_list":
+        list_type = parsed.get("list_type") or "all"
+        try:
+            items = await lists_mod.fetch(
+                types=None if list_type == "all" else (list_type,), status="active")
+        except Exception as exc:  # noqa: BLE001
+            log.warning("list fetch failed: %s", exc)
+            items = []
             result["response"] = "Sorry, I couldn't reach the lists service."
             result["ok"] = False
         else:
-            if removed_list:
-                result["removed"] = removed_list
-                result["response"] = fmt.confirm_removed(removed_list)
+            if not items:
+                result["response"] = fmt.confirm_cleared(list_type, [])
                 result["ok"] = True
-                if not parsed.get("item_text"):
-                    session_set_added([])   # undo consumed; don't double-undo
-                view = _view_type_for(removed_list)
-                if view:
-                    await _pop_list(view)
-                else:
-                    await _broadcast_lists("list_updated", removed=removed_list)
             else:
-                result["response"] = "I couldn't find anything to remove."
-                result["ok"] = False
+                session_set_pending("clear", items, list_type)   # always confirm a clear
+                result["response"] = fmt.confirm_bulk_question("clear", items, list_type)
+                result["ok"] = True
 
     elif intent == "ask":
         query = parsed.get("query") or command
@@ -372,13 +483,7 @@ async def handle_command(command: str, followup: bool = False) -> dict:
         result["response"] = "Sorry, I can only handle timers, lists, and questions right now."
         result["ok"] = False
 
-    result["audio_url"] = await _speak_reply(result["response"])
-    await events.emit(
-        "response", text=result["response"], audio_url=result["audio_url"], intent=intent
-    )
-    # Remember this turn so the next follow-up can resolve "also/those/make it".
-    session_note(_summarize_turn(intent, result))
-    return result
+    return await _finalize(result, intent)
 
 
 # --------------------------------------------------------------------------

@@ -353,6 +353,22 @@ addressed phrases still drop silently, Alexa-style.
 
 **Still TODO:** richer reference resolution ("take those off" mid-list).
 
+**Smart / bulk list ops — BUILT 2026-07-07.** `remove_items` and `complete_item`
+now run an LLM **resolver** (`lists.resolve_targets`): qwen gets the current list
+(`id=<n> <type>: <text>` lines) + the user's phrase and returns which ids match —
+one item, several ("milk and bread"), a category ("the dairy"), a property
+("everything orange"), or "all". New `clear_list` intent (+ `list_type` field)
+wipes a whole list. **Confirmation gate:** any op that would remove >1 item, or a
+clear, sets a session `pending` op and asks ("That'll remove 3 items: … Say yes
+to confirm"); the follow-up window catches the spoken yes/no (`_affirmation` in
+app.py; a non-yes/no reply abandons the pending op and is parsed fresh). Single
+removes, undo ("scratch my last"), and all completes execute immediately (not
+destructive). Replaced the old rapidfuzz single-item matchers. NOTE resolver is a
+model judgment call — "everything orange" matched oranges/orange-juice but not
+carrots (read the word, not the color); tune the resolver prompt if needed.
+CAUTION: testing bulk removes/clears on the LIVE shared family list is dangerous
+— use fake tokens and CANCEL clears; I polluted the real list once (2026-07-07).
+
 ## Knowledge / Ask Mode — BUILT + DEPLOYED 2026-07-07 (design locked 2026-07-06)
 
 **Status: live.** qwen classifies `ask` (with cleaned `query`); orchestrator

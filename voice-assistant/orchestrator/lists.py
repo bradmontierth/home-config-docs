@@ -26,9 +26,8 @@ import time
 import uuid
 
 import httpx
-from rapidfuzz import fuzz
 
-from . import config
+from . import clients, config
 
 log = logging.getLogger("orchestrator.lists")
 
@@ -98,62 +97,50 @@ async def fetch(types: tuple[str, ...] | None = None, status: str = "active") ->
     return items
 
 
-def _match_score(query: str, text: str) -> float:
-    q, t = query.lower().strip(), (text or "").lower().strip()
-    if not q or not t:
-        return 0.0
-    # partial_ratio catches "eggs" in "Buy eggs"; token_set_ratio catches word
-    # reordering ("dentist call" vs "Call the dentist"). Take the stronger.
-    return max(fuzz.partial_ratio(q, t), fuzz.token_set_ratio(q, t))
+_RESOLVE_SYSTEM = (
+    "You select which list items the user wants to act on. You get the current "
+    "list (each line 'id=<n> <type>: <text>') and a phrase describing a target. "
+    "Return ONLY JSON: {\"ids\": [matching item ids]}.\n"
+    "Match by meaning: a specific item (\"the milk\") -> that item; several "
+    "(\"milk and bread\") -> each; a category (\"the dairy\", \"produce\") -> all "
+    "items in it; a property (\"everything orange\") -> all items with it; "
+    "\"all\"/\"everything\"/\"the whole list\" -> every id. Only use ids from the "
+    "list. If nothing matches, return {\"ids\": []}. Output JSON only."
+)
 
 
-async def complete_by_text(item_text: str) -> dict | None:
-    """Find the best active item matching `item_text` and mark it complete.
-    Returns the completed item (with its pre-completion fields), or None if
-    nothing cleared the match threshold."""
-    item_text = (item_text or "").strip()
-    if not item_text:
-        return None
-    items = await fetch(status="active")
-    best, best_score = None, 0.0
-    for it in items:
-        score = _match_score(item_text, it.get("text", ""))
-        if score > best_score:
-            best, best_score = it, score
-    if best is None or best_score < config.LIST_MATCH_THRESHOLD:
-        log.info("complete_by_text %r: no match (best=%.0f)", item_text, best_score)
-        return None
-    async with httpx.AsyncClient(timeout=15, base_url=config.COMPANION_URL) as client:
-        r = await client.post(f"/api/items/{best['id']}/complete")
-        r.raise_for_status()
-    log.info("complete_by_text %r -> #%s %r (score %.0f)",
-             item_text, best["id"], best.get("text"), best_score)
-    return best
-
-
-async def delete_by_text(item_text: str) -> dict | None:
-    """Find the best active item matching `item_text` and delete it (remove a
-    mistake, vs complete which marks done). Returns it, or None if no match."""
-    item_text = (item_text or "").strip()
-    if not item_text:
-        return None
-    items = await fetch(status="active")
-    best, best_score = None, 0.0
-    for it in items:
-        score = _match_score(item_text, it.get("text", ""))
-        if score > best_score:
-            best, best_score = it, score
-    if best is None or best_score < config.LIST_MATCH_THRESHOLD:
-        log.info("delete_by_text %r: no match (best=%.0f)", item_text, best_score)
-        return None
-    await _delete(best["id"])
-    log.info("delete_by_text %r -> #%s %r", item_text, best["id"], best.get("text"))
-    return best
+async def resolve_targets(criterion: str, items: list[dict]) -> list[dict]:
+    """Ask the LLM which items match a natural-language target (one item, several,
+    a category, or a property). Returns the matching rows, order preserved."""
+    criterion = (criterion or "").strip()
+    if not criterion or not items:
+        return []
+    listing = "\n".join(
+        f'id={it.get("id")} {it.get("type")}: {it.get("text")}' for it in items
+    )
+    messages = [
+        {"role": "system", "content": _RESOLVE_SYSTEM},
+        {"role": "user", "content": f"List:\n{listing}\n\nPhrase: {criterion!r}"},
+    ]
+    try:
+        data = clients.extract_json(await clients.parse_intent_raw(messages))
+    except Exception as exc:  # noqa: BLE001
+        log.warning("resolve_targets %r failed: %s", criterion, exc)
+        return []
+    wanted = set()
+    for i in data.get("ids") or []:
+        try:
+            wanted.add(int(i))
+        except (TypeError, ValueError):
+            pass
+    matched = [it for it in items if it.get("id") in wanted]
+    log.info("resolve_targets %r -> %s", criterion, [it.get("text") for it in matched])
+    return matched
 
 
 async def delete_ids(items: list[dict]) -> list[dict]:
-    """Delete a known set of items (undo of a just-completed add). Returns those
-    that were still active and got deleted."""
+    """Delete a known set of items (undo of an add, or a resolved bulk remove).
+    Returns those that were still active and got deleted."""
     active_ids = {it.get("id") for it in await fetch(status="active")}
     removed = []
     for it in items:
@@ -165,9 +152,41 @@ async def delete_ids(items: list[dict]) -> list[dict]:
     return removed
 
 
+async def complete_ids(items: list[dict]) -> list[dict]:
+    """Mark a known set of items complete. Returns those still active that were
+    completed."""
+    active_ids = {it.get("id") for it in await fetch(status="active")}
+    done = []
+    for it in items:
+        if it.get("id") in active_ids:
+            await _complete(it["id"])
+            done.append(it)
+    if done:
+        log.info("complete_ids completed %s", [it.get("text") for it in done])
+    return done
+
+
+async def clear(list_type: str | None) -> list[dict]:
+    """Delete every active item on a list ("shopping"/"todo"/"all" or None=all).
+    Returns the removed rows."""
+    types = None if list_type in (None, "all") else (list_type,)
+    items = await fetch(types=types, status="active")
+    for it in items:
+        await _delete(it["id"])
+    log.info("clear %s removed %d item(s)", list_type, len(items))
+    return items
+
+
 async def _delete(item_id: int) -> None:
     async with httpx.AsyncClient(timeout=15, base_url=config.COMPANION_URL) as client:
         r = await client.delete(f"/api/items/{item_id}")
+        if r.status_code != 404:
+            r.raise_for_status()
+
+
+async def _complete(item_id: int) -> None:
+    async with httpx.AsyncClient(timeout=15, base_url=config.COMPANION_URL) as client:
+        r = await client.post(f"/api/items/{item_id}/complete")
         if r.status_code != 404:
             r.raise_for_status()
 

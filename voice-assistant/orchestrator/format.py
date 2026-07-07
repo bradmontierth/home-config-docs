@@ -163,3 +163,33 @@ def confirm_complete(item: dict) -> str:
     verb = "Checked off" if item.get("type") == "shopping" else "Marked"
     tail = "" if item.get("type") == "shopping" else " as done"
     return f"{verb} {text}{tail}."
+
+
+def confirm_completed(items: list[dict]) -> str:
+    if len(items) == 1:
+        return confirm_complete(items[0])
+    return "Checked off " + join_natural([_spoken_text(it) for it in items]) + "."
+
+
+_CLEAR_LABEL = {"shopping": "shopping list", "todo": "to-do list", "all": "lists"}
+
+
+def confirm_cleared(list_type: str | None, items: list[dict]) -> str:
+    label = _CLEAR_LABEL.get(list_type or "all", "list")
+    n = len(items)
+    if not n:
+        return f"Your {label} was already empty."
+    noun = "item" if n == 1 else "items"
+    return f"Cleared the {label} — removed {n} {noun}."
+
+
+def confirm_bulk_question(op: str, items: list[dict], list_type: str | None = None) -> str:
+    """Spoken confirmation prompt before a destructive bulk op."""
+    n = len(items)
+    if op == "clear":
+        label = _CLEAR_LABEL.get(list_type or "all", "list")
+        noun = "item" if n == 1 else "items"
+        return f"That'll clear the {label} — {n} {noun}. Say yes to confirm."
+    names = join_natural([_spoken_text(it) for it in items])
+    noun = "item" if n == 1 else "items"
+    return f"That'll remove {n} {noun}: {names}. Say yes to confirm."
