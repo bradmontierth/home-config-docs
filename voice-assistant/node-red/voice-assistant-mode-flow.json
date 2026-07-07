@@ -1,0 +1,243 @@
+{
+    "id": "7d4069eae9ec1eda",
+    "label": "Voice Assistant Mode",
+    "nodes": [
+        {
+            "id": "va_disc_inj",
+            "type": "inject",
+            "name": "publish discovery",
+            "props": [],
+            "repeat": "",
+            "crontab": "",
+            "once": true,
+            "onceDelay": "3",
+            "topic": "",
+            "x": 180,
+            "y": 80,
+            "wires": [
+                [
+                    "va_build_cfg"
+                ]
+            ],
+            "z": "7d4069eae9ec1eda"
+        },
+        {
+            "id": "va_build_cfg",
+            "type": "function",
+            "name": "build switch config",
+            "func": "msg.topic = \"homeassistant/switch/kitchen_voice_assistant/active/config\";\nmsg.payload = {\"name\": \"Active\", \"unique_id\": \"kitchen_voice_assistant_active\", \"object_id\": \"kitchen_voice_assistant_active\", \"device\": {\"identifiers\": [\"kitchen_voice_assistant\"], \"name\": \"Kitchen Voice Assistant\", \"manufacturer\": \"homegrown\", \"model\": \"satellite\"}, \"command_topic\": \"voice/kitchen/assistant_active/set\", \"state_topic\": \"voice/kitchen/assistant_active/state\", \"availability_topic\": \"voice/kitchen/assistant_active/availability\", \"payload_on\": \"ON\", \"payload_off\": \"OFF\", \"icon\": \"mdi:microphone-message\"};\nmsg.retain = true;\nreturn msg;\n",
+            "outputs": 1,
+            "noerr": 0,
+            "initialize": "",
+            "finalize": "",
+            "libs": [],
+            "wires": [
+                [
+                    "va_pub"
+                ]
+            ],
+            "x": 400,
+            "y": 80,
+            "z": "7d4069eae9ec1eda"
+        },
+        {
+            "id": "va_pub",
+            "type": "mqtt out",
+            "name": "-> homeassistant/.../config",
+            "topic": "",
+            "qos": "0",
+            "retain": "",
+            "respTopic": "",
+            "contentType": "",
+            "userProps": "",
+            "correl": "",
+            "expiry": "",
+            "broker": "82f540b7378c2e35",
+            "x": 640,
+            "y": 80,
+            "wires": [],
+            "z": "7d4069eae9ec1eda"
+        },
+        {
+            "id": "va_cmd_in",
+            "type": "mqtt in",
+            "name": "cmd: assistant_active/set",
+            "topic": "voice/kitchen/assistant_active/set",
+            "qos": "0",
+            "datatype": "utf8",
+            "broker": "82f540b7378c2e35",
+            "nl": false,
+            "rap": true,
+            "rh": 0,
+            "inputs": 0,
+            "x": 180,
+            "y": 160,
+            "wires": [
+                [
+                    "va_map"
+                ]
+            ],
+            "z": "7d4069eae9ec1eda"
+        },
+        {
+            "id": "va_map",
+            "type": "function",
+            "name": "ON->active / OFF->shadow",
+            "func": "const on = String(msg.payload).toUpperCase() === 'ON';\nmsg.payload = { mode: on ? 'active' : 'shadow' };\nmsg.headers = { 'Content-Type': 'application/json' };\nreturn msg;\n",
+            "outputs": 1,
+            "noerr": 0,
+            "initialize": "",
+            "finalize": "",
+            "libs": [],
+            "wires": [
+                [
+                    "va_post"
+                ]
+            ],
+            "x": 420,
+            "y": 160,
+            "z": "7d4069eae9ec1eda"
+        },
+        {
+            "id": "va_post",
+            "type": "http request",
+            "name": "POST satellite /mode",
+            "method": "POST",
+            "ret": "obj",
+            "paytoqs": "ignore",
+            "url": "http://192.168.10.24:8781/mode",
+            "tls": "",
+            "persist": false,
+            "proxy": "",
+            "insecureHTTPParser": false,
+            "authType": "",
+            "senderr": false,
+            "headers": [],
+            "wires": [
+                [
+                    "va_cmd_state"
+                ]
+            ],
+            "x": 650,
+            "y": 160,
+            "z": "7d4069eae9ec1eda"
+        },
+        {
+            "id": "va_cmd_state",
+            "type": "function",
+            "name": "mode->state",
+            "func": "const mode = (msg.payload && msg.payload.mode) || 'shadow';\nreturn { topic: 'voice/kitchen/assistant_active/state', payload: mode === 'active' ? 'ON' : 'OFF', retain: true };\n",
+            "outputs": 1,
+            "noerr": 0,
+            "initialize": "",
+            "finalize": "",
+            "libs": [],
+            "wires": [
+                [
+                    "va_state_out"
+                ]
+            ],
+            "x": 860,
+            "y": 160,
+            "z": "7d4069eae9ec1eda"
+        },
+        {
+            "id": "va_state_out",
+            "type": "mqtt out",
+            "name": "-> state",
+            "topic": "",
+            "qos": "0",
+            "retain": "",
+            "respTopic": "",
+            "contentType": "",
+            "userProps": "",
+            "correl": "",
+            "expiry": "",
+            "broker": "82f540b7378c2e35",
+            "x": 1050,
+            "y": 160,
+            "wires": [],
+            "z": "7d4069eae9ec1eda"
+        },
+        {
+            "id": "va_hp_inj",
+            "type": "inject",
+            "name": "poll health 30s",
+            "props": [],
+            "repeat": "30",
+            "crontab": "",
+            "once": true,
+            "onceDelay": "5",
+            "topic": "",
+            "x": 180,
+            "y": 240,
+            "wires": [
+                [
+                    "va_get_health"
+                ]
+            ],
+            "z": "7d4069eae9ec1eda"
+        },
+        {
+            "id": "va_get_health",
+            "type": "http request",
+            "name": "GET satellite /health",
+            "method": "GET",
+            "ret": "obj",
+            "paytoqs": "ignore",
+            "url": "http://192.168.10.24:8781/health",
+            "tls": "",
+            "persist": false,
+            "proxy": "",
+            "insecureHTTPParser": false,
+            "authType": "",
+            "senderr": false,
+            "headers": [],
+            "wires": [
+                [
+                    "va_hs"
+                ]
+            ],
+            "x": 420,
+            "y": 240,
+            "z": "7d4069eae9ec1eda"
+        },
+        {
+            "id": "va_hs",
+            "type": "function",
+            "name": "health->state+avail",
+            "func": "if (!msg.payload || !msg.payload.mode) return null;\nconst on = msg.payload.mode === 'active';\nreturn [[\n  { topic: 'voice/kitchen/assistant_active/state', payload: on ? 'ON' : 'OFF', retain: true },\n  { topic: 'voice/kitchen/assistant_active/availability', payload: 'online', retain: true }\n]];\n",
+            "outputs": 1,
+            "noerr": 0,
+            "initialize": "",
+            "finalize": "",
+            "libs": [],
+            "wires": [
+                [
+                    "va_sync_out"
+                ]
+            ],
+            "x": 660,
+            "y": 240,
+            "z": "7d4069eae9ec1eda"
+        },
+        {
+            "id": "va_sync_out",
+            "type": "mqtt out",
+            "name": "-> state+avail",
+            "topic": "",
+            "qos": "0",
+            "retain": "",
+            "respTopic": "",
+            "contentType": "",
+            "userProps": "",
+            "correl": "",
+            "expiry": "",
+            "broker": "82f540b7378c2e35",
+            "x": 880,
+            "y": 240,
+            "wires": [],
+            "z": "7d4069eae9ec1eda"
+        }
+    ]
+}

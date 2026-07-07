@@ -1,7 +1,48 @@
 # Homegrown Voice Assistant Plan
 
-Status: shadow wake-word bench being deployed to `kitchen-speaker` (2026-07-05).
+Status: shadow bench live; both wake candidates trained + benched on real
+clips (2026-07-06). **Wake phrase decided: "okay computer".**
 This is the persistent design doc for the kitchen voice assistant pipeline.
+
+## Wake Model Bakeoff Result (2026-07-06)
+
+Both candidates trained on GX10 (livekit-wakeword, conv_attention/medium,
+110k steps, optimal threshold 0.66 from eval).
+
+Synthetic validation (25.9h held-out TTS): hey_computer looked better
+(recall 92% vs 87% at matched 0.077 FP/hr). **This was misleading.**
+
+Real-clip replay (the data that decided it):
+- Positives = 15 clips of the user's real voice the hey_livekit control
+  MISSED (pessimistic sample), Parakeet-attributed to phrase.
+  Recall: okay_computer 6/6 (all >=0.935), hey_computer 8/8 (0.66-0.98).
+- Negatives = 173 real household clips that tripped the control (nobody said
+  the phrase). False-fires @0.66: **okay_computer 7, hey_computer 29 (~4x)**.
+  @0.8: 4 vs 11. @0.9: 1 vs 7.
+
+Why the flip: "hey computer" trips on real household "hey…" onsets + chatter;
+"okay computer" needs the specific "okay" attack. Synthetic negatives never
+contained the family's speech patterns. **Lesson: bench on real audio.**
+
+Winner: **okay_computer** — perfect recall on real voice at high confidence,
+~4x fewer real-world false positives. Models saved on GX10 at
+`/home/pi/wake-train/output/{okay,hey}_computer/.../*.onnx`; both copied to
+kitchen-speaker `/home/pi/wake-bench/`. Replay scripts + CSVs in
+`home_config/voice-assistant/training/` and the bench dir.
+NOTE these FP counts are relative (clips pre-filtered by the control's 0.30
+threshold), not an absolute per-hour rate; and all are STAGE 1 only.
+
+### Stage-2 verification proven (2026-07-06) — the metric that matters
+Ran all 13 okay_computer stage-1 false-fires (@0.5) through Parakeet and
+applied stage-2 logic (transcript must contain "okay computer"):
+**13/13 REJECTED** — transcripts were unrelated speech ("I just don't want
+kids", "yogurt beer on the yogurt", etc.) or empty/noise. Zero false
+positives reach the house even at the permissive 0.5 threshold. And Parakeet
+transcribed all 6 real "okay computer" positives cleanly → stage-2 PASSES
+them → zero added false negatives. Two-stage design validated end-to-end.
+Small sample (13 FP / 6 TP); live bench now widening it; real orchestrator
+will log verify verdicts at scale. This confirms: keep stage-1 permissive
+(~0.5), let free/perfect Parakeet verify clean up.
 
 ## Vision
 
@@ -40,7 +81,7 @@ kitchen-speaker Pi (satellite)                Beelink (orchestrator)            
 ┌─────────────────────────────┐   trigger   ┌──────────────────────────┐
 │ ALSA 16k mono ← TONOR G11   │ ──────────► │ voice-orchestrator       │──► Parakeet :8090
 │ ring buffer (pre-roll)      │  + audio WS │  stage-2 wake verify     │    (verify + realtime WS)
-│ Porcupine (permissive)      │             │  intent LLM (no think)   │──► qwen3-next :8095
+│ livekit-wakeword (permiss.) │             │  intent LLM (no think)   │──► qwen3-next :8095
 │ Silero VAD endpointing      │ ◄────────── │  timers engine (SQLite)  │──► Kokoro via router :8891
 │ duck MA + play TTS/alarms   │  tts audio  │  tools: companion :8768, │
 │ MQTT mode subscriber        │             │   HA proxy, timers       │
@@ -96,8 +137,19 @@ MQTT retained topic `voice/kitchen/mode`, HA select entity via MQTT discovery:
 Scope: gates the mic → wake path ONLY. Running timers still fire, dashboard
 touch interactions still work.
 
-All thresholds (Porcupine sensitivity, stage-2 fuzzy threshold, VAD silence
-ms) hot-reloadable — no redeploy to tune.
+**Deployed 2026-07-06 (active/shadow switch)**: satellite exposes HTTP
+`POST /mode {active|shadow|off}` (defaults shadow). HA control is
+`switch.kitchen_voice_assistant_active` — a **2-state** switch (ON→active,
+OFF→shadow) created via **MQTT discovery published from Node-RED**, deployed
+through the NR Admin API (`POST /flow`, tab `7d4069eae9ec1eda`) with **no HA or
+Node-RED restart**. Command topic `voice/kitchen/assistant_active/set` →
+satellite /mode; state synced back from a 30s /health poll. Flow + deploy
+script version-controlled in `voice-assistant/node-red/`. The third `off`
+state (full mic pause) is in the /mode endpoint but not yet exposed as an
+entity — add a select later.
+
+All thresholds (livekit-wakeword stage-1 threshold, stage-2 fuzzy threshold,
+VAD silence ms) hot-reloadable — no redeploy to tune.
 
 ## Shadow Bench + Labeling Protocol (LIVE NOW)
 
@@ -120,6 +172,14 @@ trigger is a false positive by definition.** So labeling needs one button:
   word", calls the bench cross-origin; bench sends CORS `*`). Deployed
   2026-07-05 (index.html/app.js/styles.css + container rebuild + kiosk
   reload).
+- Remote mark from anywhere: HA toggle `input_boolean.wake_word_mark`
+  (created via HA websocket API) → Node-RED tab "Wake Word Bench"
+  (b8ae4e9783309aec, docker node-red :1880) → POST bench /mark → auto
+  toggle-off + `notify.notify` result push to phones. Acts as a momentary
+  button in the HA app; verified end-to-end 2026-07-05.
+- Sample spacing protocol: one press per utterance, press within a few
+  seconds of speaking (8s match window), ≥15s between attempts (FN clips
+  capture the last 12s — closer attempts bleed into one clip).
 
 Wake phrase candidates (Star Trek theme): **"okay computer"** (favorite) and
 **"hey computer"**. Bare "computer" rejected — everyday conversation word.
@@ -148,14 +208,36 @@ sound_theme, state}` in SQLite (absolute `ends_at` → restart-safe).
   bubbling, oven-ding, marimba fallback). Clips stored on the satellite.
 - Alarm sequence: duck/pause MA → themed sound → announcement → loop with
   ~4s gaps (voice-dismiss window) → auto-stop after ~10 repeats.
-- Dismissal layers: touchscreen tap (most reliable) > voice in gaps (any
-  stage-1 wake mutes alarm instantly) > auto-stop.
+- Dismissal layers: touchscreen tap (most reliable) > **barge-in voice: while
+  ringing, the satellite transcribes the mic CONTINUOUSLY via Parakeet for
+  "stop"/"cancel"/"okay computer" — NO wake word needed** (Echo/Nest-style,
+  added 2026-07-06 after live test: saying "stop" did nothing because it wasn't
+  the wake word). Alarm PLAYBACK runs in a thread; the main capture loop is the
+  single mic reader and does the listening (~1.2s chunks). The themed sound /
+  announcement never contain a dismiss word, so no false stops. > HTTP
+  /alarm/dismiss > auto-stop.
+- Wake-turn capture (2026-07-06 live test): grab the stream continuously (like
+  Echo/Nest — supports "okay computer set a timer" run together). DO NOT drain
+  after the chime (that loses the run-together command). Instead capture for a
+  MIN_CAPTURE window (~3s) during which VAD cannot endpoint, then endpoint on
+  ~700ms trailing silence. The min window is what stops the wake-chime bleed
+  from ending capture before the user speaks. (A first attempt drained the mic
+  after the chime; wrong — reverted.)
 - Follow-ups in schema from day one: time-left query, add N minutes, cancel
   by name, cancel-all, unlabeled timers ("10 min timer"). Ambiguous "stop the
   timer": ringing timer wins, else nearest-to-finish, always announce which.
 - Audio note: alarm player shares bcm2835 Headphones card with
   squeezelite/librespot/gmediarender — verify ALSA dmix concurrent playback;
   fallback is MA announce feature (auto duck/resume, more latency).
+- Playback path (2026-07-06): ALL assistant audio — chimes, alarm sounds, AND
+  Kokoro TTS (announcements + replies) — plays via direct `aplay` on the
+  satellite's Headphones card. NONE goes through Music Assistant. Music is a
+  separate stream on the same card (ducking TBD).
+- Dynamic volume (2026-07-06): satellite applies **software gain to its own
+  audio only** (mixer untouched → music unaffected), driven by the existing
+  Node-RED global `mode` via `POST /volume` (tab 0f4b1b8a369d5d91, polls every
+  2 min). Tiers Day 60 / Early Morning+Evening 40 / Night 30. Alarm floored at
+  50% so cooking timers stay audible at night. Persists in data/volume.
 
 ## Incident 2026-07-05: training OOMed the GX10 (power cycle required)
 
@@ -201,10 +283,83 @@ habit after go-live (active mode logs all triggers too).
 
 ## Intent Schema (deliberately small)
 
-`set_timer`, `timer_query`, `timer_adjust`, `timer_cancel`, `add_items`
-(reuse companion analyze), `show_todos`, `show_shopping`, `complete_item`,
-`set_reminder`, and later a tiny allowlisted HA set (blinds). Strict JSON,
-temperature 0, low max_tokens, thinking off.
+`set_timer`, `timer_query`, `timer_adjust`, `timer_cancel`, `ask` (knowledge
+question → smart model, see below), `add_items` (reuse companion analyze),
+`show_todos`, `show_shopping`, `complete_item`, `set_reminder`, and later a tiny
+allowlisted HA set (blinds). Strict JSON, temperature 0, low max_tokens,
+thinking off.
+
+Key insight: **qwen is already the classifier** — every command makes one
+intent-parse call (~0.8s). Adding `ask` (and the lists intents) costs ZERO
+extra latency for timers; only an `ask` classification triggers a second call
+to the smart model. No "ask" keyword needed — natural phrasing routes via qwen.
+
+## Knowledge / Ask Mode — BUILT + DEPLOYED 2026-07-07 (design locked 2026-07-06)
+
+**Status: live.** qwen classifies `ask` (with cleaned `query`); orchestrator
+streams GPT-5.4 via OpenRouter and splits at `===MORE===` short-first. Verified
+end-to-end via `/command`: "how many tablespoons in a cup?" → intent ask →
+spoken "There are 16 tablespoons in 1 cup." + TTS, ~2.8s; full answer streamed to
+the dashboard body. Files: `orchestrator/openrouter.py` (streaming client, key
+from mounted `/secrets/openrouter.env`), `orchestrator/ask.py` (sentinel split +
+background `_stream_full`), `intent.py` (`ask` + `query`), `app.py` ask branch.
+Compose mounts `/home/pi/cecret_lake/openrouter/.env:/secrets/openrouter.env:ro`
++ env `OPENROUTER_MODEL=openai/gpt-5.4`. Dashboard: `#assistant-body` +
+`ask_thinking`/`ask_stream`/`ask_full` handlers (40px scrollable body under the
+88px spoken headline; ask popups linger 45s). **⚠️ OpenRouter balance was ~$0.61
+on 2026-07-07 (~60–100 asks) — top up.** Original design below.
+
+
+
+For factual/general questions ("when do babies start walking?", "how many
+tablespoons in a cup?"). Routing: qwen intent-parse tags it `ask` with a
+cleaned `query` field — no keyword, no extra latency for timers (same single
+qwen call). Only `ask` fires the smart model.
+
+**Smart model: GPT-5.4 via OpenRouter** (user choice: best price/knowledge
+balance). OpenAI-compatible: base `https://openrouter.ai/api/v1`, `Bearer`
+auth. Key + model config already exist in `voice-notes-local/.env`
+(`OPENROUTER_API_KEY_FILE`, `OPENROUTER_MODEL`); client pattern to copy:
+`podcastv2/feedwriter/feedwriter/openrouter_client.py`. Make model an env var
+(default slug ~`openai/gpt-5.4`, confirm exact slug at build).
+
+**Two-part answer, streamed, short-first (NOT JSON mode).** JSON can't be
+parsed until closed, so it fights streaming. Instead prompt the model to emit:
+```
+<1–2 sentence spoken answer>
+===MORE===
+<full, richer answer for the dashboard>
+```
+Flow (all in the orchestrator; **satellite needs NO changes**):
+1. Stream tokens from OpenRouter.
+2. The instant `===MORE===` appears → the spoken answer is complete → Kokoro
+   TTS it → return `{response: spoken, audio_url}` to the satellite (~2s, fast;
+   speaks regardless of how long the full answer is). Emit `response` event
+   (spoken text) to dashboard.
+3. In a background task, keep streaming the full part → emit batched
+   `ask_stream` events (~300ms / sentence) so the dashboard fills in live while
+   TTS reads the short version. Emit final `ask_full` on completion.
+- Prompt the spoken part for 1–2 sentences, kitchen-glance brevity; full part
+  richer. Robustness: if the model omits `===MORE===`, treat the whole reply as
+  the answer + auto-truncate a spoken version.
+- UX rationale (user): short answer read aloud fast; if it piques interest, the
+  full answer is already on the dashboard to read. "12 months" → speak it;
+  don't force reading the rest.
+
+Build tasks: (a) add `ask` intent to `intent.py` schema + validation (add
+`query` field). (b) orchestrator `openrouter.py` streaming client + sentinel
+parser + background full-stream task. (c) `handle_command` ask branch. (d)
+dashboard: consume `ask_stream`/`ask_full` → show streaming full answer under
+the spoken headline (reuse assistant popup, maybe an expandable body).
+
+## Lists (after ask-mode)
+
+todo/shopping/reminders reusing the voice-notes companion at
+`http://192.168.10.217:8768` (`/api/items`, reachable, has analyze prompt with
+confidence + due-date rules). Intents: `add_items` (→ companion analyze),
+`show_todos`, `show_shopping`, `complete_item`, `set_reminder`. Bigger than
+ask-mode because it needs NEW dashboard views (todo/shopping lists), not just
+the popup. Companion also does FCM reminder pushes.
 
 ## Latency Budget (measured where noted)
 
@@ -224,11 +379,48 @@ speech via Parakeet realtime WS.
 1. ✅ Shadow bench LIVE on kitchen-speaker (pretrained "hey livekit" model) —
    collecting FP baseline + deliberate TP/FN sessions. Next: train custom
    phrase with the livekit pipeline on the GX10.
-2. Satellite service: capture, Porcupine, VAD, MQTT mode, alarm/TTS playback.
-3. Orchestrator on Beelink: stage-2 verify, Parakeet WS streaming, intent,
-   timers, TTS dispatch, event fan-out, trigger log + review page.
-4. Dashboard panel: badge states (listening/verifying/thinking/speaking),
-   caption line, response, timer cards, todos/shopping views.
+2. ✅ **Satellite service BUILT + deployed 2026-07-06**
+   (`home_config/voice-assistant/satellite/assistant.py`, on kitchen-speaker at
+   `~/voice-pipeline/`, `voice-assistant.service`, HTTP :8781). Subsumes the
+   shadow bench (owns the mic; wake-bench.service stopped+disabled, kept as
+   fallback). Continuous livekit-wakeword stage-1 (okay_computer @0.5) →
+   two-phase pipeline: snapshot ~2.5s pre-roll → POST /verify → glock wake chime
+   → webrtcvad command endpoint → chirp VAD chime → POST /command/audio → play
+   spoken reply. Hosts POST `/alarm` (theme sound + announcement loop, voice/
+   touch/timeout dismiss). **3-state MODE kill switch** (active/shadow/off) via
+   HTTP POST `/mode`, **defaults shadow** (safe: deploy changes nothing audible
+   until flipped active). Chimes in `~/voice-pipeline/sounds/` (chime_tts, MIT).
+   Verified: health, Beelink→satellite reachability, mode switch. Pending live
+   voice test + alarm-audio test (needs a person to speak). Deferred follow-ups:
+   MQTT mode (HTTP /mode works now), Music Assistant ducking, real animal foley
+   (themes fall back to marimba), port bench /mark labeling.
+3. ✅ **Orchestrator TIMERS VERTICAL SLICE built + validated 2026-07-06**
+   (`home_config/voice-assistant/orchestrator/`, port 8785). Proven end to end
+   against live services: `/wake` raw-WAV → Parakeet → stage-2 verify (real
+   synthesized speech: "okay computer…" score 100 pass, off-phrase score 42
+   reject) → intent LLM (thinking off) → SQLite timer engine (absolute
+   `ends_at`, restart-safe, catch-up firing of expiries missed while down) →
+   pre-rendered announcement WAV + spoken reply → dashboard `/api/live`
+   fan-out. Full pipeline **~1.6s** incl. two serial TTS renders. LLM picks
+   themes correctly (chicken→cluck, rice→steam_whistle). Intents live:
+   set/query/adjust/cancel/cancel-all. Remaining orchestrator work: Parakeet
+   realtime-WS live captions, lists/HA intents, trigger log + review page.
+   Dashboard gained `POST /api/assistant/event` → re-broadcasts as
+   `{"type":"assistant","event":{…}}`.
+4. ✅ **Dashboard panel BUILT 2026-07-06** (`dashboard_webapp` frontend):
+   Echo-Show-style popup consumes `{type:"assistant",event}` over /api/live —
+   `wake_confirmed`→"Listening…", `transcript`→caption, `thinking`→"Thinking…",
+   `response`→answer text (auto-hide 8s). Live **timer cards** (top-right stack)
+   from `timer_*` events, tick locally off `ends_at`; `timer_done`→ringing card
+   (tap to stop → satellite /alarm/dismiss) + "⏰ done" banner. Kiosk restores
+   cards after reload via new dashboard proxy `GET /api/assistant/timers` →
+   orchestrator (orchestrator has no CORS). Files: index.html/styles.css/app.js.
+   **Swipe-to-cancel** (2026-07-06): horizontal swipe on a timer card flings it
+   off and cancels it — running card → dashboard proxy `POST
+   /api/assistant/timers/{id}/cancel` → orchestrator; ringing card → satellite
+   /alarm/dismiss. Pointer events + `touch-action:pan-y` so vertical drag still
+   scrolls. Cards sized for across-the-room glancing (countdown 172px).
+   Remaining: todos/shopping views (lists phase).
 5. Custom wake word once bench data validates thresholds; tuning week with
    the mode select as pressure valve.
 

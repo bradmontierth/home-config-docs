@@ -1,0 +1,66 @@
+{
+    "id": "0f4b1b8a369d5d91",
+    "label": "Voice Assistant Volume",
+    "nodes": [
+        {
+            "id": "vav_inj",
+            "type": "inject",
+            "name": "poll mode 2m",
+            "props": [],
+            "repeat": "120",
+            "crontab": "",
+            "once": true,
+            "onceDelay": "6",
+            "topic": "",
+            "x": 190,
+            "y": 100,
+            "wires": [
+                [
+                    "vav_map"
+                ]
+            ],
+            "z": "0f4b1b8a369d5d91"
+        },
+        {
+            "id": "vav_map",
+            "type": "function",
+            "name": "mode -> volume level",
+            "func": "const mode = global.get('mode');\nconst map = {\"Day\": 60, \"Early Morning\": 40, \"Evening\": 40, \"Night\": 30, \"Away\": 40};\nconst level = (map[mode] != null) ? map[mode] : 40;\nmsg.payload = { level: level };\nmsg.headers = { 'Content-Type': 'application/json' };\nmsg.topic = 'va-volume ' + mode + ' -> ' + level;\nreturn msg;\n",
+            "outputs": 1,
+            "noerr": 0,
+            "initialize": "",
+            "finalize": "",
+            "libs": [],
+            "x": 430,
+            "y": 100,
+            "wires": [
+                [
+                    "vav_post"
+                ]
+            ],
+            "z": "0f4b1b8a369d5d91"
+        },
+        {
+            "id": "vav_post",
+            "type": "http request",
+            "name": "POST satellite /volume",
+            "method": "POST",
+            "ret": "obj",
+            "paytoqs": "ignore",
+            "url": "http://192.168.10.24:8781/volume",
+            "tls": "",
+            "persist": false,
+            "proxy": "",
+            "insecureHTTPParser": false,
+            "authType": "",
+            "senderr": false,
+            "headers": [],
+            "x": 690,
+            "y": 100,
+            "wires": [
+                []
+            ],
+            "z": "0f4b1b8a369d5d91"
+        }
+    ]
+}
