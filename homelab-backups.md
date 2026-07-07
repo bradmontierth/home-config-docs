@@ -40,6 +40,18 @@ Node-RED should send a Pushover alert if the command exits nonzero. The backup s
 
 The old direct S3 upload nodes for Home Assistant, Joplin, Paperless, Grafana SQL, and Docker Compose backups were disabled because those artifacts are now included in the encrypted homelab backup archive. The jobs that generate those source backups still run.
 
+## Secrets Vault (cecret_lake)
+
+`/home/pi/cecret_lake` is the homelab secrets vault (OpenRouter/Tesla/Rachio/
+Pushover keys, Firebase service accounts, HA token, codex `auth.json`, etc.). It
+is **not a git repo** and its secrets are mounted into containers by path, so the
+compose-adjacent `.env` capture does not reach them. Added to `explicit_includes`
+2026-07-07 so the encrypted archive protects it. The include excludes codex
+runtime junk (`tmp`, `log`, `sessions`, `cache`, `plugins`, ...) — without those
+excludes it balloons to ~1.7 GB of `tmp/arg0/codex-linux-sandbox` binaries;
+scoped, it is ~1 MB. If you add a new secret under a codex-style runtime dir,
+re-check the exclude list.
+
 ## Host Vs Container Node-RED
 
 The backup command currently runs from the host Node-RED service, not the containerized Node-RED instance. That keeps the execution environment simple because the script uses host paths and host tools:
