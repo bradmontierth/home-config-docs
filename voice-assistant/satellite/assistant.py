@@ -81,6 +81,11 @@ FOLLOWUP_ENABLED = os.getenv("FOLLOWUP_ENABLED", "1").lower() not in ("0", "fals
 FOLLOWUP_WINDOW_MS = int(os.getenv("FOLLOWUP_WINDOW_MS", "7000"))  # wait-for-speech window
 FOLLOWUP_MIN_MS = int(os.getenv("FOLLOWUP_MIN_MS", "300"))        # min capture (no chime bleed)
 FOLLOWUP_MAX_TURNS = int(os.getenv("FOLLOWUP_MAX_TURNS", "6"))    # runaway-session cap
+# Wake-turn capture: after draining the chime/pre-roll bleed, wait up to
+# WAKE_ONSET_MS for speech to start, then (Silero having endpointed cleanly)
+# only a short min-capture is needed. No 3s floor — that was a webrtcvad crutch.
+WAKE_ONSET_MS = int(os.getenv("WAKE_ONSET_MS", "4000"))
+WAKE_MIN_CAPTURE_MS = int(os.getenv("WAKE_MIN_CAPTURE_MS", "400"))
 
 # Playback volume (0-100) applied as software gain to OUR audio only (chimes,
 # alarm, TTS) — music on the shared card is untouched. Driven by day-mode via
@@ -273,10 +278,15 @@ def theme_sound(theme: str) -> Path:
 # --- Silero neural VAD -----------------------------------------------------
 class SileroVad:
     """Streaming speech detector. Feed it consecutive 512-sample (32ms @ 16k)
-    int16 chunks; it carries recurrent state across a turn (reset() between
-    turns). is_speech() -> bool via a probability threshold."""
+    int16 chunks; it carries recurrent state AND a 64-sample context across a
+    turn (reset() between turns). is_speech() -> bool via a probability threshold.
+
+    CRITICAL: the model is fed 64 samples of the previous window PREPENDED to the
+    512 new ones (576 total) — matching the reference silero-vad OnnxWrapper.
+    Feeding a bare 512 makes it output ~0 on everything (that was the bug)."""
 
     CHUNK = 512
+    CONTEXT = 64
 
     def __init__(self, model_path: str, threshold: float = SILERO_THRESHOLD):
         import onnxruntime as ort
@@ -290,12 +300,15 @@ class SileroVad:
 
     def reset(self) -> None:
         self._state = np.zeros((2, 1, 128), dtype=np.float32)
+        self._context = np.zeros((1, self.CONTEXT), dtype=np.float32)
 
     def is_speech(self, frame_bytes: bytes) -> bool:
         chunk = (np.frombuffer(frame_bytes, dtype=np.int16).astype(np.float32)
                  / 32768.0).reshape(1, -1)
-        out = self.sess.run(None, {"input": chunk, "state": self._state, "sr": self._sr})
+        x = np.concatenate([self._context, chunk], axis=1)   # 64 context + 512
+        out = self.sess.run(None, {"input": x, "state": self._state, "sr": self._sr})
         self._state = out[1]
+        self._context = x[:, -self.CONTEXT:]
         return float(out[0].ravel()[0]) >= self.threshold
 
 
@@ -335,7 +348,11 @@ def capture_command(stdout, vad, min_capture_ms: int = MIN_CAPTURE_MS,
         elif speech:
             silence_ms += VAD_FRAME_MS
         if not speech:
-            if total_ms >= onset_ms:
+            # Onset timeout is WALL-CLOCK, not audio-duration: the buffered
+            # chime/pre-roll bleed (read in ~0ms of real time) must NOT count
+            # against the time we give you to start speaking. Run-together speech
+            # in that buffer still registers above; this only bounds real waiting.
+            if (time.time() - t0) * 1000 >= onset_ms:
                 reason = "no_speech_onset"
                 break                       # no speech onset in window -> abort
             continue                        # keep waiting for speech to start
@@ -371,10 +388,12 @@ def run_turn(preroll_pcm: bytes, stdout, vad) -> None:
 
     log(f"wake CONFIRMED score={v.get('score')}")
     play_file(SOUNDS_DIR / "wake.wav")
-    # NB: no drain — the chime bleed is harmless in the audio (Parakeet ignores
-    # the tone); the min capture window keeps it from ending capture early, and
-    # not draining preserves a run-together command spoken over the chime.
-    cmd_pcm = capture_command(stdout, vad)
+    # Deliberately NO drain: the buffered audio holds a run-together command
+    # ("okay computer, download a car") spoken without waiting for the chime.
+    # capture_command still processes it (Silero catches the speech in it); the
+    # onset timeout is wall-clock, so the buffer doesn't steal the wait budget.
+    cmd_pcm = capture_command(stdout, vad, min_capture_ms=WAKE_MIN_CAPTURE_MS,
+                              onset_ms=WAKE_ONSET_MS)
     play_file(SOUNDS_DIR / "vad.wav")
     if not cmd_pcm:
         log("no command captured")
