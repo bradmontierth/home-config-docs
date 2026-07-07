@@ -39,6 +39,29 @@ ENGINE: TimerEngine
 
 
 # --------------------------------------------------------------------------
+# conversation session (for follow-up turns — "also add milk", "make it 15")
+# --------------------------------------------------------------------------
+# Single satellite for now, so one module-level session is enough. Holds a
+# short summary of the last turn; a follow-up parse gets it as context so the
+# LLM can resolve references and, crucially, reject unrelated room chatter.
+SESSION_TTL_S = 90.0
+_SESSION: dict = {"ts": 0.0, "summary": ""}
+
+
+def session_note(summary: str) -> None:
+    """Record a one-line summary of what the last actionable turn did."""
+    _SESSION["summary"] = summary
+    _SESSION["ts"] = time.time()
+
+
+def session_context() -> str | None:
+    """The recent-turn summary if still fresh, else None (session expired)."""
+    if not _SESSION["summary"] or time.time() - _SESSION["ts"] > SESSION_TTL_S:
+        return None
+    return _SESSION["summary"]
+
+
+# --------------------------------------------------------------------------
 # expiry -> alarm
 # --------------------------------------------------------------------------
 async def _on_timer_expire(timer: dict) -> None:
@@ -122,17 +145,56 @@ async def _pop_list(list_type: str) -> None:
     await events.emit("show_list", list_type=list_type, items=items)
 
 
-async def handle_command(command: str) -> dict:
+def _summarize_turn(intent: str, result: dict) -> str:
+    """One-line summary of an actionable turn, fed back as follow-up context."""
+    parsed = result.get("parsed", {})
+    if intent == "set_timer" and result.get("timer"):
+        t = result["timer"]
+        return f"you set a {fmt.timer_name(t)} for {fmt.humanize_seconds(t['duration_seconds'])}"
+    if intent in ("add_items", "set_reminder"):
+        names = ", ".join((i.get("text") or "").strip() for i in result.get("added") or [])
+        return f"you added {names or 'items'} to your lists"
+    if intent == "complete_item" and result.get("completed"):
+        return f"you checked off {result['completed'].get('text', 'an item')}"
+    if intent == "timer_adjust" and result.get("timer"):
+        return f"you adjusted the {fmt.timer_name(result['timer'])}"
+    if intent == "timer_cancel":
+        return "you cancelled a timer"
+    if intent in ("show_todos", "show_shopping"):
+        return "you were shown a list"
+    if intent == "timer_query":
+        return "you asked how much time was left"
+    if intent == "ask":
+        return f"you asked: {parsed.get('query') or ''}"
+    return (result.get("response") or "")[:120]
+
+
+async def handle_command(command: str, followup: bool = False) -> dict:
     """Parse a command and act on it. Emits thinking/response events; returns a
-    structured result."""
+    structured result. `followup` = a continued-conversation turn (no wake word):
+    parse with session context and drop non-actionable speech silently."""
     command = command.strip()
     if not command:
         return {"intent": "none", "response": "I didn't catch that.", "ok": False}
 
-    await events.emit("thinking", command=command)
-    parsed = await intent_mod.parse(command)
+    context = session_context() if followup else None
+    if not followup:
+        await events.emit("thinking", command=command)
+    parsed = await intent_mod.parse(command, context=context)
     intent = parsed["intent"]
-    log.info("intent=%s parsed=%s", intent, parsed)
+    log.info("intent=%s followup=%s parsed=%s", intent, followup, parsed)
+
+    if followup and intent == "none":
+        # Background chatter / not addressed to us. Drop silently: no events, no
+        # audio, no dashboard flash — a dropped follow-up must be invisible. The
+        # satellite reads intent "none" and closes the follow-up window.
+        log.info("followup dropped as not-for-us: %r", command)
+        return {"intent": "none", "response": "", "ok": False, "silent": True}
+    if followup:
+        # Actionable follow-up: surface caption + thinking now (deferred past the
+        # none gate so background chatter never flashes on the dashboard).
+        await events.emit("transcript", text=command)
+        await events.emit("thinking", command=command)
 
     result: dict = {"intent": intent, "parsed": parsed}
 
@@ -263,6 +325,8 @@ async def handle_command(command: str) -> dict:
     await events.emit(
         "response", text=result["response"], audio_url=result["audio_url"], intent=intent
     )
+    # Remember this turn so the next follow-up can resolve "also/those/make it".
+    session_note(_summarize_turn(intent, result))
     return result
 
 
@@ -322,19 +386,24 @@ async def verify_wake(request: Request) -> dict:
 
 
 @app.post("/command/audio")
-async def command_audio(request: Request) -> dict:
-    """Phase 2: the captured command utterance (post-wake). Transcribe + act.
-    No wake check here — /verify already gated this turn."""
+async def command_audio(request: Request, followup: bool = False) -> dict:
+    """Phase 2: the captured command utterance. Transcribe + act. No wake check —
+    /verify already gated this turn. `followup=1` marks a continued-conversation
+    turn (no wake word): background speech is dropped silently."""
     wav = await request.body()
     if not wav:
         raise HTTPException(400, "empty audio body")
     t0 = time.time()
     transcript = await clients.transcribe(wav)
     if not transcript:
-        await events.emit("response", text="I didn't catch that.", intent="none")
-        return {"ok": False, "transcript": "", "response": "I didn't catch that."}
-    await events.emit("transcript", text=transcript)
-    result = await handle_command(transcript)
+        # Silence: on a follow-up, stay quiet; on a wake turn, say we missed it.
+        if not followup:
+            await events.emit("response", text="I didn't catch that.", intent="none")
+        return {"ok": False, "transcript": "", "response": "",
+                "intent": "none", "silent": followup}
+    if not followup:
+        await events.emit("transcript", text=transcript)
+    result = await handle_command(transcript, followup=followup)
     result["transcript"] = transcript
     result["latency_ms"] = round((time.time() - t0) * 1000)
     return result
@@ -352,12 +421,13 @@ async def transcribe_audio(request: Request) -> dict:
 
 @app.post("/command")
 async def command(payload: dict = Body(...)) -> dict:
-    """Text bypass for testing and future text-driven paths."""
+    """Text bypass for testing and future text-driven paths. `followup: true`
+    exercises the continued-conversation path (session context + silent none)."""
     text = str(payload.get("text", "")).strip()
     if not text:
         raise HTTPException(400, "missing 'text'")
     t0 = time.time()
-    result = await handle_command(text)
+    result = await handle_command(text, followup=bool(payload.get("followup")))
     result["latency_ms"] = round((time.time() - t0) * 1000)
     return result
 

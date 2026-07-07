@@ -57,11 +57,31 @@ Rules:
 - If the command is not a timer, list, or knowledge command, intent "none".
 Return JSON only."""
 
+# Appended to the system prompt when parsing a FOLLOW-UP turn (the user kept
+# talking after a reply, with no wake word to gate it). Stricter about "none":
+# the mic is open to the whole room, so unrelated chatter must be dropped.
+_FOLLOWUP_NOTE = """
+FOLLOW-UP TURN: this audio came right after your last reply, captured WITHOUT a \
+wake word, so it may be a continuation of the conversation OR unrelated \
+background speech / someone else's conversation / a stray fragment not addressed \
+to you.
+Recent context: {context}
+Only produce an action intent if the command is CLEARLY addressed to you and \
+actionable (e.g. "also add butter", "make that fifteen minutes", "and cancel the \
+rice"). If it is small talk, a fragment, someone else talking, or anything not \
+clearly a command to you, return intent "none" with all other fields null. When \
+in doubt, return "none"."""
 
-async def parse(command: str) -> dict:
-    """Parse a command string into a validated intent dict."""
+
+async def parse(command: str, context: str | None = None) -> dict:
+    """Parse a command string into a validated intent dict. When `context` is
+    given (a follow-up turn), append the follow-up note so ambiguous/background
+    speech routes to "none"."""
+    system = _SYSTEM
+    if context:
+        system = _SYSTEM + "\n" + _FOLLOWUP_NOTE.format(context=context)
     messages = [
-        {"role": "system", "content": _SYSTEM},
+        {"role": "system", "content": system},
         {"role": "user", "content": command},
     ]
     raw = await clients.parse_intent_raw(messages)

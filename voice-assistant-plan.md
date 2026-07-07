@@ -294,6 +294,55 @@ intent-parse call (~0.8s). Adding `ask` (and the lists intents) costs ZERO
 extra latency for timers; only an `ask` classification triggers a second call
 to the smart model. No "ask" keyword needed — natural phrasing routes via qwen.
 
+## Follow-up / Continued Conversation (design locked 2026-07-07)
+
+Talk again after a reply WITHOUT re-saying "okay computer" — "add eggs to my
+shopping list" … "also add milk" … "actually take those off". This is Alexa
+**Follow-Up Mode** / Google **Continued Conversation**.
+
+**How the big two do it (and what we copy):** after the assistant speaks, it
+reopens the mic for a SHORT bounded window (Alexa ~5s, Google ~8s), re-armed
+each time you actually speak; the ring stays lit as the "you can talk" cue; a
+device-directedness check drops speech not addressed to it SILENTLY; and
+dialog/session context carries across turns for "those/also/undo". It is NEVER
+an indefinitely-open mic — that's the openWakeWord false-accept trap we already
+rejected. We copy: bounded reopen (re-armed by speech), silent drop of
+non-actionable speech, session context.
+
+**Decisions (user, 2026-07-07):** default ON; window **7s**; NOT suppressed
+after "set a timer" ("set a timer … also add eggs" is a real kitchen flow).
+
+**Where the work is (satellite + orchestrator; NO new model — reuse qwen):**
+- Satellite `run_turn`: after playing the reply, enter a follow-up loop —
+  `capture_command` with a ~7s speech-ONSET window (no wake chime, no capture
+  chime; the spoken reply is the ack). On speech → POST `/command/audio?followup=1`
+  → play reply → re-arm. Exit when: the window passes silent, the orchestrator
+  returns intent `none` (not addressed / not actionable → SILENT, no audio), an
+  alarm is ringing/queued (bail so a timer isn't held off the mic), or a
+  FOLLOWUP_MAX_TURNS safety cap. Needs `capture_command` split into
+  min-capture-ms (chime-bleed guard, wake turn only) vs onset-ms (how long to
+  wait for speech to start).
+- Orchestrator: **session state** (module-level, single satellite, ~90s TTL):
+  last intent + added/completed items + timer + transcript. `intent.parse` gains
+  an optional `context`; with it, a follow-up system-prompt variant that says
+  "this may be a continuation OR unrelated background speech — only act if
+  clearly addressed and actionable, else intent `none`", stricter about `none`
+  than the post-wake parser (the wake word didn't gate this turn).
+  `handle_command(followup=True)`: parse with context FIRST; on `none` return
+  silently (emit nothing — a dropped follow-up is invisible: no chime, no
+  "sorry", no dashboard flash); on actionable, proceed + update session.
+  `/command/audio` reads a `followup` flag and returns the intent so the
+  satellite knows whether to continue.
+
+**Phasing:** Step 1 (this) = window + session context + silent none (covers
+"also add milk"). Step 2 = `remove_items` intent + reference resolution
+("take those off / undo") using the session's last items.
+
+**Deferred fast-follows:** dashboard "Listening…" cue during the silent
+pre-speech window (needs a satellite→orch ping + a small frontend handler;
+skipped in Step 1 to avoid a frontend rebuild — a follow-up you actually use
+already lights the dashboard via the normal transcript/response events).
+
 ## Knowledge / Ask Mode — BUILT + DEPLOYED 2026-07-07 (design locked 2026-07-06)
 
 **Status: live.** qwen classifies `ask` (with cleaned `query`); orchestrator

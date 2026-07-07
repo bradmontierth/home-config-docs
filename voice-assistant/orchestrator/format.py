@@ -94,7 +94,7 @@ def humanize_due(due_at: str | None) -> str:
 
 # Companion prefixes shopping items with an imperative ("Buy eggs"). Fine on the
 # dashboard, but "Added buy eggs" reads badly aloud — strip it for speech only.
-_SHOPPING_PREFIXES = ("buy ", "get ", "grab ", "pick up ", "purchase ")
+_SHOPPING_PREFIXES = ("buy ", "get ", "grab ", "pick up ", "purchase ", "add ")
 
 
 def _spoken_text(item: dict) -> str:

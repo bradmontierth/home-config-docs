@@ -66,6 +66,13 @@ MAX_COMMAND_S = float(os.getenv("MAX_COMMAND_S", "8"))
 MIN_VOICED_MS = int(os.getenv("MIN_VOICED_MS", "200"))
 RETRIGGER_GUARD_S = float(os.getenv("RETRIGGER_GUARD_S", "1.5"))
 
+# Follow-up / continued conversation: after a reply, reopen the mic (no wake
+# word) for a bounded window; re-arm each time you actually speak. Default ON.
+FOLLOWUP_ENABLED = os.getenv("FOLLOWUP_ENABLED", "1").lower() not in ("0", "false", "no", "")
+FOLLOWUP_WINDOW_MS = int(os.getenv("FOLLOWUP_WINDOW_MS", "7000"))  # wait-for-speech window
+FOLLOWUP_MIN_MS = int(os.getenv("FOLLOWUP_MIN_MS", "300"))        # min capture (no chime bleed)
+FOLLOWUP_MAX_TURNS = int(os.getenv("FOLLOWUP_MAX_TURNS", "6"))    # runaway-session cap
+
 # Playback volume (0-100) applied as software gain to OUR audio only (chimes,
 # alarm, TTS) — music on the shared card is untouched. Driven by day-mode via
 # Node-RED POST /volume (mirrors the /mode switch). Alarm never dips below the
@@ -255,10 +262,16 @@ def theme_sound(theme: str) -> Path:
 
 
 # --- command capture (min window, then webrtcvad endpointing) --------------
-def capture_command(stdout, vad) -> bytes:
-    """Keep capturing for MIN_CAPTURE_MS (covers chime bleed + a beat to start
-    speaking, and run-together commands), then endpoint on SILENCE_MS trailing
-    silence. No draining — the stream is grabbed continuously like Echo/Nest."""
+def capture_command(stdout, vad, min_capture_ms: int = MIN_CAPTURE_MS,
+                    onset_ms: int | None = None) -> bytes:
+    """Capture one utterance. Two independent windows:
+      - `onset_ms`: how long to wait for speech to START before giving up (the
+        wake turn = min_capture_ms; a follow-up = the longer FOLLOWUP window).
+      - `min_capture_ms`: once capturing, don't endpoint before this (covers the
+        wake-chime bleed + run-together commands; ~0 for follow-ups, no chime).
+    After speech, endpoint on SILENCE_MS trailing silence."""
+    if onset_ms is None:
+        onset_ms = min_capture_ms
     frame_bytes = VAD_FRAME_SAMPLES * 2
     frames: list[bytes] = []
     speech = False
@@ -279,10 +292,12 @@ def capture_command(stdout, vad) -> bytes:
             voiced_ms += 20
         elif speech:
             silence_ms += 20
-        if total_ms < MIN_CAPTURE_MS:
-            continue                        # never endpoint inside the min window
         if not speech:
-            break                           # window passed, nothing said -> abort
+            if total_ms >= onset_ms:
+                break                       # no speech onset in window -> abort
+            continue                        # keep waiting for speech to start
+        if total_ms < min_capture_ms:
+            continue                        # never endpoint inside the min window
         if silence_ms >= SILENCE_MS:
             break                           # normal endpoint after speech
     return b"".join(frames) if voiced_ms >= MIN_VOICED_MS else b""
@@ -326,6 +341,46 @@ def run_turn(preroll_pcm: bytes, stdout, vad) -> None:
             play_wav_bytes(get_bytes(ORCH_BASE + url))
         except Exception as exc:  # noqa: BLE001
             log(f"reply playback failed: {exc}")
+    run_followups(stdout, vad)
+
+
+def run_followups(stdout, vad) -> None:
+    """Continued conversation: after the reply, reopen the mic (no wake word) and
+    listen for another command; re-arm on each actionable turn. Ends silently on
+    a quiet window, on a not-for-us reply (orchestrator intent 'none'), if a timer
+    starts ringing, or at the safety cap. Echo/Google 'Follow-Up Mode'."""
+    if not FOLLOWUP_ENABLED:
+        return
+    for _ in range(FOLLOWUP_MAX_TURNS):
+        if STATE.current_alarm is not None or STATE.alarm_queue:
+            return                          # a timer needs the mic — don't hold it
+        # Drop the reply that just played (it bled into the mic) so we don't
+        # transcribe our own voice as a follow-up. No AEC on this mic.
+        drain_input(stdout)
+        cmd = capture_command(stdout, vad, min_capture_ms=FOLLOWUP_MIN_MS,
+                              onset_ms=FOLLOWUP_WINDOW_MS)
+        if not cmd:
+            return                          # quiet window -> conversation over
+        try:
+            resp = post_wav("/command/audio?followup=1", wrap_wav(cmd))
+        except Exception as exc:  # noqa: BLE001
+            log(f"followup /command/audio failed: {exc}")
+            return
+        intent = resp.get("intent")
+        reply = resp.get("response") or ""
+        if resp.get("silent") or intent in (None, "none") or not reply:
+            log(f"followup not for us (intent={intent}) -> ending session")
+            return
+        log(f"followup -> {intent}: {reply}")
+        append_event({"type": "followup", "intent": intent,
+                      "transcript": resp.get("transcript"), "response": reply})
+        url = resp.get("audio_url")
+        if url:
+            try:
+                play_wav_bytes(get_bytes(ORCH_BASE + url))
+            except Exception as exc:  # noqa: BLE001
+                log(f"followup reply playback failed: {exc}")
+    log("followup max turns reached -> ending session")
 
 
 # --- alarm: playback in a thread, main loop listens continuously -----------
