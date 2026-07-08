@@ -574,6 +574,28 @@ async def command_audio(request: Request, followup: bool = False) -> dict:
     return result
 
 
+@app.post("/partial")
+async def partial(request: Request, seq: int = 0) -> dict:
+    """Live-caption snapshot. During command capture the satellite POSTs the
+    ENTIRE buffer-so-far every ~400ms; each one is re-decoded as a normal
+    full-context batch (so partials have zero accuracy penalty vs the final)
+    and fanned to the dashboard as partial_transcript {text, seq}. Display-only
+    by design: intent parsing always runs on the final /command/audio
+    transcript, never a partial. Best-effort throughout — failures return ok
+    False and cost nothing but a skipped caption frame."""
+    wav = await request.body()
+    if not wav:
+        raise HTTPException(400, "empty audio body")
+    try:
+        text = await clients.transcribe(wav)
+    except Exception as exc:  # noqa: BLE001 — captions are cosmetic
+        log.debug("partial transcribe failed: %s", exc)
+        return {"ok": False, "seq": seq}
+    if text:
+        await events.emit("partial_transcript", text=text, seq=seq)
+    return {"ok": True, "seq": seq, "text": text}
+
+
 @app.post("/transcribe")
 async def transcribe_audio(request: Request) -> dict:
     """Raw transcription (no intent). Used by the satellite to listen for a

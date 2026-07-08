@@ -87,6 +87,13 @@ FOLLOWUP_MAX_TURNS = int(os.getenv("FOLLOWUP_MAX_TURNS", "6"))    # runaway-sess
 WAKE_ONSET_MS = int(os.getenv("WAKE_ONSET_MS", "4000"))
 WAKE_MIN_CAPTURE_MS = int(os.getenv("WAKE_MIN_CAPTURE_MS", "400"))
 
+# Live captions: during command capture, POST the ENTIRE buffer-so-far to the
+# orchestrator every ~PARTIAL_INTERVAL_MS (a full-context batch re-decode, so
+# partials carry zero accuracy penalty). Display-only — the final
+# /command/audio decode is still the only thing intents run on.
+PARTIALS_ENABLED = os.getenv("PARTIALS_ENABLED", "1").lower() not in ("0", "false", "no", "")
+PARTIAL_INTERVAL_MS = int(os.getenv("PARTIAL_INTERVAL_MS", "400"))
+
 # Playback volume (0-100) applied as software gain to OUR audio only (chimes,
 # alarm, TTS) — music on the shared card is untouched. Driven by day-mode via
 # Node-RED POST /volume (mirrors the /mode switch). Alarm never dips below the
@@ -275,6 +282,49 @@ def theme_sound(theme: str) -> Path:
     return p if p.exists() else SOUNDS_DIR / "themes" / "marimba.wav"
 
 
+# --- live-caption partials ---------------------------------------------------
+class PartialStreamer:
+    """Feeds the dashboard's live captions. capture_command offers the entire
+    buffer-so-far every ~PARTIAL_INTERVAL_MS; a single daemon worker POSTs it
+    to the orchestrator's /partial. Strictly decoupled from capture: the worker
+    holds at most the LATEST snapshot (an unsent older one is overwritten, never
+    queued), so a slow decode or dead orchestrator can never back-pressure the
+    mic loop — worst case captions skip forward. seq increases monotonically for
+    the process lifetime; the dashboard drops anything <= the newest it has
+    rendered, so out-of-order arrivals are harmless."""
+
+    def __init__(self):
+        self._lock = threading.Lock()
+        self._latest: tuple[int, bytes] | None = None
+        self._wake = threading.Event()
+        self._seq = 0
+        threading.Thread(target=self._worker, daemon=True).start()
+
+    def offer(self, pcm: bytes) -> None:
+        with self._lock:
+            self._seq += 1
+            self._latest = (self._seq, pcm)
+        self._wake.set()
+
+    def _worker(self) -> None:
+        while True:
+            self._wake.wait()
+            with self._lock:
+                item, self._latest = self._latest, None
+                self._wake.clear()
+            if item is None:
+                continue
+            seq, pcm = item
+            try:
+                post_wav(f"/partial?seq={seq}", wrap_wav(pcm), timeout=4)
+            except Exception:  # noqa: BLE001 — captions are cosmetic, never log-spam
+                pass
+
+
+PARTIALS = PartialStreamer() if PARTIALS_ENABLED else None
+PARTIAL_FRAMES = max(1, PARTIAL_INTERVAL_MS // VAD_FRAME_MS)
+
+
 # --- Silero neural VAD -----------------------------------------------------
 class SileroVad:
     """Streaming speech detector. Feed it consecutive 512-sample (32ms @ 16k)
@@ -314,13 +364,17 @@ class SileroVad:
 
 # --- command capture (min window, then Silero endpointing) -----------------
 def capture_command(stdout, vad, min_capture_ms: int = MIN_CAPTURE_MS,
-                    onset_ms: int | None = None) -> bytes:
+                    onset_ms: int | None = None, partials: bool = False) -> bytes:
     """Capture one utterance. Two independent windows:
       - `onset_ms`: how long to wait for speech to START before giving up (the
         wake turn = min_capture_ms; a follow-up = the longer FOLLOWUP window).
       - `min_capture_ms`: once capturing, don't endpoint before this (covers the
         wake-chime bleed + run-together commands; ~0 for follow-ups, no chime).
-    After speech, endpoint on SILENCE_MS trailing silence."""
+    After speech, endpoint on SILENCE_MS trailing silence.
+    `partials`: stream live-caption snapshots to the orchestrator while
+    capturing. Wake turns only — a follow-up capture hears ANY room speech, and
+    background chatter the orchestrator silently drops must stay invisible on
+    the dashboard (streaming its words live would break that rule)."""
     if onset_ms is None:
         onset_ms = min_capture_ms
     frame_bytes = SileroVad.CHUNK * 2   # 512 samples * int16
@@ -328,6 +382,7 @@ def capture_command(stdout, vad, min_capture_ms: int = MIN_CAPTURE_MS,
     frames: list[bytes] = []
     speech = False
     silence_ms = voiced_ms = total_ms = 0
+    last_partial_at = 0
     reason = "max_command"
     t0 = time.time()
     while total_ms < MAX_COMMAND_S * 1000:
@@ -347,6 +402,13 @@ def capture_command(stdout, vad, min_capture_ms: int = MIN_CAPTURE_MS,
             voiced_ms += VAD_FRAME_MS
         elif speech:
             silence_ms += VAD_FRAME_MS
+        # Live captions: once speech has started, offer the WHOLE buffer-so-far
+        # every ~PARTIAL_INTERVAL_MS. offer() is a lock+event set (microseconds);
+        # the POST happens on the streamer's own thread, so the capture loop's
+        # timing is untouched even if the orchestrator is slow or down.
+        if PARTIALS and partials and speech and len(frames) - last_partial_at >= PARTIAL_FRAMES:
+            last_partial_at = len(frames)
+            PARTIALS.offer(b"".join(frames))
         if not speech:
             # Onset timeout is WALL-CLOCK, not audio-duration: the buffered
             # chime/pre-roll bleed (read in ~0ms of real time) must NOT count
@@ -393,7 +455,7 @@ def run_turn(preroll_pcm: bytes, stdout, vad) -> None:
     # capture_command still processes it (Silero catches the speech in it); the
     # onset timeout is wall-clock, so the buffer doesn't steal the wait budget.
     cmd_pcm = capture_command(stdout, vad, min_capture_ms=WAKE_MIN_CAPTURE_MS,
-                              onset_ms=WAKE_ONSET_MS)
+                              onset_ms=WAKE_ONSET_MS, partials=True)
     play_file(SOUNDS_DIR / "vad.wav")
     if not cmd_pcm:
         log("no command captured")

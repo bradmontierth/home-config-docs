@@ -540,6 +540,31 @@ flicker-free rendering and immunity to falling behind. Server emits
   length" from its own successive decodes — the client diff is cheap enough that
   coupling the server to it isn't worth it.
 
+**BUILT 2026-07-08.** Implemented exactly as designed: satellite
+`PartialStreamer` (single daemon worker, latest-snapshot-only so a slow decode
+can never back-pressure the mic loop; process-lifetime monotonic seq),
+`capture_command(partials=True)` offers the whole buffer every ~400ms once
+speech starts; orchestrator `POST /partial?seq=N` re-decodes and emits
+`partial_transcript {text, seq}` (empty decode = no emit); dashboard word-span
+reconciler (`captionRender`) with committed-prefix hardening, in-place
+revisions, fade-in tail, seq guard, and a 1.5s post-final straggler block. New
+turns without a `wake_confirmed` (follow-ups) reset via a `turnDone` flag set
+on `response`. Env knobs: `PARTIALS_ENABLED` (default on), `PARTIAL_INTERVAL_MS`
+(400) on the satellite.
+**Design decision made during build: partials fire on WAKE turns only, not
+follow-up captures.** A follow-up capture hears any room speech, and the
+silent-drop rule says chatter the orchestrator rejects must be invisible on the
+dashboard — streaming its words live during capture (before the intent gate can
+run) would break that. Follow-ups keep the Listening pill + final-transcript
+flow. Verified E2E with simulated growing-prefix posts (TTS clip → 400ms PCM
+prefixes → `/partial` → dashboard `/api/live` websocket): captions grew
+`'Set a tim' → 'Set a timer for' → … → 'Set a timer for 10 minutes for the
+pasta'`, mid-word truncations self-corrected on the next snapshot, decode kept
+the 400ms cadence. Reconciler unit-tested (grow / revise-in-place / shorten /
+final-freeze / stable-prefix untouched). Deployed: satellite restarted (mode
+re-asserted active), orchestrator + dashboard rebuilt. Pending: first live
+voice test in the kitchen.
+
 ### B. Music via Music Assistant ("okay computer, play Raffi")
 Fully replace Google Home for the NFC-jukebox use case (3-yr-old scans a card
 today; add voice). New `play_music` intent → deterministic MA call → the
