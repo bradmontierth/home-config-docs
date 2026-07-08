@@ -59,6 +59,20 @@ LIST_OWNER = os.getenv("LIST_OWNER", "brad")
 # rapidfuzz score (0-100) an item must clear to be matched for completion.
 LIST_MATCH_THRESHOLD = float(os.getenv("LIST_MATCH_THRESHOLD", "70"))
 
+# --- music (Music Assistant) ------------------------------------------------
+# MA server (Beelink). API is WebSocket JSON-RPC at /ws via the official
+# music-assistant-client package — there is no REST search. See music.py.
+MA_URL = os.getenv("MA_URL", "http://192.168.10.217:8095")
+# The kitchen jukebox player/queue (squeezelite Kitchen-Big-Speakers) — same
+# queue the NFC reader drives, so voice and cards share one player.
+MA_QUEUE_ID = os.getenv("MA_QUEUE_ID", "e4:5f:01:67:1e:56")
+# Ducking: on a wake trigger / alarm, music volume drops to cur*FACTOR (but at
+# least MIN). TTL is the watchdog that restores volume if the satellite dies
+# mid-turn and its unduck never arrives.
+MUSIC_DUCK_FACTOR = float(os.getenv("MUSIC_DUCK_FACTOR", "0.25"))
+MUSIC_DUCK_MIN = int(os.getenv("MUSIC_DUCK_MIN", "5"))
+MUSIC_DUCK_TTL_S = float(os.getenv("MUSIC_DUCK_TTL_S", "240"))
+
 # --- wake stage-2 ----------------------------------------------------------
 WAKE_PHRASE = os.getenv("WAKE_PHRASE", "okay computer")
 # rapidfuzz partial_ratio (0-100) the wake phrase must clear in the transcript.

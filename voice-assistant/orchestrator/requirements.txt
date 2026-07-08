@@ -2,3 +2,4 @@ fastapi>=0.110
 uvicorn[standard]>=0.29
 httpx>=0.27
 rapidfuzz>=3.6
+music-assistant-client>=1.4.2

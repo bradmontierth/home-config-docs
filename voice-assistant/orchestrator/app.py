@@ -27,6 +27,7 @@ from fastapi.responses import FileResponse
 
 from . import ask as ask_mod
 from . import lists as lists_mod
+from . import music as music_mod
 from . import clients, config, events, format as fmt, intent as intent_mod, verify
 from .timers import TimerEngine
 
@@ -136,12 +137,14 @@ async def _startup() -> None:
     global ENGINE
     ENGINE = TimerEngine(on_expire=_on_timer_expire)
     ENGINE.start()
+    music_mod.start()
     log.info("orchestrator up; %d active timer(s) restored", len(ENGINE.active()))
 
 
 @app.on_event("shutdown")
 async def _shutdown() -> None:
     await ENGINE.stop()
+    await music_mod.stop()
 
 
 # --------------------------------------------------------------------------
@@ -224,6 +227,13 @@ def _summarize_turn(intent: str, result: dict) -> str:
         return "you asked how much time was left"
     if intent == "ask":
         return f"you asked: {parsed.get('query') or ''}"
+    if intent == "play_music":
+        name = (result.get("music") or {}).get("name")
+        return f"you started playing {name}" if name else "you resumed the music"
+    if intent == "music_control":
+        return f"you told the music player: {parsed.get('music_action')}"
+    if intent == "music_query":
+        return "you asked what music is playing"
     return (result.get("response") or "")[:120]
 
 
@@ -464,6 +474,59 @@ async def handle_command(command: str, followup: bool = False) -> dict:
                 result["response"] = fmt.confirm_bulk_question("clear", items, list_type)
                 result["ok"] = True
 
+    elif intent == "play_music":
+        try:
+            sel = await music_mod.play(parsed.get("query"), parsed.get("media_type"))
+        except music_mod.MusicUnavailable:
+            result["response"] = "Sorry, I can't reach the music player."
+            result["ok"] = False
+        except LookupError:
+            result["response"] = f"I couldn't find {parsed.get('query')} to play."
+            result["ok"] = False
+        except Exception as exc:  # noqa: BLE001
+            log.warning("play_music failed: %s", exc)
+            result["response"] = "Sorry, something went wrong starting the music."
+            result["ok"] = False
+        else:
+            result["music"] = sel
+            result["response"] = fmt.confirm_play(sel)
+            result["ok"] = True
+            # Pop the existing jukebox now-playing modal on the kiosk — it polls
+            # live MA queue state, so voice-started music renders there for free.
+            await events.emit("show_music", **sel)
+
+    elif intent == "music_control":
+        action = parsed.get("music_action")
+        if not action:
+            result["response"] = "Sorry, I didn't catch what to do with the music."
+            result["ok"] = False
+        else:
+            try:
+                await music_mod.control(action)
+            except music_mod.MusicUnavailable:
+                result["response"] = "Sorry, I can't reach the music player."
+                result["ok"] = False
+            except Exception as exc:  # noqa: BLE001
+                log.warning("music_control %s failed: %s", action, exc)
+                result["response"] = "Sorry, that didn't work."
+                result["ok"] = False
+            else:
+                result["response"] = fmt.confirm_music_control(action)
+                result["ok"] = True
+
+    elif intent == "music_query":
+        try:
+            np = music_mod.now_playing()
+        except music_mod.MusicUnavailable:
+            result["response"] = "Sorry, I can't reach the music player."
+            result["ok"] = False
+        else:
+            result["now_playing"] = np
+            result["response"] = fmt.now_playing_phrase(np)
+            result["ok"] = True
+            if np:
+                await events.emit("show_music", **np)
+
     elif intent == "ask":
         query = parsed.get("query") or command
         await events.emit("ask_thinking", query=query)
@@ -594,6 +657,38 @@ async def partial(request: Request, seq: int = 0) -> dict:
     if text:
         await events.emit("partial_transcript", text=text, seq=seq)
     return {"ok": True, "seq": seq, "text": text}
+
+
+# -- music ducking (satellite) ----------------------------------------------
+@app.post("/music/duck")
+async def music_duck() -> dict:
+    """Satellite fires this on a stage-1 wake trigger / alarm start so speech
+    isn't buried under the music. Best-effort — never errors."""
+    try:
+        await music_mod.duck()
+    except Exception as exc:  # noqa: BLE001 — includes MusicUnavailable
+        log.debug("duck skipped: %s", exc)
+        return {"ok": False}
+    return {"ok": True}
+
+
+@app.post("/music/unduck")
+async def music_unduck() -> dict:
+    try:
+        await music_mod.unduck()
+    except Exception as exc:  # noqa: BLE001
+        log.debug("unduck skipped: %s", exc)
+        return {"ok": False}
+    return {"ok": True}
+
+
+@app.get("/music/state")
+def music_state() -> dict:
+    """Debug/CLI peek at what the kitchen queue is doing."""
+    try:
+        return {"ok": True, "now_playing": music_mod.now_playing()}
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": False, "error": str(exc)}
 
 
 @app.post("/transcribe")

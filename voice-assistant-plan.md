@@ -588,7 +588,58 @@ couldn't be dismissed by voice — added an **alarm bail** inside the capture
 loop (reason=alarm_bail: a timer starting to ring aborts capture with
 whatever was said so far, freeing the mic for the dismiss listener).
 
-### B. Music via Music Assistant ("okay computer, play Raffi")
+### B. Music via Music Assistant ("okay computer, play Raffi") — BUILT 2026-07-08
+
+**Status: built + deployed 2026-07-08 (orchestrator + satellite + dashboard
+all live). Validated end-to-end via /command text bypass + dashboard WS;
+live-voice test — especially wake recall with music at normal volume — still
+pending a person at the mic.**
+
+What shipped:
+- `orchestrator/music.py`: one persistent `music-assistant-client` (1.4.2)
+  WS connection in a reconnect-forever background task; MA down never breaks
+  timers/lists/ask (spoken "can't reach the music player" instead). GOTCHA:
+  the client's DEFAULT search media-types include GENRE, which the schema-26
+  server rejects with NotImplementedError — always pass media_types
+  explicitly.
+- Intents `play_music` (query + optional media_type), `music_control`
+  (pause/resume/stop/next/previous/volume_up/volume_down), `music_query`
+  ("what's playing"). Bare "stop"/"pause" route to music_control (timers get
+  cancelled, not stopped; alarm dismiss never reaches intent parsing).
+- **Ranking as revised above, plus one addition learned from live data: the
+  general pass runs TWICE — library-only candidates first, then all
+  providers.** Spotify search is full of traps: junk "artists" literally named
+  after songs ("Wheels on the Bus", "Baby Beluga") and random user playlists
+  name-match 100 and would steal queries the household library should win
+  ("play baby beluga" must hit the owned album). Thresholds: playlist ≥92,
+  artist ≥80, album ≥85, track ≥80 (rapidfuzz token_sort on normalized
+  names); low confidence still plays the best guess. Verified live: "play
+  raffi" → library artist shuffled (streams filesystem_local per track —
+  local-first confirmed automatic), "play baby beluga" → owned album 17
+  (dual-mapped beats spotify-only library album 8 via a has-local tiebreak),
+  "play the best of raffi" → local playlist 41.
+- **qwen media_type gotcha: it inferred media_type="album" for "the best of
+  raffi" (sounds like an album), which bypassed playlist ranking.** The prompt
+  now demands the type word be LITERALLY SPOKEN and carries that exact
+  counter-example.
+- **Ducking (satellite)**: fire-and-forget POST /music/duck on every stage-1
+  active trigger and on alarm start; /music/unduck when run_turn (incl.
+  follow-ups) or the alarm ends. The orchestrator refcounts nested pairs (a
+  turn and an alarm can overlap), ducks to max(5, 25%·vol) only when actually
+  playing, and a 240s watchdog restores volume if the satellite dies mid-turn
+  and the unduck never arrives. volume_up/down spoken DURING a duck adjusts
+  the restore target, not the live (ducked) volume. Note ducking happens
+  post-trigger, so it helps verify/capture and the alarm 'stop' listener —
+  it cannot help stage-1 wake recall itself (hence the pending live test).
+- **Dashboard = the existing NFC jukebox modal; no new card was needed.** The
+  jukebox service's /api/now-playing reads LIVE MA queue state, so
+  voice-started music renders there exactly like an NFC scan: the
+  orchestrator emits `show_music` (on play_music and on "what's playing"),
+  app.js opens the modal. Transport buttons/scrubber/volume were already
+  built and drive the same queue.
+
+Original design below.
+
 Fully replace Google Home for the NFC-jukebox use case (3-yr-old scans a card
 today; add voice). New `play_music` intent → deterministic MA call → the
 existing squeezelite/MA jukebox player (`Kitchen-Big-Speakers`, MA queue

@@ -183,6 +183,49 @@ def confirm_cleared(list_type: str | None, items: list[dict]) -> str:
     return f"Cleared the {label} — removed {n} {noun}."
 
 
+# --- music -------------------------------------------------------------------
+def confirm_play(sel: dict) -> str:
+    """Spoken confirmation for play_music, by what the ranker picked."""
+    kind, name = sel.get("kind"), sel.get("name")
+    if kind == "resume":
+        return "Resuming your music."
+    if kind == "artist":
+        return f"Shuffling {name}."
+    if kind == "album":
+        return f"Playing the album {name}."
+    if kind == "playlist":
+        return f"Shuffling the playlist {name}."
+    artist = sel.get("artist")
+    if artist:
+        return f"Playing {name} by {artist}."
+    return f"Playing {name}."
+
+
+_MUSIC_ACK = {
+    "pause": "Paused.",
+    "resume": "Okay, resuming.",
+    "stop": "Stopped the music.",
+    "next": "Skipping.",
+    "previous": "Going back.",
+    "volume_up": "Okay, louder.",
+    "volume_down": "Okay, quieter.",
+}
+
+
+def confirm_music_control(action: str) -> str:
+    return _MUSIC_ACK.get(action, "Done.")
+
+
+def now_playing_phrase(np: dict | None) -> str:
+    if not np or not np.get("track"):
+        return "Nothing is playing right now."
+    track, artist = np["track"], np.get("artist")
+    what = f"{track} by {artist}" if artist else track
+    if np.get("state") == "paused":
+        return f"{what} is paused."
+    return f"This is {what}."
+
+
 def confirm_bulk_question(op: str, items: list[dict], list_type: str | None = None) -> str:
     """Spoken confirmation prompt before a destructive bulk op."""
     n = len(items)

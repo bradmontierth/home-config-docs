@@ -16,8 +16,12 @@ log = logging.getLogger("orchestrator.intent")
 INTENTS = (
     "set_timer", "timer_query", "timer_adjust", "timer_cancel",
     "add_items", "set_reminder", "show_todos", "show_shopping", "complete_item",
-    "remove_items", "clear_list", "ask", "unclear", "none",
+    "remove_items", "clear_list", "play_music", "music_control", "music_query",
+    "ask", "unclear", "none",
 )
+
+MUSIC_ACTIONS = ("pause", "resume", "stop", "next", "previous",
+                 "volume_up", "volume_down")
 
 _SYSTEM = f"""You are the intent parser for a kitchen assistant. Convert the \
 user's command into a single strict JSON object and output ONLY that JSON — no \
@@ -30,9 +34,11 @@ Schema:
   "duration_seconds": integer total seconds for set_timer / timer_adjust (adjust may be negative to remove time), else null,
   "sound_theme": one of {list(config.SOUND_THEMES)},
   "scope": "one" or "all" — "all" only when the user clearly means every timer (e.g. "cancel all timers"), else "one",
-  "query": for intent "ask", the cleaned question text to send to the knowledge model; else null,
+  "query": for intent "ask" the cleaned question text; for "play_music" the name of what to play; else null,
   "item_text": for complete_item / remove_items, a phrase describing WHICH item(s) to act on — one item ("eggs"), several ("milk and bread"), a category ("the dairy", "produce"), or a property ("everything orange", "all of it"); else null,
-  "list_type": for clear_list / show, which list — "shopping", "todo", or "all"; else null
+  "list_type": for clear_list / show, which list — "shopping", "todo", or "all"; else null,
+  "media_type": for play_music, only when the user NAMES a type — "artist", "album", "track", or "playlist"; else null,
+  "music_action": for music_control, one of {list(MUSIC_ACTIONS)}; else null
 }}
 
 Rules:
@@ -63,7 +69,20 @@ Rules:
 - clear_list = emptying a whole list: "clear the shopping list", "clear my todos", "delete everything
   on the list", "empty the list". Set "list_type" to "shopping", "todo", or "all". NOT the same as
   remove_items (which targets specific items); clear_list wipes the entire list.
-- If the command is not a timer, list, or knowledge command, intent "none".
+- play_music = starting music: "play raffi", "play baby beluga", "put on the wheels on the bus",
+  "play the album baby beluga", "play some music". Put WHAT to play in "query" — just the name, with
+  filler dropped ("play the album baby beluga" -> query "baby beluga", media_type "album"; "play some
+  raffi" -> query "raffi"). If they only want music with nothing named ("play some music", "turn on
+  the music"), leave query null. media_type stays null unless they LITERALLY SAY the word "artist",
+  "album", "song"/"track", or "playlist" — never infer it from the name ("play the best of raffi"
+  -> query "the best of raffi", media_type null, even though it sounds like an album).
+- music_control = controlling playback that's already going. Map to "music_action": "pause" the
+  music -> pause; "keep playing" / "unpause" / "resume" -> resume; "stop the music" / "turn off the
+  music" -> stop; "skip" / "next song" / "skip this" -> next; "go back" / "previous song" -> previous;
+  "turn it up" / "louder" -> volume_up; "turn it down" / "quieter" -> volume_down.
+  A bare "pause" or "stop" with no object is music_control too (timers get cancelled, not stopped).
+- music_query = asking about the current song: "what's playing", "what song is this", "who sings this".
+- If the command is not a timer, list, music, or knowledge command, intent "none".
 Return JSON only."""
 
 # Appended to the system prompt when parsing a FOLLOW-UP turn (the user kept
@@ -143,6 +162,14 @@ def _validate(data: dict) -> dict:
     if list_type not in ("shopping", "todo", "all"):
         list_type = None
 
+    media_type = data.get("media_type")
+    if media_type not in ("artist", "album", "track", "playlist"):
+        media_type = None
+
+    music_action = data.get("music_action")
+    if music_action not in MUSIC_ACTIONS:
+        music_action = None
+
     return {
         "intent": intent,
         "label": label,
@@ -152,4 +179,6 @@ def _validate(data: dict) -> dict:
         "query": query,
         "item_text": item_text,
         "list_type": list_type,
+        "media_type": media_type,
+        "music_action": music_action,
     }

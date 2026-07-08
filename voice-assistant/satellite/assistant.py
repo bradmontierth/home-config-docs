@@ -213,6 +213,30 @@ def get_bytes(url: str, timeout: float = 30) -> bytes:
         return r.read()
 
 
+# --- music ducking -----------------------------------------------------------
+# Music at speech volume on the same speakers defeats stage-2 verify, command
+# capture, AND the alarm 'stop' barge-in listener (the TONOR can't AEC audio it
+# didn't play). Duck on every stage-1 active trigger and on alarm start; unduck
+# when the turn (incl. follow-ups) or alarm ends. The orchestrator refcounts
+# nested pairs and has a watchdog, so these are safe to fire blind.
+def _music_post(path: str) -> None:
+    """Fire-and-forget on its own thread — must never delay /verify or capture."""
+    def _post():
+        try:
+            post_json(path, {}, timeout=3)
+        except Exception:  # noqa: BLE001 — no music / orch down: nothing to duck
+            pass
+    threading.Thread(target=_post, daemon=True).start()
+
+
+def duck_music() -> None:
+    _music_post("/music/duck")
+
+
+def unduck_music() -> None:
+    _music_post("/music/unduck")
+
+
 def wrap_wav(pcm: bytes) -> bytes:
     buf = io.BytesIO()
     with wave.open(buf, "wb") as w:
@@ -608,6 +632,7 @@ def alarm_playback(req: dict) -> None:
         play_file(SOUNDS_DIR / "dismiss.wav")  # confirmation chirp: "it took"
     with STATE.lock:
         STATE.current_alarm = None
+    unduck_music()
     log(f"ALARM end timer={tid} ({'dismissed' if dismissed else 'timeout'})")
     try:
         post_json(f"/timers/{tid}/dismiss", {})   # sync orchestrator ringing->done
@@ -623,6 +648,7 @@ def start_next_alarm() -> None:
         req = STATE.alarm_queue.pop(0)
         STATE.current_alarm = req.get("timer_id") or f"anon-{int(time.time())}"
     STATE.dismiss.clear()
+    duck_music()   # the ringing must beat the music, and 'stop' must be hearable
     threading.Thread(target=alarm_playback, args=(req,), daemon=True).start()
 
 
@@ -793,7 +819,11 @@ def main() -> int:
             continue
 
         preroll = b"".join(list(ring)[-int(PREROLL_S * FPS):])
-        run_turn(preroll, arecord.stdout, vad)
+        duck_music()
+        try:
+            run_turn(preroll, arecord.stdout, vad)
+        finally:
+            unduck_music()
         resync()
 
 
