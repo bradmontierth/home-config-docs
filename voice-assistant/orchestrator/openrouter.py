@@ -69,6 +69,8 @@ async def stream_chat(
         "max_tokens": config.OPENROUTER_MAX_TOKENS,
         "stream": True,
     }
+    if config.OPENROUTER_WEB_SEARCH:
+        body["plugins"] = [{"id": "web", "engine": config.OPENROUTER_WEB_ENGINE}]
     headers = {
         "Authorization": f"Bearer {_read_key()}",
         "Content-Type": "application/json",

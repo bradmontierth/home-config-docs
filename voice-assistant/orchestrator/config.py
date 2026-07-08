@@ -46,6 +46,14 @@ OPENROUTER_KEY_FILE = os.getenv("OPENROUTER_API_KEY_FILE", "")
 OPENROUTER_MAX_TOKENS = int(os.getenv("OPENROUTER_MAX_TOKENS", "700"))
 # Sentinel separating the short spoken answer from the full dashboard answer.
 ASK_SENTINEL = os.getenv("ASK_SENTINEL", "===MORE===")
+# Web search via OpenRouter's web plugin. "native" passes through to the
+# provider's own search tool (OpenAI: model decides per-query whether to
+# search, so no-search questions stay fast). Set OPENROUTER_WEB_SEARCH=0 to
+# disable. "exa" would search on EVERY request — don't use it here.
+OPENROUTER_WEB_SEARCH = os.getenv("OPENROUTER_WEB_SEARCH", "1") not in (
+    "0", "false", "no", ""
+)
+OPENROUTER_WEB_ENGINE = os.getenv("OPENROUTER_WEB_ENGINE", "native")
 
 # --- lists (todo / shopping / reminders via voice-notes companion) --------
 # The companion is note-centric: sync a note then analyze it to extract typed
