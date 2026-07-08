@@ -54,6 +54,9 @@ OPENROUTER_WEB_SEARCH = os.getenv("OPENROUTER_WEB_SEARCH", "1") not in (
     "0", "false", "no", ""
 )
 OPENROUTER_WEB_ENGINE = os.getenv("OPENROUTER_WEB_ENGINE", "native")
+# Household timezone, stamped into the ask system prompt so the model can
+# resolve "today" / "last night" (the container itself runs UTC).
+ASK_TIMEZONE = os.getenv("ASK_TIMEZONE", "America/Denver")
 
 # --- lists (todo / shopping / reminders via voice-notes companion) --------
 # The companion is note-centric: sync a note then analyze it to extract typed
