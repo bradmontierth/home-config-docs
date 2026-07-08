@@ -637,6 +637,25 @@ What shipped:
   orchestrator emits `show_music` (on play_music and on "what's playing"),
   app.js opens the modal. Transport buttons/scrubber/volume were already
   built and drive the same queue.
+- **Library-index fuzzy resolver (added same day after the first live-voice
+  test): ASR misspellings defeated MA search entirely.** Parakeet produced
+  "Rafi" / "raffie" / "Lenny Rafi" across three tries; MA's search is literal,
+  so the LIBRARY returned nothing while Spotify returned real junk artists
+  literally named "Rafi"/"Raffie" — library-first ranking never had a
+  candidate. Fix in music.py: keep every library name in memory (~5.3k
+  entries via paged get_library_* — NOTE an unlimited call silently returns
+  one 500-row server page; warm on connect, background refresh at 15-min TTL,
+  MUSIC_INDEX_TTL_S) and fuzzy-match the query against it BEFORE MA search
+  (rapidfuzz indel ratio on normalized names + a doubled-letter-collapse
+  variant that makes "rafi"→"raffi" score 100, + a "by <artist>"-tail-stripped
+  variant, + per-token rescue for single-word ARTIST names at ≥90 only —
+  at 80 it hijacked "toxic by britney spears" via "spears"≈track "Sparks").
+  Same bucket precedence/thresholds; ties prefer locally-mapped items (two
+  library "Baby Beluga" albums — play the owned files). Confident hit plays
+  directly (Spotify junk never enters the race); otherwise fall through to
+  MA search unchanged for non-library discovery. ~6ms per resolve on the
+  Beelink vs ~800ms for the qwen parse. Verified: all three real mangled
+  transcripts → library://artist/41.
 
 Original design below.
 

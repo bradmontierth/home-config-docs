@@ -72,6 +72,9 @@ MA_QUEUE_ID = os.getenv("MA_QUEUE_ID", "e4:5f:01:67:1e:56")
 MUSIC_DUCK_FACTOR = float(os.getenv("MUSIC_DUCK_FACTOR", "0.25"))
 MUSIC_DUCK_MIN = int(os.getenv("MUSIC_DUCK_MIN", "5"))
 MUSIC_DUCK_TTL_S = float(os.getenv("MUSIC_DUCK_TTL_S", "240"))
+# In-memory library-name index for the ASR-robust fuzzy resolver (music.py);
+# refreshed in the background when older than this.
+MUSIC_INDEX_TTL_S = float(os.getenv("MUSIC_INDEX_TTL_S", "900"))
 
 # --- wake stage-2 ----------------------------------------------------------
 WAKE_PHRASE = os.getenv("WAKE_PHRASE", "okay computer")

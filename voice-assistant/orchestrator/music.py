@@ -29,6 +29,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
+import time
 
 import aiohttp
 from music_assistant_client.client import MusicAssistantClient
@@ -80,6 +81,7 @@ async def _run() -> None:
             _client = client
             log.info("Music Assistant connected (%s, server %s)",
                      config.MA_URL, client.server_info.server_version)
+            asyncio.create_task(_refresh_index_guarded())   # warm the resolver
             await listen          # returns/raises only when the connection dies
         except asyncio.CancelledError:
             return
@@ -95,6 +97,125 @@ def _ma() -> MusicAssistantClient:
     if _client is None:
         raise MusicUnavailable("Music Assistant is not connected")
     return _client
+
+
+# --------------------------------------------------------------------------
+# library index — the ASR-robust resolver (checked BEFORE MA search)
+# --------------------------------------------------------------------------
+# MA's search is literal: for a Parakeet misspelling ("rafi", "raffie") the
+# library provider returns NOTHING while Spotify returns real junk artists
+# with those exact names — so search-based ranking can never recover the
+# household's own music from a mangled transcript. Instead, keep every
+# library name in memory and fuzzy-match the query against it first; only
+# fall through to MA search when nothing in the library is close.
+_index: dict = {"ts": 0.0, "entries": [], "refreshing": None}
+_PAGE = 500   # get_library_* silently cap an unlimited call at a server page
+
+
+async def _refresh_index() -> None:
+    client = _ma()
+    m = client.music
+    entries: list[dict] = []
+    for kind, fetch in (("playlist", m.get_library_playlists),
+                        ("artist", m.get_library_artists),
+                        ("album", m.get_library_albums),
+                        ("track", m.get_library_tracks)):
+        offset = 0
+        while True:
+            page = await fetch(limit=_PAGE, offset=offset)
+            for it in page:
+                norm = _norm(it.name)
+                if not norm:
+                    continue
+                arts = getattr(it, "artists", None) or []
+                entries.append({
+                    "kind": kind, "name": it.name, "uri": it.uri,
+                    "norm": norm, "collapsed": _collapse(norm),
+                    "artist": arts[0].name if arts else None,
+                    "local": _has_local(it),
+                })
+            if len(page) < _PAGE:
+                break
+            offset += _PAGE
+    _index["entries"] = entries
+    _index["ts"] = time.time()
+    log.info("library index refreshed: %d entries", len(entries))
+
+
+async def _refresh_index_guarded() -> None:
+    try:
+        await _refresh_index()
+    except Exception as exc:  # noqa: BLE001
+        log.warning("library index refresh failed: %s", exc)
+
+
+async def _ensure_index() -> list[dict]:
+    """Current index; a stale one is served as-is while a background refresh
+    runs (a play command must never wait ~1s on a full library fetch)."""
+    age = time.time() - _index["ts"]
+    if _index["entries"] and age < config.MUSIC_INDEX_TTL_S:
+        return _index["entries"]
+    if _index["entries"]:
+        if _index["refreshing"] is None or _index["refreshing"].done():
+            _index["refreshing"] = asyncio.create_task(_refresh_index_guarded())
+        return _index["entries"]
+    await _refresh_index()
+    return _index["entries"]
+
+
+def _collapse(s: str) -> str:
+    """Squash doubled letters — poor-man's phonetics for exactly the thing ASR
+    can't hear ("raffi"/"rafi", "will.i.am" aside)."""
+    return re.sub(r"(.)\1+", r"\1", s)
+
+
+def _entry_score(e: dict, qn: str, qc: str, qtokens: list[str]) -> float:
+    score = max(fuzz.ratio(qn, e["norm"]), fuzz.ratio(qc, e["collapsed"]))
+    # A garbled multiword transcript ("lenny rafi") can still contain a
+    # single-word ARTIST name — score each query token too, but only accept a
+    # near-exact token hit (≥90): this path is for recovering a name buried in
+    # debris, and at lower bars it invents matches ("spears" ≈ track "Sparks"
+    # at 83 hijacked a Britney request from the search fallthrough).
+    if e["kind"] == "artist" and " " not in e["norm"] and len(e["norm"]) >= 4:
+        for tok in qtokens:
+            if len(tok) >= 4:
+                ts = fuzz.ratio(_collapse(tok), e["collapsed"])
+                if ts >= 90:
+                    score = max(score, ts)
+    return score
+
+
+async def _resolve_library(query: str, media_type: str | None) -> dict | None:
+    """Best library match for a (possibly misspelled) query, or None. Same
+    bucket precedence + thresholds as the search ranker."""
+    entries = await _ensure_index()
+    qn = _norm(query)
+    if not entries or not qn:
+        return None
+    # "baby beluga by raffi" — the by-tail wrecks a whole-string ratio against
+    # the track name; score with and without it.
+    qn2 = re.sub(r"\bby [a-z0-9 ]+$", "", qn).strip()
+    variants = [(qn, _collapse(qn), qn.split())]
+    if qn2 and qn2 != qn:
+        variants.append((qn2, _collapse(qn2), qn2.split()))
+    best: dict[str, tuple[float, dict]] = {}
+    for e in entries:
+        s = max(_entry_score(e, *v) for v in variants)
+        cur = best.get(e["kind"])
+        # Ties go to locally-mapped items: of two library albums named "Baby
+        # Beluga", play the one whose files we own.
+        if cur is None or (s, e["local"]) > (cur[0], cur[1]["local"]):
+            best[e["kind"]] = (s, e)
+    if media_type in _RESULT_ATTR:          # user literally named the type
+        hit = best.get(media_type)
+        if hit and hit[0] >= 60:
+            return {**hit[1], "score": hit[0]}
+        return None
+    for kind, threshold in _BUCKETS:
+        hit = best.get(kind)
+        if hit and hit[0] >= threshold:
+            return {**hit[1], "score": hit[0]}
+    return None
 
 
 # --------------------------------------------------------------------------
@@ -180,19 +301,32 @@ async def play(query: str | None, media_type: str | None = None) -> dict:
     if not query:
         await client.player_queues.queue_command_resume(qid)
         return {"kind": "resume", "name": None}
-    results = await client.music.search(query, media_types=SEARCH_TYPES, limit=10)
-    pick = _rank(query, results, media_type)
-    if pick is None:
-        raise LookupError(f"no results for {query!r}")
-    item, kind = pick
+    # Library index first (survives ASR misspellings); MA search only when the
+    # library has nothing close.
+    sel = None
+    via = "library-index"
+    try:
+        sel = await _resolve_library(query, media_type)
+    except Exception as exc:  # noqa: BLE001 — resolver trouble must not kill play
+        log.warning("library resolver failed, falling back to search: %s", exc)
+    if sel is None:
+        via = "search"
+        results = await client.music.search(query, media_types=SEARCH_TYPES, limit=10)
+        pick = _rank(query, results, media_type)
+        if pick is None:
+            raise LookupError(f"no results for {query!r}")
+        item, kind = pick
+        sel = {"kind": kind, "name": item.name, "uri": item.uri,
+               "artist": _artist_of(item)}
     # Artist/playlist get shuffle (fresh mix each time); album/track play in order.
-    shuffle = kind in ("artist", "playlist")
+    shuffle = sel["kind"] in ("artist", "playlist")
     await client.player_queues.queue_command_shuffle(qid, shuffle)
-    await client.player_queues.play_media(qid, item.uri, option=QueueOption.REPLACE)
-    log.info("play_music %r -> %s %r (%s, shuffle=%s)",
-             query, kind, item.name, item.uri, shuffle)
-    return {"kind": kind, "name": item.name, "artist": _artist_of(item),
-            "uri": item.uri, "shuffle": shuffle}
+    await client.player_queues.play_media(qid, sel["uri"], option=QueueOption.REPLACE)
+    log.info("play_music %r -> %s %r (%s, shuffle=%s, via=%s, score=%s)",
+             query, sel["kind"], sel["name"], sel["uri"], shuffle, via,
+             sel.get("score"))
+    return {"kind": sel["kind"], "name": sel["name"], "artist": sel.get("artist"),
+            "uri": sel["uri"], "shuffle": shuffle}
 
 
 # --------------------------------------------------------------------------
