@@ -594,11 +594,11 @@ appeared, and on reconnect the op flushed (item completed server-side) with NO
 resurrection. WireGuard contract verified against the installed app
 (1.0.20260315): `TunnelManager$IntentReceiver` present, `CONTROL_TUNNELS` is
 protectionLevel=dangerous → runtime grant wired into settings (pre-granted on
-Brad's phone via adb). REMAINING: set the per-device tunnel name in app
-settings on both phones (needs each phone's WG tunnel name) + a real
-away-from-home test of the VPN raise; install + permission + tunnel-name on
-Adrienne's phone. Implementation notes in `voice-notes-android/README.md`.
-Original design below.
+Brad's phone via adb). **Away-test PASSED 2026-07-08**: tunnel name "wg" set in
+settings; wifi dropped, app reopened → VPN auto-connected and synced. Source
+pushed to github-illuminate:bradmontierth/voice-notes-android.git. REMAINING:
+install + permission + tunnel name on Adrienne's phone. Implementation notes in
+`voice-notes-android/README.md`. Original design below.
 The APK (voice recorder + todos/shopping tabs, shares the companion :8768
 backend) is the perfect out-of-home companion: say "add lemon juice" at home,
 pull up the list at Costco. Nothing is exposed to the internet — it's all
