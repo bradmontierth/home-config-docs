@@ -71,7 +71,12 @@ VAD_FRAME_MS = 32   # Silero requires exactly 512-sample (32ms @ 16k) chunks
 # from ending capture before you speak.
 MIN_CAPTURE_MS = int(os.getenv("MIN_CAPTURE_MS", "3000"))
 SILENCE_MS = int(os.getenv("SILENCE_MS", "700"))
-MAX_COMMAND_S = float(os.getenv("MAX_COMMAND_S", "8"))
+# Runaway guard, NOT a human speech budget (wall-clock from speech onset). With
+# Silero endpointing working, the only way to hit this is speech that never
+# stops — a TV/radio near the mic is genuine speech, so silence-endpointing
+# correctly never fires. Keep it far above any real command or question; at 8
+# it was cutting off long asks mid-word.
+MAX_COMMAND_S = float(os.getenv("MAX_COMMAND_S", "20"))
 MIN_VOICED_MS = int(os.getenv("MIN_VOICED_MS", "200"))
 RETRIGGER_GUARD_S = float(os.getenv("RETRIGGER_GUARD_S", "1.5"))
 
@@ -396,6 +401,13 @@ def capture_command(stdout, vad, min_capture_ms: int = MIN_CAPTURE_MS,
         # real time, and counting it as audio silently ate a quarter of the
         # speaking budget — live turns hit "8s" at ~6.3s and cut mid-word.
         if speech and time.time() - speech_t0 >= MAX_COMMAND_S:
+            break
+        # A timer starting to ring mid-capture needs the mic back: the 'stop'
+        # barge-in listener runs in the main loop, which this capture blocks.
+        # Bail with whatever we have — the alarm just started, so at most one
+        # frame of it bled in and the command (if any) is intact.
+        if STATE.current_alarm is not None or STATE.alarm_queue:
+            reason = "alarm_bail"
             break
         b = stdout.read(frame_bytes)
         if len(b) < frame_bytes:

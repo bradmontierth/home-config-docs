@@ -575,9 +575,18 @@ opens with ~1.7s of chime/verify bleed that reads in ~0ms of real time
 tripped after only ~6.3s of real speaking and cut mid-word (logs:
 `reason=max_command total=8000ms wall=6290ms tail_silence=0ms`). Same bug
 class as the onset timeout fixed in 1e5ef10. Fix: the cap is now wall-clock
-from SPEECH ONSET — you get the full 8s of actual speaking time regardless of
+from SPEECH ONSET — you get the full cap of actual speaking time regardless of
 bleed. Silero endpointing itself was verified healthy in the same logs
 (follow-up turn endpointed at exactly 704ms trailing silence, sane voiced%).
+Follow-up decision (same day): **MAX_COMMAND_S re-scoped from human budget to
+runaway guard and raised 8 → 20s.** With Silero endpointing working, the only
+thing that hits the cap is speech that never stops — i.e. a TV/radio near the
+mic (genuine speech, so silence-endpointing correctly never fires); humans
+should never encounter it. The real cost of a long capture was that the
+'stop' barge-in listener lives in the main loop, so a mid-capture alarm
+couldn't be dismissed by voice — added an **alarm bail** inside the capture
+loop (reason=alarm_bail: a timer starting to ring aborts capture with
+whatever was said so far, freeing the mic for the dismiss listener).
 
 ### B. Music via Music Assistant ("okay computer, play Raffi")
 Fully replace Google Home for the NFC-jukebox use case (3-yr-old scans a card
