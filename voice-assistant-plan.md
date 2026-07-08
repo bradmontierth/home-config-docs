@@ -464,6 +464,208 @@ the kiosk view). NEEDS a container rebuild on Beelink `~/voice-pipeline` to
 deploy. Validated 2026-07-07 against the live companion: all 5 intents route
 (qwen), add/fetch/complete round-trip; timers + ask regressions intact.
 
+## Backlog / Future Features (discussed 2026-07-07, not yet built)
+
+Three features brainstormed + designed on 2026-07-07. All judged sound; pieces
+mostly already exist. Not sequenced — capture-for-later.
+
+### A. Live streaming transcription on the dashboard (highest perceived-intelligence win)
+Google/Alexa show words appearing ~500ms after you speak them, with earlier
+words self-correcting as context grows. Today the kiosk just says "Listening" —
+functional but feels dumb. This is about **responsiveness**, not total
+transcription time (Parakeet is ~200ms batch after VAD).
+
+**Approach (user's insight, and it's the right one): repeated full-buffer
+batch, NOT a sliding window.** Every ~400ms during capture, re-decode the
+*entire* audio-so-far as a normal batch and emit it as the partial. Because each
+partial is a full-context batch (not a limited-right-context stream), there is
+**zero accuracy penalty** — the only "word changes retroactively" behavior is the
+genuine one where real future context improves an earlier guess (exactly the
+Google-Home effect). The final partial after endpoint already *is* the
+authoritative full-utterance decode; no separate "replace with batch" pass
+needed. Cost = redundant GPU (~7 decodes for a 3s utterance); free on an
+otherwise-idle home GPU (Parakeet RTF ≈ 0.05, a 3s clip ≈ 150ms).
+
+**Work (revised 2026-07-08 review):** (1) satellite: keep the capture path
+byte-for-byte untouched (min-capture window, Silero endpointing, chime-bleed
+guard are hard-won) — during capture, fire a best-effort `POST /partial` with
+the ENTIRE buffer-so-far every ~400ms. A 3s utterance is 96 KB of PCM16 —
+trivial on LAN. No persistent socket, no protocol change; a bug in partials
+can't break commands because the final `/command/audio` path is unchanged, and
+full-buffer snapshots natively match the snapshot/seq front-end design below.
+(2) orchestrator: `/partial` re-decodes the buffer → emits `partial_transcript
+{text, seq}`; endpoint → existing final decode → `transcript`. (3) dashboard:
+new `partial_transcript` handler, the "Listening" pill morphs into live growing
+text, finalized by `transcript`. **Hard rule: partials are display-only; intent
+parsing ALWAYS runs on the final authoritative `transcript`, never a partial.**
+Doesn't touch intent/lists/timers logic at all. The reuse-`/parakeet/realtime`
+question is ANSWERED (2026-07-08): its docs state it is micro-batch per ~2s
+chunk with NO partial/revision events — choppy 2s finals, no cross-chunk
+context. Do NOT reuse it; the re-batch loop wins on accuracy AND latency.
+
+**Front-end reconciliation (all client-side; server stays dumb).** Every partial
+is a **complete snapshot, not a delta** — that single property gives both
+flicker-free rendering and immunity to falling behind. Server emits
+`partial_transcript {text, seq}` full strings every ~400ms + one final
+`transcript {text}`.
+
+- *Flicker-free render = word-level spans + longest-common-prefix diff.* Do NOT
+  `textContent = wholeString` each tick (restarts per-word animations, relays out
+  the whole node). Render **one `<span>` per word**, keep a parallel word array.
+  On each partial: tokenize → walk from index 0 while `old[i]===new[i]` (the
+  **stable prefix** — those spans are never touched, so no flicker/no animation
+  restart) → from the first divergence (the **unstable tail**) update existing
+  spans in place, append new spans with a ~120ms opacity fade-in so new words
+  "arrive", and drop trailing spans if a revision *shortened* the hypothesis
+  (rare). Word-granularity on purpose: ASR revisions are whole-word ("to"→"two")
+  and live in the trailing/recent-audio region, so a prefix compare matches how
+  hypotheses actually move; a mid-sentence flip re-rendering its tail is
+  acceptable and rare once right-context locks the prefix.
+- *Never fall behind = monotonic snapshot guard.* Reconcile is microseconds
+  (dozens of words), never the bottleneck; the real risk is bursty/out-of-order
+  WS delivery. Because each message is self-sufficient, just render the newest
+  and discard stale ones: track `lastSeq`, `if (msg.seq <= lastSeq) return`. Under
+  load you can skip intermediate frames and the display stays correct — it jumps
+  forward. (Deltas wouldn't allow this; snapshots do — the payoff for sending
+  cumulative full strings.)
+- *"Gray then commits" polish (optional, but it's the ack cue).* Tail/new words
+  render ~60% opacity; a word that survives ≥1 cycle in the stable prefix gets a
+  `committed` class (full opacity) — the prefix visibly hardening behind the live
+  tail *is* the "yep, I heard that" acknowledgement. Final `transcript` → one last
+  reconcile, freeze all to committed, snap (no fade).
+- *Layout:* growing caption in a `flex-wrap` container anchored at a fixed top,
+  words wrapping downward, so new words extend rather than shoving existing ones
+  onto new lines. Reconciliation lives in the existing `handleAssistantEvent`
+  (`app.js`). One thing NOT to do yet: have the server compute a "stable prefix
+  length" from its own successive decodes — the client diff is cheap enough that
+  coupling the server to it isn't worth it.
+
+### B. Music via Music Assistant ("okay computer, play Raffi")
+Fully replace Google Home for the NFC-jukebox use case (3-yr-old scans a card
+today; add voice). New `play_music` intent → deterministic MA call → the
+existing squeezelite/MA jukebox player (`Kitchen-Big-Speakers`, MA queue
+`e4:5f:01:67:1e:56`).
+
+**Verified against the live server 2026-07-08 (MA 2.6.3, Beelink :8095).** The
+API is **WebSocket JSON-RPC at `/ws`** — there is NO REST `/search`. Use the
+official `music-assistant-client` pip package (async, fits the FastAPI
+orchestrator); commands `music/search` + `player_queues/play_media`. Providers
+confirmed live: `filesystem_local--4Z5yRhf7` and `spotify--my6S2t5X`.
+
+**Local-first is mostly free — MA merges providers in the library.** Real
+"Raffi" search: library artist `library://artist/41` carries BOTH spotify and
+filesystem mappings; owned albums (Baby Beluga) likewise dual-mapped. Playing a
+`library://` URI lets MA pick the stream provider PER TRACK, preferring higher
+quality — local lossless beats Spotify lossy automatically. Rule is simply
+**prefer results with a `library://` URI over provider-only URIs**; no
+threshold-and-fallback ranking layer. Verify with one test play; escape hatch
+if MA ever picks Spotify for an owned track: pass the `filesystem_local`
+provider_mapping URI explicitly.
+
+**Ranking (revised 2026-07-08 review): playlist wins only on strong/near-exact
+name match; bare artist name → library artist, shuffled.** The old "playlist
+named X > artist" order breaks on real data: TWO local playlists match "Raffi"
+("The Best of Raffi", "Raffi kids songs") — playlist-first needs a tiebreak and
+freezes "play Raffi" onto one stale list forever. Artist-shuffle still beats a
+single track (the original concern), plays local files, stays fresh. If the
+3-yr-old needs one canonical mix, name the playlist something she'd actually
+say. Flow: qwen extracts raw `query` + *optional* `media_type` hint → MA search
+→ strong playlist name-match > library artist > album > track. Low confidence →
+just play best guess (no "did you mean" mid-cooking). Transport intents
+(`stop`/`pause`/`next`/`volume`/"what's playing") come nearly free and coexist
+with the NFC jukebox (both drive the same player).
+
+**Ducking is part of THIS feature, not TBD.** Today music-defeats-wake is
+theoretical; `play_music` makes it constant. Build the duck (pause or volume
+drop via the same MA client) on stage-1 trigger, and TEST wake recall with
+music at normal volume before trusting voice "stop" (the TONOR can't AEC audio
+it didn't play). Add a dashboard now-playing card with pause/skip/stop buttons
+as the guaranteed fallback (matches the timer-card pattern).
+
+### C. Companion Android APK: offline-first list sync + seamless auto-VPN — BUILT 2026-07-08
+
+**Status: built, installed on Brad's Pixel (v0.2.0), published to
+`/home/pi/apks/voice-notes-latest.apk`.** Verified live on-device: shared
+unfiltered reads render the same items the companion serves; quick-add ("+ Add"
+on a list tab) → outbox → companion note-sync+analyze → typed item round-trips;
+offline test (companion container stopped): Done on an item hid it locally,
+amber "Offline — showing saved list · synced 1m ago · 1 change waiting" banner
+appeared, and on reconnect the op flushed (item completed server-side) with NO
+resurrection. WireGuard contract verified against the installed app
+(1.0.20260315): `TunnelManager$IntentReceiver` present, `CONTROL_TUNNELS` is
+protectionLevel=dangerous → runtime grant wired into settings (pre-granted on
+Brad's phone via adb). REMAINING: set the per-device tunnel name in app
+settings on both phones (needs each phone's WG tunnel name) + a real
+away-from-home test of the VPN raise; install + permission + tunnel-name on
+Adrienne's phone. Implementation notes in `voice-notes-android/README.md`.
+Original design below.
+The APK (voice recorder + todos/shopping tabs, shares the companion :8768
+backend) is the perfect out-of-home companion: say "add lemon juice" at home,
+pull up the list at Costco. Nothing is exposed to the internet — it's all
+LAN/WireGuard.
+
+**Core reframe: decouple read from write.** Render list views from a local
+cache, never a live fetch — and **reads are ALREADY cache-backed** (2026-07-08
+code review: item fetch is best-effort, rendering always reads the local DB).
+The write side is the gap, and it's a live BUG, not a nice-to-have:
+`completeTask`/`deleteTask` (MainActivity) call the companion, SILENTLY swallow
+network failure, and update the local DB anyway — the next successful sync
+`replaceItems` from the server **resurrects everything checked off offline**.
+Check off 20 items at Costco with VPN down → all 20 come back. Fix: an
+**outbox** table of pending ops; on sync, replay the outbox FIRST (404 on
+delete = success), THEN pull `replaceItems` — and NEVER pull while the outbox
+is non-empty (that ordering is what prevents resurrection). Sync on
+open/resume + tab switch reconciles; a nightly background poll stays
+unnecessary. **Gotcha:** probe the actual companion endpoint with a short
+timeout — don't trust Android's "internet available" (true on Costco wifi while
+the LAN backend is unreachable).
+
+**Shared-list mismatch (MUST fix before this replaces Keep):** the app fetches
+`GET /api/items?user=<device user>`, but the kitchen assistant files everything
+under LIST_OWNER=brad and lists are household-shared (2026-07-07 decision) — on
+Adrienne's phone, voice-added items NEVER appear. The companion already
+supports unfiltered reads (`user` is optional on `/api/items`). Drop the user
+filter for item reads; keep the device user for note authorship only.
+
+**Offline adds need a pending state:** adds go through the companion's
+server-side LLM analyze, so an offline add can't produce a typed item locally.
+Queue the raw text in the outbox and render a "pending" placeholder row so an
+add at Costco isn't invisible until sync.
+
+**Auto-VPN (user already has WireGuard's "Allow remote control from other apps"
+ON):** on backend-probe failure, proactively fire the WireGuard control intent so
+future opens are seamless without her thinking about VPN. It's **fire-and-verify**
+(the broadcast returns nothing; the reachability probe is the source of truth):
+1. Probe backend (short timeout, real endpoint).
+2. Fail → broadcast `com.wireguard.android.action.SET_TUNNEL_UP`,
+   `setPackage("com.wireguard.android")`, extra
+   `com.wireguard.android.extra.TUNNEL_NAME=<tunnel>` (idempotent — no-op if
+   already up, so no need to query state first). App likely needs the
+   `com.wireguard.android.permission.CONTROL_TUNNELS` permission in its manifest.
+3. Poll the probe with backoff (~500ms up to ~5s, brief "Connecting…") — WG's
+   handshake takes a second or two.
+4. Pass → sync + flush outbox (silent; VPN consent already granted since she uses
+   WG, so no dialog). Timeout → stale banner ("Couldn't reach home — showing
+   saved list"), the safety net for when the server is genuinely down.
+
+**Guardrails:** only ever `SET_TUNNEL_UP`, never `DOWN` (she leaves it on; don't
+manage teardown). Attempt once per open (or rate-limit) — don't re-raise in a
+loop if the server's actually down. Start on-open only; a foreground
+network-change listener is a nice-to-have; do NOT auto-raise VPN from the
+background (invasive + Android background-execution limits). Tunnel name is a
+**per-device setting** (two phones, likely two tunnel names). Rejected
+alternatives: embedding a tunnel via wireguard-android GoBackend (becomes its own
+VPN app — overkill) and a manual "Connect" button (auto is smoother since the
+remote-control setting is already on). Caveat: WG's intent API has drifted across
+app versions — verify action strings against the installed build before relying
+on it.
+
+**Optional polish (later):** companion already does FCM pushes → a silent
+data-push on list change ("something changed, sync when convenient") buys
+Keep-grade freshness with no background polling. And a small "recently
+completed" strike-through section (companion keeps `status=completed` rows)
+preserves the in-store "did I already grab that?" glance that Keep gives.
+
 ## Latency Budget (measured where noted)
 
 | Stage | Time |
