@@ -551,19 +551,33 @@ revisions, fade-in tail, seq guard, and a 1.5s post-final straggler block. New
 turns without a `wake_confirmed` (follow-ups) reset via a `turnDone` flag set
 on `response`. Env knobs: `PARTIALS_ENABLED` (default on), `PARTIAL_INTERVAL_MS`
 (400) on the satellite.
-**Design decision made during build: partials fire on WAKE turns only, not
-follow-up captures.** A follow-up capture hears any room speech, and the
-silent-drop rule says chatter the orchestrator rejects must be invisible on the
-dashboard — streaming its words live during capture (before the intent gate can
-run) would break that. Follow-ups keep the Listening pill + final-transcript
-flow. Verified E2E with simulated growing-prefix posts (TTS clip → 400ms PCM
+**Partials fire on wake AND follow-up turns (user call, 2026-07-08).** I first
+gated them to wake turns to protect the silent-drop rule (follow-up captures
+hear any room speech, before the intent gate runs). Brad's reasoning for
+including follow-ups: the unobtrusiveness rule is about AUDIO (no chime, no
+spoken "sorry") — captions are silent and only visible if you're already
+looking at the dashboard, and it's a local pipeline so live transcription of
+room speech isn't a privacy signal to hide. Mechanism: a dropped-chatter
+follow-up sends nothing after its partials, so the dashboard re-arms a 6s hide
+timer on every partial (never pins the popup) and the caption just fades;
+`thinking`/`transcript` clear that timer once a turn turns actionable.
+Verified E2E with simulated growing-prefix posts (TTS clip → 400ms PCM
 prefixes → `/partial` → dashboard `/api/live` websocket): captions grew
 `'Set a tim' → 'Set a timer for' → … → 'Set a timer for 10 minutes for the
 pasta'`, mid-word truncations self-corrected on the next snapshot, decode kept
 the 400ms cadence. Reconciler unit-tested (grow / revise-in-place / shorten /
-final-freeze / stable-prefix untouched). Deployed: satellite restarted (mode
-re-asserted active), orchestrator + dashboard rebuilt. Pending: first live
-voice test in the kitchen.
+final-freeze / stable-prefix untouched). Live-voice tested 2026-07-08: works.
+
+**Capture bug found via the first live captions test (fixed 2026-07-08): the
+max-command cap counted AUDIO duration, not wall time.** The capture buffer
+opens with ~1.7s of chime/verify bleed that reads in ~0ms of real time
+(deliberately un-drained for run-together commands), so `MAX_COMMAND_S=8`
+tripped after only ~6.3s of real speaking and cut mid-word (logs:
+`reason=max_command total=8000ms wall=6290ms tail_silence=0ms`). Same bug
+class as the onset timeout fixed in 1e5ef10. Fix: the cap is now wall-clock
+from SPEECH ONSET — you get the full 8s of actual speaking time regardless of
+bleed. Silero endpointing itself was verified healthy in the same logs
+(follow-up turn endpointed at exactly 704ms trailing silence, sane voiced%).
 
 ### B. Music via Music Assistant ("okay computer, play Raffi")
 Fully replace Google Home for the NFC-jukebox use case (3-yr-old scans a card

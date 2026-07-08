@@ -372,20 +372,31 @@ def capture_command(stdout, vad, min_capture_ms: int = MIN_CAPTURE_MS,
         wake-chime bleed + run-together commands; ~0 for follow-ups, no chime).
     After speech, endpoint on SILENCE_MS trailing silence.
     `partials`: stream live-caption snapshots to the orchestrator while
-    capturing. Wake turns only — a follow-up capture hears ANY room speech, and
-    background chatter the orchestrator silently drops must stay invisible on
-    the dashboard (streaming its words live would break that rule)."""
+    capturing. On for wake AND follow-up turns (user call 2026-07-08): captions
+    are silent and only visible if you're looking at the dashboard, so they
+    don't violate the follow-ups-are-unobtrusive rule the way audio would —
+    and it's a local pipeline, so seeing chatter transcribed isn't creepy.
+    Dropped-chatter captions just fade out (dashboard re-arms a short hide
+    timer per partial)."""
     if onset_ms is None:
         onset_ms = min_capture_ms
     frame_bytes = SileroVad.CHUNK * 2   # 512 samples * int16
     vad.reset()                         # fresh recurrent state per utterance
     frames: list[bytes] = []
     speech = False
+    speech_t0 = 0.0
     silence_ms = voiced_ms = total_ms = 0
     last_partial_at = 0
     reason = "max_command"
     t0 = time.time()
-    while total_ms < MAX_COMMAND_S * 1000:
+    while True:
+        # Max-command cap is WALL-CLOCK FROM SPEECH ONSET, not audio duration
+        # (same bug class as the onset timeout, fixed 2026-07-08): the capture
+        # buffer opens with ~1.7s of chime/verify bleed that reads in ~0ms of
+        # real time, and counting it as audio silently ate a quarter of the
+        # speaking budget — live turns hit "8s" at ~6.3s and cut mid-word.
+        if speech and time.time() - speech_t0 >= MAX_COMMAND_S:
+            break
         b = stdout.read(frame_bytes)
         if len(b) < frame_bytes:
             reason = "stream_end"
@@ -397,6 +408,8 @@ def capture_command(stdout, vad, min_capture_ms: int = MIN_CAPTURE_MS,
         except Exception:  # noqa: BLE001
             is_speech = False
         if is_speech:
+            if not speech:
+                speech_t0 = time.time()
             speech = True
             silence_ms = 0
             voiced_ms += VAD_FRAME_MS
@@ -497,7 +510,7 @@ def run_followups(stdout, vad) -> None:
         except Exception:  # noqa: BLE001
             pass
         cmd = capture_command(stdout, vad, min_capture_ms=FOLLOWUP_MIN_MS,
-                              onset_ms=FOLLOWUP_WINDOW_MS)
+                              onset_ms=FOLLOWUP_WINDOW_MS, partials=True)
         if not cmd:
             return                          # quiet window -> conversation over
         try:
