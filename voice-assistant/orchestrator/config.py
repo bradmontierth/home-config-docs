@@ -57,6 +57,10 @@ OPENROUTER_WEB_ENGINE = os.getenv("OPENROUTER_WEB_ENGINE", "native")
 # Household timezone, stamped into the ask system prompt so the model can
 # resolve "today" / "last night" (the container itself runs UTC).
 ASK_TIMEZONE = os.getenv("ASK_TIMEZONE", "America/Denver")
+# How much page content each search returns to the model (low/medium/high).
+# high costs a cent or two more per search but thin results made the model
+# confidently report "no game yesterday" on a day with two matches.
+OPENROUTER_WEB_CONTEXT = os.getenv("OPENROUTER_WEB_CONTEXT", "high")
 
 # --- lists (todo / shopping / reminders via voice-notes companion) --------
 # The companion is note-centric: sync a note then analyze it to extract typed

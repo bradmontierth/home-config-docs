@@ -71,11 +71,15 @@ async def stream_chat(
     }
     if config.OPENROUTER_WEB_SEARCH:
         body["plugins"] = [{"id": "web", "engine": config.OPENROUTER_WEB_ENGINE}]
+        body["web_search_options"] = {
+            "search_context_size": config.OPENROUTER_WEB_CONTEXT
+        }
     headers = {
         "Authorization": f"Bearer {_read_key()}",
         "Content-Type": "application/json",
         "X-Title": "Kitchen Voice Assistant",
     }
+    gen_id, usage = None, None
     async with httpx.AsyncClient(timeout=60) as client:
         async with client.stream(
             "POST", f"{config.OPENROUTER_BASE_URL}/chat/completions",
@@ -84,15 +88,36 @@ async def stream_chat(
             if r.status_code >= 400:
                 detail = (await r.aread()).decode("utf-8", "ignore")[:300]
                 raise RuntimeError(f"OpenRouter {r.status_code}: {detail}")
-            async for line in r.aiter_lines():
-                if not line or not line.startswith("data:"):
-                    continue
-                data = line[5:].strip()
-                if data == "[DONE]":
-                    break
-                try:
-                    delta = json.loads(data)["choices"][0]["delta"].get("content")
-                except (json.JSONDecodeError, KeyError, IndexError):
-                    continue
-                if delta:
-                    yield delta
+            try:
+                async for line in r.aiter_lines():
+                    if not line or not line.startswith("data:"):
+                        continue
+                    data = line[5:].strip()
+                    if data == "[DONE]":
+                        break
+                    try:
+                        chunk = json.loads(data)
+                    except json.JSONDecodeError:
+                        continue
+                    gen_id = chunk.get("id") or gen_id
+                    usage = chunk.get("usage") or usage
+                    try:
+                        delta = chunk["choices"][0]["delta"].get("content")
+                    except (KeyError, IndexError):
+                        continue
+                    if delta:
+                        yield delta
+            finally:
+                # The final chunk carries usage — including whether the web
+                # plugin actually searched. Log it so "did search fire?" is
+                # answerable from docker logs (the deltas alone can't tell).
+                searches = (usage or {}).get(
+                    "server_tool_use_details", {}
+                ).get("web_search_requests", 0)
+                log.info(
+                    "generation %s: web_searches=%s cost=$%.4f tokens=%s",
+                    gen_id,
+                    searches,
+                    (usage or {}).get("cost") or 0.0,
+                    (usage or {}).get("total_tokens", "?"),
+                )
