@@ -43,7 +43,13 @@ OPENROUTER_MODEL = os.getenv("OPENROUTER_MODEL", "openai/gpt-5.4")
 OPENROUTER_KEY_FILE = os.getenv("OPENROUTER_API_KEY_FILE", "")
 # Ceiling on generated tokens. Also keeps OpenRouter's pre-auth cost check happy
 # when the account balance is low (unbounded max_tokens can trip a 402).
-OPENROUTER_MAX_TOKENS = int(os.getenv("OPENROUTER_MAX_TOKENS", "700"))
+# NOTE: on reasoning models this cap covers reasoning AND the answer — 700 was
+# starving deliberation entirely (~69 reasoning tokens, one-glance search reads).
+OPENROUTER_MAX_TOKENS = int(os.getenv("OPENROUTER_MAX_TOKENS", "4000"))
+# Reasoning effort for the smart model (empty string disables the param).
+# "medium" lets it think about search results and re-search; the spoken filler
+# masks the added seconds.
+OPENROUTER_REASONING_EFFORT = os.getenv("OPENROUTER_REASONING_EFFORT", "medium")
 # Sentinel separating the short spoken answer from the full dashboard answer.
 ASK_SENTINEL = os.getenv("ASK_SENTINEL", "===MORE===")
 # Web search via OpenRouter's web plugin. "native" passes through to the

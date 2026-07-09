@@ -74,6 +74,8 @@ async def stream_chat(
         body["web_search_options"] = {
             "search_context_size": config.OPENROUTER_WEB_CONTEXT
         }
+    if config.OPENROUTER_REASONING_EFFORT:
+        body["reasoning"] = {"effort": config.OPENROUTER_REASONING_EFFORT}
     headers = {
         "Authorization": f"Bearer {_read_key()}",
         "Content-Type": "application/json",
@@ -114,10 +116,15 @@ async def stream_chat(
                 searches = (usage or {}).get(
                     "server_tool_use_details", {}
                 ).get("web_search_requests", 0)
+                reasoning = (usage or {}).get(
+                    "completion_tokens_details", {}
+                ).get("reasoning_tokens", 0)
                 log.info(
-                    "generation %s: web_searches=%s cost=$%.4f tokens=%s",
+                    "generation %s: web_searches=%s reasoning_tokens=%s "
+                    "cost=$%.4f tokens=%s",
                     gen_id,
                     searches,
+                    reasoning,
                     (usage or {}).get("cost") or 0.0,
                     (usage or {}).get("total_tokens", "?"),
                 )
