@@ -30,6 +30,7 @@ import asyncio
 import logging
 import re
 import time
+import unicodedata
 
 import aiohttp
 from music_assistant_client.client import MusicAssistantClient
@@ -128,10 +129,17 @@ async def _refresh_index() -> None:
                 if not norm:
                     continue
                 arts = getattr(it, "artists", None) or []
+                artist = arts[0].name if arts else None
+                # artist+name in one string lets token-set scoring absorb a
+                # spoken composer/artist qualifier ("Chopin's ballade 4",
+                # "baby beluga by raffi") without stripping heuristics.
+                full = _norm(f"{artist} {it.name}") if artist else norm
                 entries.append({
                     "kind": kind, "name": it.name, "uri": it.uri,
                     "norm": norm, "collapsed": _collapse(norm),
-                    "artist": arts[0].name if arts else None,
+                    "full": full, "fullc": _collapse(full),
+                    "ftoks": frozenset(full.split()),
+                    "artist": artist,
                     "local": _has_local(it),
                 })
             if len(page) < _PAGE:
@@ -171,12 +179,40 @@ def _collapse(s: str) -> str:
 
 def _entry_score(e: dict, qn: str, qc: str, qtokens: list[str]) -> float:
     score = max(fuzz.ratio(qn, e["norm"]), fuzz.ratio(qc, e["collapsed"]))
-    # A garbled multiword transcript ("lenny rafi") can still contain a
+    # Tracks/albums: formal names carry tails the user never says ("Ballade
+    # No. 4 IN F MINOR, OP. 52") and queries carry an artist the name doesn't
+    # ("CHOPIN'S ballade 4"). token_set_ratio scores on the exact-token
+    # intersection vs each side's leftovers, and matching against artist+name
+    # ("full") absorbs the spoken qualifier — "chopin s balade 4" ∩
+    # "frederic chopin balade 4 in f minor op 52" ≈ 93. Exact-token
+    # intersection is what keeps this safe: "spears" never intersects
+    # "sparks". Multiword queries only — a single token would "fully match"
+    # anything containing it.
+    if e["kind"] in ("track", "album") and len(qtokens) >= 2:
+        ts = max(fuzz.token_set_ratio(qn, e["full"]),
+                 fuzz.token_set_ratio(qc, e["fullc"]))
+        # Weight by how much of the NAME the query explains, so "the fourth
+        # ballade" prefers the track "Ballade No. 4 in F minor" over a
+        # compilation album whose title happens to list its contents
+        # ("...Piano Concerto No.2 - Ballade No.4 - Berceuse..."). A perfect
+        # full-name match keeps 100; sprawling titles bleed a few points.
+        cov = len(e["ftoks"].intersection(qtokens)) / (len(e["ftoks"]) or 1)
+        # +1 track nudge, subset path only: a query that's a fragment of a
+        # longer title names a PIECE, and compilation-album titles that list
+        # their contents ("...Ballade No.4 - Berceuse...") otherwise tie the
+        # real track exactly. Full-name matches score via plain ratio above,
+        # so "baby beluga" still ties album-vs-track and keeps the album.
+        bonus = 1.0 if e["kind"] == "track" else 0.0
+        score = max(score, ts * (0.85 + 0.15 * cov) + bonus)
+    # A garbled SHORT transcript ("lenny rafi") can still contain a
     # single-word ARTIST name — score each query token too, but only accept a
     # near-exact token hit (≥90): this path is for recovering a name buried in
     # debris, and at lower bars it invents matches ("spears" ≈ track "Sparks"
-    # at 83 hijacked a Britney request from the search fallthrough).
-    if e["kind"] == "artist" and " " not in e["norm"] and len(e["norm"]) >= 4:
+    # at 83 hijacked a Britney request from the search fallthrough). ≤3 tokens
+    # only: a longer query names a PIECE ("Chopin's ballade number four") and
+    # the bare composer token must not steal it from the track bucket.
+    if (e["kind"] == "artist" and len(qtokens) <= 3
+            and " " not in e["norm"] and len(e["norm"]) >= 4):
         for tok in qtokens:
             if len(tok) >= 4:
                 ts = fuzz.ratio(_collapse(tok), e["collapsed"])
@@ -211,19 +247,52 @@ async def _resolve_library(query: str, media_type: str | None) -> dict | None:
         if hit and hit[0] >= 60:
             return {**hit[1], "score": hit[0]}
         return None
-    for kind, threshold in _BUCKETS:
+    for kind, threshold in (("playlist", 92), ("artist", 80)):
         hit = best.get(kind)
         if hit and hit[0] >= threshold:
             return {**hit[1], "score": hit[0]}
+    # Album vs track compete on SCORE (ties → album): strict bucket order let
+    # any qualifying album beat a better-matching track ("the fourth ballade"
+    # lost to a concert-program album title that merely mentions Ballade 4).
+    contenders = [hit for kind, threshold in (("album", 85), ("track", 80))
+                  if (hit := best.get(kind)) and hit[0] >= threshold]
+    if contenders:
+        hit = max(contenders, key=lambda h: h[0])
+        return {**hit[1], "score": hit[0]}
     return None
 
 
 # --------------------------------------------------------------------------
 # search + ranking
 # --------------------------------------------------------------------------
+# Spoken numbers vs printed track names ("ballade number four" vs "Ballade
+# No. 4"): normalize both sides to bare digits so edit distance never has to
+# bridge "four"↔"4". Applied inside _norm, so titles containing number WORDS
+# normalize identically on the index and the query ("One Light, One Sun").
+_NUM_WORDS = {
+    "one": "1", "two": "2", "three": "3", "four": "4", "five": "5",
+    "six": "6", "seven": "7", "eight": "8", "nine": "9", "ten": "10",
+    "eleven": "11", "twelve": "12", "thirteen": "13", "fourteen": "14",
+    "fifteen": "15", "sixteen": "16", "seventeen": "17", "eighteen": "18",
+    "nineteen": "19", "twenty": "20",
+    "first": "1", "second": "2", "third": "3", "fourth": "4", "fifth": "5",
+    "sixth": "6", "seventh": "7", "eighth": "8", "ninth": "9", "tenth": "10",
+    "eleventh": "11", "twelfth": "12", "thirteenth": "13", "fourteenth": "14",
+    "fifteenth": "15", "sixteenth": "16", "seventeenth": "17",
+    "eighteenth": "18", "nineteenth": "19", "twentieth": "20",
+    "opus": "op",
+}
+
+
 def _norm(s: str) -> str:
-    s = re.sub(r"[^a-z0-9 ]", " ", (s or "").lower())
+    # Fold accents BEFORE the ascii strip: "Frédéric" must become "frederic",
+    # not "fr d ric" (three junk tokens that wreck token-set coverage).
+    s = unicodedata.normalize("NFKD", s or "").encode("ascii", "ignore").decode()
+    s = re.sub(r"[^a-z0-9 ]", " ", s.lower())
     s = re.sub(r"\bthe\b", " ", s)
+    s = " ".join(_NUM_WORDS.get(t, t) for t in s.split())
+    # "no 4" / "number 4" / "num 4" -> "4" ("#4" already lost its # above)
+    s = re.sub(r"\b(?:no|number|num)\s+(\d+)\b", r"\1", s)
     return " ".join(s.split())
 
 

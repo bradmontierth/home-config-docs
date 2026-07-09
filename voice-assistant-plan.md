@@ -656,6 +656,32 @@ What shipped:
   MA search unchanged for non-library discovery. ~6ms per resolve on the
   Beelink vs ~800ms for the qwen parse. Verified: all three real mangled
   transcripts → library://artist/41.
+- **Classical-piece lexical layer (added after 2nd live test: "Chopin's
+  ballade number four" shuffled random Chopin — the piece query lost to the
+  bare composer).** Deliberately NOT embeddings: text embeddings are weak at
+  exact numbers ("ballade no 4" ≈ "ballade no 1" in vector space), so for
+  numbered classical pieces they'd confidently pick the wrong one; embeddings
+  remain a possible phase-2 fallback for nickname/vibes queries ("raindrop
+  prelude"). What shipped instead, all in music.py scoring: (1) number
+  normalization inside _norm — word numbers/ordinals→digits, opus→op, and
+  "no/number/num + digit"→digit, so "ballade number four" ≡ "Ballade No. 4";
+  (2) unicode accent folding BEFORE the ascii strip ("Frédéric"→"frederic",
+  not "fr d ric" — the junk tokens deflated token-set coverage and made the
+  Garrick Ohlsson duplicate beat the canonical recording); (3)
+  token_set_ratio for track/album entries against an artist-prefixed name
+  string ("full"), so a spoken composer qualifier and an unspoken formal
+  tail ("in F Minor, Op. 52") both stop wrecking the match — exact-token
+  intersection keeps it safe (no "spears"≈"sparks"); weighted by
+  query-coverage-of-name and a +1 TRACK nudge on this subset path only,
+  because compilation-album titles that list their contents ("...Piano
+  Concerto No.2 - Ballade No.4 - Berceuse...") otherwise tie the real track
+  exactly (full-name matches score via plain ratio, so "baby beluga" still
+  prefers the album); (4) the single-word-artist token rescue is capped at
+  ≤3-token queries — longer queries name a piece and the composer token must
+  not steal them (that was the actual live failure). Verified: "chopin's
+  ballade number four" / "ballade number four" / "the fourth ballade" all →
+  the canonical 'Ballade No. 4 in F Minor, Op. 52' track; chopin/rafi/baby
+  beluga/wheels-on-the-bus/britney-fallthrough all unchanged.
 
 Original design below.
 
