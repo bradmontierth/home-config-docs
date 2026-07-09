@@ -16,6 +16,7 @@ caption, response, and timer cards.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import re
@@ -138,6 +139,8 @@ async def _startup() -> None:
     ENGINE = TimerEngine(on_expire=_on_timer_expire)
     ENGINE.start()
     music_mod.start()
+    # Render the ask filler WAVs now so the first ask doesn't pay TTS latency.
+    asyncio.create_task(ask_mod.ensure_fillers())
     log.info("orchestrator up; %d active timer(s) restored", len(ENGINE.active()))
 
 

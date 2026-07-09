@@ -61,6 +61,17 @@ ASK_TIMEZONE = os.getenv("ASK_TIMEZONE", "America/Denver")
 # high costs a cent or two more per search but thin results made the model
 # confidently report "no game yesterday" on a day with two matches.
 OPENROUTER_WEB_CONTEXT = os.getenv("OPENROUTER_WEB_CONTEXT", "high")
+# Spoken filler ("Let me look that up…") pushed to the satellite the moment an
+# ask heads to the smart model, masking the 3-7s round trip. Pre-rendered WAVs;
+# playback serializes behind the satellite's PLAYBACK_LOCK. Empty URL disables.
+ASK_FILLER = os.getenv("ASK_FILLER", "1") not in ("0", "false", "no", "")
+SATELLITE_SPEAK_URL = os.getenv(
+    "SATELLITE_SPEAK_URL", "http://192.168.10.24:8781/speak"
+)
+# Follow-up context: recent ask Q+A pairs replayed to the smart model so
+# "but who's playing in it?" works. Turns kept / freshness window.
+ASK_HISTORY_TURNS = int(os.getenv("ASK_HISTORY_TURNS", "4"))
+ASK_HISTORY_TTL_S = int(os.getenv("ASK_HISTORY_TTL_S", "300"))
 
 # --- lists (todo / shopping / reminders via voice-notes companion) --------
 # The companion is note-centric: sync a note then analyze it to extract typed

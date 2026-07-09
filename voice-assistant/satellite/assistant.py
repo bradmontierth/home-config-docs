@@ -294,6 +294,16 @@ def play_wav_bytes(wav_bytes: bytes, is_alarm: bool = False) -> None:
             log(f"aplay bytes failed: {exc}")
 
 
+def speak_url(url: str) -> None:
+    """Fetch a WAV from the orchestrator and play it. Used for the ask filler
+    ('Let me look that up…') pushed while /command/audio is still in flight;
+    PLAYBACK_LOCK makes the real reply queue behind it instead of colliding."""
+    try:
+        play_wav_bytes(get_bytes(url))
+    except Exception as exc:  # noqa: BLE001
+        log(f"speak playback failed ({url}): {exc}")
+
+
 def play_file(path: Path, is_alarm: bool = False) -> None:
     if not path.exists():
         log(f"missing sound {path}")
@@ -715,6 +725,15 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self._json(200, {"ok": True, "timer_id": body.get("timer_id")})
         elif self.path == "/alarm/dismiss":
             STATE.dismiss.set()
+            self._json(200, {"ok": True})
+        elif self.path == "/speak":
+            url = str(self._read_json().get("url", ""))
+            if not url:
+                self._json(400, {"ok": False, "error": "url required"})
+                return
+            if url.startswith("/"):
+                url = ORCH_BASE + url
+            threading.Thread(target=speak_url, args=(url,), daemon=True).start()
             self._json(200, {"ok": True})
         else:
             self._json(404, {"ok": False})

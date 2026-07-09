@@ -52,6 +52,10 @@ Rules:
 - ask = a general knowledge or factual question NOT about timers: "how many tablespoons in a cup",
   "when do babies start walking", "what temperature is chicken done at", "how do I dice an onion".
   Put the cleaned question in "query". No keyword is needed — natural questions route here.
+  A question that refers back to an earlier exchange is STILL ask, even if it can't stand alone:
+  "when do they play next", "but who's playing in it", "what about tomorrow", "how old is she".
+  The knowledge service keeps the conversation history — pass the question through in "query"
+  as spoken; never route a question to "unclear" just because its subject is a pronoun.
 - add_items = adding things to a shopping or todo list: "add eggs and milk to the shopping list",
   "put paper towels on the list", "add a todo to call the plumber". Leave label/query/item_text null;
   the full command is forwarded to the list service, which figures out the items itself.
@@ -98,6 +102,9 @@ Choose the intent by whether the speech is addressed to you:
 - If it is a clear command to you, use the matching action intent (e.g. "also \
 add butter", "make that fifteen minutes", "and cancel the rice", "scratch my \
 last").
+- A follow-up QUESTION about your previous answer ("but who's playing in it", \
+"when do they play next", "what about tomorrow") is intent "ask" — put it in \
+"query" as spoken.
 - If it clearly seems addressed to you (a command, a request, second person) \
 but you cannot map it to any supported action, use intent "unclear".
 - If it is small talk, a fragment, someone else's conversation, or anything not \

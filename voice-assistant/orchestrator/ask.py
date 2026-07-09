@@ -11,16 +11,94 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
+import random
+import re
 import time
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-from . import config, events, openrouter
+import httpx
+
+from . import clients, config, events, openrouter
 
 log = logging.getLogger("orchestrator.ask")
 
 SENTINEL = config.ASK_SENTINEL
 _STREAM_EMIT_INTERVAL = 0.3  # seconds between dashboard ask_stream flushes
+
+# --- filler: satellite speaks while the smart model works ------------------
+_FILLER_PHRASES = [
+    "Let me look that up for you.",
+    "One sec, checking.",
+    "Good question, let me check.",
+    "Let me search the web real quick.",
+    "Hmm, let me find out.",
+]
+_filler_urls: list[str] = []
+
+
+async def ensure_fillers() -> None:
+    """Pre-render the filler phrases to the audio cache (skipping any WAV that
+    already exists from a previous run). Safe to call repeatedly."""
+    for i, phrase in enumerate(_FILLER_PHRASES):
+        name, url = f"filler-{i}.wav", f"/audio/filler-{i}.wav"
+        if url in _filler_urls:
+            continue
+        path = os.path.join(config.ANNOUNCE_CACHE_DIR, name)
+        if not os.path.exists(path):
+            try:
+                wav = await clients.synthesize(phrase)
+            except Exception as exc:  # noqa: BLE001
+                log.warning("filler TTS failed (%r): %s", phrase, exc)
+                continue
+            with open(path, "wb") as fh:
+                fh.write(wav)
+        _filler_urls.append(url)
+
+
+async def _play_filler() -> None:
+    """Best-effort: tell the satellite to speak a random filler right now,
+    in parallel with the smart-model round trip. Never raises."""
+    if not config.ASK_FILLER or not config.SATELLITE_SPEAK_URL:
+        return
+    if not _filler_urls:
+        await ensure_fillers()          # TTS was down at startup — retry now
+        if not _filler_urls:
+            return
+    try:
+        async with httpx.AsyncClient(timeout=4) as client:
+            await client.post(
+                config.SATELLITE_SPEAK_URL,
+                json={"url": random.choice(_filler_urls)},
+            )
+    except Exception as exc:  # noqa: BLE001
+        log.info("satellite filler dispatch failed: %s", exc)
+
+
+# --- conversation history so follow-up asks have context -------------------
+_history: list[dict] = []  # {"q": str, "a": str, "t": monotonic}
+
+
+def _remember(query: str, answer: str) -> dict:
+    """Record a Q+A pair NOW (a follow-up can arrive while the full answer is
+    still streaming) and return the entry so the streamer can extend it."""
+    entry = {"q": query, "a": answer.strip(), "t": time.monotonic()}
+    _history.append(entry)
+    del _history[:-config.ASK_HISTORY_TURNS]
+    return entry
+
+
+def _history_messages() -> list[dict]:
+    """Recent Q+A pairs as chat messages, oldest first. Stale pairs age out so
+    a fresh question hours later isn't polluted by old context."""
+    cutoff = time.monotonic() - config.ASK_HISTORY_TTL_S
+    out: list[dict] = []
+    for h in _history:
+        if h["t"] >= cutoff and h["a"]:
+            out.append({"role": "user", "content": h["q"]})
+            out.append({"role": "assistant", "content": h["a"]})
+    return out
 
 def _system() -> str:
     now = datetime.now(ZoneInfo(config.ASK_TIMEZONE))
@@ -59,8 +137,22 @@ def _system() -> str:
         "Plain text, no markdown headers or links; if you searched, you may "
         "name sources here.\n\n"
         "Do not offer follow-ups, do not ask questions back, do not mention "
-        "that you are an AI. Always include the separator line."
+        "that you are an AI. Always include the separator line.\n\n"
+        "Earlier questions and answers from the last few minutes may precede "
+        "the current question — use them to resolve references like 'they', "
+        "'it', or 'the game' in follow-ups."
     )
+
+
+# The model sometimes drops search citations into the answer despite the
+# prompt — " ([fifa.com](https://…))" read aloud is a disaster. Strip
+# parenthesized citations entirely; collapse other markdown links to their text.
+_MD_CITATION = re.compile(r"\s*\(\[[^\]]*\]\([^)\s]*\)\)")
+_MD_LINK = re.compile(r"\[([^\]]*)\]\([^)\s]*\)")
+
+
+def _strip_links(text: str) -> str:
+    return _MD_LINK.sub(r"\1", _MD_CITATION.sub("", text)).strip()
 
 
 def _spoken_fallback(text: str) -> str:
@@ -80,18 +172,18 @@ def _spoken_fallback(text: str) -> str:
     return spoken or text[:200].strip()
 
 
-async def _stream_full(query: str, initial: str, agen) -> None:
+async def _stream_full(query: str, entry: dict, initial: str, agen) -> None:
     """Drain the rest of the stream, fanning the growing full answer to the
     dashboard. Runs detached from the request that produced the spoken reply."""
     acc = initial
     last = 0.0
     try:
-        await events.emit("ask_stream", query=query, text=acc.strip(), done=False)
+        await events.emit("ask_stream", query=query, text=_strip_links(acc), done=False)
         async for delta in agen:
             acc += delta
             now = time.monotonic()
             if now - last >= _STREAM_EMIT_INTERVAL:
-                await events.emit("ask_stream", query=query, text=acc.strip(), done=False)
+                await events.emit("ask_stream", query=query, text=_strip_links(acc), done=False)
                 last = now
     except Exception as exc:  # noqa: BLE001
         log.warning("ask full-stream failed: %s", exc)
@@ -100,7 +192,8 @@ async def _stream_full(query: str, initial: str, agen) -> None:
             await agen.aclose()
         except Exception:  # noqa: BLE001
             pass
-    await events.emit("ask_full", query=query, text=acc.strip(), done=True)
+    entry["a"] = f"{entry['a']}\n{acc}".strip()
+    await events.emit("ask_full", query=query, text=_strip_links(acc), done=True)
 
 
 async def handle_ask(query: str) -> dict:
@@ -113,8 +206,13 @@ async def handle_ask(query: str) -> dict:
     if not query:
         return {"response": "I didn't catch the question.", "full": "", "ok": False}
 
+    # Speak the filler in parallel — the satellite is blocked on our HTTP
+    # response, so the "let me look that up" must be pushed, not returned.
+    asyncio.create_task(_play_filler())
+
     messages = [
         {"role": "system", "content": _system()},
+        *_history_messages(),
         {"role": "user", "content": query},
     ]
     agen = openrouter.stream_chat(messages)
@@ -147,18 +245,23 @@ async def handle_ask(query: str) -> dict:
     if spoken is None:
         # No sentinel: whole reply is the answer. Speak a truncated version,
         # push the full text to the dashboard now (nothing left to stream).
-        full = acc.strip()
+        full = _strip_links(acc)
         spoken = _spoken_fallback(full)
+        _remember(query, full)
         await events.emit("ask_full", query=query, text=full, done=True)
         return {"response": spoken, "full": full, "ok": bool(full)}
 
     if stream_alive:
-        # Finish the full part in the background so the spoken reply returns now.
-        asyncio.create_task(_stream_full(query, remainder, agen))
+        # Finish the full part in the background so the spoken reply returns
+        # now; remember the spoken part immediately so an instant follow-up
+        # ("but who's playing in it?") already has context.
+        entry = _remember(query, spoken)
+        asyncio.create_task(_stream_full(query, entry, remainder, agen))
     else:
-        await events.emit("ask_full", query=query, text=remainder.strip(), done=True)
+        _remember(query, f"{spoken}\n{remainder}".strip())
+        await events.emit("ask_full", query=query, text=_strip_links(remainder), done=True)
 
     if not spoken:
         spoken = _spoken_fallback(remainder) if remainder else \
             "Here's what I found."
-    return {"response": spoken, "full": remainder.strip(), "ok": True}
+    return {"response": _strip_links(spoken), "full": _strip_links(remainder), "ok": True}
