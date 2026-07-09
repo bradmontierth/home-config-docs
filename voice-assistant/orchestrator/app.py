@@ -29,6 +29,7 @@ from fastapi.responses import FileResponse
 from . import ask as ask_mod
 from . import lists as lists_mod
 from . import music as music_mod
+from . import sports as sports_mod
 from . import clients, config, events, format as fmt, intent as intent_mod, verify
 from .timers import TimerEngine
 
@@ -230,6 +231,9 @@ def _summarize_turn(intent: str, result: dict) -> str:
         return "you asked how much time was left"
     if intent == "ask":
         return f"you asked: {parsed.get('query') or ''}"
+    if intent == "sports":
+        return f"you asked about {parsed.get('query') or 'sports'} and heard: " \
+               f"{(result.get('response') or '')[:100]}"
     if intent == "play_music":
         name = (result.get("music") or {}).get("name")
         return f"you started playing {name}" if name else "you resumed the music"
@@ -529,6 +533,25 @@ async def handle_command(command: str, followup: bool = False) -> dict:
             result["ok"] = True
             if np:
                 await events.emit("show_music", **np)
+
+    elif intent == "sports":
+        sports_result = None
+        try:
+            sports_result = await sports_mod.handle(parsed)
+        except Exception as exc:  # noqa: BLE001 — unofficial API; never fatal
+            log.warning("sports lookup failed, falling back to ask: %s", exc)
+        if sports_result:
+            result.update(sports_result)
+            # Seed ask history so a pronoun follow-up ("who do they play
+            # next?") routed to the smart model knows what we just said.
+            ask_mod.remember(command, sports_result["response"])
+        else:
+            # Unresolvable team/league or ESPN change -> slow-but-right path.
+            await events.emit("ask_thinking", query=command)
+            ask_result = await ask_mod.handle_ask(command)
+            result["response"] = ask_result["response"]
+            result["full"] = ask_result.get("full", "")
+            result["ok"] = ask_result["ok"]
 
     elif intent == "ask":
         query = parsed.get("query") or command

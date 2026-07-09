@@ -17,7 +17,7 @@ INTENTS = (
     "set_timer", "timer_query", "timer_adjust", "timer_cancel",
     "add_items", "set_reminder", "show_todos", "show_shopping", "complete_item",
     "remove_items", "clear_list", "play_music", "music_control", "music_query",
-    "ask", "unclear", "none",
+    "sports", "ask", "unclear", "none",
 )
 
 MUSIC_ACTIONS = ("pause", "resume", "stop", "next", "previous",
@@ -38,7 +38,9 @@ Schema:
   "item_text": for complete_item / remove_items, a phrase describing WHICH item(s) to act on — one item ("eggs"), several ("milk and bread"), a category ("the dairy", "produce"), or a property ("everything orange", "all of it"); else null,
   "list_type": for clear_list / show, which list — "shopping", "todo", or "all"; else null,
   "media_type": for play_music, only when the user NAMES a type — "artist", "album", "track", or "playlist"; else null,
-  "music_action": for music_control, one of {list(MUSIC_ACTIONS)}; else null
+  "music_action": for music_control, one of {list(MUSIC_ACTIONS)}; else null,
+  "sports_action": for sports, "last" (score/result of the most recent or current game) or "next" (upcoming game); else null,
+  "sports_date": for sports, "today" or "yesterday" only when the user SAYS a day like that ("last night" = "yesterday"); else null
 }}
 
 Rules:
@@ -49,6 +51,13 @@ Rules:
 - timer_query = "how much time is left", "how long on the rice". duration_seconds null.
 - timer_adjust = "add 5 minutes to the rice" -> duration_seconds 300; "take 2 minutes off" -> -120.
 - timer_cancel = "cancel the rice timer" (scope one) or "cancel all timers" (scope all).
+- sports = a score, result, or upcoming-game question about a NAMED team or league: "what was the
+  score of the jazz game" (query "jazz", sports_action "last"), "who won the world cup game
+  yesterday" (query "world cup", "last", sports_date "yesterday"), "did the cubs win last night"
+  (query "cubs", "last", "yesterday"), "when do the brewers play next" (query "brewers", "next"),
+  "are there any nba games tonight" (query "nba", "next"). Put the team or league name in "query".
+  If the team is only a pronoun ("when do they play next") or the question is about stats, rosters,
+  standings, or history rather than a game result/schedule, use "ask" instead.
 - ask = a general knowledge or factual question NOT about timers: "how many tablespoons in a cup",
   "when do babies start walking", "what temperature is chicken done at", "how do I dice an onion".
   Put the cleaned question in "query". No keyword is needed — natural questions route here.
@@ -177,6 +186,14 @@ def _validate(data: dict) -> dict:
     if music_action not in MUSIC_ACTIONS:
         music_action = None
 
+    sports_action = data.get("sports_action")
+    if sports_action not in ("last", "next"):
+        sports_action = None
+
+    sports_date = data.get("sports_date")
+    if sports_date not in ("today", "yesterday"):
+        sports_date = None
+
     return {
         "intent": intent,
         "label": label,
@@ -188,4 +205,6 @@ def _validate(data: dict) -> dict:
         "list_type": list_type,
         "media_type": media_type,
         "music_action": music_action,
+        "sports_action": sports_action,
+        "sports_date": sports_date,
     }

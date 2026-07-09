@@ -89,6 +89,12 @@ def _remember(query: str, answer: str) -> dict:
     return entry
 
 
+def remember(query: str, answer: str) -> None:
+    """Public hook: other intents (sports) record their Q+A here so pronoun
+    follow-ups that route to ask ("who do they play next?") have context."""
+    _remember(query, answer)
+
+
 def _history_messages() -> list[dict]:
     """Recent Q+A pairs as chat messages, oldest first. Stale pairs age out so
     a fresh question hours later isn't polluted by old context."""

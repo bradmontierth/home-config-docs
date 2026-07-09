@@ -25,6 +25,7 @@ satellite WAV ─► /wake ─► Parakeet transcribe ─► stage-2 verify ("ok
 | `intent.py` | qwen3-next JSON intent parse, timers schema, validation |
 | `timers.py` | SQLite engine + single asyncio expiry scheduler, restart-safe |
 | `format.py` | spoken phrasing (durations, confirmations) |
+| `sports.py` | scores/schedules from ESPN's unofficial API (structured, no LLM; falls back to ask) |
 | `events.py` | dashboard fan-out + satellite alarm dispatch (both best-effort) |
 | `app.py` | FastAPI wiring |
 
