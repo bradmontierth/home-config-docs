@@ -137,6 +137,7 @@ async def _refresh_index() -> None:
                 entries.append({
                     "kind": kind, "name": it.name, "uri": it.uri,
                     "norm": norm, "collapsed": _collapse(norm),
+                    "skel": _skeleton(norm),
                     "full": full, "fullc": _collapse(full),
                     "ftoks": frozenset(full.split()),
                     "artist": artist,
@@ -177,8 +178,31 @@ def _collapse(s: str) -> str:
     return re.sub(r"(.)\1+", r"\1", s)
 
 
-def _entry_score(e: dict, qn: str, qc: str, qtokens: list[str]) -> float:
+def _skeleton(s: str) -> str:
+    """Sound-spelling skeleton: spaces out, vowel RUNS (y and h count as
+    vowel-ish) collapsed to one marker, doubled consonants squashed. Bridges
+    the ASR class where the SOUND matched but the spelling didn't — Parakeet
+    wrote "Deo" for the track "Day O" (both -> "dV"), and "day oh" lands there
+    too (h rides the vowel run). Deliberately NOT metaphone: on names this
+    short a consonant key like "T" matches half the library, and metaphone
+    encodes "deo"/"day o" differently anyway. Skeletons are compared for
+    EXACT equality only (they're too short for fuzzy), and only within the
+    library index — worst case is the wrong OWNED song, never Spotify junk."""
+    s = s.replace(" ", "")
+    s = re.sub(r"[aeiouyh]+", "V", s)
+    return re.sub(r"(.)\1+", r"\1", s)
+
+
+def _entry_score(e: dict, qn: str, qc: str, qtokens: list[str], qs: str) -> float:
     score = max(fuzz.ratio(qn, e["norm"]), fuzz.ratio(qc, e["collapsed"]))
+    # Phonetic-skeleton equality ("deo" == "day o" == "dV"): strong but not
+    # supreme — 90.x clears the artist/album/track bars yet stays below the
+    # playlist bar (92, near-exact by design) and below any true lexical ~100
+    # competitor. The plain ratio rides along as a tiebreak so the lexically
+    # closest of several skeleton-equal names wins. len>=2 guards degenerate
+    # skeletons ("V") from matching everything.
+    if len(qs) >= 2 and qs == e["skel"]:
+        score = max(score, 90.0 + fuzz.ratio(qn, e["norm"]) / 100.0)
     # Tracks/albums: formal names carry tails the user never says ("Ballade
     # No. 4 IN F MINOR, OP. 52") and queries carry an artist the name doesn't
     # ("CHOPIN'S ballade 4"). token_set_ratio scores on the exact-token
@@ -221,19 +245,33 @@ def _entry_score(e: dict, qn: str, qc: str, qtokens: list[str]) -> float:
     return score
 
 
-async def _resolve_library(query: str, media_type: str | None) -> dict | None:
+_LIB_THRESHOLDS = {"playlist": 92, "artist": 80, "album": 85, "track": 80}
+
+
+async def _resolve_library(query: str, media_type: str | None,
+                           relaxed: bool = False) -> dict | None:
     """Best library match for a (possibly misspelled) query, or None. Same
-    bucket precedence + thresholds as the search ranker."""
+    bucket precedence + thresholds as the search ranker.
+
+    relaxed=True is the LAST-RESORT pass play() runs only after MA search also
+    failed (its winner was a below-threshold guess): a merely-plausible OWNED
+    match beats a scoreless Spotify roll of the dice ("Deo" once drew spotify
+    track 'demons'). Relaxed mode ignores bucket precedence — with low floors,
+    a weak early bucket would steal from a strong later one (a 57-scoring
+    artist beat the 90-scoring Day O track in testing) — and just takes the
+    best score anywhere at a flat 60 floor."""
     entries = await _ensure_index()
     qn = _norm(query)
     if not entries or not qn:
         return None
     # "baby beluga by raffi" — the by-tail wrecks a whole-string ratio against
     # the track name; score with and without it.
-    qn2 = re.sub(r"\bby [a-z0-9 ]+$", "", qn).strip()
-    variants = [(qn, _collapse(qn), qn.split())]
+    qn2 = re.sub(r"\bby ([a-z0-9 ]+)$", "", qn).strip()
+    tail_artist = (m.group(1).strip() if (m := re.search(r"\bby ([a-z0-9 ]+)$", qn))
+                   else None)
+    variants = [(qn, _collapse(qn), qn.split(), _skeleton(qn))]
     if qn2 and qn2 != qn:
-        variants.append((qn2, _collapse(qn2), qn2.split()))
+        variants.append((qn2, _collapse(qn2), qn2.split(), _skeleton(qn2)))
     best: dict[str, tuple[float, dict]] = {}
     for e in entries:
         s = max(_entry_score(e, *v) for v in variants)
@@ -242,20 +280,38 @@ async def _resolve_library(query: str, media_type: str | None) -> dict | None:
         # Beluga", play the one whose files we own.
         if cur is None or (s, e["local"]) > (cur[0], cur[1]["local"]):
             best[e["kind"]] = (s, e)
+    if relaxed:
+        hits = [h for h in best.values() if h[0] >= 60]
+        if not hits:
+            return None
+        hit = max(hits, key=lambda h: (h[0], h[1]["local"]))
+        return {**hit[1], "score": hit[0]}
     if media_type in _RESULT_ATTR:          # user literally named the type
         hit = best.get(media_type)
         if hit and hit[0] >= 60:
             return {**hit[1], "score": hit[0]}
         return None
-    for kind, threshold in (("playlist", 92), ("artist", 80)):
+    # "X by Y": if Y names the artist of a strong track/album hit, the user
+    # asked for that PIECE — don't let the artist bucket steal it into a
+    # shuffle ("deo by rafi" must play Day O, not shuffle Raffi).
+    if tail_artist:
+        piece = [hit for kind in ("album", "track")
+                 if (hit := best.get(kind)) and hit[0] >= _LIB_THRESHOLDS[kind]
+                 and hit[1].get("artist")
+                 and fuzz.ratio(_collapse(tail_artist),
+                                _collapse(_norm(hit[1]["artist"]))) >= 80]
+        if piece:
+            hit = max(piece, key=lambda h: h[0])
+            return {**hit[1], "score": hit[0]}
+    for kind in ("playlist", "artist"):
         hit = best.get(kind)
-        if hit and hit[0] >= threshold:
+        if hit and hit[0] >= _LIB_THRESHOLDS[kind]:
             return {**hit[1], "score": hit[0]}
     # Album vs track compete on SCORE (ties → album): strict bucket order let
     # any qualifying album beat a better-matching track ("the fourth ballade"
     # lost to a concert-program album title that merely mentions Ballade 4).
-    contenders = [hit for kind, threshold in (("album", 85), ("track", 80))
-                  if (hit := best.get(kind)) and hit[0] >= threshold]
+    contenders = [hit for kind in ("album", "track")
+                  if (hit := best.get(kind)) and hit[0] >= _LIB_THRESHOLDS[kind]]
     if contenders:
         hit = max(contenders, key=lambda h: h[0])
         return {**hit[1], "score": hit[0]}
@@ -327,12 +383,14 @@ _RESULT_ATTR = {"playlist": "playlists", "artist": "artists",
                 "album": "albums", "track": "tracks"}
 
 
-def _rank(query: str, results, media_type: str | None) -> tuple[object, str] | None:
-    """Pick what to play: (media item, kind). None only if MA returned nothing."""
+def _rank(query: str, results, media_type: str | None) -> tuple[object, str, bool] | None:
+    """Pick what to play: (media item, kind, confident). None only if MA
+    returned nothing. confident=False means the pick is a below-threshold
+    best guess — play() gives the library one relaxed-floor look first."""
     if media_type in _RESULT_ATTR:
         best = _best(query, getattr(results, _RESULT_ATTR[media_type]))
         if best and best[0] >= 60:      # they NAMED the type — honor it readily
-            return best[1], media_type
+            return best[1], media_type, True
     # Two passes: library-only candidates get first claim in every bucket, THEN
     # anything goes. Spotify search is full of traps for the general pass — a
     # random user playlist or a junk "artist" literally named after a song
@@ -345,7 +403,7 @@ def _rank(query: str, results, media_type: str | None) -> tuple[object, str] | N
                 items = [it for it in items if _is_library(it)]
             best = _best(query, items)
             if best and best[0] >= threshold:
-                return best[1], kind
+                return best[1], kind, True
     # Nothing confident — play the best guess anyway (no mid-cooking dialogs).
     overall = None
     for kind, _ in _BUCKETS:
@@ -354,7 +412,7 @@ def _rank(query: str, results, media_type: str | None) -> tuple[object, str] | N
             overall = (best[0], best[1], kind)
     if overall is None:
         return None
-    return overall[1], overall[2]
+    return overall[1], overall[2], False
 
 
 def _artist_of(item) -> str | None:
@@ -384,9 +442,20 @@ async def play(query: str | None, media_type: str | None = None) -> dict:
         pick = _rank(query, results, media_type)
         if pick is None:
             raise LookupError(f"no results for {query!r}")
-        item, kind = pick
-        sel = {"kind": kind, "name": item.name, "uri": item.uri,
-               "artist": _artist_of(item)}
+        item, kind, confident = pick
+        if not confident:
+            # Search's winner is a scoreless guess (random Spotify anything).
+            # A merely-plausible OWNED match is the better gamble — "Deo"
+            # (ASR for "Day O") once drew spotify track 'demons' here.
+            try:
+                relaxed = await _resolve_library(query, media_type, relaxed=True)
+            except Exception:  # noqa: BLE001 — guard is best-effort
+                relaxed = None
+            if relaxed:
+                sel, via = relaxed, "library-relaxed"
+        if sel is None:
+            sel = {"kind": kind, "name": item.name, "uri": item.uri,
+                   "artist": _artist_of(item)}
     # Artist/playlist get shuffle (fresh mix each time); album/track play in order.
     shuffle = sel["kind"] in ("artist", "playlist")
     await client.player_queues.queue_command_shuffle(qid, shuffle)
