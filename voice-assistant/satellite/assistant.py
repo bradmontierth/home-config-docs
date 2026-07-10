@@ -355,15 +355,20 @@ class PartialStreamer:
     to the orchestrator's /partial. Strictly decoupled from capture: the worker
     holds at most the LATEST snapshot (an unsent older one is overwritten, never
     queued), so a slow decode or dead orchestrator can never back-pressure the
-    mic loop — worst case captions skip forward. seq increases monotonically for
-    the process lifetime; the dashboard drops anything <= the newest it has
-    rendered, so out-of-order arrivals are harmless."""
+    mic loop — worst case captions skip forward. seq increases monotonically;
+    the dashboard drops anything <= the newest it has rendered, so out-of-order
+    arrivals are harmless. seq is seeded from the CLOCK, not 0: the kiosk's
+    lastSeq survives a satellite restart, and a counter that reset to 1 made it
+    silently drop every caption until seq caught back up (live regression
+    2026-07-09 — earlier restarts always came with a kiosk reload that masked
+    it). Offers accrue ~2.5/s only while someone speaks, so the counter can
+    never outrun the next restart's clock seed."""
 
     def __init__(self):
         self._lock = threading.Lock()
         self._latest: tuple[int, bytes] | None = None
         self._wake = threading.Event()
-        self._seq = 0
+        self._seq = int(time.time())
         threading.Thread(target=self._worker, daemon=True).start()
 
     def offer(self, pcm: bytes) -> None:
