@@ -325,6 +325,20 @@ bigger captions.**
   satellite (aplay + existing orchestrator duck) is buildable but lands
   ~¼–½ s of lip-sync offset; MA announcements are a non-starter
   (snapcast buffers ~1 s, queue pause/resume jarring for long clips).
+- **Portrait pairing (2026-07-10, immich-slideshow ad080fd).** Brad
+  flagged heads getting cut off: the viewer's `object-fit: cover`
+  center-cropped portraits on the 16:9 display, and 72% of the family
+  pool (2,160/2,984) is portrait. Fix = the grandparent-frame trick he
+  remembered: portraits show TWO at a time, side by side, contain-fit
+  (never cropped) over a blurred copy of themselves, per-pane captions.
+  Landscape singles stay full-bleed cover but crop from `50% 30%`
+  (faces are in the upper third). Lone portraits (no partner in queue)
+  get contain+blur solo. Video playback now contain (vertical clips
+  no longer crop); videos never pair. Sweep stores orientation-corrected
+  width/height (EXIF orientation 5-8 = swap dims); feed adds `portrait`.
+  History entries are now slides (1-2 items) so swipe-back restores
+  pairs. CDP-verified on the kiosk: pairs in tile + fullscreen, swipe
+  fwd/back, tap collapse, video tap-to-play all pass.
 - **Kid ages in captions (2026-07-10, immich-slideshow 77b769b).**
   Sweep syncs name→birthDate from Immich /api/people (only people with
   a birthDate set get ages — kids yes, parents no, nothing hardcoded;
