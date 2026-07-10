@@ -299,7 +299,13 @@ replacing the old ~860-line inline page in `slideshow_server.py`:
 - the "Videos only" toggle survives as a pill top-right
   (`SHOW_VIDEOS_ONLY_TOGGLE`); `?forceVideoId=` / `?audioMode=` still work
 - dwell defaults to 300s; override with `DWELL_SECONDS` env or `?dwell=`
-- pinch-zoom/pan was dropped with the old page
+- pinch-zoom/pan (restored 2026-07-10, commit `57dc9d7`): pinch zooms the
+  touched pane, one finger pans while zoomed, double-tap resets; swipe
+  and tap-to-play are suspended while zoomed, and auto-advance holds at
+  most one extra dwell cycle before resetting the zoom, so a stray pinch
+  cannot freeze the rotation
+- clock fonts are 64px/22px (bumped 2026-07-10 for cross-room legibility;
+  same change in the kitchen immich-slideshow viewer)
 - the page keeps the kitchen postMessage protocol
   (`slideshow-nav`/`slideshow-tap`/`slideshow-fullscreen`) and a widget
   mode below 700x450px, so it can be embedded dashboard-style later
@@ -338,8 +344,9 @@ what is now committed on master (verified by md5 on 2026-07-10).
 
 Reload the kiosk browser after a deploy. Steinhorst has NO chromium
 watchdog, and `pkill -f chromium` over ssh kills your own session (the
-pattern matches the remote command line) — use a bracket pattern, then
-relaunch with the autostart flags:
+pattern matches the remote command line). The bracket trick does NOT
+save you if the same compound command also contains a plain `chromium`
+relaunch — run the kill and the relaunch as two separate ssh commands:
 
 ```bash
 tailscale ssh pi@100.66.199.1 'pkill -f "[c]hromium"'
