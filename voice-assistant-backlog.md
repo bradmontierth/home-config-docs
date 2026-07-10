@@ -339,6 +339,16 @@ bigger captions.**
   History entries are now slides (1-2 items) so swipe-back restores
   pairs. CDP-verified on the kiosk: pairs in tile + fullscreen, swipe
   fwd/back, tap collapse, video tap-to-play all pass.
+- **Caption size + scrim fix (2026-07-10, immich-slideshow f0512a5).**
+  Brad: captions still too small at viewing distance + text "fading
+  out" at the bottom. The fade was a pairing-refactor REGRESSION:
+  captions moved inside the photo layers, which paint UNDER the global
+  bottom scrim gradient — the scrim was dimming the text itself (both
+  modes; dashboard adds no fade of its own). Scrim-bottom removed
+  entirely (user call); fonts 34/19→56/30 fullscreen, 22/14→30/18
+  widget, weight 700, heavy double text-shadow for readability on
+  bright photos. Scrim-top kept (clock sits above it, unaffected).
+  CDP-screenshot verified both modes.
 - **Kid ages in captions (2026-07-10, immich-slideshow 77b769b).**
   Sweep syncs name→birthDate from Immich /api/people (only people with
   a birthDate set get ages — kids yes, parents no, nothing hardcoded;
