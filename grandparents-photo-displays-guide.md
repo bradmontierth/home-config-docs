@@ -280,3 +280,82 @@ Deployment status as of `2026-05-31`:
   hours while a problem persists.
 
 Deploying a client rebuilds and restarts its slideshow container.
+
+## Editorial Pro Viewer And Age Captions (2026-07-10)
+
+The client slideshow page was rebuilt as
+`rpi_client/src/static/viewer.html` (the Editorial Pro design shared with
+the my_photo_app console Viewer and the kitchen immich-slideshow viewer),
+replacing the old ~860-line inline page in `slideshow_server.py`:
+
+- clock + date upper-left, tick progress marks lower-right
+- captions lower-left: `Name (age)` main line, `Location · Month Year` sub
+- portrait pairs and lone portraits render uncropped over a blurred fill;
+  landscape singles are full-bleed with a top-biased crop
+- swipe left/right navigation with history (plus arrow keys / mouse drag)
+- videos rotate as posters with a play badge; tap plays WITH sound and
+  native controls (Steinhorst has a speaker and uses it); clip end resumes
+  rotation
+- the "Videos only" toggle survives as a pill top-right
+  (`SHOW_VIDEOS_ONLY_TOGGLE`); `?forceVideoId=` / `?audioMode=` still work
+- dwell defaults to 300s; override with `DWELL_SECONDS` env or `?dwell=`
+- pinch-zoom/pan was dropped with the old page
+- the page keeps the kitchen postMessage protocol
+  (`slideshow-nav`/`slideshow-tap`/`slideshow-fullscreen`) and a widget
+  mode below 700x450px, so it can be embedded dashboard-style later
+  (Montierth plan)
+
+Age captions ("Claire (11 mo)", "Simon (3)") are computed server-side at
+feed build: `Person.birth_date` is synced from Immich people
+(`seed-people`), shared across the per-Immich-account duplicate person
+rows by display name, and baked into each feed item as `ageLabel` (age at
+photo time, so it never goes stale). Clients store it in a new
+`age_label` column; the sync backfills existing rows. To refresh after a
+birthday edit in Immich: `POST /api/admin/seed-people` then
+`POST /api/frame/republish` on the Beelink, then let clients sync.
+
+Deployed 2026-07-10: Beelink server + Steinhorst client (commit
+`73e789c`). The Montierth N100 client still runs the old page until its
+display rework lands (its HA dashboard iframes the viewer; the new API is
+backward-compatible with the old page).
+
+## Deploying A Client From Git
+
+The display Pis clone the GitHub repo over https and have no credentials,
+so `git pull` fails there. Ship a bundle over Tailscale SSH instead
+(Steinhorst example):
+
+```bash
+cd /home/pi/my_photo_app && git bundle create /tmp/mpa.bundle master
+tailscale ssh pi@100.66.199.1 'cat > /tmp/mpa.bundle' < /tmp/mpa.bundle
+tailscale ssh pi@100.66.199.1 'cd /home/pi/my_photo_app && git fetch /tmp/mpa.bundle master && git reset --hard FETCH_HEAD'
+tailscale ssh pi@100.66.199.1 'cd /home/pi/my_photo_app && docker compose -f rpi_client/docker-compose.yml up -d --build'
+```
+
+The `reset --hard` is safe: the 2026-05-31 hardening was rsynced onto the
+Pi as uncommitted modifications, but those files are byte-identical to
+what is now committed on master (verified by md5 on 2026-07-10).
+
+Reload the kiosk browser after a deploy. Steinhorst has NO chromium
+watchdog, and `pkill -f chromium` over ssh kills your own session (the
+pattern matches the remote command line) — use a bracket pattern, then
+relaunch with the autostart flags:
+
+```bash
+tailscale ssh pi@100.66.199.1 'pkill -f "[c]hromium"'
+tailscale ssh pi@100.66.199.1 'setsid env WAYLAND_DISPLAY=wayland-0 DISPLAY=:0 XDG_RUNTIME_DIR=/run/user/1000 chromium http://localhost:9010/ --password-store=basic --alsa-output-device=default --autoplay-policy=no-user-gesture-required --disable-features=AudioServiceOutOfProcess,AudioServiceSandbox --kiosk --noerrdialogs --disable-infobars --no-first-run --enable-features=OverlayScrollbar --touch-events=enabled --enable-pinch --start-maximized >/tmp/chromium-relaunch.log 2>&1 < /dev/null &'
+```
+
+Verify with a screenshot:
+`tailscale ssh pi@100.66.199.1 'WAYLAND_DISPLAY=wayland-0 XDG_RUNTIME_DIR=/run/user/1000 grim /tmp/shot.png'`.
+
+## Beelink Local Test Client
+
+The Beelink also runs an `rpi_client` container on `:9010` (profile mode;
+useful as a deploy test bed). On 2026-07-10 its recreated container could
+no longer resolve `beelink` — AdGuard serves the host's `/etc/hosts` entry
+`127.0.1.1`, which is the container itself. Same fix as the Montierth
+2026-07-02 incident: `S3_ENDPOINT_URL=http://192.168.10.217:9000` in
+`/home/pi/cecret_lake/my_photo_app_client/.env` (backup:
+`.env.backup_beelink_dns_20260710`). Never use the bare `beelink` name
+from inside containers.
