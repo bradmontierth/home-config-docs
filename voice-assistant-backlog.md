@@ -209,41 +209,63 @@ phonetics, not semantics — embeddings wouldn't fix it.
    transcription (nor music names into work dictation). Prereq: per-request
    bias support in the Parakeet server; then each client sends its own list.
 
-## 1. Immich slideshow (replace GrandKid feed) + tap-to-fullscreen — P3 (biggest feature)
+## 1. Immich slideshow (replace GrandKid feed) + tap-to-fullscreen — BUILT + DEPLOYED 2026-07-09
 
-**Current state:** dashboard top-right iframes `SLIDESHOW_BASE_URL` =
-`http://192.168.10.217:9010` = `rpi_client-rpi_client-1` — the *grandparents'*
-frame client running locally as a PoC, fed via the my_photo_app S3
-(minio) store-and-forward pipeline (built for remote frames; wrong shape for
-home). Immich runs on the Beelink (`:2283`, ML container healthy) with
-**356 detected people, family already named** (Brad/Adrienne/Simon/Claire/…),
-and `my_photo_app-server` already holds working Immich API keys — the
-integration pattern exists to copy.
+**Architecture decision (Brad asked copy-vs-reference):** REFERENCE the
+Immich library in place — no photo copies. The my_photo_app copy pipeline
+(S3 + encryption) exists because the grandparent frames are REMOTE; the
+kitchen display and Immich share the Beelink. Immich already maintains
+~1440px previews (~300KB JPEG) for every asset — ideal for the 1080p panel.
+Sidecar SQLite holds curation state only; a bounded LRU disk cache (2GB cap)
+of previews decouples the kiosk from Immich restarts.
 
-**Brad's instinct (a curator service on the Beelink) is right.** Recommend a
-NEW small service (`immich-slideshow`, FastAPI, ~one file) rather than
-extending my_photo_app — the S3/frame pipeline is baggage here; home wants
-direct + live. It serves both the feed JSON and the slideshow page.
+**Service: `/home/pi/immich-slideshow`** (new repo, port :9021, FastAPI):
+- Hourly FULL metadata sweep (deliberate, not incremental: ~40 pages/key,
+  LAN-local, and unseen-in-sweep = deleted/archived → auto-excluded).
+  `POST /api/search/metadata` with `withPeople`+`withExif` returns people
+  NAMES inline — no per-person queries needed. Both users' keys swept,
+  deduped (partner sharing: each key sees all 19,330); owner's key used for
+  image fetches.
+- Buckets: family (any of FAMILY_NAMES=Claire,Simon,Brad,Adrienne — exact
+  lowercase match, so "Brady" doesn't leak in) / faces / scenic. Sweep
+  results: 18,527 usable = 5,179 family / 1,625 faces / 11,723 scenic;
+  803 excluded (videos, archived, screenshot heuristic: PNG-without-camera-
+  make or "screenshot" in filename).
+- Selection per feed batch: weight = recency exp-decay (half-life 90d,
+  floor 0.03 so the archive still surfaces) × favorite ×1.6; shown <24h ago
+  ×0.02, <7d ×0.3. Weighted sampling w/o replacement under 60/20/20 quota
+  (shortfalls spill to family). `GET /api/feed?n=30`, `GET /img/{id}`
+  (27ms cold / 6ms cached), `/healthz`, `POST /api/sync-now`.
+- Viewer page (`/`) ports the my_photo_app review-console Viewer design
+  (scrims, clock, caption, ticks, 0.9s crossfade, 20s dwell); `body.widget`
+  mode (viewport <700×450) hides clock/ticks and shrinks the caption, so ONE
+  page serves both the tile and fullscreen — the fullscreen toggle never
+  reloads the iframe.
+- Secrets: `/home/pi/cecret_lake/immich_slideshow/.env` (keys copied from
+  my_photo_app's — note they're comma-joined in ONE `IMMICH_API_KEY` var
+  there, which is why a naive read 401s). Repo guard passed; data/ ignored.
+  GitHub remote NOT yet created (needs Brad — no gh CLI on box).
 
-- **Curation (Google-Photos-ish):** query Immich REST (search/metadata,
-  people). Score ≈ `recency_decay(exp, half-life ~60–90d) ×
-  face_weight (named family > any face > none) × quality/favorite bonus`,
-  then **quota-mix** per cycle: ~60% kids/family, ~20% other-people/unknown
-  faces, ~20% landscape/no-face — so landscapes still appear (Brad wants
-  variety, not kids-only). Avoid-repeat via a served-history table.
-  Skip screenshots/documents (Immich smart search or aspect/EXIF filters).
-  Refresh the pool hourly; serve Immich thumbnail-size originals (proxy +
-  cache locally so the kiosk never hammers Immich).
-- **Slideshow page:** minimal HTML/JS (crossfade, ~20s dwell, 1080p-friendly),
-  designed to look right at BOTH widget size and fullscreen.
-- **Tap-to-fullscreen (dashboard):** the widget stays an iframe (swap
-  `SLIDESHOW_BASE_URL`). An overlay div on the widget (iframes eat taps)
-  toggles a fullscreen class — iframe expands to the full 13.3" 1080p panel,
-  tap again (or timeout, e.g. 2 min) to return. All in `app.js`/CSS; no
-  kiosk changes. Fullscreen mode can ask the service for higher-res assets.
+**Dashboard (dashboard_webapp 42999d8, deployed + kiosk reloaded):**
+`SLIDESHOW_BASE_URL` → `:9021` (.env, runtime — no rebuild needed for URL);
+transparent `#slideshow-tap` overlay (iframes eat taps) toggles
+`.tile.family.fullscreen` (fixed, z-index 900 — below app/voice overlays
+≥1000 so captions render over photos), 2-min auto-return timer.
 
-**Open questions for Brad:** favorites/albums as an extra signal? Should the
-grandparents' rpi_client PoC on :9010 be retired once this lands?
+**Deploy gotcha (NEW, recurring-risk):** kiosk chromium relaunch hung on a
+GNOME keyring "choose password" dialog — page never loaded, zero HTTP
+traffic, empty chromium log. Screenshot via `grim` on display-pi found it.
+Fix: launch chromium with `--password-store=basic` (now part of the reload
+runbook). Also seen on the screenshot: display-pi LOW VOLTAGE warning —
+power supply may need attention.
+
+**Live-verified:** kiosk pulls feed + images; widget rendering confirmed by
+screenshot (scenic photo w/ location · date caption). NOT yet finger-tested:
+the fullscreen tap itself (no input-injection tool on display-pi).
+
+**Retained:** grandparents' rpi_client PoC still runs on :9010 (untouched) —
+retire whenever Brad wants. Favorites already act as a ×1.6 boost; albums
+unused as a signal so far.
 
 ---
 
