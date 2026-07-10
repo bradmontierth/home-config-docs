@@ -168,7 +168,7 @@ decode ≈ 150ms — continuous costs ~15% of one GPU stream only while music
 plays). Satellite learns music state via a low-rate poll of `/music/state`
 (10s) or a push on play/stop. Keeps stage-1 as-is for the silent house.
 
-## 6. Kids' songs by phonetics ("Day-O" → "Deo") — P2/P3
+## 6. Kids' songs by phonetics ("Day-O" → "Deo") — BUILT+DEPLOYED 2026-07-09 (23a5c78)
 
 **Evidence (orch log 23:51–23:53):** Parakeet wrote "Deo" / "Deo by Rafi".
 The song EXISTS locally (`Raffi/Best Of Raffi/06 - Day O.flac`), but
@@ -178,22 +178,36 @@ as a no-confidence best guess** (`score=None`). Second try ("Deo by Rafi")
 salvaged artist-shuffle Raffi via the by-artist tail. User is right: this is
 phonetics, not semantics — embeddings wouldn't fix it.
 
-**Layered plan (music.py, orchestrator only):**
-1. **Phonetic key variant in the library index** (biggest bang): store a
-   double-metaphone key per entry (e.g. `jellyfish`), match query metaphone
-   as another scoring variant ("deo" and "day o" both → `T` keys that match).
-   Gate tight (exact-key or ≥90) and keep bucket precedence — the
-   "spears≈sparks" lesson says loose phonetics is dangerous.
-2. **Never let a no-confidence Spotify guess beat a plausible local match**
-   (user's prioritization instinct, cheap): if MA-search's winner has
-   `score=None`/below threshold AND the library index had a candidate ≥ ~65,
-   play the library candidate. Cost asymmetry is real: wrong local kid song ≪
-   random Spotify anything.
-3. **(Optional, later) Parakeet phrase biasing** with a curated library vocab
-   (artist names + kid-song titles) on `/command/audio` decodes — fixes the
-   transcript itself ("Day O" instead of "Deo"), helps every downstream layer.
-   Touches the STT path for all commands, so test for regressions; check the
-   bias API in `dgx-parakeet.md` first.
+**Shipped (music.py only, three layers):**
+1. **Phonetic skeleton variant** in the library index: spaces stripped, vowel
+   RUNS collapsed to one marker (y and h count as vowel-ish, so "day oh"
+   works), doubled consonants squashed — "deo"/"day o"/"day oh" all → `dV`.
+   EXACT-equality only (short skeletons are too promiscuous for fuzzy),
+   scores 90.x — clears artist/album/track bars, stays below playlist's 92 —
+   with plain ratio as tiebreak. NOT metaphone (design changed at build time):
+   metaphone keys short titles down to single consonants that match half the
+   library, and it encodes "deo"/"day o" DIFFERENTLY anyway.
+2. **"X by Y" piece rule** (added after testing showed "deo by rafi" still
+   shuffled the artist): a by-tail matching the artist of a strong
+   track/album hit plays that piece, not an artist shuffle.
+3. **Relaxed local fallback** (the cost-asymmetry rule): when MA search's
+   winner is a below-threshold guess, a ≥60 library hit plays instead.
+   GOTCHA found in testing: relaxed floors + bucket precedence = a 57-scoring
+   artist ('Eden') stole from the 90-scoring Day O track — relaxed mode takes
+   the GLOBAL best score, no precedence.
+   Battery vs the live 5.3k index: all four real/likely Day-O transcripts →
+   the owned track; baby-beluga/rafi/best-of-raffi/wheels/ballade-4/britney
+   unchanged. Live voice test pending ("okay computer, play day-o").
+   **Known pre-existing trap (not tonight's change, watch it):** a junk
+   Spotify user playlist literally NAMED "toxic by britney spears!!"
+   name-matches ~100 and wins that query's general pass — exact-name junk
+   playlists can steal non-library queries.
+4. **(PINNED) Parakeet phrase biasing** — would fix the transcript itself,
+   but the API (`POST /parakeet/bias`) is GLOBAL across all resident workers,
+   and Brad already uses it from the Windows STT-keyboard client for WORK
+   terms ("dbt", "Tuva Project") that must NOT leak into house-wide
+   transcription (nor music names into work dictation). Prereq: per-request
+   bias support in the Parakeet server; then each client sends its own list.
 
 ## 1. Immich slideshow (replace GrandKid feed) + tap-to-fullscreen — P3 (biggest feature)
 
