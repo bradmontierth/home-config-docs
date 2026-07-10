@@ -25,10 +25,12 @@ Modes (kill switch, HTTP POST /mode {active|shadow|off}, default shadow):
   off     mic pipeline paused
 """
 
+import difflib
 import http.server
 import io
 import json
 import os
+import re
 import subprocess
 import sys
 import threading
@@ -79,6 +81,21 @@ SILENCE_MS = int(os.getenv("SILENCE_MS", "700"))
 MAX_COMMAND_S = float(os.getenv("MAX_COMMAND_S", "20"))
 MIN_VOICED_MS = int(os.getenv("MIN_VOICED_MS", "200"))
 RETRIGGER_GUARD_S = float(os.getenv("RETRIGGER_GUARD_S", "1.5"))
+# Spurious-onset guard (2026-07-09, the family-demo bug): the un-drained wake
+# buffer holds ~1.5s of trigger→verify→chime bleed, and a short Silero blip in
+# it (wake-word tail, chime edge, ducked-music vocals) counted as speech onset —
+# then 704ms of BUFFERED silence endpointed the turn before the user could speak
+# (log signature: silence_endpoint with wall≈100ms, voiced≤320ms). A silence
+# endpoint is only trusted if we heard enough real speech OR the decision was
+# made on live audio (lag = audio consumed minus wall elapsed). Otherwise the
+# blip is discarded and we keep waiting within the wall-clock onset window.
+# Follow-up turns drain first (lag≈0), so short live replies ("yes") still land.
+MIN_COMMAND_VOICED_MS = int(os.getenv("MIN_COMMAND_VOICED_MS", "500"))
+ENDPOINT_LAG_SPURIOUS_MS = int(os.getenv("ENDPOINT_LAG_SPURIOUS_MS", "400"))
+# /command/audio can legitimately take a minute: a searched+reasoning ask
+# measured 61s on 2026-07-09 (9 web searches) — the old 30s default hung up
+# before the answer, so the dashboard showed it but the kitchen never spoke.
+COMMAND_TIMEOUT_S = float(os.getenv("COMMAND_TIMEOUT_S", "120"))
 
 # Follow-up / continued conversation: after a reply, reopen the mic (no wake
 # word) for a bounded window; re-arm each time you actually speak. Default ON.
@@ -108,9 +125,19 @@ ALARM_VOLUME_FLOOR = int(os.getenv("ALARM_VOLUME_FLOOR", "50"))
 
 ALARM_MAX_LOOPS = int(os.getenv("ALARM_MAX_LOOPS", "14"))
 ALARM_GAP_S = float(os.getenv("ALARM_GAP_S", "2.0"))         # space between beeps
-STOP_CHUNK_MS = int(os.getenv("STOP_CHUNK_MS", "1000"))      # continuous-listen cadence
+# Barge-in 'stop' listener: OVERLAPPING windows, not back-to-back chunks. The
+# old 1s non-overlapping chunks dropped any "stop" straddling a boundary
+# (~40% of them — that was the say-it-four-times bug, measured 13-16s to
+# dismiss on 2026-07-09). A 2.5s window every 1s means every utterance is
+# fully inside at least one window; the transcribe POST runs on a worker
+# thread so the mic read cadence never blocks on the network.
+ALARM_WINDOW_MS = int(os.getenv("ALARM_WINDOW_MS", "2500"))
+ALARM_HOP_MS = int(os.getenv("ALARM_HOP_MS", "1000"))
 DISMISS_WORDS = ("stop", "cancel", "okay computer", "ok computer",
                  "dismiss", "turn off", "enough", "quiet", " off")
+# Fuzzy singles for when Parakeet mangles a word over the ringing ("stopp",
+# "stahp"). Matched per-token at ≥0.8 SequenceMatcher ratio, len≥3.
+DISMISS_FUZZY = ("stop", "cancel", "dismiss", "enough", "quiet")
 
 SAMPLE_RATE = 16000
 FRAME_SAMPLES = 512
@@ -480,6 +507,19 @@ def capture_command(stdout, vad, min_capture_ms: int = MIN_CAPTURE_MS,
         if total_ms < min_capture_ms:
             continue                        # never endpoint inside the min window
         if silence_ms >= SILENCE_MS:
+            # A short voiced blip whose trailing "silence" was mostly BUFFERED
+            # audio is bleed, not the user (see MIN_COMMAND_VOICED_MS above) —
+            # discard it and re-arm onset. A real run-together command carries
+            # ≥1s of voice, so it still endpoints straight from the buffer.
+            lag_ms = total_ms - (time.time() - t0) * 1000
+            if voiced_ms < MIN_COMMAND_VOICED_MS and lag_ms > ENDPOINT_LAG_SPURIOUS_MS:
+                log(f"spurious onset discarded voiced={voiced_ms}ms "
+                    f"lag={round(lag_ms)}ms total={total_ms}ms")
+                frames.clear()
+                last_partial_at = 0
+                speech = False
+                voiced_ms = silence_ms = 0
+                continue
             reason = "silence_endpoint"
             break                           # normal endpoint after speech
     # Diagnostics for endpoint tuning: how long capture ran, how much of it
@@ -520,7 +560,10 @@ def run_turn(preroll_pcm: bytes, stdout, vad) -> None:
         log("no command captured")
         return
     try:
-        resp = post_wav("/command/audio", wrap_wav(cmd_pcm))
+        # Long timeout on purpose: a searched ask can run ~60s and the reply
+        # audio only exists in this response. Wake detection is paused while we
+        # wait (single mic reader) — acceptable; alarms still fire (HTTP thread).
+        resp = post_wav("/command/audio", wrap_wav(cmd_pcm), timeout=COMMAND_TIMEOUT_S)
     except Exception as exc:  # noqa: BLE001
         log(f"/command/audio failed: {exc}")
         return
@@ -560,7 +603,8 @@ def run_followups(stdout, vad) -> None:
         if not cmd:
             return                          # quiet window -> conversation over
         try:
-            resp = post_wav("/command/audio?followup=1", wrap_wav(cmd))
+            resp = post_wav("/command/audio?followup=1", wrap_wav(cmd),
+                            timeout=COMMAND_TIMEOUT_S)
         except Exception as exc:  # noqa: BLE001
             log(f"followup /command/audio failed: {exc}")
             return
@@ -582,34 +626,62 @@ def run_followups(stdout, vad) -> None:
 
 
 # --- alarm: playback in a thread, main loop listens continuously -----------
-def check_dismiss(pcm: bytes) -> bool:
-    """Transcribe a chunk of mic audio and look for a barge-in dismiss word.
-    The alarm sound / announcement never contain these, so no false stops."""
-    try:
-        t = post_wav("/transcribe", wrap_wav(pcm), timeout=10).get("transcript", "").lower()
-    except Exception:  # noqa: BLE001
-        return False
-    if t.strip():
-        log(f"alarm-listen heard: {t!r}")
-    return any(w.strip() in t for w in DISMISS_WORDS)
+def _dismiss_in(transcript: str) -> bool:
+    """The alarm sound / announcement never contain these, so no false stops
+    from our own audio. Substring first (matches 'stopped', 'turn it off'),
+    then per-token fuzzy for ringing-mangled words."""
+    t = transcript.lower()
+    if any(w.strip() in t for w in DISMISS_WORDS):
+        return True
+    for tok in re.findall(r"[a-z]+", t):
+        if len(tok) < 3:
+            continue
+        for w in DISMISS_FUZZY:
+            # First letter must match: ASR mangles preserve the onset consonant
+            # ("stopp"/"stob" for stop) — without this, "top" (shelf, it off)
+            # fuzzy-matched "stop" and could dismiss an alarm from cooking talk.
+            if tok[0] == w[0] and difflib.SequenceMatcher(None, tok, w).ratio() >= 0.8:
+                return True
+    return False
 
 
-def alarm_listen_chunk(stdout) -> None:
-    """Read ~STOP_CHUNK_MS of mic and dismiss the alarm if a stop word is heard.
-    Runs continuously (concurrent with alarm playback) — say 'stop' any time."""
-    frame_bytes = VAD_FRAME_SAMPLES * 2
-    n = max(1, STOP_CHUNK_MS // 20)
-    buf: list[bytes] = []
-    for _ in range(n):
-        if STATE.current_alarm is None:
-            break
-        b = stdout.read(frame_bytes)
-        if len(b) < frame_bytes:
-            break
-        buf.append(b)
-    if buf and check_dismiss(b"".join(buf)):
-        log("dismiss word -> stopping alarm")
-        STATE.dismiss.set()
+class DismissChecker:
+    """Transcribes rolling mic windows during an alarm and fires STATE.dismiss
+    on a barge-in stop word. Same latest-snapshot-only worker shape as
+    PartialStreamer: the main loop's offer() never blocks, a slow decode just
+    skips a window (the next one overlaps it anyway)."""
+
+    def __init__(self):
+        self._lock = threading.Lock()
+        self._latest: bytes | None = None
+        self._wake = threading.Event()
+        threading.Thread(target=self._worker, daemon=True).start()
+
+    def offer(self, pcm: bytes) -> None:
+        with self._lock:
+            self._latest = pcm
+        self._wake.set()
+
+    def _worker(self) -> None:
+        while True:
+            self._wake.wait()
+            with self._lock:
+                pcm, self._latest = self._latest, None
+                self._wake.clear()
+            if pcm is None or STATE.current_alarm is None:
+                continue
+            try:
+                t = post_wav("/transcribe", wrap_wav(pcm), timeout=10).get("transcript", "")
+            except Exception:  # noqa: BLE001
+                continue
+            if t.strip():
+                log(f"alarm-listen heard: {t!r}")
+            if STATE.current_alarm is not None and _dismiss_in(t):
+                log("dismiss word -> stopping alarm")
+                STATE.dismiss.set()
+
+
+DISMISS_CHECKER = DismissChecker()
 
 
 def alarm_playback(req: dict) -> None:
@@ -797,12 +869,29 @@ def main() -> int:
         frames_since_hop = 0
         guard_until = time.time() + RETRIGGER_GUARD_S
 
+    alarm_window: deque = deque(maxlen=max(1, ALARM_WINDOW_MS // VAD_FRAME_MS))
+    alarm_hop_frames = max(1, ALARM_HOP_MS // VAD_FRAME_MS)
+    alarm_frames = 0
+
     while True:
         # while an alarm is ringing (playback runs in its own thread), the main
         # loop listens continuously for a 'stop' barge-in — no wake word needed.
+        # Overlapping windows via a rolling buffer; transcription on the
+        # DismissChecker worker so this read cadence never blocks.
         if STATE.current_alarm is not None:
-            in_alarm = True
-            alarm_listen_chunk(arecord.stdout)
+            if not in_alarm:
+                in_alarm = True
+                alarm_window.clear()
+                alarm_frames = 0
+            b = arecord.stdout.read(SileroVad.CHUNK * 2)
+            if not b or len(b) < SileroVad.CHUNK * 2:
+                log("arecord stream ended; exiting for restart")
+                return 1
+            alarm_window.append(b)
+            alarm_frames += 1
+            if alarm_frames >= alarm_hop_frames and len(alarm_window) >= alarm_hop_frames:
+                alarm_frames = 0
+                DISMISS_CHECKER.offer(b"".join(alarm_window))
             continue
         if in_alarm:
             in_alarm = False
