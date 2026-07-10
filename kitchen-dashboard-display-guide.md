@@ -115,8 +115,19 @@ Reload the kiosk browser after deploy:
 
 ```bash
 ssh display-pi 'pkill chromium || true'
-ssh display-pi 'DISPLAY=:0 XDG_RUNTIME_DIR=/run/user/1000 chromium --kiosk --password-store=basic --disable-accelerated-video-decode --noerrdialogs --disable-infobars --check-for-update-interval=31536000 --no-first-run "http://192.168.10.217:8777/?v=$(date +%s)" >/tmp/kitchen-dashboard-chromium.log 2>&1 &'
+ssh display-pi 'DISPLAY=:0 XDG_RUNTIME_DIR=/run/user/1000 chromium --kiosk --password-store=basic --disable-accelerated-video-decode --autoplay-policy=no-user-gesture-required --noerrdialogs --disable-infobars --check-for-update-interval=31536000 --no-first-run "http://192.168.10.217:8777/?v=$(date +%s)" >/tmp/kitchen-dashboard-chromium.log 2>&1 &'
 ```
+
+`--autoplay-policy=no-user-gesture-required` lets tapped slideshow videos play
+WITH sound (the tap lands on the dashboard overlay, not inside the iframe, so
+the iframe has no user activation of its own; without the flag videos fall
+back to muted playback automatically).
+
+For live debugging, add `--remote-debugging-port=9222` (localhost-only on
+display-pi; tunnel with `ssh -f -N -L 9223:127.0.0.1:9222 display-pi`). A CDP
+driver that can evaluate JS and dispatch real touch taps/swipes lives in the
+session scratchpad pattern: connect with websocket-client using
+`suppress_origin=True` (chromium 403s unknown WS origins otherwise).
 
 `--password-store=basic` is REQUIRED (learned 2026-07-09): without it Chromium
 may pop a GNOME "choose password for new keyring" dialog and hang before

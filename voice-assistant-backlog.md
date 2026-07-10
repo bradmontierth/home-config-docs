@@ -295,13 +295,29 @@ bigger captions.**
   SkSurface errors); (b) Brad built a pre-transcode pipeline (ffmpeg
   ≤720p H.264 2.5Mbps CRF26, nice -n 10 + 2 threads, /data/vcache,
   video_ready gate — feed never offers a video whose light copy isn't
-  ready; /video serves vcache first, Immich-proxy fallback); viewer plays
-  muted, advances on ended or VIDEO_MAX_S=45. Backfill of all 166 family
-  videos runs in the background (~12/2min pace). **Enable later by
-  SHOW_VIDEOS=1 + container restart — Brad wants the display-pi power
-  supply fixed first (low-voltage warning may underlie the GPU
-  fragility).** Sound stays off (autoplay policy + kitchen noise); revisit
-  with a fullscreen-only unmute if wanted.
+  ready; /video serves vcache first, Immich-proxy fallback). Backfill of
+  all 166 family videos runs in the background.
+- **Videos v2 = TAP-TO-PLAY, LIVE (SHOW_VIDEOS=1, 2026-07-10).** Brad's
+  design: videos never auto-play — they rotate as poster stills (Immich
+  poster frame via /img) with a play badge + duration; tapping expands to
+  fullscreen and plays ONCE with SOUND, then collapses and resumes
+  rotation. Idle video slides are plain JPEGs so rotation carries zero
+  decode risk — safe even before the power-supply fix. Mechanics: taps
+  forward into the iframe as `slideshow-tap`; the VIEWER decides meaning
+  (photo=fullscreen toggle, video=expand+play) and answers
+  `slideshow-fullscreen {on,off,toggle}` — two-way postMessage, dashboard
+  checks e.source. Sound needs kiosk flag
+  `--autoplay-policy=no-user-gesture-required` (overlay tap isn't user
+  activation INSIDE the iframe; muted fallback otherwise). Tap during
+  playback stops; swipe-away stops but stays expanded. /api/feed?types=
+  filter added (test hook). **E2E-verified on the real kiosk via CDP**
+  (remote-debugging-port + ssh tunnel + websocket-client
+  suppress_origin=True; Input.dispatchTouchEvent real taps/swipes):
+  poster+badge → touch tap → fullscreen+/video stream → clock stayed
+  live throughout → auto-collapse on ended → rotation resumed; photo
+  tap toggle + swipe re-verified. Sound itself unverified remotely
+  (listen in the kitchen). Commits: immich-slideshow 9cf9106,
+  dashboard bff7c0e.
 
 ---
 
