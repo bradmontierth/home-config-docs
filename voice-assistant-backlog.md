@@ -300,24 +300,38 @@ bigger captions.**
 - **Videos v2 = TAP-TO-PLAY, LIVE (SHOW_VIDEOS=1, 2026-07-10).** Brad's
   design: videos never auto-play — they rotate as poster stills (Immich
   poster frame via /img) with a play badge + duration; tapping expands to
-  fullscreen and plays ONCE with SOUND, then collapses and resumes
-  rotation. Idle video slides are plain JPEGs so rotation carries zero
-  decode risk — safe even before the power-supply fix. Mechanics: taps
+  fullscreen and plays ONCE (MUTED — the display has no speaker; see
+  below), then collapses and resumes rotation. Idle video slides are
+  plain JPEGs so rotation carries zero decode risk — safe even before
+  the power-supply fix. Mechanics: taps
   forward into the iframe as `slideshow-tap`; the VIEWER decides meaning
   (photo=fullscreen toggle, video=expand+play) and answers
   `slideshow-fullscreen {on,off,toggle}` — two-way postMessage, dashboard
-  checks e.source. Sound needs kiosk flag
-  `--autoplay-policy=no-user-gesture-required` (overlay tap isn't user
-  activation INSIDE the iframe; muted fallback otherwise). Tap during
+  checks e.source. Tap during
   playback stops; swipe-away stops but stays expanded. /api/feed?types=
   filter added (test hook). **E2E-verified on the real kiosk via CDP**
   (remote-debugging-port + ssh tunnel + websocket-client
   suppress_origin=True; Input.dispatchTouchEvent real taps/swipes):
   poster+badge → touch tap → fullscreen+/video stream → clock stayed
   live throughout → auto-collapse on ended → rotation resumed; photo
-  tap toggle + swipe re-verified. Sound itself unverified remotely
-  (listen in the kitchen). Commits: immich-slideshow 9cf9106,
+  tap toggle + swipe re-verified. Commits: immich-slideshow 9cf9106,
   dashboard bff7c0e.
+- **Videos are MUTED (2026-07-10)** — the display has no speaker.
+  Viewer forces `V.muted = true` (immich-slideshow 15ad05a) and the
+  kiosk launch line dropped `--autoplay-policy=no-user-gesture-required`
+  (home_config cc2ab43). To restore sound: add a speaker to display-pi
+  (best — perfect lip-sync, two-line change: unmute + re-add the flag;
+  pair with the power-supply fix). Relaying audio to the kitchen-speaker
+  satellite (aplay + existing orchestrator duck) is buildable but lands
+  ~¼–½ s of lip-sync offset; MA announcements are a non-starter
+  (snapcast buffers ~1 s, queue pause/resume jarring for long clips).
+- **Kid ages in captions (2026-07-10, immich-slideshow 77b769b).**
+  Sweep syncs name→birthDate from Immich /api/people (only people with
+  a birthDate set get ages — kids yes, parents no, nothing hardcoded;
+  set/change birthdays in Immich and it flows through within the hour).
+  Feed decorates names with age at photo time: newborn / "8 mo" /
+  half-year steps to 3 ("1", "1½", "2", "2½") / whole years after.
+  Server-side only; viewer untouched.
 
 ---
 
