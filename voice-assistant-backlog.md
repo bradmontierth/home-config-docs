@@ -102,7 +102,7 @@ reader) — acceptable; alarm playback still fires via the HTTP thread.
   expected worst case). Consider capping the search loop via prompt ("at most
   3 searches") or dropping web_context high→medium if this recurs.
 
-## 7. Jukebox play/pause button lags / toggles wrong way — P1, ROOT-CAUSED
+## 7. Jukebox play/pause button lags / toggles wrong way — P1, FIXED+DEPLOYED 2026-07-09
 
 **Diagnosis (`dashboard_webapp/app/static/app.js`):** the button decides
 play-vs-pause from the *server-reported* state (1.5s poll of
@@ -112,14 +112,16 @@ the actual player by a beat). Press pause → state still says "playing" for
 *play*. Rapid presses fight the poll. Wife pressed 10×; the winning strategy
 (press, wait 3s, press) is exactly the poll+MA lag.
 
-**Fix (dashboard only, small):** optimistic toggle —
-on click, flip the icon + local `jukebox.state` immediately, remember
-`pendingState` + timestamp, and ignore the polled `state` field for ~3s
-(or until it confirms the pending state). Subsequent clicks toggle from the
-optimistic state, so the command sent always matches what the user sees.
-Keep everything else poll-driven.
+**Fix (SHIPPED, dashboard_webapp da147fc):** the click already flipped
+optimistically, but `jukeboxCommand` schedules a poll 400ms later that
+re-applied MA's lagging state and flipped the button back. `renderJukebox` now
+holds `jukebox.pendingState` over stale polls until the server reports it (or
+a 4s deadline). Clicks always toggle from the displayed state. Same rebuild
+also shipped the caption seq **epoch tolerance** (huge backward seq jump =
+new epoch, don't mute captions). Kiosk reloaded. Live test: play music, mash
+the pause button — it should track presses 1:1 now.
 
-## 2. Weather: current + forecast — P2 (easy family-parity win)
+## 2. Weather: current + forecast — P2, BUILT+DEPLOYED 2026-07-09
 
 All data already flows to the dashboard from HA:
 - Current: `sensor.weather_station_outdoor_temperature` (+ humidity, wind,
@@ -127,14 +129,19 @@ All data already flows to the dashboard from HA:
 - Forecast: `weather.get_forecasts` service on `weather.forecast_home_2`
   (dashboard's `ha_client.py:108` already does hourly; daily also available).
 
-**Plan (orchestrator, small):** new `weather_query` intent (fields:
-`weather_when` = now|today|tomorrow|day-name). Tiny HA REST client in the
-orchestrator (GET `/api/states/<entity>` + POST
-`/api/services/weather/get_forecasts?return_response`) — copy the dashboard's
-token/env pattern; add `HA_URL`/`HA_TOKEN` to compose. Format spoken answers:
-now → "72 and partly cloudy, wind 5 mph"; forecast → high/low + condition +
-rain chance. Push a small forecast card event to the dashboard later (it
-already renders a forecast strip; optional). No new models, no satellite work.
+**Built (orchestrator only):** `weather` intent + `weather_when` slot
+(now|today|tonight|tomorrow|day-name) in intent.py; new
+`orchestrator/weather.py` — HA REST (states + `get_forecasts?return_response`
+daily), token mounted from `cecret_lake/dashboard_webapp/ha_token` (same one
+the dashboard uses; HA_URL 127.0.0.1:8123 via host network). Current answer =
+weather-station temp + met.no condition word (+ wind when ≥10mph); forecast =
+condition/high/low per day, rain note from precipitation amount (met.no gives
+NO probability, only inches). `handle()` returns None on HA-down / day beyond
+the 6-day window → falls back to the ask path (sports pattern), and answers
+seed ask history so "what about the weekend?" follow-ups have context.
+Validated live via /command: now/today/tomorrow/saturday all correct + timer
+and music regressions pass. Later polish: dashboard forecast card event;
+"inside temperature" queries (currently routed to none/ask).
 
 ## 4. Wake word impossible while music playing — P2 (instrument, then bypass)
 

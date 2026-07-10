@@ -30,6 +30,7 @@ from . import ask as ask_mod
 from . import lists as lists_mod
 from . import music as music_mod
 from . import sports as sports_mod
+from . import weather as weather_mod
 from . import clients, config, events, format as fmt, intent as intent_mod, verify
 from .timers import TimerEngine
 
@@ -234,6 +235,9 @@ def _summarize_turn(intent: str, result: dict) -> str:
     if intent == "sports":
         return f"you asked about {parsed.get('query') or 'sports'} and heard: " \
                f"{(result.get('response') or '')[:100]}"
+    if intent == "weather":
+        return f"you asked about the weather ({result.get('weather_when') or 'now'}) " \
+               f"and heard: {(result.get('response') or '')[:100]}"
     if intent == "play_music":
         name = (result.get("music") or {}).get("name")
         return f"you started playing {name}" if name else "you resumed the music"
@@ -547,6 +551,21 @@ async def handle_command(command: str, followup: bool = False) -> dict:
             ask_mod.remember(command, sports_result["response"])
         else:
             # Unresolvable team/league or ESPN change -> slow-but-right path.
+            await events.emit("ask_thinking", query=command)
+            ask_result = await ask_mod.handle_ask(command)
+            result["response"] = ask_result["response"]
+            result["full"] = ask_result.get("full", "")
+            result["ok"] = ask_result["ok"]
+
+    elif intent == "weather":
+        weather_result = await weather_mod.handle(parsed)   # None -> fall back
+        if weather_result:
+            result.update(weather_result)
+            # Seed ask history so "what about the weekend?" routed to the smart
+            # model knows what we just said (sports does the same).
+            ask_mod.remember(command, weather_result["response"])
+        else:
+            # HA down, or a day outside the 6-day met.no window.
             await events.emit("ask_thinking", query=command)
             ask_result = await ask_mod.handle_ask(command)
             result["response"] = ask_result["response"]

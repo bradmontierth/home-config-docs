@@ -33,6 +33,19 @@ SATELLITE_ALARM_URL = os.getenv(
     "SATELLITE_ALARM_URL", "http://192.168.10.24:8781/alarm"
 )
 
+# --- weather (Home Assistant REST) -----------------------------------------
+# HA runs on this same host; network_mode host makes 127.0.0.1 work in-container.
+HA_URL = os.getenv("HA_URL", "http://127.0.0.1:8123").rstrip("/")
+# Long-lived token file (raw, or dotenv HA_TOKEN=…) — mount from cecret_lake.
+HA_TOKEN_FILE = os.getenv("HA_TOKEN_FILE", "/secrets/ha_token")
+# Local weather-station sensors (accurate on-site readings) + the met.no
+# entity that backs the dashboard's condition + forecast strip.
+WEATHER_ENTITY = os.getenv("WEATHER_ENTITY", "weather.forecast_home_2")
+OUTDOOR_TEMP_ENTITY = os.getenv(
+    "OUTDOOR_TEMP_ENTITY", "sensor.weather_station_outdoor_temperature")
+WIND_SPEED_ENTITY = os.getenv(
+    "WIND_SPEED_ENTITY", "sensor.weather_station_wind_speed")
+
 # --- knowledge / ask mode (smart model via OpenRouter) --------------------
 # Streaming, short-first (===MORE=== sentinel). Only the `ask` intent hits this.
 OPENROUTER_BASE_URL = os.getenv(

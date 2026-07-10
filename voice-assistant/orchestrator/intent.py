@@ -17,8 +17,11 @@ INTENTS = (
     "set_timer", "timer_query", "timer_adjust", "timer_cancel",
     "add_items", "set_reminder", "show_todos", "show_shopping", "complete_item",
     "remove_items", "clear_list", "play_music", "music_control", "music_query",
-    "sports", "ask", "unclear", "none",
+    "sports", "weather", "ask", "unclear", "none",
 )
+
+WEATHER_WHEN = ("now", "today", "tonight", "tomorrow", "monday", "tuesday",
+                "wednesday", "thursday", "friday", "saturday", "sunday")
 
 MUSIC_ACTIONS = ("pause", "resume", "stop", "next", "previous",
                  "volume_up", "volume_down")
@@ -40,7 +43,8 @@ Schema:
   "media_type": for play_music, only when the user NAMES a type — "artist", "album", "track", or "playlist"; else null,
   "music_action": for music_control, one of {list(MUSIC_ACTIONS)}; else null,
   "sports_action": for sports, "last" (score/result of the most recent or current game) or "next" (upcoming game); else null,
-  "sports_date": for sports, "today" or "yesterday" only when the user SAYS a day like that ("last night" = "yesterday"); else null
+  "sports_date": for sports, "today" or "yesterday" only when the user SAYS a day like that ("last night" = "yesterday"); else null,
+  "weather_when": for weather, one of {list(WEATHER_WHEN)}; else null
 }}
 
 Rules:
@@ -58,6 +62,13 @@ Rules:
   "are there any nba games tonight" (query "nba", "next"). Put the team or league name in "query".
   If the team is only a pronoun ("when do they play next") or the question is about stats, rosters,
   standings, or history rather than a game result/schedule, use "ask" instead.
+- weather = the LOCAL weather here at home, current or forecast: "what's the weather", "how hot is
+  it outside", "what's the temperature outside", "is it windy" (weather_when "now"); "what's the
+  forecast", "will it rain today" ("today"); "how cold does it get tonight" ("tonight"); "what's
+  the weather tomorrow" ("tomorrow"); "what's the forecast for saturday" ("saturday"). Current
+  conditions and "is it..." questions -> "now"; forecast questions with no day named -> "today".
+  A follow-up like "what about tomorrow" right after a weather answer is weather too. But weather
+  for a NAMED other place ("weather in Chicago") or beyond a week out is "ask", not weather.
 - ask = a general knowledge or factual question NOT about timers: "how many tablespoons in a cup",
   "when do babies start walking", "what temperature is chicken done at", "how do I dice an onion".
   Put the cleaned question in "query". No keyword is needed — natural questions route here.
@@ -194,6 +205,12 @@ def _validate(data: dict) -> dict:
     if sports_date not in ("today", "yesterday"):
         sports_date = None
 
+    weather_when = data.get("weather_when")
+    if isinstance(weather_when, str):
+        weather_when = weather_when.strip().lower()
+    if weather_when not in WEATHER_WHEN:
+        weather_when = None
+
     return {
         "intent": intent,
         "label": label,
@@ -207,4 +224,5 @@ def _validate(data: dict) -> dict:
         "music_action": music_action,
         "sports_action": sports_action,
         "sports_date": sports_date,
+        "weather_when": weather_when,
     }
