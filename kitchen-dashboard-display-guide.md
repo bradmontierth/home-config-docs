@@ -115,7 +115,7 @@ Reload the kiosk browser after deploy:
 
 ```bash
 ssh display-pi 'pkill chromium || true'
-ssh display-pi 'DISPLAY=:0 XDG_RUNTIME_DIR=/run/user/1000 chromium --kiosk --password-store=basic --noerrdialogs --disable-infobars --check-for-update-interval=31536000 --no-first-run "http://192.168.10.217:8777/?v=$(date +%s)" >/tmp/kitchen-dashboard-chromium.log 2>&1 &'
+ssh display-pi 'DISPLAY=:0 XDG_RUNTIME_DIR=/run/user/1000 chromium --kiosk --password-store=basic --disable-accelerated-video-decode --noerrdialogs --disable-infobars --check-for-update-interval=31536000 --no-first-run "http://192.168.10.217:8777/?v=$(date +%s)" >/tmp/kitchen-dashboard-chromium.log 2>&1 &'
 ```
 
 `--password-store=basic` is REQUIRED (learned 2026-07-09): without it Chromium
@@ -123,6 +123,14 @@ may pop a GNOME "choose password for new keyring" dialog and hang before
 loading anything — symptom is zero HTTP traffic from the kiosk and an empty
 chromium log. Debug a mystery blank/stuck display with a screenshot:
 `ssh display-pi 'WAYLAND_DISPLAY=wayland-0 XDG_RUNTIME_DIR=/run/user/1000 grim /tmp/shot.png'`.
+
+`--disable-accelerated-video-decode` is REQUIRED (learned 2026-07-10): with
+hardware decode, slideshow videos starve the Pi's GPU memory (chromium log
+fills with `Unable to initialize SkSurface` / `MakeFromBackendTexture()
+failed`) and parts of the page silently stop repainting — the header clock
+freezes while video/radar keep moving. Software decode of the pre-transcoded
+720p clips is fine and page paint stays healthy. (May also be aggravated by
+the display-pi low-voltage condition — power supply still needs attention.)
 
 The app route `/` also cache-busts `app.js`, `styles.css`, and `editorial.css`
 using their mtimes. Still relaunch/reload Chromium after a deploy.

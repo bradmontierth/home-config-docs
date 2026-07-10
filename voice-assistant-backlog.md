@@ -267,6 +267,42 @@ the fullscreen tap itself (no input-injection tool on display-pi).
 retire whenever Brad wants. Favorites already act as a ×1.6 boost; albums
 unused as a signal so far.
 
+**Round 2 (2026-07-10, Brad's requests): family-only + swipes + videos +
+bigger captions.**
+- Pool narrowed to family-only (Simon/Claire/Adrienne/Brad OR-logic) from
+  2023-01-01 (old embarrassing photos were surfacing). Pure config:
+  MIX 1.0/0/0 + new MIN_TAKEN_AT knob (92614ea). Pool = 2,984 photos
+  (+166 videos when enabled) — at 20s dwell that's < a day of slides, so
+  everything repeats ~daily; suppression just evens rotation.
+- Swipe navigation: dashboard overlay discriminates tap (fullscreen toggle)
+  vs horizontal swipe via pointer events (`touch-action:none` REQUIRED or
+  the browser converts drags to pointercancel); swipes postMessage into the
+  viewer iframe (`{type:"slideshow-nav",dir:±1}`) — the iframe never sees
+  kiosk touches itself. Viewer keeps a 100-item history stack so
+  swipe-right goes back. Swiping re-arms the fullscreen auto-return.
+  (dashboard 3fa50cc, viewer in immich-slideshow 35e60eb)
+- Captions bumped for kitchen viewing distance: 34/19px fullscreen,
+  22/14px tile (+text-shadow).
+- **Videos: built but GATED OFF (SHOW_VIDEOS=0). Hardware video decode
+  wedged the kiosk Pi's GPU** — chromium GPU process spams `Unable to
+  initialize SkSurface`/`MakeFromBackendTexture() failed` and TEXT TILES
+  SILENTLY STOP REPAINTING (header clock froze at the second the first
+  video started while the video itself + radar kept animating — deeply
+  confusing signature; page JS provably alive via 20s img cadence in
+  service logs). Fix chain: (a) kiosk chromium now REQUIRES
+  `--disable-accelerated-video-decode` (runbook updated; sw-decode proven
+  healthy live — clock ticked to-the-second through multiple videos, zero
+  SkSurface errors); (b) Brad built a pre-transcode pipeline (ffmpeg
+  ≤720p H.264 2.5Mbps CRF26, nice -n 10 + 2 threads, /data/vcache,
+  video_ready gate — feed never offers a video whose light copy isn't
+  ready; /video serves vcache first, Immich-proxy fallback); viewer plays
+  muted, advances on ended or VIDEO_MAX_S=45. Backfill of all 166 family
+  videos runs in the background (~12/2min pace). **Enable later by
+  SHOW_VIDEOS=1 + container restart — Brad wants the display-pi power
+  supply fixed first (low-voltage warning may underlie the GPU
+  fragility).** Sound stays off (autoplay policy + kitchen noise); revisit
+  with a fullscreen-only unmute if wanted.
+
 ---
 
 ## Batch 1 live-test results (Brad, 2026-07-09 night)
