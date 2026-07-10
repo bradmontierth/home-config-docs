@@ -226,6 +226,25 @@ grandparents' rpi_client PoC on :9010 be retired once this lands?
 
 ---
 
+## Batch 1 live-test results (Brad, 2026-07-09 night)
+
+- Item 5: no premature endpoints in short tests + a ramble test — good but
+  not conclusive; real-world watch continues (grep satellite journal for
+  `spurious onset discarded` to see the guard actually firing).
+- Item 3: alarm stop improved — one dismiss on the FIRST "stop", one took two.
+  Better than 3-4×; leave as-is unless it degrades (next lever: trained
+  "stop" wake model).
+- **Regression found + fixed (c1cfd96): live captions died after the deploy.**
+  PartialStreamer's seq restarted at 1 on service restart while the kiosk's
+  `caption.lastSeq` kept its pre-restart high-water mark → every partial
+  dropped as stale. Every earlier satellite restart shipped with a kiosk
+  reload, which masked it. Fix: seed seq from `int(time.time())` — always
+  larger after a restart. Verified the chain with a TTS clip → `/partial?seq=
+  <clock>` → decode → dashboard event; then restarted once more so the live
+  seed outran the test seq. **Rule for the future: satellite seq semantics
+  must survive restarts, or the kiosk must treat a big backward seq jump as a
+  new epoch (candidate hardening for the next dashboard rebuild).**
+
 ## Side findings (logged while investigating, not on the list)
 
 - ~~**`/command/audio failed: timed out` 17:22:04**~~ — promoted to item 8
