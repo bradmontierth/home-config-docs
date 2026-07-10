@@ -115,8 +115,14 @@ Reload the kiosk browser after deploy:
 
 ```bash
 ssh display-pi 'pkill chromium || true'
-ssh display-pi 'DISPLAY=:0 XDG_RUNTIME_DIR=/run/user/1000 chromium --kiosk --noerrdialogs --disable-infobars --check-for-update-interval=31536000 --no-first-run "http://192.168.10.217:8777/?v=$(date +%s)" >/tmp/kitchen-dashboard-chromium.log 2>&1 &'
+ssh display-pi 'DISPLAY=:0 XDG_RUNTIME_DIR=/run/user/1000 chromium --kiosk --password-store=basic --noerrdialogs --disable-infobars --check-for-update-interval=31536000 --no-first-run "http://192.168.10.217:8777/?v=$(date +%s)" >/tmp/kitchen-dashboard-chromium.log 2>&1 &'
 ```
+
+`--password-store=basic` is REQUIRED (learned 2026-07-09): without it Chromium
+may pop a GNOME "choose password for new keyring" dialog and hang before
+loading anything — symptom is zero HTTP traffic from the kiosk and an empty
+chromium log. Debug a mystery blank/stuck display with a screenshot:
+`ssh display-pi 'WAYLAND_DISPLAY=wayland-0 XDG_RUNTIME_DIR=/run/user/1000 grim /tmp/shot.png'`.
 
 The app route `/` also cache-busts `app.js`, `styles.css`, and `editorial.css`
 using their mtimes. Still relaunch/reload Chromium after a deploy.
