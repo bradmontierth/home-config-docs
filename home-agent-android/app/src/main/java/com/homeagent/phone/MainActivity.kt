@@ -288,7 +288,14 @@ fun HomeAgentApp(launchSessionId: MutableState<String?>) {
         selectedSessionModel = codexModel
         sessionRunning = true
         status = "Session $id"
-        socket = connectWebSocket(client, gatewayUrl, token, id) { event ->
+        socket = connectWebSocket(client, gatewayUrl, token, id) { ws, event ->
+            if (ws !== socket) {
+                // Superseded connection: closing is async, so its events can still
+                // arrive here. Acting on them duplicates output and orphans the
+                // live socket. Close it and drop the event.
+                ws.close(1000, "stale connection")
+                return@connectWebSocket
+            }
             when (event.optString("type")) {
                 "output" -> {
                     val data = event.optString("data")
@@ -2474,7 +2481,7 @@ fun connectWebSocket(
     gatewayUrl: String,
     token: String,
     sessionId: String,
-    onEvent: (JSONObject) -> Unit
+    onEvent: (WebSocket, JSONObject) -> Unit
 ): WebSocket {
     val wsUrl = gatewayUrl
         .trimEnd('/')
@@ -2487,9 +2494,10 @@ fun connectWebSocket(
         override fun onMessage(webSocket: WebSocket, text: String) {
             onMainThread {
                 try {
-                    onEvent(JSONObject(text))
+                    onEvent(webSocket, JSONObject(text))
                 } catch (error: JSONException) {
                     onEvent(
+                        webSocket,
                         JSONObject(
                             mapOf(
                                 "type" to "output",
@@ -2503,14 +2511,14 @@ fun connectWebSocket(
 
         override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
             onMainThread {
-                onEvent(JSONObject(mapOf("type" to "output", "data" to "\n[websocket error] ${t.message}\n")))
-                onEvent(JSONObject(mapOf("type" to "status", "status" to "Disconnected")))
+                onEvent(webSocket, JSONObject(mapOf("type" to "output", "data" to "\n[websocket error] ${t.message}\n")))
+                onEvent(webSocket, JSONObject(mapOf("type" to "status", "status" to "Disconnected")))
             }
         }
 
         override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
             onMainThread {
-                onEvent(JSONObject(mapOf("type" to "status", "status" to "closed")))
+                onEvent(webSocket, JSONObject(mapOf("type" to "status", "status" to "closed")))
             }
         }
     })
