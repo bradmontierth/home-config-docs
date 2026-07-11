@@ -348,6 +348,66 @@ def theme_sound(theme: str) -> Path:
     return p if p.exists() else SOUNDS_DIR / "themes" / "marimba.wav"
 
 
+# --- slideshow media audio ---------------------------------------------------
+# The kitchen display plays home videos muted (no speaker on the display); the
+# slideshow service relays each clip's audio track here. Unlike /speak this
+# must NOT hold PLAYBACK_LOCK — a 45s clip would queue assistant replies and
+# alarms behind it. It gets its own killable aplay process instead, and is
+# stopped by /media/stop, any stage-1 wake trigger, and alarm start. Music is
+# ducked for exactly the playback lifetime (the watcher thread owns unduck).
+MEDIA_LOCK = threading.Lock()
+MEDIA_PROC: subprocess.Popen | None = None
+
+
+def media_stop() -> None:
+    with MEDIA_LOCK:
+        proc = MEDIA_PROC
+    if proc and proc.poll() is None:
+        try:
+            proc.kill()
+        except Exception:  # noqa: BLE001
+            pass
+
+
+def media_play(url: str) -> bool:
+    """Fetch a WAV and play it interruptibly. Returns once aplay is running so
+    the caller (the kiosk viewer, transitively) can start the picture in step."""
+    global MEDIA_PROC
+    try:
+        data = _scale_wav(get_bytes(url), STATE.volume_factor(False))
+    except Exception as exc:  # noqa: BLE001
+        log(f"media fetch failed ({url}): {exc}")
+        return False
+    media_stop()
+    duck_music()
+    try:
+        proc = subprocess.Popen(["aplay", "-q", "-D", PLAYBACK_DEVICE, "-"],
+                                stdin=subprocess.PIPE)
+    except Exception as exc:  # noqa: BLE001
+        log(f"media aplay spawn failed: {exc}")
+        unduck_music()
+        return False
+    with MEDIA_LOCK:
+        MEDIA_PROC = proc
+
+    def run() -> None:
+        global MEDIA_PROC
+        try:
+            proc.stdin.write(data)   # blocks at the pipe as aplay consumes
+            proc.stdin.close()
+        except Exception:  # noqa: BLE001 — killed mid-write (BrokenPipe) is normal
+            pass
+        proc.wait()
+        with MEDIA_LOCK:
+            if MEDIA_PROC is proc:
+                MEDIA_PROC = None
+        unduck_music()
+
+    threading.Thread(target=run, daemon=True).start()
+    log(f"media play {len(data) / 1e6:.1f}MB from {url}")
+    return True
+
+
 # --- live-caption partials ---------------------------------------------------
 class PartialStreamer:
     """Feeds the dashboard's live captions. capture_command offers the entire
@@ -735,6 +795,7 @@ def start_next_alarm() -> None:
         req = STATE.alarm_queue.pop(0)
         STATE.current_alarm = req.get("timer_id") or f"anon-{int(time.time())}"
     STATE.dismiss.clear()
+    media_stop()   # a ringing timer outranks slideshow video audio
     duck_music()   # the ringing must beat the music, and 'stop' must be hearable
     threading.Thread(target=alarm_playback, args=(req,), daemon=True).start()
 
@@ -811,6 +872,17 @@ class Handler(http.server.BaseHTTPRequestHandler):
             if url.startswith("/"):
                 url = ORCH_BASE + url
             threading.Thread(target=speak_url, args=(url,), daemon=True).start()
+            self._json(200, {"ok": True})
+        elif self.path == "/media/play":
+            url = str(self._read_json().get("url", ""))
+            if not url:
+                self._json(400, {"ok": False, "error": "url required"})
+                return
+            # Synchronous through aplay spawn: the response is the kiosk's cue
+            # to start the picture, so audio and video begin close together.
+            self._json(200, {"ok": media_play(url)})
+        elif self.path == "/media/stop":
+            media_stop()
             self._json(200, {"ok": True})
         else:
             self._json(404, {"ok": False})
@@ -932,6 +1004,7 @@ def main() -> int:
             continue
 
         preroll = b"".join(list(ring)[-int(PREROLL_S * FPS):])
+        media_stop()   # slideshow video audio would talk over the turn
         duck_music()
         try:
             run_turn(preroll, arecord.stdout, vad)
