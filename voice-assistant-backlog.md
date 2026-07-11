@@ -339,6 +339,24 @@ bigger captions.**
   History entries are now slides (1-2 items) so swipe-back restores
   pairs. CDP-verified on the kiosk: pairs in tile + fullscreen, swipe
   fwd/back, tap collapse, video tap-to-play all pass.
+- **Video audio → kitchen satellite (2026-07-11, immich-slideshow
+  f3f8e5d + home_config d874185).** Brad's call: son wants sound on
+  home videos; small A/V offset OK until the display-pi PSU is fixed
+  (then a local USB speaker = perfect sync). Pipeline: transcode worker
+  extracts 44.1k stereo WAVs from the vcache mp4s (378 extracted, 3
+  silent → .none markers, vcache 5.6G); slideshow serves /audio/{id};
+  viewer POST /api/av/start → satellite POST /media/play (fetches the
+  WAV, gain-scaled to the assistant speech tier, own killable aplay —
+  NOT PLAYBACK_LOCK, so clips never queue replies/alarms) and the
+  viewer starts the picture only on the relay's reply (or silent after
+  1.5s if relay down). Music ducks for exactly the clip lifetime
+  (watcher thread owns unduck; orchestrator refcount). Auto-stopped by
+  stage-1 wake trigger + alarm start; viewer /api/av/stop on swipe-away/
+  stop-tap. Config: SATELLITE_URL/SELF_URL in cecret .env. Satellite
+  deployed (mode restored active). Verified e2e: kiosk tap → video
+  t=3.2s while satellite aplay ran the matching clip; natural end →
+  aplay exits + unduck balanced; manual stop kills instantly. NOT yet
+  ear-verified for sync feel — ask Brad/Simon.
 - **Caption size + scrim fix (2026-07-10, immich-slideshow f0512a5).**
   Brad: captions still too small at viewing distance + text "fading
   out" at the bottom. The fade was a pairing-refactor REGRESSION:
