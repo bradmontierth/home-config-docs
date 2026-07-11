@@ -28,6 +28,7 @@ class HomeAgentMessagingService : FirebaseMessagingService() {
         super.onMessageReceived(message)
         val data = message.data
         val sessionId = data["session_id"] ?: return
+        val conversationId = data["root_session_id"].orEmpty().ifBlank { sessionId }
         val eventType = data["event_type"].orEmpty()
         val title = data["notification_title"] ?: message.notification?.title ?: when (eventType) {
             "approval_needed" -> "Home Agent needs approval"
@@ -41,7 +42,7 @@ class HomeAgentMessagingService : FirebaseMessagingService() {
             "failed" -> "Tap to review the failed session."
             else -> "Tap to reopen the session."
         }
-        postSessionNotification(applicationContext, sessionId, title, body)
+        postSessionNotification(applicationContext, sessionId, conversationId, title, body)
     }
 
     private fun pushClient(): OkHttpClient {

@@ -350,6 +350,7 @@ fun HomeAgentApp(launchSessionId: MutableState<String?>) {
         fun loadInfoAndMaybeReconnect() {
             fetchSessionInfo(client, gatewayUrl, token, id) { infoResult ->
                 infoResult.onSuccess { info ->
+                    cancelSessionNotification(context, info.rootSessionId ?: id)
                     selectedSessionTitle = info.displayTitle.ifBlank { info.title }
                     selectedSessionReasoning = info.reasoningEffort
                     selectedSessionAccount = info.codexAccount
@@ -378,7 +379,23 @@ fun HomeAgentApp(launchSessionId: MutableState<String?>) {
     }
 
     fun loadSessionFromNotification(id: String) {
-        loadSession(id, expandTerminal = true)
+        // A notification may be stale: its session id can have newer resume
+        // children by the time it is tapped. Join the conversation at its
+        // latest session so the user lands on the current turn.
+        status = "Finding latest session"
+        listSessions(client, gatewayUrl, token) { result ->
+            val target = result.getOrNull()?.let { latestSessionInConversation(it, id) }
+            if (target != null) {
+                sessions = result.getOrDefault(sessions)
+                selectedSessionTitle = target.displayTitle.ifBlank { target.title }
+                selectedSessionReasoning = target.reasoningEffort.takeIf { value -> value.isNotBlank() }
+                selectedSessionAccount = target.codexAccount.takeIf { value -> value.isNotBlank() }
+                selectedSessionModel = target.codexModel.takeIf { value -> value.isNotBlank() }
+                loadSession(target.sessionId, expandTerminal = true)
+            } else {
+                loadSession(id, expandTerminal = true)
+            }
+        }
     }
 
     fun refreshSessions() {
@@ -1574,6 +1591,15 @@ fun groupedSessions(sessions: List<AgentSession>): List<ConversationGroup> {
 }
 
 
+fun latestSessionInConversation(sessions: List<AgentSession>, sessionId: String): AgentSession? {
+    val known = sessions.firstOrNull { it.sessionId == sessionId }
+    val rootId = known?.rootSessionId ?: known?.sessionId ?: sessionId
+    return sessions
+        .filter { (it.rootSessionId ?: it.sessionId) == rootId }
+        .maxByOrNull { it.startedAt }
+}
+
+
 fun formatSessionTime(startedAt: Double): String {
     if (startedAt <= 0.0) return ""
     return SimpleDateFormat("MMM d h:mm a", Locale.US).format(Date((startedAt * 1000).toLong()))
@@ -2442,7 +2468,13 @@ fun ensureNotificationChannel(context: Context) {
 }
 
 
-fun postSessionNotification(context: Context, sessionId: String, title: String, message: String) {
+fun postSessionNotification(
+    context: Context,
+    sessionId: String,
+    conversationId: String,
+    title: String,
+    message: String
+) {
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
         ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
     ) {
@@ -2453,9 +2485,11 @@ fun postSessionNotification(context: Context, sessionId: String, title: String, 
         flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
         putExtra(EXTRA_SESSION_ID, sessionId)
     }
+    // Keyed by conversation (root session), not session id: each resume creates a
+    // new session id, so per-session ids stacked one stale notification per turn.
     val pendingIntent = PendingIntent.getActivity(
         context,
-        sessionId.hashCode(),
+        conversationId.hashCode(),
         intent,
         PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
     )
@@ -2472,7 +2506,13 @@ fun postSessionNotification(context: Context, sessionId: String, title: String, 
         .setAutoCancel(true)
         .build()
     val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-    manager.notify(SESSION_NOTIFICATION_ID + sessionId.hashCode(), notification)
+    manager.notify(SESSION_NOTIFICATION_ID + conversationId.hashCode(), notification)
+}
+
+
+fun cancelSessionNotification(context: Context, conversationId: String) {
+    val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+    manager.cancel(SESSION_NOTIFICATION_ID + conversationId.hashCode())
 }
 
 
