@@ -4,6 +4,7 @@ import os
 import pty
 import re
 import select
+import shutil
 import signal
 import subprocess
 import threading
@@ -41,6 +42,16 @@ CODEX_ACCOUNT_LABELS_PATH = Path(
 )
 MACHINE_CODEX_ACCOUNT_ID = "machine"
 ALLOWED_REASONING_EFFORTS = {"low", "medium", "high", "xhigh"}
+ALLOWED_AGENTS = {"codex", "claude"}
+CLAUDE_BIN = (
+    os.environ.get("HOME_AGENT_CLAUDE_BIN")
+    or shutil.which("claude")
+    or "/home/pi/.local/bin/claude"
+)
+CLAUDE_MODELS = os.environ.get(
+    "HOME_AGENT_CLAUDE_MODELS",
+    "claude-fable-5:Fable 5,claude-opus-4-8:Opus 4.8,claude-sonnet-5:Sonnet 5,claude-haiku-4-5:Haiku 4.5",
+)
 MAX_COMMAND_OUTPUT_CHARS = int(os.environ.get("HOME_AGENT_MAX_COMMAND_OUTPUT_CHARS", "1800"))
 SHOW_SUCCESSFUL_COMMAND_OUTPUT = os.environ.get("HOME_AGENT_SHOW_COMMAND_OUTPUT", "0") == "1"
 ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
@@ -52,6 +63,7 @@ class StartRequest(BaseModel):
     title: Optional[str] = None
     resume_from: Optional[str] = None
     codex_thread_id: Optional[str] = None
+    agent: Optional[str] = None
     reasoning_effort: Optional[str] = None
     codex_account: Optional[str] = None
     codex_model: Optional[str] = None
@@ -60,6 +72,7 @@ class StartRequest(BaseModel):
 class ResumeRequest(BaseModel):
     prompt: str = Field(min_length=1)
     title: Optional[str] = None
+    agent: Optional[str] = None
     reasoning_effort: Optional[str] = None
     codex_account: Optional[str] = None
     codex_model: Optional[str] = None
@@ -109,6 +122,7 @@ class SessionInfo(BaseModel):
     latest_title: Optional[str] = None
     preview: Optional[str] = None
     root_session_id: Optional[str] = None
+    agent: Optional[str] = "codex"
     reasoning_effort: Optional[str] = None
     codex_account: Optional[str] = None
     codex_model: Optional[str] = None
@@ -129,10 +143,14 @@ class CodexSession:
         self.title = request.title or "Voice Codex session"
         self.resume_from = request.resume_from
         self.codex_thread_id = request.codex_thread_id
+        self.agent = normalize_agent(request.agent)
         self.reasoning_effort = normalize_reasoning_effort(request.reasoning_effort)
         self.codex_account = normalize_codex_account(request.codex_account)
         self.codex_home = codex_home_for_account(self.codex_account)
-        self.codex_model = resolve_codex_model(request.codex_model, self.codex_home)
+        if self.agent == "claude":
+            self.codex_model = normalize_codex_model(request.codex_model) or default_claude_model()
+        else:
+            self.codex_model = resolve_codex_model(request.codex_model, self.codex_home)
         self.started_at = time.time()
         self.returncode: Optional[int] = None
         self.status = "starting"
@@ -150,6 +168,8 @@ class CodexSession:
         self.prompt_path.write_text(request.prompt, encoding="utf-8")
 
     def command(self, prompt: str) -> list[str]:
+        if self.agent == "claude":
+            return self.claude_command(prompt)
         if CODEX_MODE == "exec":
             if self.codex_thread_id:
                 cmd = [
@@ -188,6 +208,27 @@ class CodexSession:
         cmd.append(prompt)
         return cmd
 
+    def claude_command(self, prompt: str) -> list[str]:
+        cmd = [
+            CLAUDE_BIN,
+            "-p",
+            "--output-format",
+            "stream-json",
+            "--verbose",
+        ]
+        if CODEX_DANGER_BYPASS:
+            cmd.append("--dangerously-skip-permissions")
+        else:
+            cmd.extend(["--permission-mode", "acceptEdits"])
+        if self.codex_thread_id:
+            cmd.extend(["--resume", self.codex_thread_id])
+        if self.codex_model:
+            cmd.extend(["--model", self.codex_model])
+        if self.reasoning_effort:
+            cmd.extend(["--effort", self.reasoning_effort])
+        cmd.append(prompt)
+        return cmd
+
     async def start(self, prompt: str) -> None:
         if not self.cwd.exists():
             raise HTTPException(status_code=400, detail=f"cwd does not exist: {self.cwd}")
@@ -196,7 +237,7 @@ class CodexSession:
         env = os.environ.copy()
         env.setdefault("TERM", "xterm-256color")
         env.setdefault("NO_COLOR", "1")
-        if uses_machine_codex_home(self.codex_account):
+        if self.agent == "claude" or uses_machine_codex_home(self.codex_account):
             env.pop("CODEX_HOME", None)
         else:
             self.codex_home.mkdir(parents=True, exist_ok=True)
@@ -204,6 +245,7 @@ class CodexSession:
 
         metadata = {
             "session_id": self.session_id,
+            "agent": self.agent,
             "title": self.title,
             "cwd": str(self.cwd),
             "started_at": self.started_at,
@@ -302,14 +344,14 @@ class CodexSession:
             event = json.loads(line)
         except json.JSONDecodeError:
             return
-        if event.get("type") != "thread.started":
-            return
-        thread_id = event.get("thread_id")
-        if isinstance(thread_id, str) and thread_id:
+        thread_id = extract_thread_id(event)
+        if thread_id:
             self.codex_thread_id = thread_id
             self.update_metadata({"codex_thread_id": thread_id})
 
     def maybe_broadcast_auth_required(self, line: str) -> None:
+        if self.agent != "codex":
+            return
         if self.auth_required_sent or not is_auth_required_text(line):
             return
         self.auth_required_sent = True
@@ -368,7 +410,7 @@ class CodexSession:
             await self.broadcast(
                 {
                     "type": "output",
-                    "data": "\n[input queued for future sessions; this Codex exec run cannot receive live steering]\n",
+                    "data": "\n[input queued for future sessions; this run cannot receive live steering]\n",
                 }
             )
             return
@@ -411,6 +453,7 @@ class CodexSession:
             latest_title=self.title,
             preview=preview,
             root_session_id=root_id,
+            agent=self.agent,
             reasoning_effort=self.reasoning_effort,
             codex_account=self.codex_account,
             codex_model=self.codex_model,
@@ -515,6 +558,50 @@ def redact_prompt(cmd: list[str]) -> list[str]:
     if not cmd:
         return cmd
     return [*cmd[:-1], "<prompt>"]
+
+
+def normalize_agent(value: object) -> str:
+    agent = str(value or "codex").strip().lower()
+    if agent not in ALLOWED_AGENTS:
+        raise HTTPException(status_code=400, detail=f"invalid agent: {value}")
+    return agent
+
+
+def configured_claude_models() -> list[CodexModelInfo]:
+    models: list[CodexModelInfo] = []
+    seen: set[str] = set()
+    for entry in CLAUDE_MODELS.split(","):
+        raw = entry.strip()
+        if not raw:
+            continue
+        model_id, _, label = raw.partition(":")
+        normalized = normalize_codex_model(model_id)
+        if not normalized or normalized in seen:
+            continue
+        seen.add(normalized)
+        models.append(
+            CodexModelInfo(
+                model_id=normalized,
+                label=label.strip() or normalized,
+                is_default=not models,
+            )
+        )
+    return models
+
+
+def default_claude_model() -> Optional[str]:
+    models = configured_claude_models()
+    return models[0].model_id if models else None
+
+
+def extract_thread_id(event: dict) -> Optional[str]:
+    if event.get("type") == "thread.started":
+        thread_id = event.get("thread_id")
+    elif event.get("type") == "system" and event.get("subtype") == "init":
+        thread_id = event.get("session_id")
+    else:
+        return None
+    return thread_id if isinstance(thread_id, str) and thread_id else None
 
 
 def normalize_reasoning_effort(value: Optional[str]) -> str:
@@ -828,8 +915,12 @@ def format_exec_event(line: str) -> str:
         event = json.loads(line)
     except json.JSONDecodeError:
         return line
+    if not isinstance(event, dict):
+        return line
 
     event_type = event.get("type")
+    if event_type in {"system", "assistant", "user", "result"}:
+        return format_claude_event(event)
     if event_type == "thread.started":
         thread_id = event.get("thread_id")
         if thread_id:
@@ -866,6 +957,96 @@ def format_exec_event(line: str) -> str:
         item = event.get("item") or {}
         return format_item_completed(item)
     return ""
+
+
+def format_claude_event(event: dict) -> str:
+    event_type = event.get("type")
+    if event_type == "system":
+        if event.get("subtype") == "init":
+            session_id = event.get("session_id")
+            model = event.get("model") or ""
+            model_label = f" [{model}]" if model else ""
+            if session_id:
+                return f"[claude] session started ({session_id}){model_label}\n"
+            return "[claude] session started\n"
+        return ""
+    if event_type == "assistant":
+        message = event.get("message") or {}
+        parts: list[str] = []
+        for block in message.get("content") or []:
+            if not isinstance(block, dict):
+                continue
+            block_type = block.get("type")
+            if block_type in {"text", "thinking"}:
+                text = str(block.get("text") or block.get("thinking") or "").strip()
+                if text:
+                    parts.append(f"\n{text}\n")
+            elif block_type == "tool_use":
+                parts.append(format_claude_tool_use(block))
+        return "".join(parts)
+    if event_type == "user":
+        message = event.get("message") or {}
+        parts = []
+        for block in message.get("content") or []:
+            if isinstance(block, dict) and block.get("type") == "tool_result":
+                parts.append(format_claude_tool_result(block))
+        return "".join(parts)
+    if event_type == "result":
+        if event.get("is_error"):
+            reason = event.get("result") or event.get("error") or "run failed"
+            return f"[claude failed] {reason}\n"
+        details: list[str] = []
+        duration_ms = event.get("duration_ms")
+        if isinstance(duration_ms, (int, float)) and duration_ms > 0:
+            details.append(f"{duration_ms / 1000:.0f}s")
+        usage = event.get("usage") or {}
+        output_tokens = usage.get("output_tokens")
+        if output_tokens is not None:
+            details.append(f"{output_tokens} output tokens")
+        cost = event.get("total_cost_usd")
+        if isinstance(cost, (int, float)) and cost > 0:
+            details.append(f"${cost:.2f}")
+        suffix = f" ({', '.join(details)})" if details else ""
+        return f"[claude] done{suffix}\n"
+    return ""
+
+
+def format_claude_tool_use(block: dict) -> str:
+    name = str(block.get("name") or "tool")
+    tool_input = block.get("input") if isinstance(block.get("input"), dict) else {}
+    if name == "Bash":
+        command = str(tool_input.get("command") or "")
+        return f"\n$ {command}\n" if command else "\n[claude] running command\n"
+    target = ""
+    for key in ("file_path", "path", "pattern", "query", "url", "description"):
+        value = tool_input.get(key)
+        if isinstance(value, str) and value:
+            target = value
+            break
+    label = f" {target}" if target else ""
+    return f"[{name}{label}]\n"
+
+
+def format_claude_tool_result(block: dict) -> str:
+    content = block.get("content")
+    if isinstance(content, list):
+        text = "".join(
+            str(item.get("text") or "")
+            for item in content
+            if isinstance(item, dict) and item.get("type") == "text"
+        )
+    else:
+        text = str(content or "")
+    text = text.rstrip()
+    if block.get("is_error"):
+        snippet = text[:MAX_COMMAND_OUTPUT_CHARS].rstrip()
+        return f"[tool error]\n{snippet}\n" if snippet else "[tool error]\n"
+    if not text:
+        return ""
+    if SHOW_SUCCESSFUL_COMMAND_OUTPUT and len(text) <= MAX_COMMAND_OUTPUT_CHARS:
+        return f"{text}\n"
+    line_count = len(text.splitlines())
+    return f"[tool output hidden: {line_count} lines, {len(text)} chars]\n"
 
 
 def format_item_started(item: dict) -> str:
@@ -999,6 +1180,7 @@ def session_info_from_metadata(path: Path) -> Optional[SessionInfo]:
     session_id = str(metadata.get("session_id") or path.parent.name)
     log_path = str(path.parent / "codex.log")
     title = metadata.get("title")
+    agent = str(metadata.get("agent") or "codex")
     root_id, display_title, preview = session_display_context(session_id, metadata)
     return SessionInfo(
         session_id=session_id,
@@ -1012,9 +1194,11 @@ def session_info_from_metadata(path: Path) -> Optional[SessionInfo]:
         latest_title=title,
         preview=preview,
         root_session_id=root_id,
+        agent=agent,
         reasoning_effort=metadata.get("reasoning_effort") or CODEX_REASONING_EFFORT,
         codex_account=metadata.get("codex_account") or default_codex_account(),
-        codex_model=metadata.get("codex_model") or default_codex_model(),
+        codex_model=metadata.get("codex_model")
+        or (default_claude_model() if agent == "claude" else default_codex_model()),
         codex_thread_id=metadata.get("codex_thread_id") or find_codex_thread_id(session_id),
         resume_from=metadata.get("resume_from"),
     )
@@ -1101,10 +1285,11 @@ def find_codex_thread_id(session_id: str) -> Optional[str]:
                     event = json.loads(line)
                 except json.JSONDecodeError:
                     continue
-                if event.get("type") == "thread.started":
-                    thread_id = event.get("thread_id")
-                    if isinstance(thread_id, str) and thread_id:
-                        return thread_id
+                if not isinstance(event, dict):
+                    continue
+                thread_id = extract_thread_id(event)
+                if thread_id:
+                    return thread_id
     except FileNotFoundError:
         return None
     return None
@@ -1160,6 +1345,11 @@ async def list_codex_accounts() -> list[CodexAccountInfo]:
 @app.get("/codex/models", response_model=list[CodexModelInfo])
 async def list_codex_models() -> list[CodexModelInfo]:
     return discover_codex_models()
+
+
+@app.get("/claude/models", response_model=list[CodexModelInfo])
+async def list_claude_models() -> list[CodexModelInfo]:
+    return configured_claude_models()
 
 
 @app.post("/codex/accounts/{account_id}/label", response_model=CodexAccountInfo)
@@ -1253,17 +1443,24 @@ async def resume_session(session_id: str, request: ResumeRequest) -> SessionInfo
 
     thread_id = source_info.codex_thread_id or find_codex_thread_id(session_id)
     if not thread_id:
-        raise HTTPException(status_code=409, detail="session has no Codex thread id yet")
+        raise HTTPException(status_code=409, detail="session has no agent thread id yet")
 
+    # A conversation stays on the agent that started it: thread ids are not
+    # portable between Codex and Claude, so the resume ignores the client's
+    # current agent toggle (and any model that belongs to the other agent).
+    source_agent = normalize_agent(source_info.agent)
+    requested_agent = normalize_agent(request.agent) if request.agent else source_agent
+    requested_model = request.codex_model if requested_agent == source_agent else None
     child_request = StartRequest(
         prompt=request.prompt,
         cwd=source_info.cwd,
         title=request.title or f"Resume: {source_info.title or session_id}",
         resume_from=session_id,
         codex_thread_id=thread_id,
+        agent=source_agent,
         reasoning_effort=request.reasoning_effort or source_info.reasoning_effort,
         codex_account=request.codex_account or source_info.codex_account,
-        codex_model=request.codex_model or source_info.codex_model,
+        codex_model=requested_model or source_info.codex_model,
     )
     child_id = uuid.uuid4().hex[:12]
     try:

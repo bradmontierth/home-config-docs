@@ -127,6 +127,28 @@ HOME_AGENT_CODEX_DANGER_BYPASS=1
 
 By default, successful command output is collapsed in the phone stream so file reads, searches, API JSON, and log scans do not overwhelm the terminal. Raw JSONL still remains in each session `codex.log`. Set `HOME_AGENT_SHOW_COMMAND_OUTPUT=1` on the runner only when you want successful command stdout streamed to the phone.
 
+## Agent Switching (Codex / Claude)
+
+Sessions can run on Codex (default) or Claude Code. The Android settings screen
+has an Agent toggle; new sessions use the selected agent, and resumed sessions
+always stay on the agent that started the conversation (thread ids are not
+portable between the two).
+
+Claude runs as the machine login (`~/.claude`) via `claude -p --output-format
+stream-json`. With `HOME_AGENT_CODEX_DANGER_BYPASS=1` it gets
+`--dangerously-skip-permissions`; otherwise `--permission-mode acceptEdits`.
+The reasoning effort selector maps directly to `--effort`.
+
+Claude has no model catalog command, so the model list is configured:
+
+```text
+HOME_AGENT_CLAUDE_BIN=/home/pi/.local/bin/claude
+HOME_AGENT_CLAUDE_MODELS=claude-fable-5:Fable 5,claude-opus-4-8:Opus 4.8,claude-sonnet-5:Sonnet 5,claude-haiku-4-5:Haiku 4.5
+```
+
+The first entry is the default model. The list is served at `/claude/models`
+(gateway: `/api/claude/models`).
+
 ## Codex Account Switching
 
 The runner supports multiple cached Codex auth stores by setting `CODEX_HOME`

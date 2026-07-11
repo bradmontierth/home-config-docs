@@ -165,6 +165,7 @@ data class AgentSession(
     val status: String,
     val startedAt: Double,
     val rootSessionId: String?,
+    val agent: String,
     val reasoningEffort: String,
     val codexAccount: String,
     val codexModel: String,
@@ -231,10 +232,13 @@ fun HomeAgentApp(launchSessionId: MutableState<String?>) {
     var gatewayUrl by remember { mutableStateOf(prefs.getString("gateway_url", "http://192.168.10.217:8767") ?: "") }
     var token by remember { mutableStateOf(prefs.getString("token", "") ?: "") }
     var reasoningEffort by remember { mutableStateOf(prefs.getString("reasoning_effort", "medium") ?: "medium") }
+    var agent by remember { mutableStateOf(prefs.getString("agent", "codex") ?: "codex") }
     var codexAccount by remember { mutableStateOf(prefs.getString("codex_account", "account1") ?: "account1") }
     var codexModel by remember { mutableStateOf(prefs.getString("codex_model", "") ?: "") }
+    var claudeModel by remember { mutableStateOf(prefs.getString("claude_model", "") ?: "") }
     var codexAccounts by remember { mutableStateOf<List<CodexAccount>>(emptyList()) }
     var codexModels by remember { mutableStateOf<List<CodexModel>>(emptyList()) }
+    var claudeModels by remember { mutableStateOf<List<CodexModel>>(emptyList()) }
     var transcript by remember { mutableStateOf("") }
     var replyText by remember { mutableStateOf("") }
     var terminal by remember { mutableStateOf("") }
@@ -248,6 +252,7 @@ fun HomeAgentApp(launchSessionId: MutableState<String?>) {
     var terminalExpanded by remember { mutableStateOf(false) }
     var selectedSessionId by remember { mutableStateOf<String?>(null) }
     var selectedSessionTitle by remember { mutableStateOf<String?>(null) }
+    var selectedSessionAgent by remember { mutableStateOf<String?>(null) }
     var selectedSessionReasoning by remember { mutableStateOf<String?>(null) }
     var selectedSessionAccount by remember { mutableStateOf<String?>(null) }
     var selectedSessionModel by remember { mutableStateOf<String?>(null) }
@@ -266,6 +271,13 @@ fun HomeAgentApp(launchSessionId: MutableState<String?>) {
 
     fun activeSessionId(): String? = selectedSessionId ?: sessionId
 
+    // Resumes must stay on the agent that started the conversation; new
+    // sessions use the settings toggle.
+    fun activeAgent(): String = selectedSessionAgent ?: agent
+
+    fun modelForAgent(agentId: String): String =
+        if (agentId == "claude") claudeModel else codexModel
+
     fun resetReconnect() {
         reconnectSessionId = null
         reconnectAttempt = 0
@@ -283,9 +295,10 @@ fun HomeAgentApp(launchSessionId: MutableState<String?>) {
         sessionId = id
         selectedSessionId = id
         selectedSessionTitle = title
+        if (selectedSessionAgent == null) selectedSessionAgent = agent
         selectedSessionReasoning = reasoningEffort
         selectedSessionAccount = codexAccount
-        selectedSessionModel = codexModel
+        selectedSessionModel = modelForAgent(selectedSessionAgent ?: agent)
         sessionRunning = true
         status = "Session $id"
         socket = connectWebSocket(client, gatewayUrl, token, id) { ws, event ->
@@ -352,6 +365,7 @@ fun HomeAgentApp(launchSessionId: MutableState<String?>) {
                 infoResult.onSuccess { info ->
                     cancelSessionNotification(context, info.rootSessionId ?: id)
                     selectedSessionTitle = info.displayTitle.ifBlank { info.title }
+                    selectedSessionAgent = info.agent
                     selectedSessionReasoning = info.reasoningEffort
                     selectedSessionAccount = info.codexAccount
                     selectedSessionModel = info.codexModel
@@ -388,6 +402,7 @@ fun HomeAgentApp(launchSessionId: MutableState<String?>) {
             if (target != null) {
                 sessions = result.getOrDefault(sessions)
                 selectedSessionTitle = target.displayTitle.ifBlank { target.title }
+                selectedSessionAgent = target.agent.takeIf { value -> value.isNotBlank() }
                 selectedSessionReasoning = target.reasoningEffort.takeIf { value -> value.isNotBlank() }
                 selectedSessionAccount = target.codexAccount.takeIf { value -> value.isNotBlank() }
                 selectedSessionModel = target.codexModel.takeIf { value -> value.isNotBlank() }
@@ -440,6 +455,24 @@ fun HomeAgentApp(launchSessionId: MutableState<String?>) {
                     if (next != null) {
                         codexModel = next.modelId
                         prefs.edit().putString("codex_model", next.modelId).apply()
+                    }
+                }
+            }.onFailure {
+                terminal += "\n[model warning] ${it.message}\n"
+            }
+        }
+    }
+
+    fun refreshClaudeModels() {
+        listClaudeModels(client, gatewayUrl, token) { result ->
+            result.onSuccess { models ->
+                claudeModels = models
+                val modelIds = models.map { it.modelId }.toSet()
+                if (claudeModel.isBlank() || claudeModel !in modelIds) {
+                    val next = models.firstOrNull { it.isDefault } ?: models.firstOrNull()
+                    if (next != null) {
+                        claudeModel = next.modelId
+                        prefs.edit().putString("claude_model", next.modelId).apply()
                     }
                 }
             }.onFailure {
@@ -524,6 +557,7 @@ fun HomeAgentApp(launchSessionId: MutableState<String?>) {
         sessionId = null
         selectedSessionId = null
         selectedSessionTitle = null
+        selectedSessionAgent = null
         selectedSessionReasoning = null
         selectedSessionAccount = null
         selectedSessionModel = null
@@ -550,7 +584,8 @@ fun HomeAgentApp(launchSessionId: MutableState<String?>) {
             return
         }
         status = "Resuming $target"
-        resumeSession(client, gatewayUrl, token, target, text, reasoningEffort, codexAccount, codexModel) { result ->
+        val resumeAgent = activeAgent()
+        resumeSession(client, gatewayUrl, token, target, text, resumeAgent, reasoningEffort, codexAccount, modelForAgent(resumeAgent)) { result ->
             result.onSuccess { id ->
                 terminal += "\n[resume] Continuing $target as $id\n"
                 attachSession(id)
@@ -614,11 +649,12 @@ fun HomeAgentApp(launchSessionId: MutableState<String?>) {
         }
     }
 
-    fun runCodex() {
+    fun runAgent() {
         if (isSubmittingSession) return
         val target = selectedSessionId
+        val runAgentId = if (target == null) agent else activeAgent()
         isSubmittingSession = true
-        status = if (target == null) "Starting Codex" else "Resuming $target"
+        status = if (target == null) "Starting ${agentLabel(runAgentId)}" else "Resuming $target"
         terminalExpanded = true
         if (target == null) {
             terminal = ""
@@ -633,9 +669,10 @@ fun HomeAgentApp(launchSessionId: MutableState<String?>) {
             }
         }
         if (target == null) {
-            startSession(client, gatewayUrl, token, transcript, reasoningEffort, codexAccount, codexModel, callback)
+            selectedSessionAgent = runAgentId
+            startSession(client, gatewayUrl, token, transcript, runAgentId, reasoningEffort, codexAccount, modelForAgent(runAgentId), callback)
         } else {
-            resumeSession(client, gatewayUrl, token, target, transcript, reasoningEffort, codexAccount, codexModel, callback)
+            resumeSession(client, gatewayUrl, token, target, transcript, runAgentId, reasoningEffort, codexAccount, modelForAgent(runAgentId), callback)
         }
     }
 
@@ -652,6 +689,7 @@ fun HomeAgentApp(launchSessionId: MutableState<String?>) {
         ensureNotificationChannel(context)
         refreshCodexAccounts()
         refreshCodexModels()
+        refreshClaudeModels()
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             requestPermission.launch(Manifest.permission.RECORD_AUDIO)
         }
@@ -746,11 +784,14 @@ fun HomeAgentApp(launchSessionId: MutableState<String?>) {
         SettingsDialog(
             gatewayUrl = gatewayUrl,
             token = token,
+            agent = agent,
             reasoningEffort = reasoningEffort,
             codexAccount = codexAccount,
             codexAccounts = codexAccounts,
             codexModel = codexModel,
             codexModels = codexModels,
+            claudeModel = claudeModel,
+            claudeModels = claudeModels,
             onGatewayUrl = {
                 gatewayUrl = it.trim()
                 prefs.edit().putString("gateway_url", gatewayUrl).apply()
@@ -760,6 +801,10 @@ fun HomeAgentApp(launchSessionId: MutableState<String?>) {
                 token = it.trim()
                 prefs.edit().putString("token", token).apply()
                 refreshCodexAccounts()
+            },
+            onAgent = {
+                agent = it
+                prefs.edit().putString("agent", it).apply()
             },
             onReasoningEffort = {
                 reasoningEffort = it
@@ -773,8 +818,13 @@ fun HomeAgentApp(launchSessionId: MutableState<String?>) {
                 codexModel = it
                 prefs.edit().putString("codex_model", it).apply()
             },
+            onClaudeModel = {
+                claudeModel = it
+                prefs.edit().putString("claude_model", it).apply()
+            },
             onRefreshAccounts = ::refreshCodexAccounts,
             onRefreshModels = ::refreshCodexModels,
+            onRefreshClaudeModels = ::refreshClaudeModels,
             onSaveCodexAccountLabel = ::saveCodexLabel,
             onStartCodexLogin = {
                 showSettings = false
@@ -863,10 +913,14 @@ fun HomeAgentApp(launchSessionId: MutableState<String?>) {
         )
 
         selectedSessionTitle?.let {
+            val agentName = selectedSessionAgent?.let { value -> " - ${agentLabel(value)}" }.orEmpty()
             val effort = selectedSessionReasoning?.let { value -> " - ${reasoningLabel(value)}" }.orEmpty()
-            val account = selectedSessionAccount?.let { value -> " - ${codexAccountLabel(value, codexAccounts)}" }.orEmpty()
-            val model = selectedSessionModel?.let { value -> " - ${codexModelLabel(value, codexModels)}" }.orEmpty()
-            Text("Selected: $it$effort$account$model", color = Muted, style = MaterialTheme.typography.bodySmall)
+            val account = selectedSessionAccount
+                ?.takeIf { selectedSessionAgent != "claude" }
+                ?.let { value -> " - ${codexAccountLabel(value, codexAccounts)}" }
+                .orEmpty()
+            val model = selectedSessionModel?.let { value -> " - ${codexModelLabel(value, codexModels + claudeModels)}" }.orEmpty()
+            Text("Selected: $it$agentName$effort$account$model", color = Muted, style = MaterialTheme.typography.bodySmall)
         }
 
         TalkButton(
@@ -900,7 +954,7 @@ fun HomeAgentApp(launchSessionId: MutableState<String?>) {
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Button(
-                onClick = ::runCodex,
+                onClick = ::runAgent,
                 enabled = transcript.isNotBlank() && gatewayUrl.isNotBlank() && !isSubmittingSession,
                 modifier = Modifier.weight(1f),
                 colors = ButtonDefaults.buttonColors(containerColor = Primary)
@@ -908,8 +962,8 @@ fun HomeAgentApp(launchSessionId: MutableState<String?>) {
                 Text(
                     when {
                         isSubmittingSession -> "Sending"
-                        selectedSessionId == null -> "Run Codex"
-                        else -> "Resume Codex"
+                        selectedSessionId == null -> "Run ${agentLabel(agent)}"
+                        else -> "Resume ${agentLabel(activeAgent())}"
                     }
                 )
             }
@@ -952,6 +1006,7 @@ fun HomeAgentApp(launchSessionId: MutableState<String?>) {
                     onDismiss = { showSessions = false },
                     onSelect = { session ->
                         selectedSessionTitle = session.displayTitle.ifBlank { session.title }
+                        selectedSessionAgent = session.agent.takeIf { value -> value.isNotBlank() }
                         selectedSessionReasoning = session.reasoningEffort.takeIf { value -> value.isNotBlank() }
                         selectedSessionAccount = session.codexAccount.takeIf { value -> value.isNotBlank() }
                         selectedSessionModel = session.codexModel.takeIf { value -> value.isNotBlank() }
@@ -1023,6 +1078,15 @@ fun reasoningLabel(value: String): String {
 }
 
 
+fun agentLabel(value: String): String {
+    return when (value) {
+        "claude" -> "Claude"
+        "codex" -> "Codex"
+        else -> value
+    }
+}
+
+
 fun codexAccountLabel(value: String, accounts: List<CodexAccount>): String {
     return accounts.firstOrNull { it.accountId == value }?.label ?: value
 }
@@ -1060,18 +1124,24 @@ fun Header(status: String, onSessions: () -> Unit, onSettings: () -> Unit) {
 fun SettingsDialog(
     gatewayUrl: String,
     token: String,
+    agent: String,
     reasoningEffort: String,
     codexAccount: String,
     codexAccounts: List<CodexAccount>,
     codexModel: String,
     codexModels: List<CodexModel>,
+    claudeModel: String,
+    claudeModels: List<CodexModel>,
     onGatewayUrl: (String) -> Unit,
     onToken: (String) -> Unit,
+    onAgent: (String) -> Unit,
     onReasoningEffort: (String) -> Unit,
     onCodexAccount: (String) -> Unit,
     onCodexModel: (String) -> Unit,
+    onClaudeModel: (String) -> Unit,
     onRefreshAccounts: () -> Unit,
     onRefreshModels: () -> Unit,
+    onRefreshClaudeModels: () -> Unit,
     onSaveCodexAccountLabel: (String, String) -> Unit,
     onStartCodexLogin: (CodexAccount) -> Unit,
     onDismiss: () -> Unit
@@ -1102,25 +1172,42 @@ fun SettingsDialog(
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
+                AgentSelector(
+                    selected = agent,
+                    onSelected = onAgent
+                )
                 ReasoningSelector(
                     selected = reasoningEffort,
                     sessionReasoning = null,
                     onSelected = onReasoningEffort
                 )
-                CodexAccountSelector(
-                    selected = codexAccount,
-                    accounts = codexAccounts,
-                    onSelected = onCodexAccount,
-                    onRefresh = onRefreshAccounts,
-                    onSaveLabel = onSaveCodexAccountLabel,
-                    onStartLogin = onStartCodexLogin
-                )
-                CodexModelSelector(
-                    selected = codexModel,
-                    models = codexModels,
-                    onSelected = onCodexModel,
-                    onRefresh = onRefreshModels
-                )
+                if (agent == "claude") {
+                    AgentModelSelector(
+                        title = "Claude model",
+                        selected = claudeModel,
+                        models = claudeModels,
+                        fallbackModelId = "claude-fable-5",
+                        onSelected = onClaudeModel,
+                        onRefresh = onRefreshClaudeModels
+                    )
+                } else {
+                    CodexAccountSelector(
+                        selected = codexAccount,
+                        accounts = codexAccounts,
+                        onSelected = onCodexAccount,
+                        onRefresh = onRefreshAccounts,
+                        onSaveLabel = onSaveCodexAccountLabel,
+                        onStartLogin = onStartCodexLogin
+                    )
+                    AgentModelSelector(
+                        title = "Codex model",
+                        selected = codexModel,
+                        models = codexModels,
+                        fallbackModelId = "gpt-5.5",
+                        onSelected = onCodexModel,
+                        onRefresh = onRefreshModels
+                    )
+                }
             }
         },
         confirmButton = {
@@ -1230,9 +1317,51 @@ fun CodexAccountSelector(
 
 
 @Composable
-fun CodexModelSelector(
+fun AgentSelector(
+    selected: String,
+    onSelected: (String) -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text("Agent", color = Ink, fontWeight = FontWeight.Medium)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            listOf("codex", "claude").forEach { option ->
+                val active = option == selected
+                OutlinedButton(
+                    onClick = { onSelected(option) },
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(44.dp),
+                    colors = if (active) {
+                        ButtonDefaults.buttonColors(containerColor = Primary, contentColor = Color.White)
+                    } else {
+                        ButtonDefaults.outlinedButtonColors(contentColor = Ink)
+                    },
+                    border = BorderStroke(1.dp, if (active) Primary else Color(0xFFD7E2DD)),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text(agentLabel(option), maxLines = 1)
+                }
+            }
+        }
+        Text(
+            "Applies to new conversations; resumed sessions keep their agent.",
+            color = Muted,
+            style = MaterialTheme.typography.bodySmall
+        )
+    }
+}
+
+
+@Composable
+fun AgentModelSelector(
+    title: String,
     selected: String,
     models: List<CodexModel>,
+    fallbackModelId: String,
     onSelected: (String) -> Unit,
     onRefresh: () -> Unit
 ) {
@@ -1242,13 +1371,13 @@ fun CodexModelSelector(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text("Codex model", color = Ink, fontWeight = FontWeight.Medium)
+            Text(title, color = Ink, fontWeight = FontWeight.Medium)
             TextButton(onClick = onRefresh) {
                 Text("Refresh", color = Primary)
             }
         }
         val options = if (models.isEmpty()) {
-            listOf(CodexModel(selected.ifBlank { "gpt-5.5" }, selected.ifBlank { "GPT-5.5" }, "", true, false, null))
+            listOf(CodexModel(selected.ifBlank { fallbackModelId }, selected.ifBlank { fallbackModelId }, "", true, false, null))
         } else {
             models
         }
@@ -1910,6 +2039,8 @@ fun terminalLineStyle(line: String): SpanStyle {
         )
         trimmed.startsWith("[codex error]") ||
             trimmed.startsWith("[codex failed]") ||
+            trimmed.startsWith("[claude failed]") ||
+            trimmed.startsWith("[tool error]") ||
             trimmed.contains(" error]") -> SpanStyle(
                 color = Color(0xFFFF9A90),
                 fontWeight = FontWeight.Medium
@@ -1927,6 +2058,7 @@ fun terminalLineStyle(line: String): SpanStyle {
                 color = Color(0xFF7F8A82)
             )
         trimmed.startsWith("[codex]") ||
+            trimmed.startsWith("[claude]") ||
             trimmed.startsWith("[resume]") -> SpanStyle(
                 color = Color(0xFFB7C7B8)
             )
@@ -2043,6 +2175,7 @@ fun startSession(
     gatewayUrl: String,
     token: String,
     transcript: String,
+    agent: String,
     reasoningEffort: String,
     codexAccount: String,
     codexModel: String,
@@ -2051,6 +2184,7 @@ fun startSession(
     val json = JSONObject(
         mapOf(
             "text" to transcript,
+            "agent" to agent,
             "reasoning_effort" to reasoningEffort,
             "codex_account" to codexAccount,
             "codex_model" to codexModel
@@ -2072,6 +2206,7 @@ fun resumeSession(
     token: String,
     sessionId: String,
     text: String,
+    agent: String,
     reasoningEffort: String,
     codexAccount: String,
     codexModel: String,
@@ -2080,6 +2215,7 @@ fun resumeSession(
     val json = JSONObject(
         mapOf(
             "text" to text,
+            "agent" to agent,
             "reasoning_effort" to reasoningEffort,
             "codex_account" to codexAccount,
             "codex_model" to codexModel
@@ -2149,6 +2285,29 @@ fun listCodexModels(
     }
     val request = Request.Builder()
         .url("${gatewayUrl.trimEnd('/')}/api/codex/models${tokenQuery(token)}")
+        .get()
+        .build()
+    client.newCall(request).enqueue(resultCallback(callback) { response ->
+        val array = JSONArray(response.body?.string().orEmpty())
+        (0 until array.length()).map { index ->
+            parseCodexModel(array.getJSONObject(index))
+        }
+    })
+}
+
+
+fun listClaudeModels(
+    client: OkHttpClient,
+    gatewayUrl: String,
+    token: String,
+    callback: (Result<List<CodexModel>>) -> Unit
+) {
+    if (gatewayUrl.isBlank()) {
+        callback(Result.success(emptyList()))
+        return
+    }
+    val request = Request.Builder()
+        .url("${gatewayUrl.trimEnd('/')}/api/claude/models${tokenQuery(token)}")
         .get()
         .build()
     client.newCall(request).enqueue(resultCallback(callback) { response ->
@@ -2306,6 +2465,7 @@ fun parseAgentSession(item: JSONObject): AgentSession {
         status = item.optString("status", "archived"),
         startedAt = item.optDouble("started_at", 0.0),
         rootSessionId = item.optString("root_session_id").takeIf { it.isNotBlank() && it != "null" },
+        agent = item.optString("agent", "codex").ifBlank { "codex" },
         reasoningEffort = item.optString("reasoning_effort", "medium"),
         codexAccount = item.optString("codex_account", "account1"),
         codexModel = item.optString("codex_model", ""),

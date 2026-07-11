@@ -436,6 +436,16 @@ async def list_codex_models(request: Request) -> list[dict]:
     return response.json()
 
 
+@app.get("/api/claude/models")
+async def list_claude_models(request: Request) -> list[dict]:
+    require_token(request)
+    async with httpx.AsyncClient(timeout=20.0) as client:
+        response = await client.get(f"{RUNNER_URL.rstrip('/')}/claude/models")
+    if response.status_code >= 400:
+        raise HTTPException(status_code=502, detail=response.text)
+    return response.json()
+
+
 @app.post("/api/transcribe")
 async def transcribe(request: Request, audio: UploadFile = File(...)) -> dict:
     require_token(request)
@@ -460,6 +470,7 @@ async def start_session(request: Request) -> dict:
     transcript = str(body.get("text", "")).strip()
     if not transcript:
         raise HTTPException(status_code=400, detail="text is required")
+    agent = normalize_agent(body.get("agent"))
     reasoning_effort = normalize_reasoning_effort(body.get("reasoning_effort"))
     codex_account = normalize_codex_account(body.get("codex_account"))
     codex_model = normalize_codex_model(body.get("codex_model"))
@@ -471,6 +482,7 @@ async def start_session(request: Request) -> dict:
                 "prompt": prompt,
                 "cwd": str(HOME_CONFIG_DIR),
                 "title": transcript[:80],
+                "agent": agent,
                 "reasoning_effort": reasoning_effort,
                 "codex_account": codex_account,
                 "codex_model": codex_model,
@@ -503,6 +515,7 @@ def enrich_session_info(info: dict) -> dict:
     enriched["display_title"] = display_title
     enriched["preview"] = preview
     enriched["root_session_id"] = root_id
+    enriched.setdefault("agent", (metadata or {}).get("agent") or "codex")
     enriched.setdefault("reasoning_effort", (metadata or {}).get("reasoning_effort"))
     enriched.setdefault("codex_account", (metadata or {}).get("codex_account"))
     enriched.setdefault("codex_model", (metadata or {}).get("codex_model"))
@@ -520,6 +533,17 @@ def normalize_reasoning_effort(value: object) -> str | None:
     if effort not in ALLOWED_REASONING_EFFORTS:
         raise HTTPException(status_code=400, detail=f"invalid reasoning_effort: {value}")
     return effort
+
+
+def normalize_agent(value: object) -> str | None:
+    if value is None:
+        return None
+    agent = str(value).strip().lower()
+    if not agent:
+        return None
+    if agent not in {"codex", "claude"}:
+        raise HTTPException(status_code=400, detail=f"invalid agent: {value}")
+    return agent
 
 
 def normalize_codex_account(value: object) -> str | None:
@@ -788,6 +812,7 @@ async def resume_session(request: Request, session_id: str) -> dict:
     prompt = str(body.get("text") or body.get("prompt") or "").strip()
     if not prompt:
         raise HTTPException(status_code=400, detail="text is required")
+    agent = normalize_agent(body.get("agent"))
     reasoning_effort = normalize_reasoning_effort(body.get("reasoning_effort"))
     codex_account = normalize_codex_account(body.get("codex_account"))
     codex_model = normalize_codex_model(body.get("codex_model"))
@@ -797,6 +822,7 @@ async def resume_session(request: Request, session_id: str) -> dict:
             json={
                 "prompt": prompt,
                 "title": prompt[:80],
+                "agent": agent,
                 "reasoning_effort": reasoning_effort,
                 "codex_account": codex_account,
                 "codex_model": codex_model,
