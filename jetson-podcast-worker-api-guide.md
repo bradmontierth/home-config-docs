@@ -1,5 +1,15 @@
 # Jetson Podcast Worker API Guide
 
+> **LEGACY NAME (2026-07): this worker now runs on the GX10, not the Jetson.**
+> Everything below was ported; the API lives at `http://192.168.10.187:8090`
+> (ssh alias `dgx`), served by the `gx10-parakeet-api` / `gx10-parakeet-worker-*`
+> containers, with diarization on the resident `gx10-sortformer-worker`
+> (Sortformer `diar_streaming_sortformer_4spk-v2.1` on :8092 internal, not
+> pyannote). Script names (`jetson_*`), env vars (`JETSON_*`), and "Jetson"
+> wording were kept to avoid churn. The physical Jetson (`jetson-tts`, .197)
+> no longer runs podcast services. Where this guide says "Jetson", read GX10;
+> where it says pyannote, read Sortformer.
+
 The Jetson is reachable on the local network as:
 
 ```bash

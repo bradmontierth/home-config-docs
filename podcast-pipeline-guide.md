@@ -8,6 +8,13 @@ cd /home/pi/podcast
 
 Use the repo README and scripts for implementation details. This note is meant to give agents and other users the mental model, service boundaries, and operational entry points.
 
+> **LEGACY NAMES (2026-07):** all GPU work ("Jetson" below) now runs on the
+> **GX10** (`192.168.10.187:8090`, ssh alias `dgx`) — the physical Jetson
+> (`jetson-tts`, .197) is retired from this pipeline. Diarization is
+> **Sortformer** (resident `gx10-sortformer-worker`), not pyannote. Script and
+> env names (`jetson_*`, `JETSON_*`, `*PYANNOTE*`) were kept to avoid churn.
+> The active pipeline is **v2 at `/home/pi/podcastv2`** — see its README.
+
 ## Device roles
 
 The podcast app runs primarily on this Raspberry Pi / Linux host.
