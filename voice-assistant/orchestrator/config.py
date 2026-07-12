@@ -132,6 +132,15 @@ MUSIC_INDEX_TTL_S = float(os.getenv("MUSIC_INDEX_TTL_S", "900"))
 WAKE_PHRASE = os.getenv("WAKE_PHRASE", "okay computer")
 # rapidfuzz partial_ratio (0-100) the wake phrase must clear in the transcript.
 WAKE_FUZZ_THRESHOLD = float(os.getenv("WAKE_FUZZ_THRESHOLD", "80"))
+# Overlap rescue: if the full pre-roll decode rejects, re-decode only the last
+# N seconds and accept if EITHER verifies. With two voices in the pre-roll,
+# Parakeet (single-speaker ASR) transcribes the established/dominant stream and
+# drops the overlapped wake phrase entirely (diagnosed 2026-07-12: rejects like
+# "Joe, did you see the" while stage-1 scored 0.67 on the same audio). The tail
+# decode denies the competing stream the lead-in context it latches onto. The
+# phrase itself takes ~0.8-1.0s and stage-1 can fire slightly before it ends,
+# so keep >= 1.5; 0 disables.
+VERIFY_TAIL_S = float(os.getenv("VERIFY_TAIL_S", "1.5"))
 
 # --- timers ----------------------------------------------------------------
 DB_PATH = os.getenv("ORCH_DB_PATH", "/home/pi/voice-orchestrator/data/orchestrator.db")

@@ -17,11 +17,13 @@ caption, response, and timer cards.
 from __future__ import annotations
 
 import asyncio
+import io
 import logging
 import os
 import re
 import time
 import uuid
+import wave
 
 from fastapi import Body, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse
@@ -636,12 +638,41 @@ async def wake(request: Request) -> dict:
     return result
 
 
+def _wav_tail(wav: bytes, seconds: float) -> bytes | None:
+    """Last `seconds` of a WAV, re-wrapped. None if the clip is already that
+    short (a second decode would just repeat the first) or unparseable."""
+    try:
+        with wave.open(io.BytesIO(wav), "rb") as w:
+            rate, width, ch = w.getframerate(), w.getsampwidth(), w.getnchannels()
+            n = w.getnframes()
+            keep = int(seconds * rate)
+            if n <= keep:
+                return None
+            w.setpos(n - keep)
+            pcm = w.readframes(keep)
+        buf = io.BytesIO()
+        with wave.open(buf, "wb") as out:
+            out.setnchannels(ch)
+            out.setsampwidth(width)
+            out.setframerate(rate)
+            out.writeframes(pcm)
+        return buf.getvalue()
+    except Exception:  # noqa: BLE001 — malformed wav: skip the rescue decode
+        return None
+
+
 @app.post("/verify")
 async def verify_wake(request: Request) -> dict:
     """Phase 1: stage-2 verification on the pre-roll (wake phrase audio only).
     Fast path so the satellite can chime the instant the wake word is confirmed,
     then start capturing the command. `command` is any speech already trailing
-    the wake phrase in the pre-roll (if the user ran it together)."""
+    the wake phrase in the pre-roll (if the user ran it together).
+
+    Dual decode: a full-pre-roll reject gets a second decode of just the tail
+    (VERIFY_TAIL_S); either passing verifies the turn. This rescues wake words
+    spoken OVER another voice — Parakeet is single-speaker and latches onto the
+    stream with more context, so the competing voice's lead-in must be cut, not
+    out-fuzzed. Runs only on rejects; the passing path costs nothing extra."""
     wav = await request.body()
     if not wav:
         raise HTTPException(400, "empty audio body")
@@ -649,12 +680,25 @@ async def verify_wake(request: Request) -> dict:
     await events.emit("verifying")
     transcript = await clients.transcribe(wav)
     verified, command, score = verify.verify_and_extract(transcript)
-    log.info("verify transcript=%r verified=%s score=%s", transcript, verified, score)
+    decode = "full"
+    if not verified and config.VERIFY_TAIL_S > 0:
+        tail = _wav_tail(wav, config.VERIFY_TAIL_S)
+        if tail is not None:
+            tail_transcript = await clients.transcribe(tail)
+            t_verified, t_command, t_score = verify.verify_and_extract(tail_transcript)
+            log.info("verify tail transcript=%r verified=%s score=%s",
+                     tail_transcript, t_verified, t_score)
+            if t_verified:
+                verified, command, score = t_verified, t_command, t_score
+                transcript, decode = tail_transcript, "tail"
+    log.info("verify transcript=%r verified=%s score=%s decode=%s",
+             transcript, verified, score, decode)
     await events.emit("wake_confirmed" if verified else "wake_rejected",
                       score=score, transcript=transcript)
     return {
         "verified": verified, "score": score, "transcript": transcript,
-        "command": command, "latency_ms": round((time.time() - t0) * 1000),
+        "command": command, "decode": decode,
+        "latency_ms": round((time.time() - t0) * 1000),
     }
 
 

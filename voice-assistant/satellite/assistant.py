@@ -150,6 +150,11 @@ HOP_FRAMES = max(1, int(HOP_MS / 1000 * FPS))
 CLIP_LOCK = threading.Lock()
 PLAYBACK_LOCK = threading.Lock()
 EVENTS_PATH = DATA_DIR / "events.jsonl"
+# Every verify pre-roll is kept, verdict in the name: the rejects are the
+# multi-voice-miss corpus we tune stage-2 against; the accepts are the
+# regression set proving a tuning change didn't break the passing path.
+# 2.5s mono 16k = ~80KB/clip at ~15 triggers/day — no rotation needed.
+CLIP_DIR = DATA_DIR / "clips"
 
 
 def now_iso() -> str:
@@ -606,8 +611,16 @@ def run_turn(preroll_pcm: bytes, stdout, vad) -> None:
     except Exception as exc:  # noqa: BLE001
         log(f"/verify failed: {exc}")
         return
+    verdict = "ok" if v.get("verified") else "rej"
+    clip_name = f"verify-{verdict}-{datetime.now().strftime('%Y%m%d-%H%M%S')}.wav"
+    try:
+        (CLIP_DIR / clip_name).write_bytes(wrap_wav(preroll_pcm))
+    except Exception as exc:  # noqa: BLE001 — clip is diagnostics, never fatal
+        log(f"clip save failed: {exc}")
+        clip_name = None
     append_event({"type": "verify", "verified": v.get("verified"),
-                  "score": v.get("score"), "transcript": v.get("transcript")})
+                  "score": v.get("score"), "transcript": v.get("transcript"),
+                  "decode": v.get("decode"), "clip": clip_name})
     if not v.get("verified"):
         log(f"stage-2 REJECT score={v.get('score')} transcript={v.get('transcript')!r}")
         return
@@ -907,6 +920,7 @@ def main() -> int:
     from livekit.wakeword import WakeWordModel
 
     DATA_DIR.mkdir(parents=True, exist_ok=True)
+    CLIP_DIR.mkdir(parents=True, exist_ok=True)
     if not Path(MODEL_PATH).is_file():
         log(f"model missing: {MODEL_PATH}")
         return 3
