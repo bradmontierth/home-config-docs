@@ -316,14 +316,17 @@ def _scale_wav(wav_bytes: bytes, factor: float) -> bytes:
         return wav_bytes
 
 
-def play_wav_bytes(wav_bytes: bytes, is_alarm: bool = False) -> None:
-    wav_bytes = _scale_wav(wav_bytes, STATE.volume_factor(is_alarm))
+def _play_scaled(wav_bytes: bytes) -> None:
     with PLAYBACK_LOCK:
         try:
             subprocess.run(["aplay", "-q", "-D", PLAYBACK_DEVICE, "-"],
                            input=wav_bytes, timeout=30, check=False)
         except Exception as exc:  # noqa: BLE001
             log(f"aplay bytes failed: {exc}")
+
+
+def play_wav_bytes(wav_bytes: bytes, is_alarm: bool = False) -> None:
+    _play_scaled(_scale_wav(wav_bytes, STATE.volume_factor(is_alarm)))
 
 
 def speak_url(url: str) -> None:
@@ -336,16 +339,28 @@ def speak_url(url: str) -> None:
         log(f"speak playback failed ({url}): {exc}")
 
 
+# Chimes replay constantly at a volume that changes a few times a day (the
+# day-mode /volume flow), yet the disk read + numpy rescale ran per play —
+# on the wake path, between /verify returning and the chime. Cache the scaled
+# bytes per (file, volume); a handful of chimes/themes × a few levels is tiny.
+_SOUND_CACHE: dict[tuple[str, int], bytes] = {}
+
+
 def play_file(path: Path, is_alarm: bool = False) -> None:
-    if not path.exists():
-        log(f"missing sound {path}")
-        return
-    try:
-        data = path.read_bytes()
-    except Exception as exc:  # noqa: BLE001
-        log(f"read sound failed ({path}): {exc}")
-        return
-    play_wav_bytes(data, is_alarm=is_alarm)
+    factor = STATE.volume_factor(is_alarm)
+    key = (str(path), round(factor * 1000))
+    data = _SOUND_CACHE.get(key)
+    if data is None:
+        if not path.exists():
+            log(f"missing sound {path}")
+            return
+        try:
+            data = _scale_wav(path.read_bytes(), factor)
+        except Exception as exc:  # noqa: BLE001
+            log(f"read sound failed ({path}): {exc}")
+            return
+        _SOUND_CACHE[key] = data
+    _play_scaled(data)
 
 
 def theme_sound(theme: str) -> Path:
@@ -604,28 +619,51 @@ def capture_command(stdout, vad, min_capture_ms: int = MIN_CAPTURE_MS,
 
 
 # --- one wake turn ---------------------------------------------------------
-def run_turn(preroll_pcm: bytes, stdout, vad) -> None:
+def _persist_verify(preroll_pcm: bytes, event: dict) -> None:
+    """Clip write + event append for a verify. On a CONFIRMED wake this runs on
+    a worker thread: the ~80KB SD write used to sit between /verify returning
+    and the chime, so any SD stall was pure added chime latency."""
+    clip_name = event.get("clip")
+    if clip_name:
+        try:
+            (CLIP_DIR / clip_name).write_bytes(wrap_wav(preroll_pcm))
+        except Exception as exc:  # noqa: BLE001 — clip is diagnostics, never fatal
+            log(f"clip save failed: {exc}")
+            event = {**event, "clip": None}
+    append_event(event)
+
+
+def run_turn(preroll_pcm: bytes, stdout, vad, trigger_t0: float) -> None:
     STATE.stats["turns"] += 1
+    t_post = time.time()
     try:
         v = post_wav("/verify", wrap_wav(preroll_pcm))
     except Exception as exc:  # noqa: BLE001
         log(f"/verify failed: {exc}")
         return
+    # Chime-latency instrumentation (speech-end→trigger lives in the clip's
+    # trailing silence; these cover trigger→chime): rtt_ms = full /verify round
+    # trip as seen here, server_ms = the orchestrator's own ASR+verify time
+    # (the gap between them is WiFi + HTTP), chime_ms = trigger→chime-start
+    # (excludes the aplay spawn, ~50ms of constant cost after this).
+    rtt_ms = round((time.time() - t_post) * 1000)
     verdict = "ok" if v.get("verified") else "rej"
     clip_name = f"verify-{verdict}-{datetime.now().strftime('%Y%m%d-%H%M%S')}.wav"
-    try:
-        (CLIP_DIR / clip_name).write_bytes(wrap_wav(preroll_pcm))
-    except Exception as exc:  # noqa: BLE001 — clip is diagnostics, never fatal
-        log(f"clip save failed: {exc}")
-        clip_name = None
-    append_event({"type": "verify", "verified": v.get("verified"),
-                  "score": v.get("score"), "transcript": v.get("transcript"),
-                  "decode": v.get("decode"), "clip": clip_name})
+    event = {"type": "verify", "verified": v.get("verified"),
+             "score": v.get("score"), "transcript": v.get("transcript"),
+             "decode": v.get("decode"), "clip": clip_name,
+             "rtt_ms": rtt_ms, "server_ms": v.get("latency_ms")}
     if not v.get("verified"):
+        _persist_verify(preroll_pcm, event)
         log(f"stage-2 REJECT score={v.get('score')} transcript={v.get('transcript')!r}")
         return
 
-    log(f"wake CONFIRMED score={v.get('score')}")
+    chime_ms = round((time.time() - trigger_t0) * 1000)
+    event["chime_ms"] = chime_ms
+    log(f"wake CONFIRMED score={v.get('score')} rtt={rtt_ms}ms "
+        f"server={v.get('latency_ms')}ms trigger_to_chime={chime_ms}ms")
+    threading.Thread(target=_persist_verify, args=(preroll_pcm, event),
+                     daemon=True).start()
     play_file(SOUNDS_DIR / "wake.wav")
     # Deliberately NO drain: the buffered audio holds a run-together command
     # ("okay computer, download a car") spoken without waiting for the chime.
@@ -1021,7 +1059,7 @@ def main() -> int:
         media_stop()   # slideshow video audio would talk over the turn
         duck_music()
         try:
-            run_turn(preroll, arecord.stdout, vad)
+            run_turn(preroll, arecord.stdout, vad, now)
         finally:
             unduck_music()
         resync()

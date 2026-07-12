@@ -677,7 +677,9 @@ async def verify_wake(request: Request) -> dict:
     if not wav:
         raise HTTPException(400, "empty audio body")
     t0 = time.time()
-    await events.emit("verifying")
+    # Fire-and-forget: this POST to the dashboard sat serially BEFORE the ASR
+    # call, putting a cosmetic badge (with a 4s timeout tail) on the chime path.
+    asyncio.create_task(events.emit("verifying"))
     transcript = await clients.transcribe(wav)
     verified, command, score = verify.verify_and_extract(transcript)
     decode = "full"
