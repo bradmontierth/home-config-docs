@@ -79,6 +79,34 @@ async def _play_filler() -> None:
 # --- conversation history so follow-up asks have context -------------------
 _history: list[dict] = []  # {"q": str, "a": str, "t": monotonic}
 
+# Last answer, kept for recall ("show that answer again") after the popup
+# auto-hides — an answered ask costs real money and must be recoverable.
+_last_answer: dict | None = None  # {"q", "spoken", "full", "t": monotonic}
+
+
+def _set_last(query: str, spoken: str, full: str) -> dict:
+    global _last_answer
+    _last_answer = {
+        "q": query, "spoken": spoken, "full": full, "t": time.monotonic(),
+    }
+    return _last_answer
+
+
+async def handle_show_answer() -> dict:
+    """Recall the most recent answer: re-emit the ask_thinking/ask_full pair so
+    the dashboard rebuilds the fullscreen answer, and return the spoken part
+    for re-speaking. Returns {"response", "ok"} like the other handlers."""
+    last = _last_answer
+    if not last or time.monotonic() - last["t"] > config.ASK_RECALL_TTL_S:
+        return {
+            "response": "I don't have a recent answer to bring back.",
+            "ok": False,
+        }
+    await events.emit("ask_thinking", query=last["q"])
+    full = _strip_links(last["full"]) or _strip_links(last["spoken"])
+    await events.emit("ask_full", query=last["q"], text=full, done=True)
+    return {"response": _strip_links(last["spoken"]), "ok": True}
+
 
 def _remember(query: str, answer: str) -> dict:
     """Record a Q+A pair NOW (a follow-up can arrive while the full answer is
@@ -91,8 +119,10 @@ def _remember(query: str, answer: str) -> dict:
 
 def remember(query: str, answer: str) -> None:
     """Public hook: other intents (sports) record their Q+A here so pronoun
-    follow-ups that route to ask ("who do they play next?") have context."""
+    follow-ups that route to ask ("who do they play next?") have context.
+    Also makes the answer recallable via "show that answer again"."""
     _remember(query, answer)
+    _set_last(query, answer, answer)
 
 
 def _history_messages() -> list[dict]:
@@ -182,7 +212,7 @@ def _spoken_fallback(text: str) -> str:
     return spoken or text[:200].strip()
 
 
-async def _stream_full(query: str, entry: dict, initial: str, agen) -> None:
+async def _stream_full(query: str, entry: dict, last: dict, initial: str, agen) -> None:
     """Drain the rest of the stream, fanning the growing full answer to the
     dashboard. Runs detached from the request that produced the spoken reply."""
     acc = initial
@@ -203,6 +233,7 @@ async def _stream_full(query: str, entry: dict, initial: str, agen) -> None:
         except Exception:  # noqa: BLE001
             pass
     entry["a"] = f"{entry['a']}\n{acc}".strip()
+    last["full"] = acc
     await events.emit("ask_full", query=query, text=_strip_links(acc), done=True)
 
 
@@ -258,6 +289,7 @@ async def handle_ask(query: str) -> dict:
         full = _strip_links(acc)
         spoken = _spoken_fallback(full)
         _remember(query, full)
+        _set_last(query, spoken, full)
         await events.emit("ask_full", query=query, text=full, done=True)
         return {"response": spoken, "full": full, "ok": bool(full)}
 
@@ -266,9 +298,11 @@ async def handle_ask(query: str) -> dict:
         # now; remember the spoken part immediately so an instant follow-up
         # ("but who's playing in it?") already has context.
         entry = _remember(query, spoken)
-        asyncio.create_task(_stream_full(query, entry, remainder, agen))
+        last = _set_last(query, spoken, remainder)
+        asyncio.create_task(_stream_full(query, entry, last, remainder, agen))
     else:
         _remember(query, f"{spoken}\n{remainder}".strip())
+        _set_last(query, spoken, remainder)
         await events.emit("ask_full", query=query, text=_strip_links(remainder), done=True)
 
     if not spoken:

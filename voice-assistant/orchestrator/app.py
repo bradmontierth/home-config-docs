@@ -582,6 +582,13 @@ async def handle_command(command: str, followup: bool = False) -> dict:
         result["full"] = ask_result.get("full", "")
         result["ok"] = ask_result["ok"]
 
+    elif intent == "show_answer":
+        # Recall the last answer: the handler re-emits ask_thinking/ask_full to
+        # rebuild the fullscreen answer; the spoken part is re-spoken here.
+        show_result = await ask_mod.handle_show_answer()
+        result["response"] = show_result["response"]
+        result["ok"] = show_result["ok"]
+
     elif intent == "unclear":
         # Follow-up addressed to us but not mappable to an action. Give brief
         # feedback and KEEP the session open (non-silent reply -> satellite

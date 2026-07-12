@@ -91,6 +91,9 @@ SATELLITE_SPEAK_URL = os.getenv(
 # "but who's playing in it?" works. Turns kept / freshness window.
 ASK_HISTORY_TURNS = int(os.getenv("ASK_HISTORY_TURNS", "4"))
 ASK_HISTORY_TTL_S = int(os.getenv("ASK_HISTORY_TTL_S", "300"))
+# How long "show that answer again" can recall the last answer after the
+# popup auto-hides (deliberately much longer than the follow-up history TTL).
+ASK_RECALL_TTL_S = int(os.getenv("ASK_RECALL_TTL_S", "1800"))
 
 # --- lists (todo / shopping / reminders via voice-notes companion) --------
 # The companion is note-centric: sync a note then analyze it to extract typed

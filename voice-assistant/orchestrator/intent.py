@@ -17,7 +17,7 @@ INTENTS = (
     "set_timer", "timer_query", "timer_adjust", "timer_cancel",
     "add_items", "set_reminder", "show_todos", "show_shopping", "complete_item",
     "remove_items", "clear_list", "play_music", "music_control", "music_query",
-    "sports", "weather", "ask", "unclear", "none",
+    "sports", "weather", "ask", "show_answer", "unclear", "none",
 )
 
 WEATHER_WHEN = ("now", "today", "tonight", "tomorrow", "monday", "tuesday",
@@ -106,6 +106,10 @@ Rules:
   "turn it up" / "louder" -> volume_up; "turn it down" / "quieter" -> volume_down.
   A bare "pause" or "stop" with no object is music_control too (timers get cancelled, not stopped).
 - music_query = asking about the current song: "what's playing", "what song is this", "who sings this".
+- show_answer = re-show or repeat the assistant's PREVIOUS answer, adding nothing new: "show that
+  answer again", "bring that answer back", "put that back up", "show me that again", "what did you
+  just say", "repeat that", "say that again". No other fields. A NEW question about the same topic
+  ("but who's playing in it") is "ask", not show_answer.
 - If the command is not a timer, list, music, or knowledge command, intent "none".
 Return JSON only."""
 
