@@ -111,6 +111,13 @@ MA_URL = os.getenv("MA_URL", "http://192.168.10.217:8095")
 # The kitchen jukebox player/queue (squeezelite Kitchen-Big-Speakers) — same
 # queue the NFC reader drives, so voice and cards share one player.
 MA_QUEUE_ID = os.getenv("MA_QUEUE_ID", "e4:5f:01:67:1e:56")
+# The NFC jukebox drives the SAME queue and pause-toggles a re-scan of the
+# card it thinks is playing. When voice replaces the queue content, ping this
+# so it drops that marker — otherwise scanning the last card pause-toggles the
+# voice-chosen music instead of playing the card. Empty disables.
+JUKEBOX_EXTERNAL_PLAY_URL = os.getenv(
+    "JUKEBOX_EXTERNAL_PLAY_URL", "http://192.168.10.217:8769/api/external-play"
+)
 # Ducking: on a wake trigger / alarm, music volume drops to cur*FACTOR (but at
 # least MIN). TTL is the watchdog that restores volume if the satellite dies
 # mid-turn and its unduck never arrives.

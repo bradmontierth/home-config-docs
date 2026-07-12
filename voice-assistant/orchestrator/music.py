@@ -460,11 +460,27 @@ async def play(query: str | None, media_type: str | None = None) -> dict:
     shuffle = sel["kind"] in ("artist", "playlist")
     await client.player_queues.queue_command_shuffle(qid, shuffle)
     await client.player_queues.play_media(qid, sel["uri"], option=QueueOption.REPLACE)
+    asyncio.create_task(_notify_jukebox_takeover())
     log.info("play_music %r -> %s %r (%s, shuffle=%s, via=%s, score=%s)",
              query, sel["kind"], sel["name"], sel["uri"], shuffle, via,
              sel.get("score"))
     return {"kind": sel["kind"], "name": sel["name"], "artist": sel.get("artist"),
             "uri": sel["uri"], "shuffle": shuffle}
+
+
+async def _notify_jukebox_takeover() -> None:
+    """Voice just replaced the shared queue's content — tell the NFC jukebox so
+    it clears its current-card marker. Without this, re-scanning the last card
+    pause-toggles the voice-chosen music instead of playing the card.
+    Best-effort: a dead jukebox must never break play."""
+    if not config.JUKEBOX_EXTERNAL_PLAY_URL:
+        return
+    try:
+        async with aiohttp.ClientSession() as session:
+            await session.post(config.JUKEBOX_EXTERNAL_PLAY_URL,
+                               timeout=aiohttp.ClientTimeout(total=4))
+    except Exception as exc:  # noqa: BLE001
+        log.warning("jukebox external-play notify failed: %s", exc)
 
 
 # --------------------------------------------------------------------------
