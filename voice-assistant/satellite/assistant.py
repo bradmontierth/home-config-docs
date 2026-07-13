@@ -676,10 +676,20 @@ def run_turn(preroll_pcm: bytes, stdout, vad, trigger_t0: float) -> None:
         log("no command captured")
         return
     try:
+        # Stitch the pre-roll in front of the command. Capture starts AT the
+        # stage-1 trigger, but a run-together command ("okay computer set a
+        # timer…") begins DURING the ~0.5s detect lag, so its first word(s)
+        # exist only in the pre-roll (live bug 2026-07-12: "set a" showed in
+        # /verify's transcript, command decoded as just "timer for 30
+        # seconds"). The buffers are gapless — the pre-roll ends on the last
+        # frame the main loop read, capture reads the pipe from the next — so
+        # prepending reassembles the utterance; the orchestrator strips the
+        # leading wake phrase from the stitched transcript (?stitched=1).
         # Long timeout on purpose: a searched ask can run ~60s and the reply
         # audio only exists in this response. Wake detection is paused while we
         # wait (single mic reader) — acceptable; alarms still fire (HTTP thread).
-        resp = post_wav("/command/audio", wrap_wav(cmd_pcm), timeout=COMMAND_TIMEOUT_S)
+        resp = post_wav("/command/audio?stitched=1", wrap_wav(preroll_pcm + cmd_pcm),
+                        timeout=COMMAND_TIMEOUT_S)
     except Exception as exc:  # noqa: BLE001
         log(f"/command/audio failed: {exc}")
         return

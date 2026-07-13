@@ -712,15 +712,26 @@ async def verify_wake(request: Request) -> dict:
 
 
 @app.post("/command/audio")
-async def command_audio(request: Request, followup: bool = False) -> dict:
+async def command_audio(request: Request, followup: bool = False,
+                        stitched: bool = False) -> dict:
     """Phase 2: the captured command utterance. Transcribe + act. No wake check —
     /verify already gated this turn. `followup=1` marks a continued-conversation
-    turn (no wake word): background speech is dropped silently."""
+    turn (no wake word): background speech is dropped silently. `stitched=1`
+    marks wake-turn audio with the 2.5s pre-roll prepended (the satellite's fix
+    for run-together commands losing their first words in the stage-1 detect
+    gap): strip everything through the wake phrase before acting."""
     wav = await request.body()
     if not wav:
         raise HTTPException(400, "empty audio body")
     t0 = time.time()
     transcript = await clients.transcribe(wav)
+    if stitched and transcript:
+        wake_found, command, _ = verify.verify_and_extract(transcript)
+        if wake_found:
+            log.info("stitched %r -> command %r", transcript, command)
+            transcript = command
+        # No wake phrase in the decode (odd, /verify just matched this audio):
+        # keep the full transcript — a stray lead-in beats a lost turn.
     if not transcript:
         # Silence: on a follow-up, stay quiet; on a wake turn, say we missed it.
         if not followup:
