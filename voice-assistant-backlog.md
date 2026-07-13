@@ -375,6 +375,39 @@ bigger captions.**
   half-year steps to 3 ("1", "1½", "2", "2½") / whole years after.
   Server-side only; viewer untouched.
 
+## 9. Speaker ID (voice identification) for user-dependent list items — IDEA, not scheduled (added 2026-07-13)
+
+**Context:** as of 2026-07-13 reminders and to-dos are per-person in the
+voice-notes phone app and portal (shopping stays household-shared). The
+kitchen assistant files everything under `LIST_OWNER=brad`
+(orchestrator config.py), so a reminder/to-do spoken by Adrienne at the
+satellite lands on Brad's lists and Brad's phone gets the push. Speaker ID
+would route these to the actual speaker.
+
+**Brad's design sketch (sound — lazy path):** do NOT run speaker ID on every
+turn. The fast path — music, timers, questions, and especially shopping adds
+(the dominant kitchen use case) — is user-independent and skips
+identification entirely. Only when intent parsing yields a user-DEPENDENT
+item (reminder/to-do add) does the pipeline run speaker ID over the
+already-captured command audio. Marginal cost is therefore zero for ~all
+turns and one embedding pass for the rare personal item; latency doesn't
+matter there because item extraction is already async to the spoken reply.
+
+Notes for whenever this gets built:
+- Prereq: the command WAV must outlive intent parsing. The satellite already
+  POSTs the full capture; the orchestrator just has to keep it for the turn.
+- Two-person closed set is the easiest speaker-ID problem there is: enroll
+  ~30s per person, ECAPA-TDNN / resemblyzer embedding + cosine distance,
+  threshold with an "unsure" band. No diarization needed (one speaker per
+  command).
+- Fallback rule matters more than the model: below-threshold confidence
+  should file under `LIST_OWNER` (today's behavior), never guess —
+  a misrouted reminder is worse than the status quo because NEITHER phone
+  surfaces it to the right person in time.
+- UI: dashboard badge showing who it heard ("→ Adrienne's reminders"), and
+  the TTS confirmation can name the list owner — cheap trust-building plus
+  an audible correction path when it's wrong.
+
 ---
 
 ## Batch 1 live-test results (Brad, 2026-07-09 night)
