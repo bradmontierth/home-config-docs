@@ -439,3 +439,32 @@ Notes for whenever this gets built:
   exactly the kind of thing that eats the first follow-up word on slow turns.
   Cheap insurance: bump arecord's `--buffer-time`, or drain before playback.
 - Satellite restart still resets mode→shadow (known; memory note exists).
+
+## Family-room second mic (phase 2 satellite) — scoped 2026-07-19
+
+Second ReSpeaker into the ethernet Pi across the family room (currently only
+polling Powerwalls via local TED API — cores mostly free). Mic-only fallback
+satellite: better hearing from the far end, and during music it beats the
+kitchen mic that now sits next to the big speakers (no AEC) — most of
+"wake-over-music" solved by geometry.
+
+**v1 (build first):**
+- Run the standard satellite locally on the Pi (stage-1 dual models, lazy
+  HOP is fine — fallback mic, latency budget generous; verify Pi model +
+  thermals first).
+- Playback relay: far satellite's chime/TTS/alarm audio redirects to the
+  kitchen satellite (kitchen box remains the only voice). Alarms unchanged
+  (kitchen-only); far-mic "stop the timer" is just a normal turn.
+- Orchestrator wake arbitration: first verified request wins the turn;
+  suppress the other satellite for ~2-3s. Deterministic (arrival order).
+  Built-in correctness: during music the drowned kitchen mic fails verify,
+  so the far mic wins by default, not by racing.
+- Loser posts its shadow-captured command audio anyway (no user-visible
+  effect) so the logs show when the losing mic had the cleaner capture.
+
+**v2 (only if v1 logs prove mis-hears the other mic would have fixed):**
+- Dual-transcribe the *command* (never the wake — would add 300-500ms to
+  every chime): both captures hit Parakeet, orchestrator picks the better
+  transcript before intent parsing. Deterministic chooser: length-normalized
+  Parakeet Hypothesis score, tie-break on satellite voiced-ms/RMS metadata,
+  final tie-break kitchen. Doubles Parakeet load only on actual wakes.
