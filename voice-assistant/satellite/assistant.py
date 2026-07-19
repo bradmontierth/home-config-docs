@@ -19,7 +19,7 @@ Alarm (timer expiry, orchestrator POSTs /alarm):
   computer" — no wake word needed, like Echo/Nest. Loops until dismissed or
   timeout.
 
-Modes (kill switch, HTTP POST /mode {active|shadow|off}, default shadow):
+Modes (kill switch, HTTP POST /mode {active|shadow|off}, default active):
   active  full pipeline
   shadow  detect + log only; no chime, no action
   off     mic pipeline paused
@@ -44,7 +44,13 @@ from pathlib import Path
 import numpy as np
 
 # --- config ----------------------------------------------------------------
-MODEL_PATH = os.getenv("MODEL_PATH", "/home/pi/wake-bench/okay_computer.onnx")
+# MODEL_PATHS: comma-separated wake models scored every hop; any one clearing
+# the threshold triggers (dual wake: okay_computer + okay_google). MODEL_PATH
+# kept as single-model fallback for old .env files.
+MODEL_PATHS = [p.strip() for p in os.getenv(
+    "MODEL_PATHS",
+    os.getenv("MODEL_PATH", "/home/pi/wake-bench/okay_computer.onnx"),
+).split(",") if p.strip()]
 WAKE_PHRASE = os.getenv("WAKE_PHRASE", "okay computer")
 TRIGGER_THRESHOLD = float(os.getenv("TRIGGER_THRESHOLD", "0.5"))
 HOP_MS = int(os.getenv("HOP_MS", "352"))
@@ -54,7 +60,7 @@ ORCH_BASE = os.getenv("ORCH_BASE", "http://192.168.10.217:8785")
 SOUNDS_DIR = Path(os.getenv("SOUNDS_DIR", "/home/pi/voice-pipeline/sounds"))
 DATA_DIR = Path(os.getenv("DATA_DIR", "/home/pi/voice-pipeline/data"))
 HTTP_PORT = int(os.getenv("HTTP_PORT", "8781"))
-START_MODE = os.getenv("MODE", "shadow")
+START_MODE = os.getenv("MODE", "active")
 
 PREROLL_S = float(os.getenv("PREROLL_S", "2.5"))
 # Endpointing VAD. webrtcvad is energy/spectral and useless near steady noise
@@ -969,15 +975,16 @@ def main() -> int:
 
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     CLIP_DIR.mkdir(parents=True, exist_ok=True)
-    if not Path(MODEL_PATH).is_file():
-        log(f"model missing: {MODEL_PATH}")
-        return 3
+    for _mp in MODEL_PATHS:
+        if not Path(_mp).is_file():
+            log(f"model missing: {_mp}")
+            return 3
     if not Path(SILERO_MODEL).is_file():
         log(f"silero VAD model missing: {SILERO_MODEL}")
         return 3
 
-    model = WakeWordModel(models=[MODEL_PATH])
-    model_key = next(iter(model.predict(np.zeros(WINDOW_SAMPLES, dtype=np.int16)).keys()))
+    model = WakeWordModel(models=MODEL_PATHS)
+    model_keys = list(model.predict(np.zeros(WINDOW_SAMPLES, dtype=np.int16)).keys())
     vad = SileroVad(SILERO_MODEL)
     log(f"Silero VAD loaded ({SILERO_MODEL}, threshold {SILERO_THRESHOLD})")
 
@@ -991,7 +998,7 @@ def main() -> int:
     log(f"satellite up: phrase={WAKE_PHRASE!r} threshold={TRIGGER_THRESHOLD} "
         f"mode={STATE.get_mode()} orch={ORCH_BASE}")
     append_event({"type": "start", "mode": STATE.get_mode(),
-                  "model": os.path.basename(MODEL_PATH)})
+                  "model": ",".join(os.path.basename(p) for p in MODEL_PATHS)})
 
     frame_bytes = FRAME_SAMPLES * 2
     ring: deque = deque(maxlen=int(RING_SECONDS * FPS))
@@ -1052,15 +1059,18 @@ def main() -> int:
             continue
         frames_since_hop = 0
 
-        score = float(model.predict(window).get(model_key, 0.0))
+        scores = model.predict(window)
+        top_key = max(model_keys, key=lambda k: scores.get(k, 0.0))
+        score = float(scores.get(top_key, 0.0))
         now = time.time()
         if score < TRIGGER_THRESHOLD or now < guard_until:
             continue
 
         STATE.stats["triggers"] += 1
         peak = round(score, 3)
-        append_event({"type": "trigger", "peak_score": peak, "mode": mode})
-        log(f"stage-1 trigger peak={peak} mode={mode}")
+        append_event({"type": "trigger", "peak_score": peak, "mode": mode,
+                      "model": top_key})
+        log(f"stage-1 trigger peak={peak} model={top_key} mode={mode}")
         guard_until = now + RETRIGGER_GUARD_S
         if mode != "active":
             continue

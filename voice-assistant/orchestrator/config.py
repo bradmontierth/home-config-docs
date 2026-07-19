@@ -133,6 +133,11 @@ MUSIC_INDEX_TTL_S = float(os.getenv("MUSIC_INDEX_TTL_S", "900"))
 
 # --- wake stage-2 ----------------------------------------------------------
 WAKE_PHRASE = os.getenv("WAKE_PHRASE", "okay computer")
+# All phrases the verifier accepts (dual wake: okay_google model on the
+# satellite; "hey google" covers the common spoken variant). Comma-separated.
+WAKE_PHRASES = [p.strip() for p in os.getenv(
+    "WAKE_PHRASES", f"{WAKE_PHRASE},okay google,hey google"
+).split(",") if p.strip()]
 # rapidfuzz partial_ratio (0-100) the wake phrase must clear in the transcript.
 WAKE_FUZZ_THRESHOLD = float(os.getenv("WAKE_FUZZ_THRESHOLD", "80"))
 # Overlap rescue: if the full pre-roll decode rejects, re-decode only the last

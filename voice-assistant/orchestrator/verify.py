@@ -33,25 +33,25 @@ def verify_and_extract(transcript: str) -> tuple[bool, str, float]:
     if not norm:
         return False, "", 0.0
 
-    phrase = _normalize(config.WAKE_PHRASE)
-    phrase_words = phrase.split()
     words = norm.split()
-    n = len(phrase_words)
 
     best_score = 0.0
     best_end = 0
-    # Only look in the leading region — the wake word comes first. Allow a small
-    # lead-in (mis-transcribed noise before "okay") and slop of +/-1 word.
-    search_limit = min(len(words), n + 4)
-    for start in range(search_limit):
-        for width in (n - 1, n, n + 1):
-            if width <= 0 or start + width > len(words):
-                continue
-            candidate = " ".join(words[start : start + width])
-            score = fuzz.ratio(candidate, phrase)
-            if score > best_score:
-                best_score = score
-                best_end = start + width
+    for raw_phrase in config.WAKE_PHRASES:
+        phrase = _normalize(raw_phrase)
+        n = len(phrase.split())
+        # Only look in the leading region — the wake word comes first. Allow a
+        # small lead-in (mis-transcribed noise before "okay") and +/-1 word slop.
+        search_limit = min(len(words), n + 4)
+        for start in range(search_limit):
+            for width in (n - 1, n, n + 1):
+                if width <= 0 or start + width > len(words):
+                    continue
+                candidate = " ".join(words[start : start + width])
+                score = fuzz.ratio(candidate, phrase)
+                if score > best_score:
+                    best_score = score
+                    best_end = start + width
 
     verified = best_score >= config.WAKE_FUZZ_THRESHOLD
     command = " ".join(words[best_end:]).strip() if verified else ""
