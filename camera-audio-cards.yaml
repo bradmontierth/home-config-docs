@@ -11,7 +11,7 @@ elements:
       target:
         entity_id: media_player.gmediarender_on_kitchen_big_speakers
       data:
-        media_content_id: "http://192.168.10.250:8099/simon.mp3"
+        media_content_id: "http://192.168.10.217:8094/simon.mp3"
         media_content_type: music
     style:
       top: 10%
@@ -52,7 +52,7 @@ elements:
       target:
         entity_id: media_player.gmediarender_on_kitchen_big_speakers
       data:
-        media_content_id: "http://192.168.10.250:8099/claire.mp3"
+        media_content_id: "http://192.168.10.217:8094/claire.mp3"
         media_content_type: music
     style:
       top: 10%
