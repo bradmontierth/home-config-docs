@@ -149,7 +149,7 @@ SAMPLE_RATE = 16000
 FRAME_SAMPLES = 512
 WINDOW_SAMPLES = 32000
 VAD_FRAME_SAMPLES = 320       # 20ms
-RING_SECONDS = 8
+RING_SECONDS = 20   # /mark grabs the whole ring — long enough to tap after a miss
 FPS = SAMPLE_RATE / FRAME_SAMPLES
 HOP_FRAMES = max(1, int(HOP_MS / 1000 * FPS))
 
@@ -867,6 +867,111 @@ def start_next_alarm() -> None:
     threading.Thread(target=alarm_playback, args=(req,), daemon=True).start()
 
 
+# --- wake review: ring capture, offline scoring, review page ---------------
+# The ring only advances in the main wake loop, so a /mark during a turn or a
+# ringing alarm captures pre-turn audio — fine for its purpose (stage-1 misses
+# happen precisely when no turn started).
+RING: deque = deque(maxlen=int(RING_SECONDS * FPS))
+
+_SCORER_LOCK = threading.Lock()
+_SCORER = None
+
+
+def _score_clip(pcm: bytes) -> dict:
+    """Peak stage-1 score per model over a sliding window. Uses a dedicated
+    model instance — the hot-loop model must never be touched off-thread."""
+    global _SCORER
+    from livekit.wakeword import WakeWordModel
+    with _SCORER_LOCK:
+        if _SCORER is None:
+            _SCORER = WakeWordModel(models=MODEL_PATHS)
+        samples = np.frombuffer(pcm, dtype=np.int16)
+        hop = int(0.096 * SAMPLE_RATE)
+        peaks: dict = {}
+        for start in range(0, max(1, len(samples) - WINDOW_SAMPLES + 1), hop):
+            win = samples[start:start + WINDOW_SAMPLES]
+            if len(win) < WINDOW_SAMPLES:
+                win = np.pad(win, (WINDOW_SAMPLES - len(win), 0))
+            for k, v in _SCORER.predict(win).items():
+                if float(v) > peaks.get(k, 0.0):
+                    peaks[k] = float(v)
+        return {k: round(v, 3) for k, v in peaks.items()}
+
+
+def _events_tail(limit: int) -> list:
+    try:
+        with EVENTS_PATH.open("rb") as fh:
+            fh.seek(0, 2)
+            fh.seek(max(0, fh.tell() - 256 * 1024))
+            lines = fh.read().decode(errors="replace").splitlines()
+    except FileNotFoundError:
+        return []
+    out = []
+    for line in lines[-limit:]:
+        try:
+            out.append(json.loads(line))
+        except ValueError:
+            continue
+    return out
+
+
+REVIEW_HTML = """<!doctype html><html><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Kitchen wake review</title><style>
+body{font-family:system-ui,sans-serif;max-width:680px;margin:0 auto;padding:1em;background:#111;color:#ddd}
+h2{margin:.2em 0 .6em}
+#mark{width:100%;padding:1em;font-size:1.3em;border-radius:12px;border:0;background:#c0392b;color:#fff}
+#mark:active{background:#e74c3c}
+#stat{display:block;margin:.5em 0;color:#8f8;min-height:1.2em}
+.ev{border-bottom:1px solid #333;padding:.5em 0;font-size:.92em}
+.t{color:#888;margin-right:.5em}
+.b{display:inline-block;padding:.05em .5em;border-radius:8px;font-size:.85em;margin-right:.4em}
+.trigger{background:#444}.ok{background:#1e7e34}.rej{background:#7a2a20}
+.command{background:#1a5276}.mark{background:#b7770d}.other{background:#333}
+audio{width:100%;margin-top:.3em;height:32px}
+.d{color:#aaa}
+</style></head><body>
+<h2>Kitchen wake review</h2>
+<button id="mark">Mark — save last 20s</button><span id="stat"></span>
+<div id="list">loading…</div>
+<script>
+const fmt = ts => new Date(ts).toLocaleTimeString([], {hour12:false});
+function row(e, scores){
+  let b = "other", label = e.type, d = "";
+  if (e.type === "trigger"){ b = "trigger"; d = `${e.model} peak ${e.peak_score}`; }
+  else if (e.type === "verify"){ b = e.verified ? "ok" : "rej";
+    label = e.verified ? "verified" : "rejected";
+    d = `score ${e.score} — “${e.transcript||""}” (${e.rtt_ms||"?"}ms)`; }
+  else if (e.type === "command" || e.type === "followup"){ b = "command";
+    d = `${e.intent}: “${e.transcript}” → ${e.response||""}`; }
+  else if (e.type === "mark"){ b = "mark";
+    const p = scores[e.clip];
+    d = `${e.seconds}s saved` + (p ? ` — peak scores: ${Object.entries(p).map(([k,v])=>`${k} ${v}`).join(", ")}` : " — scoring…"); }
+  else { d = JSON.stringify(Object.assign({}, e, {ts: undefined, type: undefined})); }
+  const audio = e.clip ? `<audio controls preload="none" src="/clips/${e.clip}"></audio>` : "";
+  return `<div class="ev"><span class="t">${fmt(e.ts)}</span><span class="b ${b}">${label}</span><span class="d">${d}</span>${audio}</div>`;
+}
+async function refresh(){
+  if ([...document.querySelectorAll("audio")].some(a => !a.paused)) return;
+  const evs = await (await fetch("/events?limit=60")).json();
+  const scores = {};
+  evs.forEach(e => { if (e.type === "mark_scores") scores[e.clip] = e.peaks; });
+  document.getElementById("list").innerHTML =
+    evs.filter(e => e.type !== "mark_scores").reverse().map(e => row(e, scores)).join("") || "no events";
+}
+document.getElementById("mark").onclick = async () => {
+  const s = document.getElementById("stat");
+  s.textContent = "saving…";
+  try {
+    const r = await (await fetch("/mark", {method:"POST"})).json();
+    s.textContent = r.ok ? `saved ${r.clip} — scoring in background` : (r.error||"failed");
+  } catch(e){ s.textContent = "error: " + e; }
+  setTimeout(refresh, 500); setTimeout(refresh, 6000); setTimeout(refresh, 15000);
+};
+refresh(); setInterval(refresh, 10000);
+</script></body></html>"""
+
+
 # --- HTTP control surface --------------------------------------------------
 class Handler(http.server.BaseHTTPRequestHandler):
     def log_message(self, *_):
@@ -890,7 +995,37 @@ class Handler(http.server.BaseHTTPRequestHandler):
         except Exception:  # noqa: BLE001
             return {}
 
+    def _serve_bytes(self, body: bytes, ctype: str) -> None:
+        self.send_response(200)
+        self.send_header("Content-Type", ctype)
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.end_headers()
+        self.wfile.write(body)
+
     def do_GET(self):
+        path, _, query = self.path.partition("?")
+        if path == "/review":
+            self._serve_bytes(REVIEW_HTML.encode(), "text/html; charset=utf-8")
+            return
+        if path == "/events":
+            limit = 60
+            for part in query.split("&"):
+                if part.startswith("limit="):
+                    try:
+                        limit = max(1, min(500, int(part[6:])))
+                    except ValueError:
+                        pass
+            self._json(200, _events_tail(limit))
+            return
+        if path.startswith("/clips/"):
+            name = os.path.basename(path[len("/clips/"):])
+            target = CLIP_DIR / name
+            if not re.fullmatch(r"[\w.-]+\.wav", name) or not target.is_file():
+                self._json(404, {"ok": False})
+                return
+            self._serve_bytes(target.read_bytes(), "audio/wav")
+            return
         if self.path == "/health":
             with STATE.lock:
                 self._json(200, {
@@ -951,6 +1086,27 @@ class Handler(http.server.BaseHTTPRequestHandler):
         elif self.path == "/media/stop":
             media_stop()
             self._json(200, {"ok": True})
+        elif self.path == "/mark":
+            pcm = b"".join(RING)
+            if not pcm:
+                self._json(409, {"ok": False, "error": "ring empty"})
+                return
+            name = f"mark-{time.strftime('%Y%m%d-%H%M%S')}.wav"
+            (CLIP_DIR / name).write_bytes(wrap_wav(pcm))
+            append_event({"type": "mark", "clip": name,
+                          "seconds": round(len(pcm) / 2 / SAMPLE_RATE, 1)})
+            log(f"mark saved {name} ({len(pcm)//2//SAMPLE_RATE}s)")
+
+            def _score():
+                try:
+                    peaks = _score_clip(pcm)
+                    append_event({"type": "mark_scores", "clip": name, "peaks": peaks})
+                    log(f"mark scores {name}: {peaks}")
+                except Exception as exc:  # noqa: BLE001
+                    log(f"mark scoring failed: {exc}")
+
+            threading.Thread(target=_score, daemon=True).start()
+            self._json(200, {"ok": True, "clip": name})
         else:
             self._json(404, {"ok": False})
 
@@ -1001,7 +1157,7 @@ def main() -> int:
                   "model": ",".join(os.path.basename(p) for p in MODEL_PATHS)})
 
     frame_bytes = FRAME_SAMPLES * 2
-    ring: deque = deque(maxlen=int(RING_SECONDS * FPS))
+    ring = RING
     window = np.zeros(WINDOW_SAMPLES, dtype=np.int16)
     frames_since_hop = 0
     guard_until = 0.0
