@@ -700,8 +700,12 @@ def run_turn(preroll_pcm: bytes, stdout, vad, trigger_t0: float) -> None:
         log(f"/command/audio failed: {exc}")
         return
     log(f"command -> {resp.get('intent')}: {resp.get('response')}")
+    cmd_clip = f"cmd-{datetime.now().strftime('%Y%m%d-%H%M%S')}.wav"
+    threading.Thread(target=_persist_cmd, args=(preroll_pcm + cmd_pcm, cmd_clip),
+                     daemon=True).start()
     append_event({"type": "command", "intent": resp.get("intent"),
-                  "transcript": resp.get("transcript"), "response": resp.get("response")})
+                  "transcript": resp.get("transcript"), "response": resp.get("response"),
+                  "clip": cmd_clip})
     url = resp.get("audio_url")
     if url:
         try:
@@ -746,8 +750,12 @@ def run_followups(stdout, vad) -> None:
             log(f"followup not for us (intent={intent}) -> ending session")
             return
         log(f"followup -> {intent}: {reply}")
+        fup_clip = f"cmd-{datetime.now().strftime('%Y%m%d-%H%M%S')}.wav"
+        threading.Thread(target=_persist_cmd, args=(cmd, fup_clip),
+                         daemon=True).start()
         append_event({"type": "followup", "intent": intent,
-                      "transcript": resp.get("transcript"), "response": reply})
+                      "transcript": resp.get("transcript"), "response": reply,
+                      "clip": fup_clip})
         url = resp.get("audio_url")
         if url:
             try:
@@ -872,6 +880,21 @@ def start_next_alarm() -> None:
 # ringing alarm captures pre-turn audio — fine for its purpose (stage-1 misses
 # happen precisely when no turn started).
 RING: deque = deque(maxlen=int(RING_SECONDS * FPS))
+
+CMD_CLIPS_KEEP = int(os.getenv("CMD_CLIPS_KEEP", "80"))
+
+
+def _persist_cmd(pcm: bytes, clip_name: str) -> None:
+    """Keep the audio behind every command decode (~320KB per 10s turn) so a
+    mis-transcription is auditable by ear on /review; prune oldest past cap."""
+    try:
+        (CLIP_DIR / clip_name).write_bytes(wrap_wav(pcm))
+        cmds = sorted(CLIP_DIR.glob("cmd-*.wav"))
+        for old in cmds[:-CMD_CLIPS_KEEP]:
+            old.unlink(missing_ok=True)
+    except Exception as exc:  # noqa: BLE001
+        log(f"cmd clip persist failed: {exc}")
+
 
 _SCORER_LOCK = threading.Lock()
 _SCORER = None
@@ -1151,6 +1174,17 @@ def main() -> int:
         ["arecord", "-D", MIC_DEVICE, "-f", "S16_LE", "-r", str(SAMPLE_RATE),
          "-c", "1", "-t", "raw", "-q"],
         stdout=subprocess.PIPE)
+    # The default 64KB pipe holds only ~2.0s of 16k mono audio. Reply playback
+    # blocks the reader for 5-8s and the pre-capture seam (verify+chime) for up
+    # to ~2s — both overflowed it, making arecord overrun and silently DROP mic
+    # audio (7 overruns logged 2026-07-19). 1MB ≈ 32s of headroom; drain_input
+    # discards the backlog where it isn't wanted.
+    try:
+        import fcntl
+        fcntl.fcntl(arecord.stdout.fileno(),
+                    getattr(fcntl, "F_SETPIPE_SZ", 1031), 1 << 20)
+    except OSError as exc:
+        log(f"pipe resize failed (staying at 64KB): {exc}")
     log(f"satellite up: phrase={WAKE_PHRASE!r} threshold={TRIGGER_THRESHOLD} "
         f"mode={STATE.get_mode()} orch={ORCH_BASE}")
     append_event({"type": "start", "mode": STATE.get_mode(),
