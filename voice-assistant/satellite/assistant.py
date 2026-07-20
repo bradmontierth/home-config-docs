@@ -715,6 +715,47 @@ def run_turn(preroll_pcm: bytes, stdout, vad, trigger_t0: float) -> None:
     run_followups(stdout, vad)
 
 
+def run_manual_turn(stdout, vad) -> None:
+    """Button-initiated turn (dashboard mic tap): no wake word, no verify —
+    chime, capture, act. For when conditions beat the wake word (music, TV)
+    and you're near the display anyway. The pre-roll is deliberately NOT
+    stitched in: the seconds before a tap are room chatter, not command."""
+    STATE.stats["turns"] += 1
+    append_event({"type": "trigger", "mode": "active", "model": "manual"})
+    log("manual trigger (button)")
+    drain_input(stdout)             # start on live audio, not pre-tap backlog
+    play_file(SOUNDS_DIR / "wake.wav")
+    try:
+        post_json("/session/listening", {}, timeout=2)
+    except Exception:  # noqa: BLE001
+        pass
+    cmd_pcm = capture_command(stdout, vad, min_capture_ms=WAKE_MIN_CAPTURE_MS,
+                              onset_ms=WAKE_ONSET_MS, partials=True)
+    play_file(SOUNDS_DIR / "vad.wav")
+    if not cmd_pcm:
+        log("manual turn: no command captured")
+        return
+    try:
+        resp = post_wav("/command/audio", wrap_wav(cmd_pcm), timeout=COMMAND_TIMEOUT_S)
+    except Exception as exc:  # noqa: BLE001
+        log(f"manual /command/audio failed: {exc}")
+        return
+    log(f"manual command -> {resp.get('intent')}: {resp.get('response')}")
+    cmd_clip = f"cmd-{datetime.now().strftime('%Y%m%d-%H%M%S')}.wav"
+    threading.Thread(target=_persist_cmd, args=(cmd_pcm, cmd_clip),
+                     daemon=True).start()
+    append_event({"type": "command", "intent": resp.get("intent"),
+                  "transcript": resp.get("transcript"), "response": resp.get("response"),
+                  "clip": cmd_clip})
+    url = resp.get("audio_url")
+    if url:
+        try:
+            play_wav_bytes(get_bytes(ORCH_BASE + url))
+        except Exception as exc:  # noqa: BLE001
+            log(f"manual reply playback failed: {exc}")
+    run_followups(stdout, vad)
+
+
 def run_followups(stdout, vad) -> None:
     """Continued conversation: after the reply, reopen the mic (no wake word) and
     listen for another command; re-arm on each actionable turn. Ends silently on
@@ -881,6 +922,13 @@ def start_next_alarm() -> None:
 # happen precisely when no turn started).
 RING: deque = deque(maxlen=int(RING_SECONDS * FPS))
 
+# Manual trigger (dashboard mic button): the HTTP thread flags it, the main
+# loop starts a no-wake-word turn on the next frame. Stale taps (queued while
+# a turn held the loop) expire rather than reopening the mic out of nowhere.
+MANUAL_TRIGGER = threading.Event()
+MANUAL_TRIGGER_AT = [0.0]
+MANUAL_TRIGGER_TTL_S = 3.0
+
 CMD_CLIPS_KEEP = int(os.getenv("CMD_CLIPS_KEEP", "80"))
 
 
@@ -961,7 +1009,7 @@ audio{width:100%;margin-top:.3em;height:32px}
 const fmt = ts => new Date(ts).toLocaleTimeString([], {hour12:false});
 function row(e, scores){
   let b = "other", label = e.type, d = "";
-  if (e.type === "trigger"){ b = "trigger"; d = `${e.model} peak ${e.peak_score}`; }
+  if (e.type === "trigger"){ b = "trigger"; d = e.model + (e.peak_score != null ? ` peak ${e.peak_score}` : ""); }
   else if (e.type === "verify"){ b = e.verified ? "ok" : "rej";
     label = e.verified ? "verified" : "rejected";
     d = `score ${e.score} — “${e.transcript||""}” (${e.rtt_ms||"?"}ms)`; }
@@ -1109,6 +1157,16 @@ class Handler(http.server.BaseHTTPRequestHandler):
         elif self.path == "/media/stop":
             media_stop()
             self._json(200, {"ok": True})
+        elif self.path == "/trigger":
+            if STATE.get_mode() != "active":
+                self._json(409, {"ok": False, "error": "satellite not active"})
+                return
+            if STATE.current_alarm is not None:
+                self._json(409, {"ok": False, "error": "alarm ringing"})
+                return
+            MANUAL_TRIGGER_AT[0] = time.time()
+            MANUAL_TRIGGER.set()
+            self._json(200, {"ok": True})
         elif self.path == "/mark":
             pcm = b"".join(RING)
             if not pcm:
@@ -1242,6 +1300,18 @@ def main() -> int:
 
         mode = STATE.get_mode()
         if mode == "off":
+            continue
+
+        if MANUAL_TRIGGER.is_set():
+            MANUAL_TRIGGER.clear()
+            if mode == "active" and time.time() - MANUAL_TRIGGER_AT[0] < MANUAL_TRIGGER_TTL_S:
+                media_stop()
+                duck_music()
+                try:
+                    run_manual_turn(arecord.stdout, vad)
+                finally:
+                    unduck_music()
+                resync()
             continue
 
         frames_since_hop += 1
