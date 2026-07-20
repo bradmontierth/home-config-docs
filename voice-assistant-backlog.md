@@ -468,3 +468,37 @@ kitchen mic that now sits next to the big speakers (no AEC) — most of
   transcript before intent parsing. Deterministic chooser: length-normalized
   Parakeet Hypothesis score, tie-break on satellite voiced-ms/RMS metadata,
   final tie-break kitchen. Doubles Parakeet load only on actual wakes.
+
+## Unattended-timer phone escalation (Voice Notes push) — scoped 2026-07-19
+
+Timer rings in the kitchen, everyone is upstairs/with the kids, it times out
+un-dismissed and dinner burns. Escalate to phones — same rationale as the
+list sync: the phones are the household's always-on surface.
+
+**All the parts already exist — this is glue, not construction:**
+- Voice Notes app (both phones) has FCM push + `voice_notes_reminders`
+  notification channel (`VoiceNotesMessagingService` posts title/body from
+  data messages).
+- Companion (:8768) has FCM v1 send (`send_fcm_to_token`, service account in
+  cecret_lake/voice-notes/) and per-device registered tokens.
+- Satellite `alarm_playback` already tracks dismissed-vs-timeout per ring.
+
+**Design:**
+- Satellite: on alarm start, arm a one-shot ~15s watchdog thread; if
+  `STATE.dismiss` still unset when it fires, POST orchestrator
+  `/timers/{tid}/unattended` (satellite stays dumb about phones). Cancel on
+  dismiss. No change to ring behavior.
+- Orchestrator: new route formats the message from timer state ("Waffle
+  timer (12 min) has been ringing for 15s — nobody's stopped it") and
+  relays to companion.
+- Companion: new endpoint `/alert` (LAN, same auth as scanner) that fans a
+  data message to ALL registered device tokens.
+- Threshold 15s (not ring-timeout): actual full ring is ~45-90s
+  (ALARM_MAX_LOOPS=14 × sound+2s gap — longer than the felt "10-15s");
+  waiting for timeout delays the phone by a minute. 15s un-dismissed already
+  means nobody's in the kitchen.
+- Optional second notification at ring timeout ("gave up ringing") — only if
+  the 15s one proves insufficient in practice.
+
+**Explicitly out of scope (v1):** dismissing from the phone (notification is
+informational; tap opens Voice Notes), per-person routing, quiet hours.
