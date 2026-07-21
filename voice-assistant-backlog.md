@@ -502,3 +502,40 @@ list sync: the phones are the household's always-on surface.
 
 **Explicitly out of scope (v1):** dismissing from the phone (notification is
 informational; tap opens Voice Notes), per-person routing, quiet hours.
+
+## Orchestrator cancel/dismiss should silence the satellite alarm — scoped 2026-07-20
+
+**Incident (2026-07-20):** timer rang while music played, voice stop failed
+(item 4 territory), Brad swiped the ringing card on the kiosk — card flew off,
+ringing continued to timeout. Root cause was a dashboard bug, already fixed:
+`dismissAlarm()` still referenced `WAKE_BENCH_URL` after d1a252a renamed it to
+`SATELLITE_URL` → ReferenceError on every tap/swipe of a ringing card (and
+before that rename the URL pointed at the powered-off .24 Pi, so touch dismiss
+had been silently broken since the mini PC swap). Fixed + deployed + pushed
+(dashboard_webapp f959ca5); toast would have said "Couldn't stop alarm:
+WAKE_BENCH_URL is not defined" — nobody reads toasts mid-alarm.
+
+**Remaining structural gap (the actual backlog item):** the only thing that
+stops the ringing sound is the kiosk's DIRECT POST to satellite
+`/alarm/dismiss`. The orchestrator's own `/timers/{id}/cancel` and
+`/timers/{id}/dismiss` routes just flip SQLite state + emit dashboard events —
+they never notify the satellite. Any current or future client that cancels a
+ringing timer through the orchestrator REST (phone app, voice-notes portal,
+curl, a second dashboard) reproduces the "card gone, still ringing" symptom.
+
+**Fix sketch (small):**
+- `events.py`: add `alarm_stop()` posting satellite `/alarm/dismiss`
+  (best-effort, same pattern as `alarm()`); satellite endpoint is idempotent
+  (`STATE.dismiss.set()`, cleared before each new alarm) so blind-firing is
+  safe.
+- `app.py`: call it from `cancel_timer`/`dismiss_timer` when the timer being
+  cancelled was in state `ringing` (check BEFORE `cancel_by_id` mutates), and
+  from `timer_cancel` intent's `cancel_all` path if any cancelled timer was
+  ringing.
+- Gotcha: satellite `alarm_playback` ends by POSTing `/timers/{tid}/dismiss`
+  back to the orchestrator — harmless 404 today (timer already cancelled),
+  keep it that way (don't let that 404 become an error path).
+- Optionally the kiosk's `dismissAlarm()` then collapses to the orchestrator
+  route and loses its hardcoded satellite IP — one less config duplicate
+  (kiosk currently can't stop an alarm if the orchestrator is up but the
+  satellite IP changes again).
