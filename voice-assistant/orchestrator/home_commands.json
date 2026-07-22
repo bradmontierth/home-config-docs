@@ -1,0 +1,82 @@
+{
+  "blind_left_close": {
+    "aliases": ["close the left blind", "close the left kitchen blind", "close the kitchen left blind", "shut the left blind"],
+    "entity": "button.voice_blind_left_close",
+    "confirm": "Closing the left blind."
+  },
+  "blind_left_open": {
+    "aliases": ["open the left blind", "open the left kitchen blind", "open the kitchen left blind"],
+    "entity": "button.voice_blind_left_open",
+    "confirm": "Opening the left blind."
+  },
+  "blind_right_close": {
+    "aliases": ["close the right blind", "close the right kitchen blind", "shut the right blind"],
+    "entity": "button.voice_blind_right_close",
+    "confirm": "Closing the right blind."
+  },
+  "blind_right_open": {
+    "aliases": ["open the right blind", "open the right kitchen blind"],
+    "entity": "button.voice_blind_right_open",
+    "confirm": "Opening the right blind."
+  },
+  "blind_sink_close": {
+    "aliases": ["close the sink", "close the kitchen sink", "close the sink blind", "close the blind above the sink", "shut the sink blind"],
+    "entity": "button.voice_blind_sink_close",
+    "confirm": "Closing the sink blind."
+  },
+  "blind_sink_open": {
+    "aliases": ["open the sink", "open the kitchen sink", "open the sink blind", "open the blind above the sink"],
+    "entity": "button.voice_blind_sink_open",
+    "confirm": "Opening the sink blind."
+  },
+  "blind_slider_close": {
+    "aliases": ["close the sliding door", "close the sliding door blind", "close the big one", "close the big blind", "close the slider"],
+    "entity": "button.voice_blind_slider_close",
+    "confirm": "Closing the sliding door blind."
+  },
+  "blind_slider_open": {
+    "aliases": ["open the sliding door", "open the sliding door blind", "open the big one", "open the big blind", "open the slider"],
+    "entity": "button.voice_blind_slider_open",
+    "confirm": "Opening the sliding door blind."
+  },
+  "blind_small_close": {
+    "aliases": ["close the small blinds", "close the little blinds", "close the left and right blinds", "close the two small blinds"],
+    "entity": "button.voice_blind_small_close",
+    "confirm": "Closing the small blinds."
+  },
+  "blind_small_open": {
+    "aliases": ["open the small blinds", "open the little blinds", "open the left and right blinds"],
+    "entity": "button.voice_blind_small_open",
+    "confirm": "Opening the small blinds."
+  },
+  "blind_glare_close": {
+    "aliases": ["fix the glare", "the sun is in the kids' eyes", "the sun is in my eyes", "there's glare on the table", "block the sun"],
+    "entity": "button.voice_blind_glare_close",
+    "confirm": "Closing the blinds to fix the glare."
+  },
+  "blinds_all_close": {
+    "aliases": ["close the blinds", "close the kitchen blinds", "close all the blinds", "close all the kitchen blinds", "shut the blinds"],
+    "entity": "button.voice_blinds_all_close",
+    "confirm": "Closing all the kitchen blinds."
+  },
+  "blinds_all_open": {
+    "aliases": ["open the blinds", "open the kitchen blinds", "open all the blinds", "open all the kitchen blinds"],
+    "entity": "button.voice_blinds_all_open",
+    "confirm": "Opening all the kitchen blinds."
+  },
+  "kitchen_brighten": {
+    "aliases": ["brighten the lights", "brighten the kitchen", "brighter", "make it brighter", "make it brighter in here", "bump up the lights", "turn up the lights"],
+    "entity": "button.voice_kitchen_brighten",
+    "confirm": "Brightening the kitchen."
+  },
+  "dinner_mood": {
+    "aliases": ["set the mood for dinner", "dinner mode", "dinner mood", "dinner lights", "set the dinner mood", "time for dinner lights"],
+    "entity": "button.voice_dinner_mood",
+    "confirm": "Setting the dinner mood."
+  },
+  "lights_normal": {
+    "aliases": ["back to normal", "normal lights", "reset the lights", "lights back to normal", "put the lights back", "regular lights"],
+    "entity": "button.voice_lights_normal",
+    "confirm": "Back to normal."
+  }
+}

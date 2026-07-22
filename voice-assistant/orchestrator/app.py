@@ -29,6 +29,7 @@ from fastapi import Body, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse
 
 from . import ask as ask_mod
+from . import home_control as home_mod
 from . import lists as lists_mod
 from . import music as music_mod
 from . import places as places_mod
@@ -251,6 +252,8 @@ def _summarize_turn(intent: str, result: dict) -> str:
         return f"you told the music player: {parsed.get('music_action')}"
     if intent == "music_query":
         return "you asked what music is playing"
+    if intent == "home_control":
+        return f"you gave a home command and heard: {(result.get('response') or '')[:100]}"
     return (result.get("response") or "")[:120]
 
 
@@ -550,6 +553,20 @@ async def handle_command(command: str, followup: bool = False) -> dict:
             result["ok"] = True
             if np:
                 await events.emit("show_music", **np)
+
+    elif intent == "home_control":
+        hc_result = None
+        try:
+            hc_result = await home_mod.handle(parsed, command)
+        except Exception as exc:  # noqa: BLE001 — HA down/slow; still refuse below
+            log.warning("home control failed: %s", exc)
+        if hc_result:
+            result.update(hc_result)
+        else:
+            # Deliberately NOT the ask fallback (contrast with sports/weather):
+            # a control phrase must never turn into a web search or a guess.
+            result["response"] = "I don't control that."
+            result["ok"] = False
 
     elif intent == "sports":
         sports_result = None

@@ -51,6 +51,13 @@ COMPANION_ALERT_URL = os.getenv(
 HA_URL = os.getenv("HA_URL", "http://127.0.0.1:8123").rstrip("/")
 # Long-lived token file (raw, or dotenv HA_TOKEN=…) — mount from cecret_lake.
 HA_TOKEN_FILE = os.getenv("HA_TOKEN_FILE", "/secrets/ha_token")
+
+# --- home control (curated voice buttons) ----------------------------------
+# Alias table for the home_control intent; bind-mounted over the baked-in
+# copy so alias edits go live on the next command (mtime hot-reload).
+HOME_COMMANDS_FILE = os.getenv(
+    "HOME_COMMANDS_FILE",
+    os.path.join(os.path.dirname(__file__), "home_commands.json"))
 # Local weather-station sensors (accurate on-site readings) + the met.no
 # entity that backs the dashboard's condition + forecast strip.
 WEATHER_ENTITY = os.getenv("WEATHER_ENTITY", "weather.forecast_home_2")

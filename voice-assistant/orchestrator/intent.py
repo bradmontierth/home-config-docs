@@ -17,8 +17,8 @@ INTENTS = (
     "set_timer", "timer_query", "timer_adjust", "timer_cancel",
     "add_items", "set_reminder", "show_todos", "show_shopping", "complete_item",
     "remove_items", "clear_list", "play_music", "music_control", "music_query",
-    "sports", "weather", "business_hours", "place_search", "ask", "show_answer",
-    "unclear", "none",
+    "sports", "weather", "business_hours", "place_search", "home_control",
+    "ask", "show_answer", "unclear", "none",
 )
 
 WEATHER_WHEN = ("now", "today", "tonight", "tomorrow", "monday", "tuesday",
@@ -91,6 +91,14 @@ Rules:
   explicitly ask when it opens/closes or whether it is open remain business_hours. Apply the same
   place_modifier rule for an explicitly named department or service, such as "where is Costco gas"
   -> query "Costco", place_modifier "gas".
+- home_control = a command to CHANGE something in the house — blinds, lights, lighting modes:
+  "close the blinds", "open the left blind", "close the kitchen sink blind", "fix the glare",
+  "close the sliding door", "brighten the lights", "make it brighter in here", "dinner mode",
+  "set the mood for dinner", "back to normal", "reset the lights". Put the command phrase in
+  "query", close to as spoken. Use it for house-change commands even if the target sounds
+  unsupported ("open the garage") — the control layer decides what it controls. But music
+  playback stays music_control ("turn it up", "stop the music"), and QUESTIONS about the house
+  state ("are the blinds closed", "is the kitchen light on") are "ask", never home_control.
 - ask = a general knowledge or factual question NOT about timers: "how many tablespoons in a cup",
   "when do babies start walking", "what temperature is chicken done at", "how do I dice an onion".
   Put the cleaned question in "query". No keyword is needed — natural questions route here.
@@ -132,7 +140,7 @@ Rules:
   answer again", "bring that answer back", "put that back up", "show me that again", "what did you
   just say", "repeat that", "say that again". No other fields. A NEW question about the same topic
   ("but who's playing in it") is "ask", not show_answer.
-- If the command is not a timer, list, music, or knowledge command, intent "none".
+- If the command is not a timer, list, music, home-control, or knowledge command, intent "none".
 Return JSON only."""
 
 # Appended to the system prompt when parsing a FOLLOW-UP turn (the user kept

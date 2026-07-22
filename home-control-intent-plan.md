@@ -1,41 +1,95 @@
 # Home Control Intent (Curated Buttons) Plan
 
-**Status:** PLANNED 2026-07-20. Nothing built — no HA helpers, no Node-RED flows, no orchestrator code.
-**Where:** orchestrator (`home_config/voice-assistant/orchestrator/`) + HA helpers + Node-RED (Beelink, existing tabs/globals). Satellite untouched. Companion plan: `business-hours-places-plan.md` (same build session candidate).
+**Status:** Phase 1 DEPLOYED 2026-07-22 — Node-RED tab "Voice Buttons" (`294429bac2b766ff`), all 16 `button.voice_*` entities live in HA. Smoke-tested by API press: sink + slider blinds close/reopen, dinner mood on/exit (WLED ps5 + whites off → exact circadian restore), brighten wire (BriCurveAdj 150/BriCurveDisable true) + back-to-normal reset, HA logbook entries confirmed. Remaining Phase 1: Brad's eyes-on pass (left/right/small/glare/all buttons; judge whether WLED preset 5 "pink blue solid" is dinner-worthy).
+
+**Phase 2 DEPLOYED 2026-07-22** (commit `8c09321`, container rebuilt): `home_control` intent + `home_control.py` + `home_commands.json` (bind-mounted `:ro`, mtime hot-reload). **Deviation from plan:** matcher is full-string `fuzz.ratio` at threshold 80 after politeness-filler strip, NOT `WRatio` 85 — WRatio's partial/token heuristics scored "turn on the sprinklers" ≈ "close the sink blind" at 52→ok but "what a nice dinner we had" ≈ "dinner mood" at 86 and "are the blinds closed" ≈ "close the blinds" at 82; with plain ratio, misses top out ≈68 and cleaned hits score ≥86. Pin words (left/right/sink/sliding/slider/big/small/little) restrict candidates so near-identical blind aliases can't cross. 7 unit tests (`test_home_control.py`); E2E: sink close/reopen by text `/command`, garage + front-door refusals, brighten/normal round trip, "are the blinds closed"→ask, press 15–18ms. Live-voice test (wake word → satellite) pending Brad.
+**Where:** orchestrator (`home_config/voice-assistant/orchestrator/`) + MQTT discovery buttons (created by Node-RED) + Node-RED flows (Beelink, existing tabs/globals). Satellite untouched. Companion plan: `business-hours-places-plan.md` (same build session candidate).
 
 ## Goal
 
-Very limited voice home control — a handful of curated *commands*, not general device control. "Close the blinds," "brighten the lights," "set the mood for dinner." No room disambiguation, no device names, no exposure of individual Zigbee2MQTT/ESPHome entities to the voice layer.
+Very limited voice home control — a handful of curated *commands*, not general device control. "Close the sink blind," "brighten the lights," "set the mood for dinner." No exposure of the general Zigbee2MQTT/ESPHome entity space to the voice layer; the four kitchen blinds are addressable only through a fixed alias table.
 
-Decisions made 2026-07-20 (Brad):
+Decisions made 2026-07-20 (Brad), amended 2026-07-22:
 
 - **Voice = another Pico button.** All logic and state live in Node-RED (all-custom flows, globals, existing "button push → temporary override → 60-min time-based return" machinery). Voice is just one more entry point into those flows.
-- **Mechanism: one HA `input_button` per command.** Orchestrator only ever calls `input_button/press`; Node-RED events-state nodes pick up presses like any wall button. Buttons are also pressable from HA dashboards/phone, and every voice action lands in the HA logbook.
-- No HA scripts — logic would be duplicated outside Node-RED. No direct orchestrator→Node-RED HTTP — bypasses HA visibility for no gain.
-- **Blast radius = the button list.** Worst case of any parse error / fuzzy mismatch / false wake: a flow Brad wrote runs at an odd time. Locks, garage, alarm excluded entirely (not a v1 confirmation-tier thing — just absent).
+- **Mechanism: one MQTT discovery `button` per command, created by Node-RED** (2026-07-22 — supersedes the HA `input_button` helper idea). This is the house convention for creating HA entities (template sensors need an HA restart; MQTT discovery doesn't), and it's a strictly better fit here: a press from *any* source (voice via HA service call, HA dashboard, phone) makes HA publish to the button's `command_topic`, and a single Node-RED `mqtt in` node on that topic namespace is the one entry point — no events-state nodes, and HA-UI presses and voice presses are literally the same code path. Every press still lands in the HA logbook.
+- No HA scripts — logic would be duplicated outside Node-RED. Orchestrator always goes through HA (`button/press`), never straight to MQTT/Node-RED — keeps HA visibility and the logbook audit trail.
+- **Blast radius = the button list.** Worst case of any parse error / fuzzy mismatch / false wake: a blind moves or a lighting flow Brad wrote runs at an odd time. Locks, garage, alarm excluded entirely (not a v1 confirmation-tier thing — just absent).
 - **Misses do NOT fall back to `ask`** (unlike sports/weather/places). A control phrase that doesn't match says "I don't control that" — never web-search "open the blinds."
+- **Blinds: no sun-azimuth logic, ever** (2026-07-22). Glare is predictable in principle but hard to compute (reflections, sun peeking through) and there are only 4 kitchen blinds. Instead: a per-blind alias table, plus a "glare" combo that closes the two blinds that actually ever matter (kitchen left + sink).
+
+## The four kitchen blinds
+
+| Name | Entity | Notes |
+|---|---|---|
+| Kitchen left | `cover.kitchen_left_shade` | one of the two glare offenders |
+| Kitchen right | `cover.kitchen_right_shade` | |
+| Sink | `cover.sink_shade` | the other glare offender |
+| Sliding door ("the big one") | `cover.kitchen_sliding_kitchen_door` | duplicate `cover.kitchen_sliding_door_shade_windowshade` exists (other integration) — RESOLVED 2026-07-22: chosen entity verified live by close/reopen via the voice button. |
+
+(`cover.all_blinds` is a house-wide group — do not use.)
 
 ## MVP command set
 
-| Command | Aliases (starter) | Entity | Node-RED flow behavior | Exit |
-|---|---|---|---|---|
-| Fix the glare | "close the blinds", "fix the glare", "sun's in the kids' eyes" | `input_button.voice_kitchen_blinds_close` | v1: close all 4 kitchen blinds. v2: sun-azimuth logic picks the 1–2 glaring blinds | open command / manual |
-| Open the blinds | "open the blinds", "open the kitchen blinds" | `input_button.voice_kitchen_blinds_open` | open all 4 | — |
-| Brighten | "brighten the lights", "brighter", "bump up the lights" | `input_button.voice_kitchen_brighten` | new trigger into the **existing** override flow; stepping logic (dim→50%, bright→100%) lives there | existing 60-min return |
-| Dinner mood | "set the mood for dinner", "dinner mode", "dinner lights" | `input_button.voice_dinner_mood` | WLED preset (kitchen fixture color strips top+bottom) + ESPHome white strips off | 60-min return or back-to-normal |
-| Back to normal | "back to normal", "normal lights", "reset the lights" | `input_button.voice_lights_normal` | cancel active overrides, resume circadian baseline | — |
+Blind buttons come in open/close pairs; targets and starter aliases:
 
-Naming convention `input_button.voice_*` so the voice-exposed surface is greppable in HA.
+| Target | Covers | Close aliases (starter) | Open aliases (starter) |
+|---|---|---|---|
+| `blind_left` | left | "close the left blind", "close the left kitchen blind" | "open the left blind", … |
+| `blind_right` | right | "close the right blind", … | … |
+| `blind_sink` | sink | "close the sink", "close the kitchen sink", "close the sink blind" | "open the sink blind", … |
+| `blind_slider` | sliding door | "close the sliding door", "close the big one", "close the big blind" | "open the sliding door", … |
+| `blind_small` | left + right | "close the small blinds" | "open the small blinds" |
+| `blind_glare` | **left + sink** | "fix the glare", "sun's in the kids' eyes" | — (no open; "open the blinds" covers it) |
+| `blinds_all` | all 4 | "close the blinds", "close the kitchen blinds" | "open the blinds", "open the kitchen blinds" |
 
-## Phase 1 — HA + Node-RED (flows are the real work)
+(Whether bare "close the blinds" should mean all-4 or the glare pair is a pure alias-table edit later — hot-reload JSON, no redeploy. Starting literal: all 4.)
 
-1. Create the 5 `input_button` helpers in HA.
-2. Node-RED: events-state node per button (press = state timestamp change) wired into flows:
-   - **Brighten**: attach to the existing Pico/Zooz override entry point — should be a wire, not new logic.
-   - **Blinds open/close-all**: simple cover group calls. (Sun-azimuth glare selection = v2; needs Brad's window-orientation input.)
-   - **Dinner mood**: WLED preset call + ESPHome strips off + an exit path matching the house override pattern.
-   - **Back to normal**: cancel/expire override state, re-apply circadian values.
-3. **Validate with zero voice involvement:** press each button from the HA UI, watch the room. Flows are done when the buttons work by hand.
+Plus the three lighting commands, unchanged from the original plan:
+
+| Command | Aliases (starter) | Node-RED flow behavior | Exit |
+|---|---|---|---|
+| `kitchen_brighten` | "brighten the lights", "brighter", "bump up the lights" | new trigger into the **existing** override flow; stepping logic (dim→50%, bright→100%) lives there | existing 60-min return |
+| `dinner_mood` | "set the mood for dinner", "dinner mode", "dinner lights" | WLED preset (kitchen fixture color strips top+bottom) + ESPHome white strips off | 60-min return or back-to-normal |
+| `lights_normal` | "back to normal", "normal lights", "reset the lights" | cancel active overrides, resume circadian baseline | — |
+
+Total: 12 blind buttons + 3 lighting buttons = 15. Naming convention `button.voice_*` (via discovery `object_id`) so the voice-exposed surface is greppable in HA.
+
+## Phase 1 — as built (2026-07-22)
+
+Tab **"Voice Buttons" `294429bac2b766ff`** (node ids `cafe*`; flows backup `flows.json.backup_before_voice_buttons_*`). Deviations/discoveries vs the plan below:
+
+- **Return timer is 90 min, not 60** — the house's actual `stoptimer-varidelay` convention (Pico brighten uses 90); dinner mood uses the same 90-min auto-exit.
+- **Brighten** = link-out into `Under Cab Adj IN` (`a7e05d5f415f49c9`, Kitchen Motion Lighting) — the identical path as Kitchen Garage Entry Pico button 1: zigbee2mqtt-get Cabinet LEDs → "increment 50" (sets `BriCurveAdj`, `BriCurveDisable=true`) → 90-min reset.
+- **Dinner mood** = POST `{"on":true,"ps":5}` to WLED `192.168.30.37/json` + `light.turn_off` the 5 `light.kitchenfixture_*` channels (transition 2) + `KitchenDinnerMood` global + 90-min stoptimer → exit. **No gate flag needed in existing flows:** every repaint path ("Update CT Values while On", motion, circadian) gates on the `kitchenFixtureStatus` global and only re-drives sides already ON. Known benign edges that relight whites mid-dinner: physical fixture wall-switch press (explicit intent) and the Misc-tab TV-off-after-8pm path.
+- **Dinner exit / back-to-normal relight** reuses the house subflow `7d78ee4552a640a7` "kitchen fixture both" with the standard msg shape (`payload=sunPercentMod`, `switch:"on"`, `level=BriCurve`, `transition`).
+- **Back to normal** = replicate "Reset BriCurveAdj" (`BriCurveAdj=BriCurve`, `BriCurveDisable=false`) + link-out into `Global CT In` (`1fa5c29431b8582b`) to repaint ON lights + stop dinner timer + dinner exit if `KitchenDinnerMood`. NOTE: the repaint path is gated by a separate `BrightnessOverride` global (set from Misc Automations) — deliberately left untouched; if it's ever true, repaint no-ops.
+- **Blinds** = one function mapping command → `{target:{entity_id:[...]}}` into two v7 call-service nodes (`cover.close_cover`/`cover.open_cover`, `blockInputOverrides:false`) — input target override confirmed working live.
+- Discovery inject has `once:true` (5s after deploy), so redeploying the tab republishes retained configs — that's the whole entity-management story.
+
+## Phase 1 — original plan (superseded by "as built" above)
+
+1. **Discovery setup flow (Node-RED):** one inject → function → mqtt-out that loops a command list and publishes retained configs to `homeassistant/button/voice_<cmd>/config`:
+
+   ```json
+   {
+     "name": "Voice: close left blind",
+     "unique_id": "voice_blind_left_close",
+     "object_id": "voice_blind_left_close",
+     "command_topic": "voice/button/blind_left_close",
+     "payload_press": "PRESS",
+     "device": {"identifiers": ["voice_buttons"], "name": "Voice Buttons"}
+   }
+   ```
+
+   All 15 under one "Voice Buttons" device so they group in HA. Re-running the inject after editing the list is the whole entity-management story (retained configs; publish empty payload to a config topic to delete a button).
+
+2. **One `mqtt in` node on `voice/button/#`** → switch on topic tail:
+   - **Blind targets** → a single function node mapping command → `{service: close_cover|open_cover, entity_id: [covers]}` → HA call-service node. Trivial; no override machinery.
+   - **Brighten** → wire into the existing Pico/Zooz override entry point — a wire, not new logic.
+   - **Dinner mood** → WLED preset call + ESPHome strips off + an exit path matching the house override pattern.
+   - **Back to normal** → cancel/expire override state, re-apply circadian values.
+3. **Validate with zero voice involvement:** press each button from the HA UI, watch the room. Flows are done when the buttons work by hand. This also settles the sliding-door duplicate-entity question.
 
 Node-RED deploys via Admin API per `nodered-flow-agent-guide.md` (same as bedtime rework); backup flows.json first as usual.
 
@@ -49,16 +103,22 @@ Smaller than the Places intent (~40-line handler, one code path).
 
 ```json
 {
-  "blinds_close": {
-    "aliases": ["close the blinds", "fix the glare", "close the kitchen blinds"],
-    "entity": "input_button.voice_kitchen_blinds_close",
-    "confirm": "Closing the blinds."
+  "blind_glare_close": {
+    "aliases": ["fix the glare", "sun's in the kids' eyes"],
+    "entity": "button.voice_blind_glare_close",
+    "confirm": "Closing the left and sink blinds."
+  },
+  "blind_sink_close": {
+    "aliases": ["close the sink", "close the kitchen sink", "close the sink blind"],
+    "entity": "button.voice_blind_sink_close",
+    "confirm": "Closing the sink blind."
   }
 }
 ```
 
 - One entry per command; `confirm` is the full spoken response (no LLM involvement in phrasing).
 - **Hot-reload on file mtime** — editing aliases or adding a command never needs a container restart.
+- Keep this file and the Node-RED discovery list in sync by hand (15 entries; acceptable for MVP).
 
 ### 2. `intent.py`
 
@@ -67,8 +127,8 @@ Smaller than the Places intent (~40-line handler, one code path).
 
 ### 3. New `orchestrator/home_control.py`
 
-- `async def handle(parsed) -> dict | None`: rapidfuzz `WRatio` of `parsed["query"]` against all aliases — **threshold ~85, stricter than sports' 78** (tiny vocabulary; wrong action beats wrong answer, so prefer misses). Below threshold → `None`.
-- On match: `POST {HA_URL}/api/services/input_button/press` `{"entity_id": ...}` — token via the existing `weather.py:_token()` pattern (same mounted `ha_token`, `config.py:40`; consider extracting `_token()` to a shared helper rather than a third copy).
+- `async def handle(parsed) -> dict | None`: rapidfuzz `WRatio` of `parsed["query"]` against all aliases — **threshold ~85, stricter than sports' 78** (tiny vocabulary; wrong action beats wrong answer, so prefer misses). Below threshold → `None`. With left/right/sink/slider now in the vocabulary, sanity-check that near-collisions ("close the left blind" vs "close the right blind") resolve correctly at this threshold — the differing word is short; if flaky, exact-substring match on the target word (left/right/sink/slider/small/big) before fuzzy.
+- On match: `POST {HA_URL}/api/services/button/press` `{"entity_id": ...}` — token via the existing `weather.py:_token()` pattern (same mounted `ha_token`, `config.py:40`; consider extracting `_token()` to a shared helper rather than a third copy).
 - Return `{"response": entry["confirm"], "ok": True}`. Optimistic confirmation — no state verification (service call returns before blinds move; that's correct).
 
 ### 4. `app.py`
@@ -81,16 +141,17 @@ Smaller than the Places intent (~40-line handler, one code path).
 
 ## Testing
 
-1. Phase 1 gate: all 5 buttons work from HA UI by hand.
-2. `POST /command` text bypass (`app.py:813`): each canonical alias + paraphrases ("make it brighter in here", "shut the blinds") to check LLM→fuzzy pipeline; "open the garage" and "unlock the front door" **must** miss with "I don't control that."; "close the blinds" while music plays (confirm `music_control` doesn't collide).
+1. Phase 1 gate: all 15 buttons work from HA UI by hand (blinds move, lighting flows fire); sliding-door duplicate resolved.
+2. `POST /command` text bypass (`app.py:813`): each canonical alias + paraphrases ("make it brighter in here", "shut the blinds", "close the little blinds"); left-vs-right disambiguation both directions; "open the garage" and "unlock the front door" **must** miss with "I don't control that."; "close the blinds" while music plays (confirm `music_control` doesn't collide).
 3. False-positive sweep: a few question-shaped phrases ("are the blinds closed") — should NOT route to `home_control` (v1: they'll go to `ask`; acceptable).
 4. Live voice: full round-trip latency (expect fastest intent — one LAN call, no filler needed).
 5. HA logbook shows each voice press (audit trail sanity check).
 
 ## Non-goals / later
 
-- Sun-azimuth glare flow choosing which 1–2 blinds to close (v2 of Phase 1; needs window-orientation mapping from Brad).
-- Individual device control, brightness numbers by voice, room-scoped general control — deliberately never.
+- ~~Sun-azimuth glare flow~~ — **killed 2026-07-22**, replaced by the `blind_glare` combo (left + sink). Not deferred; deleted.
+- Individual device control beyond the fixed blind alias table, brightness numbers by voice, room-scoped general control — deliberately never.
 - Locks / garage / alarm — excluded, including any confirmation-tier scheme.
 - State queries ("are the blinds closed?") — different intent (read-path), only if wanted later.
 - State verification after service call.
+- Non-kitchen blinds (family room, bedrooms) — add rows to the alias table + discovery list only if actually asked for by voice in practice.
