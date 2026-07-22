@@ -37,7 +37,9 @@ android {
         applicationId = "com.homeagent.phone"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
+        // Epoch-seconds versionCode: every rebuild counts as an upgrade so the
+        // self-hosted F-Droid repo can push it to phones unattended.
+        versionCode = (System.currentTimeMillis() / 1000L).toInt()
         versionName = "0.1.0"
     }
 

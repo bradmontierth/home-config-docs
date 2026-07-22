@@ -24,9 +24,21 @@ APK links are under the `APK Downloads` section.
 | STT Keyboard | `http://192.168.10.217:3000/apk/android-stt-latest.apk` | `/home/pi/apks/android-stt-latest.apk` |
 | Windows Transcribe | `http://192.168.10.217:3000/apk/windows-transcribe-latest.exe` | `/home/pi/apks/windows-transcribe-latest.exe` |
 
-Publish by copying the built APK or executable to the matching served file in `/home/pi/apks`,
-then verify the source and destination hashes match. Homepage serves this
-directory from its `/apk/` path.
+Publish APKs with the F-Droid publish script (preferred — it also feeds the
+phones' silent auto-updates; see `fdroid-repo-guide.md`):
+
+```bash
+/home/pi/fdroid/publish.sh <built-apk> <served-name-from-table-above>
+```
+
+It copies to `/home/pi/apks` (the direct links above) *and* to the self-hosted
+F-Droid repo, verifies hashes and versionCode monotonicity, and regenerates
+the signed index. The `.exe` is not an APK: publish it by plain copy to
+`/home/pi/apks`. Homepage serves this directory from its `/apk/` path.
+
+All app repos now derive `versionCode` from build-time epoch seconds, so every
+rebuild is a valid upgrade; per-app "Publish" sections below predate the
+script but their `cp`-based steps are superseded by `publish.sh`.
 
 Note: when adding a brand-new served filename, Homepage (Next.js) can cache the
 not-found result for a path requested before the file existed, returning `404`

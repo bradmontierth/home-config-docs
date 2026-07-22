@@ -31,6 +31,7 @@ from fastapi.responses import FileResponse
 from . import ask as ask_mod
 from . import lists as lists_mod
 from . import music as music_mod
+from . import places as places_mod
 from . import sports as sports_mod
 from . import weather as weather_mod
 from . import clients, config, events, format as fmt, intent as intent_mod, verify
@@ -568,6 +569,23 @@ async def handle_command(command: str, followup: bool = False) -> dict:
             ask_mod.remember(command, weather_result["response"])
         else:
             # HA down, or a day outside the 6-day met.no window.
+            await events.emit("ask_thinking", query=command)
+            ask_result = await ask_mod.handle_ask(command)
+            result["response"] = ask_result["response"]
+            result["full"] = ask_result.get("full", "")
+            result["ok"] = ask_result["ok"]
+
+    elif intent == "business_hours":
+        places_result = None
+        try:
+            places_result = await places_mod.handle(parsed)
+        except Exception as exc:  # noqa: BLE001 — slow ask path is the fallback
+            log.warning("business-hours lookup failed, falling back to ask: %s", exc)
+        if places_result:
+            result.update(places_result)
+            # Preserve the named place for a pronoun follow-up handled by ask.
+            ask_mod.remember(command, places_result["response"])
+        else:
             await events.emit("ask_thinking", query=command)
             ask_result = await ask_mod.handle_ask(command)
             result["response"] = ask_result["response"]

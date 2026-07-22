@@ -216,15 +216,15 @@ async def _stream_full(query: str, entry: dict, last: dict, initial: str, agen) 
     """Drain the rest of the stream, fanning the growing full answer to the
     dashboard. Runs detached from the request that produced the spoken reply."""
     acc = initial
-    last = 0.0
+    last_emit = 0.0
     try:
         await events.emit("ask_stream", query=query, text=_strip_links(acc), done=False)
         async for delta in agen:
             acc += delta
             now = time.monotonic()
-            if now - last >= _STREAM_EMIT_INTERVAL:
+            if now - last_emit >= _STREAM_EMIT_INTERVAL:
                 await events.emit("ask_stream", query=query, text=_strip_links(acc), done=False)
-                last = now
+                last_emit = now
     except Exception as exc:  # noqa: BLE001
         log.warning("ask full-stream failed: %s", exc)
     finally:

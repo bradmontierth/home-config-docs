@@ -80,6 +80,18 @@ ASK_TIMEZONE = os.getenv("ASK_TIMEZONE", "America/Denver")
 # high costs a cent or two more per search but thin results made the model
 # confidently report "no game yesterday" on a day with two matches.
 OPENROUTER_WEB_CONTEXT = os.getenv("OPENROUTER_WEB_CONTEXT", "high")
+
+# --- business hours (Google Places API (New)) ------------------------------
+# Server-side key file (raw key, or GOOGLE_PLACES_KEY=...) mounted read-only
+# from cecret_lake. HOME_LAT/LON bias a Text Search to nearby locations.
+GOOGLE_PLACES_KEY_FILE = os.getenv("GOOGLE_PLACES_KEY_FILE", "")
+HOME_LAT = float(os.getenv("HOME_LAT", "0"))
+HOME_LON = float(os.getenv("HOME_LON", "0"))
+PLACES_LOCATION_RADIUS_M = float(os.getenv("PLACES_LOCATION_RADIUS_M", "40000"))
+# Google Cloud is hard-capped at 25 SearchText calls/day. Stay below that here
+# too, while leaving five calls of headroom for tests and enforcement lag.
+PLACES_DAILY_LIMIT = int(os.getenv("PLACES_DAILY_LIMIT", "20"))
+PLACES_CACHE_TTL_S = float(os.getenv("PLACES_CACHE_TTL_S", "86400"))
 # Spoken filler ("Let me look that up…") pushed to the satellite the moment an
 # ask heads to the smart model, masking the 3-7s round trip. Pre-rendered WAVs;
 # playback serializes behind the satellite's PLAYBACK_LOCK. Empty URL disables.
