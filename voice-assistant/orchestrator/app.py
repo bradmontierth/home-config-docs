@@ -35,7 +35,7 @@ from . import places as places_mod
 from . import sports as sports_mod
 from . import weather as weather_mod
 from . import clients, config, events, format as fmt, intent as intent_mod, verify
-from .timers import TimerEngine
+from .timers import RINGING, TimerEngine
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s"
@@ -367,6 +367,9 @@ async def handle_command(command: str, followup: bool = False) -> dict:
             result["ok"] = False
 
     elif intent == "timer_cancel":
+        # Snapshot ringing state BEFORE cancel mutates it: cancelling a
+        # ringing timer must also silence the satellite's alarm sound.
+        ringing_ids = {t["id"] for t in ENGINE.active() if t["state"] == RINGING}
         if parsed["scope"] == "all":
             cancelled = ENGINE.cancel_all()
             n = len(cancelled)
@@ -374,9 +377,13 @@ async def handle_command(command: str, followup: bool = False) -> dict:
                 "Cancelled all timers." if n else "There were no timers to cancel."
             )
             result["ok"] = True
+            if any(t["id"] in ringing_ids for t in cancelled):
+                await events.alarm_stop()
             await events.emit("timer_cancelled", scope="all", timers=ENGINE.active())
         else:
             timer = ENGINE.cancel(parsed["label"])
+            if timer and timer["id"] in ringing_ids:
+                await events.alarm_stop()
             if timer:
                 result["timer"] = timer
                 result["response"] = fmt.confirm_cancel(timer)
@@ -856,17 +863,44 @@ async def dismiss_timer(timer_id: str) -> dict:
     timer = ENGINE.dismiss(timer_id)
     if not timer:
         raise HTTPException(404, "no ringing timer with that id")
+    # Awaited before responding (see events.alarm_stop docstring): the
+    # satellite's own end-of-ring POST lands here too, and its next queued
+    # alarm must not start until this dismiss has been delivered.
+    await events.alarm_stop()
     await events.emit("timer_dismissed", timer=timer, timers=ENGINE.active())
     return {"ok": True, "timer": timer}
 
 
 @app.post("/timers/{timer_id}/cancel")
 async def cancel_timer(timer_id: str) -> dict:
+    row = ENGINE.get(timer_id)
+    was_ringing = bool(row and row["state"] == RINGING)
     timer = ENGINE.cancel_by_id(timer_id)
     if not timer:
         raise HTTPException(404, "no active timer with that id")
+    if was_ringing:
+        await events.alarm_stop()
     await events.emit("timer_cancelled", timer=timer, timers=ENGINE.active())
     return {"ok": True, "timer": timer}
+
+
+@app.post("/timers/{timer_id}/unattended")
+async def unattended_timer(timer_id: str) -> dict:
+    """Satellite watchdog escalation: the alarm has been ringing ~15s with
+    nobody dismissing it — push to the household phones so dinner doesn't
+    burn while everyone is upstairs."""
+    timer = ENGINE.get(timer_id)
+    if not timer or timer["state"] != RINGING:
+        return {"ok": False, "reason": "not ringing"}
+    name = fmt.timer_name(timer)
+    dur = fmt.humanize_seconds(timer.get("duration_seconds") or 0)
+    body = f"The {name} ({dur}) is ringing in the kitchen and nobody has stopped it."
+    await events.phone_alert(
+        "Kitchen timer unattended", body,
+        event_type="timer_unattended", timer_id=timer_id,
+    )
+    await events.emit("timer_unattended", timer=timer, timers=ENGINE.active())
+    return {"ok": True}
 
 
 @app.post("/timers/{timer_id}/add")

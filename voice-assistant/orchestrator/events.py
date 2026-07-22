@@ -44,3 +44,35 @@ async def alarm(timer: dict[str, Any], announce_url: str | None) -> None:
             await client.post(config.SATELLITE_ALARM_URL, json=body)
     except Exception as exc:  # noqa: BLE001
         log.info("satellite alarm dispatch failed (expected until satellite built): %s", exc)
+
+
+async def alarm_stop() -> None:
+    """Silence any ringing satellite alarm. Fired when a ringing timer is
+    cancelled/dismissed through the orchestrator, so every client (kiosk,
+    phone, curl) stops the sound and not just the card. Safe to blind-fire:
+    the satellite clears its dismiss flag before each new alarm.
+
+    Callers on the satellite's own end-of-ring POST path must await this
+    BEFORE responding — the satellite starts its next queued alarm only after
+    that response, which orders this dismiss ahead of the next ring."""
+    if not config.SATELLITE_ALARM_DISMISS_URL:
+        return
+    try:
+        async with httpx.AsyncClient(timeout=4) as client:
+            await client.post(config.SATELLITE_ALARM_DISMISS_URL)
+    except Exception as exc:  # noqa: BLE001
+        log.info("satellite alarm stop failed: %s", exc)
+
+
+async def phone_alert(title: str, body: str, **data: str) -> None:
+    """Fan a push notification to every registered household phone via the
+    Voice Notes companion. Best-effort."""
+    if not config.COMPANION_ALERT_URL:
+        return
+    payload = {"title": title, "body": body, "data": data}
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            resp = await client.post(config.COMPANION_ALERT_URL, json=payload)
+            log.info("phone alert %r -> %s %s", title, resp.status_code, resp.text[:200])
+    except Exception as exc:  # noqa: BLE001
+        log.warning("phone alert failed: %s", exc)

@@ -131,6 +131,11 @@ ALARM_VOLUME_FLOOR = int(os.getenv("ALARM_VOLUME_FLOOR", "50"))
 
 ALARM_MAX_LOOPS = int(os.getenv("ALARM_MAX_LOOPS", "14"))
 ALARM_GAP_S = float(os.getenv("ALARM_GAP_S", "2.0"))         # space between beeps
+# Ringing this long with no dismiss = nobody's in the kitchen -> tell the
+# orchestrator, which pushes to the household phones. Deliberately well under
+# the full ring (~45-90s); waiting for ring timeout would delay the phones by
+# a minute. 0 disables.
+UNATTENDED_ALERT_S = float(os.getenv("UNATTENDED_ALERT_S", "15"))
 # Barge-in 'stop' listener: OVERLAPPING windows, not back-to-back chunks. The
 # old 1s non-overlapping chunks dropped any "stop" straddling a boundary
 # (~40% of them — that was the say-it-four-times bug, measured 13-16s to
@@ -865,12 +870,31 @@ class DismissChecker:
 DISMISS_CHECKER = DismissChecker()
 
 
+def _unattended_watch(tid: str) -> None:
+    """One-shot watchdog: alarm rang UNATTENDED_ALERT_S with no dismiss ->
+    POST the orchestrator, which escalates to the household phones. Waits on
+    the same Event the ring loop does, so any dismiss cancels it for free."""
+    if STATE.dismiss.wait(UNATTENDED_ALERT_S):
+        return
+    if STATE.current_alarm != tid:
+        return
+    try:
+        post_json(f"/timers/{tid}/unattended", {}, timeout=20)
+        log(f"unattended alert sent timer={tid}")
+    except Exception as exc:  # noqa: BLE001
+        log(f"unattended alert failed: {exc}")
+
+
 def alarm_playback(req: dict) -> None:
     """Thread: loop the themed sound + periodic announcement until dismissed or
     timeout. Does NOT touch the mic — the main loop listens for 'stop'."""
     tid = STATE.current_alarm
     theme = req.get("sound_theme") or "marimba"
     log(f"ALARM start timer={tid} label={req.get('label')} theme={theme}")
+    if UNATTENDED_ALERT_S > 0 and req.get("timer_id"):
+        threading.Thread(
+            target=_unattended_watch, args=(req["timer_id"],), daemon=True
+        ).start()
     announce_wav = None
     if req.get("announce_url"):
         try:

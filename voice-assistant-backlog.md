@@ -469,7 +469,7 @@ kitchen mic that now sits next to the big speakers (no AEC) — most of
   Parakeet Hypothesis score, tie-break on satellite voiced-ms/RMS metadata,
   final tie-break kitchen. Doubles Parakeet load only on actual wakes.
 
-## Unattended-timer phone escalation (Voice Notes push) — scoped 2026-07-19
+## Unattended-timer phone escalation (Voice Notes push) — BUILT+DEPLOYED 2026-07-22
 
 Timer rings in the kitchen, everyone is upstairs/with the kids, it times out
 un-dismissed and dinner burns. Escalate to phones — same rationale as the
@@ -503,7 +503,19 @@ list sync: the phones are the household's always-on surface.
 **Explicitly out of scope (v1):** dismissing from the phone (notification is
 informational; tap opens Voice Notes), per-person routing, quiet hours.
 
-## Orchestrator cancel/dismiss should silence the satellite alarm — scoped 2026-07-20
+**Built as designed 2026-07-22, one deviation:** the watchdog lives in
+`alarm_playback` as a thread waiting on `STATE.dismiss.wait(UNATTENDED_ALERT_S)`
+— any dismiss cancels it for free, no explicit cancel path needed. Skipped for
+anonymous alarms (no timer_id). Companion `/api/alert` fans to ALL push tokens
+(both users) and prunes unregistered ones. Orchestrator route
+`/timers/{id}/unattended` no-ops unless the timer is still RINGING, formats
+"The waffle timer (12 minutes) is ringing in the kitchen and nobody has
+stopped it.", relays via `events.phone_alert`, and emits a `timer_unattended`
+dashboard event. E2E-verified live: ring 15s untouched → both phones got the
+push (companion log sent=2). Android app needed no change (it renders any
+data message's notification_title/body).
+
+## Orchestrator cancel/dismiss should silence the satellite alarm — BUILT+DEPLOYED 2026-07-22
 
 **Incident (2026-07-20):** timer rang while music played, voice stop failed
 (item 4 territory), Brad swiped the ringing card on the kiosk — card flew off,
@@ -539,3 +551,17 @@ curl, a second dashboard) reproduces the "card gone, still ringing" symptom.
   route and loses its hardcoded satellite IP — one less config duplicate
   (kiosk currently can't stop an alarm if the orchestrator is up but the
   satellite IP changes again).
+
+**Built as sketched 2026-07-22.** `events.alarm_stop()` POSTs
+`SATELLITE_ALARM_DISMISS_URL` (config-derived from SATELLITE_ALARM_URL, so one
+env var moves both); fired from `cancel_timer`/`dismiss_timer` REST routes and
+both `timer_cancel` intent paths (ringing state snapshotted BEFORE the engine
+mutates it). Race note: the satellite's own end-of-ring POST to
+`/timers/{tid}/dismiss` now triggers alarm_stop back at the satellite — safe
+ONLY because the route awaits alarm_stop before responding, and the satellite
+starts its next queued alarm (which clears the dismiss flag) only after that
+response returns. Don't move alarm_stop to a background task there.
+E2E-verified live: REST cancel of a ringing timer silenced the speaker <1s
+(`ALARM end (dismissed)` in satellite journal). The optional kiosk
+`dismissAlarm()` collapse to the orchestrator route is NOT done — kiosk still
+POSTs the satellite directly.

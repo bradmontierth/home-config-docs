@@ -32,6 +32,19 @@ DASHBOARD_EVENT_TOKEN = os.getenv("DASHBOARD_EVENT_TOKEN", "")
 SATELLITE_ALARM_URL = os.getenv(
     "SATELLITE_ALARM_URL", "http://192.168.10.24:8781/alarm"
 )
+# Silence a ringing satellite alarm. Derived from the alarm URL so a single
+# env var moves both when the satellite box changes address.
+SATELLITE_ALARM_DISMISS_URL = os.getenv(
+    "SATELLITE_ALARM_DISMISS_URL",
+    SATELLITE_ALARM_URL + "/dismiss" if SATELLITE_ALARM_URL else "",
+)
+
+# Voice Notes companion (Beelink :8768) — fans a push notification to every
+# registered household phone. Used for unattended-timer escalation. Empty
+# string disables the call.
+COMPANION_ALERT_URL = os.getenv(
+    "COMPANION_ALERT_URL", "http://127.0.0.1:8768/api/alert"
+)
 
 # --- weather (Home Assistant REST) -----------------------------------------
 # HA runs on this same host; network_mode host makes 127.0.0.1 work in-container.
