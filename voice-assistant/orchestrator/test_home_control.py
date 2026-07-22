@@ -1,8 +1,11 @@
 import asyncio
+import json
+import os
+import tempfile
 import unittest
 from unittest.mock import AsyncMock, patch
 
-from . import home_control
+from . import config, home_control
 
 
 def _handle(query: str):
@@ -93,6 +96,64 @@ class HomeControlMatchTest(unittest.TestCase):
     def test_confirmation_is_spoken_verbatim(self):
         result = _handle("fix the glare")
         self.assertEqual(result["response"], "Closing the blinds to fix the glare.")
+
+
+class HomeCommandsEditTest(unittest.TestCase):
+    """Editor mutations against a temp copy — the repo file is never written."""
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.file = os.path.join(tmp.name, "home_commands.json")
+        patcher = patch.object(config, "HOME_COMMANDS_FILE", self.file)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        home_control._commands_cache = None
+        self.addCleanup(setattr, home_control, "_commands_cache", None)
+
+    def test_seeds_from_repo_copy(self):
+        commands = home_control._commands()
+        self.assertTrue(os.path.exists(self.file))
+        self.assertIn("blinds_all_close", commands)
+
+    def test_add_alias_persists_and_matches(self):
+        home_control.add_alias("blinds_all_close", "Darken the Kitchen")
+        on_disk = json.loads(open(self.file).read())
+        self.assertIn("darken the kitchen", on_disk["blinds_all_close"]["aliases"])
+        verdict = home_control.evaluate("darken the kitchen")
+        self.assertTrue(verdict["matched"])
+        self.assertEqual(verdict["command"], "blinds_all_close")
+
+    def test_add_alias_rejects_bad_input(self):
+        with self.assertRaises(ValueError):
+            home_control.add_alias("blinds_all_close", "   ")
+        with self.assertRaises(ValueError):
+            home_control.add_alias("no_such_command", "whatever")
+        # alias already owned by another command
+        with self.assertRaises(ValueError):
+            home_control.add_alias("blinds_all_close", "fix the glare")
+
+    def test_remove_alias(self):
+        home_control.add_alias("dinner_mood", "cozy dinner")
+        home_control.remove_alias("dinner_mood", "cozy dinner")
+        on_disk = json.loads(open(self.file).read())
+        self.assertNotIn("cozy dinner", on_disk["dinner_mood"]["aliases"])
+        with self.assertRaises(ValueError):
+            home_control.remove_alias("dinner_mood", "cozy dinner")
+
+    def test_cannot_remove_last_alias(self):
+        entry = home_control.snapshot()["blind_glare_close"]
+        for alias in entry["aliases"][:-1]:
+            home_control.remove_alias("blind_glare_close", alias)
+        with self.assertRaises(ValueError):
+            home_control.remove_alias("blind_glare_close",
+                                      entry["aliases"][-1])
+
+    def test_evaluate_reports_near_miss(self):
+        verdict = home_control.evaluate("unlock the front door")
+        self.assertFalse(verdict["matched"])
+        self.assertIn("command", verdict)  # closest candidate still reported
+        self.assertLess(verdict["score"], verdict["threshold"])
 
 
 if __name__ == "__main__":

@@ -22,6 +22,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+import shutil
 import time
 from pathlib import Path
 
@@ -64,10 +65,25 @@ _PIN_WORDS = {
 
 _commands_cache: tuple[float, dict] | None = None  # (mtime, parsed json)
 
+# The copy baked into the image alongside this module — the versioned seed.
+_SEED_FILE = Path(__file__).with_name("home_commands.json")
+
+
+def _path() -> Path:
+    """Live table path; seeded from the repo copy on first use (the live file
+    sits in /data so the phone editor can write it — a single-file :ro bind
+    mount would go stale whenever a git operation swapped the host inode)."""
+    path = Path(config.HOME_COMMANDS_FILE)
+    if not path.exists():
+        path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(_SEED_FILE, path)
+        log.info("seeded home commands at %s", path)
+    return path
+
 
 def _commands() -> dict:
     global _commands_cache
-    path = Path(config.HOME_COMMANDS_FILE)
+    path = _path()
     mtime = path.stat().st_mtime
     if _commands_cache is None or _commands_cache[0] != mtime:
         _commands_cache = (mtime, json.loads(path.read_text()))
@@ -75,10 +91,23 @@ def _commands() -> dict:
     return _commands_cache[1]
 
 
-def _match(query: str) -> tuple[str, dict, float] | None:
-    """Best (key, entry, score) over all aliases, or None below threshold."""
+def _save(commands: dict) -> None:
+    path = _path()
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_text(json.dumps(commands, indent=2, ensure_ascii=False) + "\n")
+    tmp.replace(path)
+    global _commands_cache
+    _commands_cache = None  # force reload on next read
+
+
+def snapshot() -> dict:
+    """Deep copy of the live table for the editor UI."""
+    return json.loads(json.dumps(_commands()))
+
+
+def _best(query: str) -> tuple[str, dict, float] | None:
+    """Best (key, entry, score) for an already-cleaned query, no threshold."""
     commands = _commands()
-    query = _clean(query)
     words = set(re.findall(r"[a-z']+", query))
     pins = {_PIN_WORDS[w] for w in words if w in _PIN_WORDS}
     if len(pins) == 1:
@@ -91,11 +120,69 @@ def _match(query: str) -> tuple[str, dict, float] | None:
         score = max(fuzz.ratio(query, a.lower()) for a in entry["aliases"])
         if best is None or score > best[2]:
             best = (key, entry, score)
+    return best
+
+
+def _match(query: str) -> tuple[str, dict, float] | None:
+    """Best (key, entry, score) over all aliases, or None below threshold."""
+    query = _clean(query)
+    best = _best(query) if query else None
     if best and best[2] >= _THRESHOLD:
         return best
-    log.info("no home command match for %r (best=%s %.0f)",
-             query, best[0] if best else None, best[2] if best else 0)
+    if best:
+        log.info("no home command match for %r (best=%s %.0f)",
+                 query, best[0], best[2])
     return None
+
+
+def evaluate(query: str) -> dict:
+    """Score a phrase without pressing anything — the editor's phrase tester.
+    Reports the best candidate even when it misses, so a failed phrase can be
+    added as an alias of the right command in one tap."""
+    cleaned = _clean((query or "").strip().lower())
+    best = _best(cleaned) if cleaned else None
+    out = {"query": cleaned, "matched": False, "threshold": _THRESHOLD}
+    if best:
+        key, entry, score = best
+        out.update(command=key, score=round(score),
+                   confirm=entry["confirm"],
+                   matched=score >= _THRESHOLD)
+    return out
+
+
+def add_alias(command: str, alias: str) -> dict:
+    """Add an alias to a command and persist. Raises ValueError on anything
+    invalid — unknown command, empty alias, or the alias already belonging to
+    any command (a phrase must map to exactly one button)."""
+    alias = " ".join((alias or "").lower().split())
+    if not alias:
+        raise ValueError("Alias is empty.")
+    commands = snapshot()
+    if command not in commands:
+        raise ValueError(f"Unknown command {command!r}.")
+    for key, entry in commands.items():
+        if alias in entry["aliases"]:
+            raise ValueError(f'"{alias}" is already an alias of {key}.')
+    commands[command]["aliases"].append(alias)
+    _save(commands)
+    log.info("alias added: %r -> %s", alias, command)
+    return commands[command]
+
+
+def remove_alias(command: str, alias: str) -> dict:
+    """Remove an alias and persist. A command must keep at least one alias."""
+    commands = snapshot()
+    if command not in commands:
+        raise ValueError(f"Unknown command {command!r}.")
+    entry = commands[command]
+    if alias not in entry["aliases"]:
+        raise ValueError(f'"{alias}" is not an alias of {command}.')
+    if len(entry["aliases"]) == 1:
+        raise ValueError("Can't remove a command's last alias.")
+    entry["aliases"].remove(alias)
+    _save(commands)
+    log.info("alias removed: %r from %s", alias, command)
+    return entry
 
 
 async def _press(entity: str) -> None:

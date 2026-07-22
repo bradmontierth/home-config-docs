@@ -986,3 +986,44 @@ def audio(name: str) -> FileResponse:
     if not os.path.exists(path):
         raise HTTPException(404, "no such audio")
     return FileResponse(path, media_type="audio/wav")
+
+
+# --- home-commands editor (phone page linked from the homelab homepage) -----
+
+@app.get("/home-commands")
+def home_commands() -> dict:
+    return {"ok": True, "commands": home_mod.snapshot(),
+            "threshold": home_mod._THRESHOLD}
+
+
+@app.get("/home-commands/match")
+def home_commands_match(q: str) -> dict:
+    """Dry-run a phrase against the alias table — never presses a button."""
+    return home_mod.evaluate(q)
+
+
+@app.post("/home-commands/alias")
+def home_commands_add_alias(payload: dict = Body(...)) -> dict:
+    try:
+        entry = home_mod.add_alias(payload.get("command") or "",
+                                   payload.get("alias") or "")
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+    return {"ok": True, "entry": entry}
+
+
+@app.post("/home-commands/alias/delete")
+def home_commands_remove_alias(payload: dict = Body(...)) -> dict:
+    try:
+        entry = home_mod.remove_alias(payload.get("command") or "",
+                                      payload.get("alias") or "")
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+    return {"ok": True, "entry": entry}
+
+
+@app.get("/home-commands/ui")
+def home_commands_ui() -> FileResponse:
+    return FileResponse(
+        os.path.join(os.path.dirname(__file__), "home_commands_ui.html"),
+        media_type="text/html")

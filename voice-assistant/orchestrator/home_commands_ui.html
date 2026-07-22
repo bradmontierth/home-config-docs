@@ -1,0 +1,254 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Voice Commands</title>
+<style>
+  :root {
+    --bg: #f5f5f4; --card: #ffffff; --ink: #1c1917; --muted: #78716c;
+    --line: #e7e5e4; --accent: #2563eb; --good: #15803d; --good-bg: #dcfce7;
+    --bad: #b45309; --bad-bg: #fef3c7; --chip: #f1f5f9; --danger: #b91c1c;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #131110; --card: #1e1b19; --ink: #e7e5e4; --muted: #a8a29e;
+      --line: #302c29; --accent: #60a5fa; --good: #4ade80; --good-bg: #14331f;
+      --bad: #fbbf24; --bad-bg: #3a2c0d; --chip: #2a2624; --danger: #f87171;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 16px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+    padding: 16px 12px calc(24px + env(safe-area-inset-bottom));
+    max-width: 640px; margin-inline: auto;
+  }
+  h1 { font-size: 20px; margin: 4px 4px 12px; }
+  h1 small { color: var(--muted); font-weight: 400; font-size: 13px; display: block; }
+  .card {
+    background: var(--card); border: 1px solid var(--line);
+    border-radius: 14px; padding: 14px; margin-bottom: 12px;
+  }
+  .tester { position: sticky; top: 8px; z-index: 5; box-shadow: 0 4px 14px rgb(0 0 0 / .12); }
+  .row { display: flex; gap: 8px; }
+  input[type=text] {
+    flex: 1; min-width: 0; font: inherit; color: var(--ink);
+    background: var(--bg); border: 1px solid var(--line);
+    border-radius: 10px; padding: 10px 12px;
+  }
+  button {
+    font: inherit; border: 0; border-radius: 10px; padding: 10px 14px;
+    background: var(--accent); color: #fff; cursor: pointer; touch-action: manipulation;
+  }
+  button.small { padding: 6px 10px; font-size: 14px; }
+  button.ghost { background: var(--chip); color: var(--ink); }
+  .verdict { margin-top: 10px; padding: 10px 12px; border-radius: 10px; font-size: 15px; display: none; }
+  .verdict.hit { display: block; background: var(--good-bg); color: var(--good); }
+  .verdict.miss { display: block; background: var(--bad-bg); color: var(--bad); }
+  .verdict .fix { margin-top: 8px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  select {
+    font: inherit; color: var(--ink); background: var(--bg);
+    border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; max-width: 100%;
+  }
+  .group { color: var(--muted); font-size: 13px; text-transform: uppercase;
+           letter-spacing: .06em; margin: 18px 6px 8px; }
+  .cmd-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+  .cmd-name { font-weight: 600; }
+  .cmd-confirm { color: var(--muted); font-size: 13px; text-align: right; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+  .chip {
+    display: inline-flex; align-items: center; gap: 6px; background: var(--chip);
+    border: 1px solid var(--line); border-radius: 999px; padding: 6px 8px 6px 12px;
+    font-size: 14px;
+  }
+  .chip b { font-weight: 400; }
+  .chip button {
+    background: none; color: var(--danger); padding: 2px 6px; font-size: 15px; line-height: 1;
+  }
+  .adder { display: none; margin-top: 10px; }
+  .adder.open { display: flex; }
+  .addbtn { margin-top: 10px; }
+  .toast {
+    position: fixed; left: 50%; bottom: calc(18px + env(safe-area-inset-bottom));
+    transform: translateX(-50%); background: var(--ink); color: var(--bg);
+    padding: 10px 16px; border-radius: 999px; font-size: 14px; opacity: 0;
+    transition: opacity .25s; pointer-events: none; max-width: 92vw; text-align: center;
+  }
+  .toast.show { opacity: .95; }
+</style>
+</head>
+<body>
+<h1>Voice Commands
+  <small>Phrases the kitchen assistant maps to house buttons. Test a phrase, then add what failed.</small>
+</h1>
+
+<div class="card tester">
+  <form class="row" id="testForm">
+    <input type="text" id="testInput" placeholder="Try a phrase… e.g. darken the kitchen"
+           autocomplete="off" autocapitalize="none">
+    <button type="submit">Test</button>
+  </form>
+  <div class="verdict" id="verdict"></div>
+</div>
+
+<div id="list"></div>
+<div class="toast" id="toast"></div>
+
+<script>
+const NAMES = {
+  blind_left_close: "Close left blind", blind_left_open: "Open left blind",
+  blind_right_close: "Close right blind", blind_right_open: "Open right blind",
+  blind_sink_close: "Close sink blind", blind_sink_open: "Open sink blind",
+  blind_slider_close: "Close sliding door", blind_slider_open: "Open sliding door",
+  blind_small_close: "Close small blinds", blind_small_open: "Open small blinds",
+  blind_glare_close: "Fix the glare", blinds_all_close: "Close all blinds",
+  blinds_all_open: "Open all blinds", kitchen_brighten: "Brighten kitchen",
+  dinner_mood: "Dinner mood", lights_normal: "Back to normal",
+};
+const name = k => NAMES[k] || k.replaceAll("_", " ");
+let COMMANDS = {};
+
+const $ = id => document.getElementById(id);
+function toast(msg) {
+  const t = $("toast");
+  t.textContent = msg;
+  t.classList.add("show");
+  clearTimeout(t._h);
+  t._h = setTimeout(() => t.classList.remove("show"), 2600);
+}
+
+async function api(path, opts) {
+  const r = await fetch(path, opts);
+  const body = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(body.detail || r.statusText);
+  return body;
+}
+
+async function load() {
+  const data = await api("/home-commands");
+  COMMANDS = data.commands;
+  render();
+}
+
+function chip(cmd, alias) {
+  const span = document.createElement("span");
+  span.className = "chip";
+  const b = document.createElement("b");
+  b.textContent = alias;
+  const x = document.createElement("button");
+  x.textContent = "✕";
+  x.title = "remove";
+  x.onclick = async () => {
+    if (!confirm(`Remove "${alias}" from ${name(cmd)}?`)) return;
+    try {
+      await api("/home-commands/alias/delete", {
+        method: "POST", headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({command: cmd, alias}),
+      });
+      toast("Removed.");
+      await load();
+    } catch (e) { toast(e.message); }
+  };
+  span.append(b, x);
+  return span;
+}
+
+async function addAlias(cmd, alias) {
+  alias = (alias || "").trim();
+  if (!alias) return;
+  try {
+    await api("/home-commands/alias", {
+      method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({command: cmd, alias}),
+    });
+    toast(`Added to ${name(cmd)} — live now.`);
+    await load();
+  } catch (e) { toast(e.message); }
+}
+
+function card(cmd, entry) {
+  const div = document.createElement("div");
+  div.className = "card";
+  const head = document.createElement("div");
+  head.className = "cmd-head";
+  head.innerHTML = `<span class="cmd-name"></span><span class="cmd-confirm"></span>`;
+  head.querySelector(".cmd-name").textContent = name(cmd);
+  head.querySelector(".cmd-confirm").textContent = `“${entry.confirm}”`;
+  const chips = document.createElement("div");
+  chips.className = "chips";
+  for (const a of entry.aliases) chips.append(chip(cmd, a));
+  const btn = document.createElement("button");
+  btn.className = "small ghost addbtn";
+  btn.textContent = "+ add phrase";
+  const adder = document.createElement("form");
+  adder.className = "row adder";
+  const inp = document.createElement("input");
+  inp.type = "text"; inp.placeholder = "new phrase"; inp.autocapitalize = "none";
+  const go = document.createElement("button");
+  go.type = "submit"; go.className = "small"; go.textContent = "Add";
+  adder.append(inp, go);
+  btn.onclick = () => { adder.classList.add("open"); btn.style.display = "none"; inp.focus(); };
+  adder.onsubmit = e => { e.preventDefault(); addAlias(cmd, inp.value); };
+  div.append(head, chips, btn, adder);
+  return div;
+}
+
+function render() {
+  const list = $("list");
+  list.replaceChildren();
+  const blinds = Object.keys(COMMANDS).filter(k => k.startsWith("blind"));
+  const lights = Object.keys(COMMANDS).filter(k => !k.startsWith("blind"));
+  const g1 = document.createElement("div"); g1.className = "group"; g1.textContent = "Blinds";
+  list.append(g1);
+  for (const k of blinds) list.append(card(k, COMMANDS[k]));
+  const g2 = document.createElement("div"); g2.className = "group"; g2.textContent = "Lighting";
+  list.append(g2);
+  for (const k of lights) list.append(card(k, COMMANDS[k]));
+}
+
+$("testForm").onsubmit = async e => {
+  e.preventDefault();
+  const q = $("testInput").value.trim();
+  if (!q) return;
+  const v = $("verdict");
+  try {
+    const r = await api("/home-commands/match?q=" + encodeURIComponent(q));
+    v.replaceChildren();
+    if (r.matched) {
+      v.className = "verdict hit";
+      v.textContent = `✓ Matches ${name(r.command)} (${r.score}) — would say “${r.confirm}”`;
+    } else {
+      v.className = "verdict miss";
+      const line = document.createElement("div");
+      line.textContent = r.command
+        ? `✗ No match — closest was ${name(r.command)} at ${r.score} (needs ${r.threshold}).`
+        : "✗ No match.";
+      const fix = document.createElement("div");
+      fix.className = "fix";
+      const label = document.createElement("span");
+      label.textContent = "Add it to:";
+      const sel = document.createElement("select");
+      for (const k of Object.keys(COMMANDS)) {
+        const o = document.createElement("option");
+        o.value = k; o.textContent = name(k);
+        if (k === r.command) o.selected = true;
+        sel.append(o);
+      }
+      const go = document.createElement("button");
+      go.className = "small"; go.textContent = "Add phrase";
+      go.onclick = async () => {
+        await addAlias(sel.value, r.query || q);
+        v.className = "verdict"; v.replaceChildren();
+        $("testInput").value = "";
+      };
+      fix.append(label, sel, go);
+      v.append(line, fix);
+    }
+  } catch (err) { toast(err.message); }
+};
+
+load().catch(e => toast(e.message));
+</script>
+</body>
+</html>
