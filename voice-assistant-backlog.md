@@ -562,6 +562,11 @@ ONLY because the route awaits alarm_stop before responding, and the satellite
 starts its next queued alarm (which clears the dismiss flag) only after that
 response returns. Don't move alarm_stop to a background task there.
 E2E-verified live: REST cancel of a ringing timer silenced the speaker <1s
-(`ALARM end (dismissed)` in satellite journal). The optional kiosk
-`dismissAlarm()` collapse to the orchestrator route is NOT done — kiosk still
-POSTs the satellite directly.
+(`ALARM end (dismissed)` in satellite journal). Kiosk collapse ALSO done
+same day (dashboard abe2b10 + orchestrator `POST /alarm/stop`): ringing-card
+tap/swipe → dashboard proxy `/api/assistant/alarm/stop` → orchestrator, which
+dismisses whatever's ringing AND blind-fires the satellite silence — state
+skew can't keep the alarm ringing, and the kiosk's alarm path no longer
+hardcodes the satellite IP (SATELLITE_URL remains only for the mic button +
+wake review). Proxy path e2e-verified live; kiosk reloaded (finger tap on a
+real ringing card still pending).

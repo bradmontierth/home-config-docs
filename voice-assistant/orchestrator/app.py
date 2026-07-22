@@ -884,6 +884,18 @@ async def cancel_timer(timer_id: str) -> dict:
     return {"ok": True, "timer": timer}
 
 
+@app.post("/alarm/stop")
+async def alarm_stop_route() -> dict:
+    """Front door for 'make the ringing stop' (kiosk tap/swipe, phone). Marks
+    the ringing timer dismissed if the engine knows of one, but silences the
+    satellite UNCONDITIONALLY — state skew must never keep the alarm ringing."""
+    timer = ENGINE.dismiss_any_ringing()
+    await events.alarm_stop()
+    if timer:
+        await events.emit("timer_dismissed", timer=timer, timers=ENGINE.active())
+    return {"ok": True, "timer": timer}
+
+
 @app.post("/timers/{timer_id}/unattended")
 async def unattended_timer(timer_id: str) -> dict:
     """Satellite watchdog escalation: the alarm has been ringing ~15s with
