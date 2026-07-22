@@ -1,9 +1,11 @@
 # Business Hours Intent (Google Places) Plan
 
-**Status:** BUILT + DEPLOYED 2026-07-21. Cloud project, key, daily quota,
-orchestrator intent, cache, and fallback are live; kitchen live-voice validation
-remains.
-**Where:** orchestrator only — `home_config/voice-assistant/orchestrator/` (deployed as `voice-orchestrator` container via `/home/pi/voice-pipeline/docker-compose.yml`, port 8785). Satellite untouched.
+**Status:** BUILT + DEPLOYED 2026-07-21. Cloud keys and hard quotas,
+orchestrator place/hours intents, cache/fallback, and the kitchen display's
+Google-backed map evidence view are live and visually validated on the kiosk.
+**Where:** `home_config/voice-assistant/orchestrator/` (deployed as
+`voice-orchestrator` via `/home/pi/voice-pipeline/docker-compose.yml`, port
+8785) plus `/home/pi/dashboard_webapp`. Satellite and Node-RED are untouched.
 
 ## Goal
 
@@ -41,6 +43,11 @@ Guard summary: Cloud `SearchTextRequest per day=25` is the primary stop;
 API-only/IP key restrictions, the $1 alert, 24h cache, and application limit of
 20/day are additional layers.
 
+Maps JavaScript has its own project-level hard cap: `Map loads per day=25`.
+The dashboard creates the Google map lazily on the first place question and
+retains that map object for the kiosk browser session, so changing queries and
+pins does not create another map load.
+
 ## Phase 1 — orchestrator intent
 
 Clone the sports shape (`sports.py`, dispatch at `app.py:543-560`).
@@ -50,14 +57,26 @@ Clone the sports shape (`sports.py`, dispatch at `app.py:543-560`).
 - Add `business_hours` to `INTENTS` (`intent.py:16-21`).
 - Prompt rule (system prompt block `intent.py:29-114`): match open/close/hours questions about a named business → `intent: business_hours`, business name into `query`, plus `hours_when`: `"open" | "close" | "now" | "today"` (default `today`; `"now"` for "is Costco open?"). Coercion in `_validate` (`intent.py:155`).
 
-### 2. New `orchestrator/places.py` (~100 lines)
+### 2. New `orchestrator/places.py`
 
-- `async def handle(parsed) -> dict | None` — returns `{"response": ..., "ok": True}` or `None` (can't resolve / no key / quota error / timeout).
+- `async def handle(parsed) -> dict | None` — returns the spoken response plus
+  a structured `places_view` payload, or `None` (can't resolve / no key / quota
+  error / timeout).
 - **One HTTP call per query:** Text Search (New) `POST https://places.googleapis.com/v1/places:searchText`
-  - body: `textQuery` = business name, `locationBias` circle (radius ~40km) around `HOME_LAT/LON`, `maxResultCount: 1`, `regionCode: "US"`
-  - headers: `X-Goog-Api-Key`, `X-Goog-FieldMask: places.displayName,places.formattedAddress,places.regularOpeningHours,places.currentOpeningHours`
+  - body: `textQuery` = business name, 10-mile `locationBias` circle around
+    `HOME_LAT/LON`, `maxResultCount: 20`, `regionCode: "US"`.
+  - The field mask also includes place ID and coordinates. One response supplies
+    every pin, address, current status, and weekly schedule; there are no
+    per-location Place Details calls.
+  - Results are name-confidence checked, filtered to the exact 10-mile circle,
+    straight-line sorted, deduplicated, and capped at eight display results.
+    Exact canonical storefronts beat same-address departments (for example,
+    `The Home Depot` beats `Garden Center at The Home Depot`).
   - per-call `httpx.AsyncClient(timeout=8)` like `sports.py:298`.
-- **Cache:** module dict keyed by normalized business name, **24h TTL** (same shape as `_teams_cache`, `sports.py:44-83`). `currentOpeningHours` covers next 7 days incl. holidays, so 24h keeps holiday accuracy. Cache hit = zero API calls, instant answer.
+- **Cache:** module dict keyed by normalized business name, max **24h TTL**.
+  It expires just after Google's earliest `nextOpenTime` / `nextCloseTime`, so
+  cached `openNow` never survives a store-state transition. Cache hit = zero
+  API calls and an instant answer.
 - **Client-side daily budget:** module counter, max ~20 calls/day; over budget → return `None` (falls back to `ask`). Log when tripped.
 - **Answer formatting:** from `currentOpeningHours` (fall back `regularOpeningHours`) pick today's period in `ASK_TIMEZONE` (`config.py:78`):
   - close → "Home Depot closes at 10 PM tonight."
@@ -69,7 +88,11 @@ Clone the sports shape (`sports.py`, dispatch at `app.py:543-560`).
 
 ### 3. `app.py`
 
-- `elif intent == "business_hours":` block mirroring sports (`app.py:543-560`): try/except around `places.handle(parsed)`; `None` or exception → fall through to `ask_mod.handle_ask`; success → `ask_mod.remember(command, response)` so "when does it open?" pronoun follow-ups work via existing follow-up context. Answer reaches dashboard via the generic `response` event in `_finalize` (`app.py:253-259`) — no caption work.
+- `business_hours` and `place_search` share the same guarded handler. `None` or
+  exception falls through to `ask_mod.handle_ask`; success is remembered for
+  pronoun follow-ups. On success, `show_places` is emitted immediately before
+  reply TTS, so visual evidence and speech progress in parallel. The later
+  generic `response` event updates the summary without covering the map.
 
 ### 4. `config.py` + compose
 
@@ -85,21 +108,55 @@ Clone the sports shape (`sports.py`, dispatch at `app.py:543-560`).
 5. Live voice test in kitchen; confirm latency ≈ sports intent (2–3s).
 6. Follow-up test: "what time does costco close?" → "when does it open?" (falls to `ask` with remembered context — acceptable v1).
 
+## Phase 2 — Kitchen display map evidence
+
+- Added `place_search` for “where is Chipotle,” “show me Home Depot,” “are
+  there Costcos nearby,” “closest Walgreens,” and “how far is Walmart.” Hours
+  questions still use `business_hours`; both share one Places handler and one
+  Text Search call.
+- Google Cloud uses a separate `kitchen-dashboard-maps` browser key restricted
+  to Maps JavaScript API and `http://192.168.10.217:8777/*`. The server-side
+  Places key is never returned to the browser.
+- Browser key and Map ID live in
+  `/home/pi/cecret_lake/dashboard_webapp/google_maps_browser_key` and
+  `google_maps_map_id`, mounted read-only. `/api/bootstrap` supplies only the
+  referrer-restricted browser configuration.
+- `show_places` renders a fullscreen evidence view: Google map and attribution,
+  exact-radius circle, numbered pins, closest highlight, selectable results,
+  address, open/closed status, special-hours badge, and Monday–Sunday schedule
+  with today emphasized.
+- The view closes explicitly or after 90 seconds; interaction extends it to
+  180 seconds. A new place question reuses the map and replaces markers. Timer
+  alarms and non-place answers retire stale evidence.
+- The kiosk Chromium/GLES stack drew vector overlays but not the vector
+  basemap. Production forces Google's raster renderer and numbered Google
+  markers, restoring roads, controls, logo, and required attribution. The Map
+  ID remains configured for a future vector-capable display/browser.
+
 ### Deployment validation — 2026-07-21
 
 - Direct Beelink Text Search succeeded with the restricted key and returned
   nearby Home Depot `currentOpeningHours` + `regularOpeningHours`.
-- Six formatter/name-confidence unit tests pass in the production image.
+- Thirteen formatter, evidence-payload, distance/radius, canonical-store, cache,
+  and ask regression tests pass in the production image.
 - Text bypass passed: Home Depot close, Costco open, Walmart open-now, and El
   Farol hours today; measured latency 2.2–3.5s.
 - Repeating Home Depot logged `Places cache hit` and made no second API call.
 - Google corrected nonsense `blorbcorp` to Labcorp; a RapidFuzz display-name
   confidence gate now rejects that weak match (75 < 80), negative-caches it,
   and falls back to `ask` instead of speaking the wrong business hours.
-- Existing weather intent smoke-tested after deploy. Live kitchen voice remains.
+- Live `Where is Chipotle?` returned seven locations inside 10 miles; repeats
+  logged `Places cache hit` and made zero new Places calls.
+- Live `What time does Home Depot close?` selected the actual Riverton store,
+  not Garden/Rental/Pro Desk entities, spoke the 10 PM close, and showed six
+  storefront pins with seven-day schedules.
+- Physical-kiosk screenshots verified the raster Google basemap, Google
+  attribution, circle, numbered markers, selected details, and today highlight.
 
 ## Non-goals / later
 
 - Follow-up "when does it open?" answered *fast* from the cached place (needs last-place session state + parser rule) — v2 if the `ask` fallback feels slow in practice.
-- Phone number / address / "how far is it" questions — same Text Search response has the fields; only add if actually wanted (address is Essentials-tier, phone is Enterprise — no SKU change either way since we're already Enterprise).
+- Driving time, traffic-aware distance, directions, and Routes API calls. V1
+  labels locally calculated distance as straight-line and makes no Routes calls
+  or billable route-matrix elements.
 - Public-IP-change watchdog cron (Phase 0 step 3 note).

@@ -241,6 +241,9 @@ def _summarize_turn(intent: str, result: dict) -> str:
     if intent == "weather":
         return f"you asked about the weather ({result.get('weather_when') or 'now'}) " \
                f"and heard: {(result.get('response') or '')[:100]}"
+    if intent in ("business_hours", "place_search"):
+        return f"you asked about {parsed.get('query') or 'a nearby place'} and heard: " \
+               f"{(result.get('response') or '')[:100]}"
     if intent == "play_music":
         name = (result.get("music") or {}).get("name")
         return f"you started playing {name}" if name else "you resumed the music"
@@ -575,7 +578,7 @@ async def handle_command(command: str, followup: bool = False) -> dict:
             result["full"] = ask_result.get("full", "")
             result["ok"] = ask_result["ok"]
 
-    elif intent == "business_hours":
+    elif intent in ("business_hours", "place_search"):
         places_result = None
         try:
             places_result = await places_mod.handle(parsed)
@@ -583,6 +586,7 @@ async def handle_command(command: str, followup: bool = False) -> dict:
             log.warning("business-hours lookup failed, falling back to ask: %s", exc)
         if places_result:
             result.update(places_result)
+            await events.emit("show_places", **places_result["places_view"])
             # Preserve the named place for a pronoun follow-up handled by ask.
             ask_mod.remember(command, places_result["response"])
         else:

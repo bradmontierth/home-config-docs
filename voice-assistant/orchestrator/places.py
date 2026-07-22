@@ -1,18 +1,20 @@
-"""Fast business-hours answers from Google Places API (New).
+"""Fast nearby-place and business-hours answers from Google Places API (New).
 
-One Text Search call returns the nearest named business plus current/regular
-hours. Results are cached for 24 hours and an in-process daily counter stays
-below the Google Cloud SearchText hard quota. Any configuration, resolution,
-quota, or API failure returns None so app.py can use the slower ask path.
+One Text Search call returns nearby matching businesses, coordinates, and
+current/regular hours. Results are cached until the next hours transition (at
+most 24 hours), and an in-process daily counter stays below the Google Cloud
+SearchText hard quota. Any configuration, resolution, quota, or API failure
+returns None so app.py can use the slower ask path.
 """
 
 from __future__ import annotations
 
 import asyncio
 import logging
+import math
 import re
 import time
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -24,10 +26,10 @@ from . import config
 log = logging.getLogger("orchestrator.places")
 
 _URL = "https://places.googleapis.com/v1/places:searchText"
-_FIELD_MASK = ("places.displayName,places.formattedAddress,"
+_FIELD_MASK = ("places.id,places.displayName,places.formattedAddress,places.location,"
                "places.regularOpeningHours,places.currentOpeningHours")
 _KEY_CACHE: str | None = None
-_CACHE: dict[str, tuple[float, dict | None]] = {}
+_CACHE: dict[str, tuple[float, list[dict] | None]] = {}
 _MATCH_THRESHOLD = 80
 _BUDGET_DAY: date | None = None
 _BUDGET_COUNT = 0
@@ -65,6 +67,48 @@ def _normalized(query: str) -> str:
     return re.sub(r"\s+", " ", query.strip().casefold())
 
 
+def _result_cache_ttl(raw_places: list[dict],
+                      now: datetime | None = None) -> float:
+    """Never cache openNow beyond Google's next open/close transition."""
+    now = now or datetime.now(timezone.utc)
+    transitions = []
+    for place in raw_places:
+        current = place.get("currentOpeningHours") or {}
+        for field in ("nextOpenTime", "nextCloseTime"):
+            raw = current.get(field)
+            if not raw:
+                continue
+            try:
+                transition = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+            except (TypeError, ValueError):
+                continue
+            seconds = (transition - now).total_seconds()
+            if seconds > 0:
+                transitions.append(seconds)
+    if not transitions:
+        return config.PLACES_CACHE_TTL_S
+    # A small grace window prevents a request racing the exact minute a store
+    # changes state while still making the next question refresh its openNow.
+    return min(config.PLACES_CACHE_TTL_S, max(60.0, min(transitions) + 60.0))
+
+
+def _canonical_name(value: str) -> str:
+    """Normalize harmless storefront naming differences such as leading The."""
+    normalized = _normalized(value)
+    return normalized[4:] if normalized.startswith("the ") else normalized
+
+
+def _name_tier(query: str, display_name: str) -> int:
+    """Prefer the real store over same-address departments/service desks."""
+    query_name = _canonical_name(query)
+    candidate = _canonical_name(display_name)
+    if candidate == query_name:
+        return 0
+    if candidate.startswith(query_name + " "):
+        return 1
+    return 2
+
+
 async def _reserve_call() -> int | None:
     """Reserve one application-side call for the local calendar day."""
     global _BUDGET_DAY, _BUDGET_COUNT
@@ -80,7 +124,7 @@ async def _reserve_call() -> int | None:
         return _BUDGET_COUNT
 
 
-async def _search(query: str) -> dict | None:
+async def _search(query: str) -> list[dict] | None:
     key = _normalized(query)
     cached = _CACHE.get(key)
     if cached and cached[0] > time.monotonic():
@@ -98,7 +142,9 @@ async def _search(query: str) -> dict | None:
                        "longitude": config.HOME_LON},
             "radius": config.PLACES_LOCATION_RADIUS_M,
         }},
-        "maxResultCount": 1,
+        # Fetch Google's full first page once, then enforce the exact radius,
+        # brand confidence, ordering, and eight-card display limit locally.
+        "maxResultCount": 20,
         "regionCode": "US",
     }
     headers = {
@@ -118,20 +164,68 @@ async def _search(query: str) -> dict | None:
         log.info("Places found no result for %r", query)
         _CACHE[key] = (time.monotonic() + config.PLACES_CACHE_TTL_S, None)
         return None
-    place = places[0]
-    display_name = place.get("displayName", {}).get("text", "")
-    score = fuzz.WRatio(key, _normalized(display_name)) if display_name else 0
-    if score < _MATCH_THRESHOLD:
-        # Text Search can aggressively spell-correct nonsense (for example,
-        # "blorbcorp" -> "Labcorp"). Never turn that into a confident answer.
-        log.info("Places rejected weak match %r -> %r score=%.0f",
-                 query, display_name, score)
-        _CACHE[key] = (time.monotonic() + config.PLACES_CACHE_TTL_S, None)
-        return None
-    _CACHE[key] = (time.monotonic() + config.PLACES_CACHE_TTL_S, place)
-    log.info("Places lookup %r -> %s score=%.0f call=%d/%d", query,
-             display_name, score, call_number, config.PLACES_DAILY_LIMIT)
-    return place
+    _CACHE[key] = (time.monotonic() + _result_cache_ttl(places), places)
+    log.info("Places lookup %r -> %d raw result(s) call=%d/%d", query,
+             len(places), call_number, config.PLACES_DAILY_LIMIT)
+    return places
+
+
+def _distance_m(home_lat: float, home_lon: float,
+                place_lat: float, place_lon: float) -> float:
+    """Great-circle distance, sufficient for local nearest-place ordering."""
+    earth_m = 6_371_008.8
+    phi1, phi2 = math.radians(home_lat), math.radians(place_lat)
+    d_phi = math.radians(place_lat - home_lat)
+    d_lambda = math.radians(place_lon - home_lon)
+    value = (math.sin(d_phi / 2) ** 2
+             + math.cos(phi1) * math.cos(phi2) * math.sin(d_lambda / 2) ** 2)
+    return earth_m * 2 * math.atan2(math.sqrt(value), math.sqrt(1 - value))
+
+
+def _matching_nearby(query: str, raw_places: list[dict]) -> list[tuple[dict, float]]:
+    """Return strong name matches inside the configured circle, nearest first."""
+    query_key = _normalized(query)
+    candidates: list[tuple[dict, float, int]] = []
+    weak: list[tuple[str, float]] = []
+    for place in raw_places:
+        name = place.get("displayName", {}).get("text", "")
+        score = fuzz.WRatio(query_key, _normalized(name)) if name else 0
+        if score < _MATCH_THRESHOLD:
+            weak.append((name, score))
+            continue
+        location = place.get("location") or {}
+        lat, lon = location.get("latitude"), location.get("longitude")
+        if not isinstance(lat, (int, float)) or not isinstance(lon, (int, float)):
+            continue
+        distance = _distance_m(config.HOME_LAT, config.HOME_LON, lat, lon)
+        if distance <= config.PLACES_LOCATION_RADIUS_M:
+            candidates.append((place, distance, _name_tier(query, name)))
+    if not candidates and weak:
+        log.info("Places rejected weak matches for %r: %s", query, weak[:3])
+    if not candidates:
+        return []
+
+    # If Google returned real chain storefronts, suppress departments such as
+    # "Garden Center at The Home Depot" at the same coordinates. If a chain's
+    # official display name is extended ("Chipotle Mexican Grill"), tier 1 is
+    # still retained because it is the best available form.
+    best_tier = min(item[2] for item in candidates)
+    candidates = [item for item in candidates if item[2] == best_tier]
+    candidates.sort(key=lambda item: item[1])
+    nearby: list[tuple[dict, float]] = []
+    seen: set[tuple] = set()
+    for place, distance, _ in candidates:
+        location = place.get("location") or {}
+        identity = (
+            _canonical_name(place.get("displayName", {}).get("text", "")),
+            round(float(location.get("latitude")), 5),
+            round(float(location.get("longitude")), 5),
+        )
+        if identity in seen:
+            continue
+        seen.add(identity)
+        nearby.append((place, distance))
+    return nearby[:config.PLACES_MAX_RESULTS]
 
 
 def _timestamp(raw: str | None, tz: ZoneInfo) -> datetime | None:
@@ -279,16 +373,120 @@ def _answer(place: dict, action: str, now: datetime | None = None) -> str | None
     return f"{name} is open " + " and ".join(spans) + " today."
 
 
+def _schedule(place: dict) -> list[dict[str, str]]:
+    """Normalize Google's locale-ready weekday descriptions for the kiosk."""
+    regular = place.get("regularOpeningHours") or {}
+    rows = []
+    for description in regular.get("weekdayDescriptions") or []:
+        day, separator, hours = description.partition(":")
+        if separator:
+            rows.append({"day": day.strip(), "hours": hours.strip()})
+    return rows
+
+
+def _status(place: dict, now: datetime) -> tuple[str, str]:
+    current = place.get("currentOpeningHours") or {}
+    tz = ZoneInfo(config.ASK_TIMEZONE)
+    if current.get("openNow") is True:
+        closing = _timestamp(current.get("nextCloseTime"), tz)
+        return "Open", f"Until {_time(closing)}" if closing else "Open now"
+    if current.get("openNow") is False:
+        opening = _timestamp(current.get("nextOpenTime"), tz)
+        if opening:
+            relative = _relative_day(opening.date(), now.date())
+            suffix = "" if relative == "today" else f" {relative}"
+            return "Closed", f"Opens {_time(opening)}{suffix}"
+        return "Closed", "Closed now"
+    return "Hours unavailable", ""
+
+
+def _public_place(place: dict, distance_m: float, index: int,
+                  now: datetime) -> dict:
+    location = place.get("location") or {}
+    status, status_detail = _status(place, now)
+    current = place.get("currentOpeningHours") or {}
+    return {
+        "id": place.get("id") or f"place-{index}",
+        "number": index + 1,
+        "name": place.get("displayName", {}).get("text") or "Location",
+        "address": place.get("formattedAddress") or "Address unavailable",
+        "latitude": location.get("latitude"),
+        "longitude": location.get("longitude"),
+        "distance_miles": round(distance_m / 1609.344, 1),
+        "distance_kind": "straight_line",
+        "status": status,
+        "status_detail": status_detail,
+        "special_hours": bool(current.get("specialDays")),
+        "schedule": _schedule(place),
+    }
+
+
+def _location_answer(query: str, places: list[dict]) -> str:
+    count = len(places)
+    if not count:
+        return f"I couldn't find any {query} locations within 10 miles."
+    closest = places[0]
+    miles = closest["distance_miles"]
+    distance = "less than a tenth of a mile" if miles == 0 else f"{miles:g} miles"
+    street = closest["address"].split(",", 1)[0]
+    if count == 1:
+        return f"I found one {query} within 10 miles. It's {distance} away, at {street}."
+    return (f"I found {count} {query} locations within 10 miles. "
+            f"The closest is {distance} away, at {street}.")
+
+
 async def handle(parsed: dict) -> dict | None:
-    """Answer a business-hours intent, or None for the ask fallback."""
+    """Answer a nearby-place intent and return its dashboard evidence payload."""
     query = (parsed.get("query") or "").strip()
     if not query:
         return None
-    place = await _search(query)
-    if not place:
+    raw_places = await _search(query)
+    if not raw_places:
         return None
-    action = parsed.get("hours_when") or "today"
-    spoken = _answer(place, action)
-    if not spoken:
+
+    nearby = _matching_nearby(query, raw_places)
+    # Text Search can aggressively spell-correct nonsense (for example,
+    # "blorbcorp" -> "Labcorp"). Never turn that into a confident answer.
+    strong_match = any(
+        fuzz.WRatio(
+            _normalized(query),
+            _normalized(place.get("displayName", {}).get("text", "")),
+        ) >= _MATCH_THRESHOLD
+        for place in raw_places
+    )
+    if not nearby and not strong_match:
         return None
-    return {"response": spoken, "ok": True, "hours_when": action}
+
+    now = datetime.now(ZoneInfo(config.ASK_TIMEZONE))
+    public_places = [
+        _public_place(place, distance, index, now)
+        for index, (place, distance) in enumerate(nearby)
+    ]
+    action = parsed.get("hours_when") or "location"
+    if parsed.get("intent") == "business_hours":
+        if not nearby:
+            spoken = f"I couldn't find any {query} locations within 10 miles."
+        else:
+            spoken = _answer(nearby[0][0], action)
+            if not spoken:
+                return None
+    else:
+        spoken = _location_answer(query, public_places)
+
+    radius_miles = round(config.PLACES_LOCATION_RADIUS_M / 1609.344, 1)
+    view = {
+        "query": query,
+        "action": action,
+        "summary": spoken,
+        "radius_miles": radius_miles,
+        "home": {"latitude": config.HOME_LAT, "longitude": config.HOME_LON},
+        "places": public_places,
+        "selected_id": public_places[0]["id"] if public_places else None,
+        "updated_at": now.isoformat(),
+    }
+    return {
+        "response": spoken,
+        "ok": True,
+        "hours_when": action,
+        "places_view": view,
+    }

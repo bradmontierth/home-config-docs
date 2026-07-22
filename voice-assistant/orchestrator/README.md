@@ -26,7 +26,7 @@ satellite WAV ─► /wake ─► Parakeet transcribe ─► stage-2 verify ("ok
 | `timers.py` | SQLite engine + single asyncio expiry scheduler, restart-safe |
 | `format.py` | spoken phrasing (durations, confirmations) |
 | `sports.py` | scores/schedules from ESPN's unofficial API (structured, no LLM; falls back to ask) |
-| `places.py` | nearby business hours from Google Places API (New), with cache and daily call guard |
+| `places.py` | nearby maps/business hours from one Google Places Text Search, with cache and daily call guard |
 | `events.py` | dashboard fan-out + satellite alarm dispatch (both best-effort) |
 | `app.py` | FastAPI wiring |
 
@@ -66,7 +66,7 @@ uvicorn orchestrator.app:app --host 0.0.0.0 --port 8785
 event over the existing `/api/live` WebSocket wrapped as
 `{"type":"assistant","event":{...}}`. Event types: `verifying`, `wake_rejected`,
 `transcript`, `thinking`, `response`, `timer_created`, `timer_updated`,
-`timer_cancelled`, `timer_dismissed`, `timer_done`.
+`timer_cancelled`, `timer_dismissed`, `timer_done`, `show_places`.
 
 ## Satellite alarm contract (not built yet)
 On expiry the orchestrator POSTs `SATELLITE_ALARM_URL`:

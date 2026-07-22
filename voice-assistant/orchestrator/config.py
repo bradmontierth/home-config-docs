@@ -87,7 +87,8 @@ OPENROUTER_WEB_CONTEXT = os.getenv("OPENROUTER_WEB_CONTEXT", "high")
 GOOGLE_PLACES_KEY_FILE = os.getenv("GOOGLE_PLACES_KEY_FILE", "")
 HOME_LAT = float(os.getenv("HOME_LAT", "0"))
 HOME_LON = float(os.getenv("HOME_LON", "0"))
-PLACES_LOCATION_RADIUS_M = float(os.getenv("PLACES_LOCATION_RADIUS_M", "40000"))
+PLACES_LOCATION_RADIUS_M = float(os.getenv("PLACES_LOCATION_RADIUS_M", "16093.44"))
+PLACES_MAX_RESULTS = int(os.getenv("PLACES_MAX_RESULTS", "8"))
 # Google Cloud is hard-capped at 25 SearchText calls/day. Stay below that here
 # too, while leaving five calls of headroom for tests and enforcement lag.
 PLACES_DAILY_LIMIT = int(os.getenv("PLACES_DAILY_LIMIT", "20"))
