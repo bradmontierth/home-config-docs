@@ -41,6 +41,7 @@ Schema:
   "sound_theme": one of {list(config.SOUND_THEMES)},
   "scope": "one" or "all" — "all" only when the user clearly means every timer (e.g. "cancel all timers"), else "one",
   "query": for intent "ask" the cleaned question text; for "play_music" the name of what to play; for "business_hours" or "place_search" the named business; else null,
+  "place_modifier": for "business_hours" or "place_search", a specifically requested department or service such as "tire center", "gas", "pharmacy", or "garden center"; otherwise null,
   "item_text": for complete_item / remove_items, a phrase describing WHICH item(s) to act on — one item ("eggs"), several ("milk and bread"), a category ("the dairy", "produce"), or a property ("everything orange", "all of it"); else null,
   "list_type": for clear_list / show, which list — "shopping", "todo", or "all"; else null,
   "media_type": for play_music, only when the user NAMES a type — "artist", "album", "track", or "playlist"; else null,
@@ -78,10 +79,18 @@ Rules:
   "open"), "is Walmart open" ("Walmart", "now"), "what are Smith's hours today" ("Smith's",
   "today"). A pronoun-only follow-up such as "when does it open" remains "ask" in v1 because the
   knowledge service has the prior answer context. Do not use this intent for an unnamed business.
+  Keep a specifically requested on-site service separate: "when does Costco tire center close"
+  -> query "Costco", place_modifier "tire center"; "is Costco gas open" -> query "Costco",
+  place_modifier "gas"; "when does the Walgreens pharmacy close" -> query "Walgreens",
+  place_modifier "pharmacy". Generic store questions such as "when does Costco close" have a null
+  modifier. Do not split a proper business name merely because it contains a service word:
+  "when does Discount Tire close" -> query "Discount Tire", place_modifier null.
 - place_search = a location/map/distance request about a NAMED business or chain: "where is
   Chipotle" (query "Chipotle"), "show me Home Depot", "are there Costcos nearby", "where's the
   closest Walgreens", "how far is Walmart". Use the clean business name as query. Questions that
-  explicitly ask when it opens/closes or whether it is open remain business_hours.
+  explicitly ask when it opens/closes or whether it is open remain business_hours. Apply the same
+  place_modifier rule for an explicitly named department or service, such as "where is Costco gas"
+  -> query "Costco", place_modifier "gas".
 - ask = a general knowledge or factual question NOT about timers: "how many tablespoons in a cup",
   "when do babies start walking", "what temperature is chicken done at", "how do I dice an onion".
   Put the cleaned question in "query". No keyword is needed — natural questions route here.
@@ -196,6 +205,12 @@ def _validate(data: dict) -> dict:
     else:
         query = None
 
+    place_modifier = data.get("place_modifier")
+    if isinstance(place_modifier, str):
+        place_modifier = place_modifier.strip().lower() or None
+    else:
+        place_modifier = None
+
     item_text = data.get("item_text")
     if isinstance(item_text, str):
         item_text = item_text.strip() or None
@@ -241,6 +256,7 @@ def _validate(data: dict) -> dict:
         "sound_theme": theme,
         "scope": scope,
         "query": query,
+        "place_modifier": place_modifier,
         "item_text": item_text,
         "list_type": list_type,
         "media_type": media_type,

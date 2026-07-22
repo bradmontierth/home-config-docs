@@ -3,7 +3,7 @@ import unittest
 from unittest.mock import AsyncMock, patch
 from zoneinfo import ZoneInfo
 
-from . import places
+from . import intent, places
 
 
 class PlacesFormattingTest(unittest.TestCase):
@@ -124,6 +124,159 @@ class PlacesFormattingTest(unittest.TestCase):
             nearby = places._matching_nearby("Home Depot", raw)
         self.assertEqual([item[0]["id"] for item in nearby], ["store", "store-2"])
 
+    def test_generic_costco_resolves_wholesale_not_colocated_services(self):
+        raw = [
+            {
+                "id": "tire",
+                "displayName": {"text": "Costco Tire Service Center"},
+                "formattedAddress": "123 Main St, Riverton, UT",
+                "location": {"latitude": 40.50, "longitude": -112.0},
+                "primaryType": "tire_shop",
+                "types": ["tire_shop", "store"],
+            },
+            {
+                "id": "bakery",
+                "displayName": {"text": "Costco Bakery"},
+                "formattedAddress": "123 Main St, Riverton, UT",
+                "location": {"latitude": 40.50, "longitude": -112.0},
+                "primaryType": "bakery",
+            },
+            {
+                "id": "warehouse",
+                "displayName": {"text": "Costco Wholesale"},
+                "formattedAddress": "123 Main St, Riverton, UT",
+                "location": {"latitude": 40.50, "longitude": -112.0},
+                "primaryType": "warehouse_store",
+            },
+            {
+                "id": "gas",
+                "displayName": {"text": "Costco Gas Station"},
+                "formattedAddress": "123 Main St, Riverton, UT",
+                "location": {"latitude": 40.5002, "longitude": -112.0},
+                "primaryType": "gas_station",
+                "containingPlaces": [{"id": "warehouse"}],
+            },
+        ]
+        with patch.object(places.config, "HOME_LAT", 40.494), \
+                patch.object(places.config, "HOME_LON", -112.0), \
+                patch.object(places.config, "PLACES_LOCATION_RADIUS_M", 16093.44):
+            nearby = places._matching_nearby("Costco", raw)
+        self.assertEqual([item[0]["id"] for item in nearby], ["warehouse"])
+
+    def test_explicit_costco_service_selects_requested_type(self):
+        raw = [
+            {
+                "id": "warehouse",
+                "displayName": {"text": "Costco Wholesale"},
+                "formattedAddress": "123 Main St, Riverton, UT",
+                "location": {"latitude": 40.50, "longitude": -112.0},
+                "primaryType": "warehouse_store",
+                "types": ["warehouse_store", "store"],
+            },
+            {
+                "id": "tire",
+                "displayName": {"text": "Costco Tire Service Center"},
+                "formattedAddress": "123 Main St, Riverton, UT",
+                "location": {"latitude": 40.50, "longitude": -112.0},
+                "primaryType": "tire_shop",
+                "types": ["tire_shop", "store"],
+            },
+            {
+                "id": "gas",
+                "displayName": {"text": "Costco Gas Station"},
+                "formattedAddress": "123 Main St, Riverton, UT",
+                "location": {"latitude": 40.50, "longitude": -112.0},
+                "primaryType": "gas_station",
+            },
+        ]
+        with patch.object(places.config, "HOME_LAT", 40.494), \
+                patch.object(places.config, "HOME_LON", -112.0), \
+                patch.object(places.config, "PLACES_LOCATION_RADIUS_M", 16093.44):
+            nearby = places._matching_nearby("Costco", raw, "tire center")
+        self.assertEqual([item[0]["id"] for item in nearby], ["tire"])
+
+    def test_generic_walgreens_demotes_embedded_pharmacy(self):
+        raw = [
+            {
+                "id": "pharmacy",
+                "displayName": {"text": "Walgreens Pharmacy"},
+                "formattedAddress": "1 Main St, Riverton, UT",
+                "location": {"latitude": 40.50, "longitude": -112.0},
+                "primaryType": "pharmacy",
+            },
+            {
+                "id": "store",
+                "displayName": {"text": "Walgreens"},
+                "formattedAddress": "1 Main St, Riverton, UT",
+                "location": {"latitude": 40.50, "longitude": -112.0},
+                "primaryType": "drugstore",
+            },
+        ]
+        with patch.object(places.config, "HOME_LAT", 40.494), \
+                patch.object(places.config, "HOME_LON", -112.0), \
+                patch.object(places.config, "PLACES_LOCATION_RADIUS_M", 16093.44):
+            nearby = places._matching_nearby("Walgreens", raw)
+        self.assertEqual([item[0]["id"] for item in nearby], ["store"])
+
+    def test_standalone_service_brand_is_not_discarded(self):
+        raw = [
+            {
+                "id": "near",
+                "displayName": {"text": "Discount Tire"},
+                "formattedAddress": "1 Main St, Riverton, UT",
+                "location": {"latitude": 40.50, "longitude": -112.0},
+                "primaryType": "tire_shop",
+            },
+            {
+                "id": "far",
+                "displayName": {"text": "Discount Tire"},
+                "formattedAddress": "2 Main St, Riverton, UT",
+                "location": {"latitude": 40.54, "longitude": -112.0},
+                "primaryType": "tire_shop",
+            },
+        ]
+        with patch.object(places.config, "HOME_LAT", 40.494), \
+                patch.object(places.config, "HOME_LON", -112.0), \
+                patch.object(places.config, "PLACES_LOCATION_RADIUS_M", 16093.44):
+            nearby = places._matching_nearby("Discount Tire", raw)
+        self.assertEqual([item[0]["id"] for item in nearby], ["near", "far"])
+
+    def test_containing_place_parent_wins_same_site_cluster(self):
+        raw = [
+            {
+                "id": "child",
+                "displayName": {"text": "Walmart"},
+                "formattedAddress": "1 Main St, Riverton, UT",
+                "location": {"latitude": 40.50, "longitude": -112.0},
+                "primaryType": "department_store",
+                "containingPlaces": [{"id": "parent"}],
+            },
+            {
+                "id": "parent",
+                "displayName": {"text": "Walmart Supercenter"},
+                "formattedAddress": "1 Main St, Riverton, UT",
+                "location": {"latitude": 40.50, "longitude": -112.0},
+                "primaryType": "department_store",
+            },
+        ]
+        with patch.object(places.config, "HOME_LAT", 40.494), \
+                patch.object(places.config, "HOME_LON", -112.0), \
+                patch.object(places.config, "PLACES_LOCATION_RADIUS_M", 16093.44):
+            nearby = places._matching_nearby("Walmart", raw)
+        self.assertEqual([item[0]["id"] for item in nearby], ["parent"])
+
+
+class PlacesIntentValidationTest(unittest.TestCase):
+    def test_place_modifier_is_normalized(self):
+        parsed = intent._validate({
+            "intent": "business_hours",
+            "query": "Costco",
+            "place_modifier": " Tire Center ",
+            "hours_when": "close",
+        })
+        self.assertEqual(parsed["query"], "Costco")
+        self.assertEqual(parsed["place_modifier"], "tire center")
+
 
 class PlacesHandleTest(unittest.IsolatedAsyncioTestCase):
     async def test_one_search_yields_multiple_sorted_map_results(self):
@@ -174,6 +327,44 @@ class PlacesHandleTest(unittest.IsolatedAsyncioTestCase):
             places.fuzz.WRatio(places._normalized("blorbcorp"),
                                places._normalized("Labcorp")),
             places._MATCH_THRESHOLD)
+
+    async def test_explicit_modifier_uses_base_query_and_no_extra_search(self):
+        raw = [{
+            "id": "gas",
+            "displayName": {"text": "Costco Gas Station"},
+            "formattedAddress": "1 Main St, Riverton, UT",
+            "location": {"latitude": 40.50, "longitude": -112.0},
+            "primaryType": "gas_station",
+        }]
+        with patch.object(places, "_search", AsyncMock(return_value=raw)) as search, \
+                patch.object(places.config, "HOME_LAT", 40.494), \
+                patch.object(places.config, "HOME_LON", -112.0), \
+                patch.object(places.config, "PLACES_LOCATION_RADIUS_M", 16093.44):
+            result = await places.handle({
+                "intent": "place_search", "query": "Costco",
+                "place_modifier": "gas", "hours_when": None,
+            })
+        search.assert_awaited_once_with("Costco")
+        self.assertEqual(result["places_view"]["query"], "Costco gas")
+        self.assertEqual(result["places_view"]["places"][0]["id"], "gas")
+
+    async def test_explicit_modifier_never_substitutes_parent_store(self):
+        raw = [{
+            "id": "warehouse",
+            "displayName": {"text": "Costco Wholesale"},
+            "formattedAddress": "1 Main St, Riverton, UT",
+            "location": {"latitude": 40.50, "longitude": -112.0},
+            "primaryType": "warehouse_store",
+        }]
+        with patch.object(places, "_search", AsyncMock(return_value=raw)), \
+                patch.object(places.config, "HOME_LAT", 40.494), \
+                patch.object(places.config, "HOME_LON", -112.0), \
+                patch.object(places.config, "PLACES_LOCATION_RADIUS_M", 16093.44):
+            result = await places.handle({
+                "intent": "business_hours", "query": "Costco",
+                "place_modifier": "pharmacy", "hours_when": "close",
+            })
+        self.assertIsNone(result)
 
 
 if __name__ == "__main__":

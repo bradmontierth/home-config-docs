@@ -27,13 +27,71 @@ log = logging.getLogger("orchestrator.places")
 
 _URL = "https://places.googleapis.com/v1/places:searchText"
 _FIELD_MASK = ("places.id,places.displayName,places.formattedAddress,places.location,"
-               "places.regularOpeningHours,places.currentOpeningHours")
+               "places.regularOpeningHours,places.currentOpeningHours,places.types,"
+               "places.primaryType,places.containingPlaces,places.businessStatus")
 _KEY_CACHE: str | None = None
 _CACHE: dict[str, tuple[float, list[dict] | None]] = {}
 _MATCH_THRESHOLD = 80
 _BUDGET_DAY: date | None = None
 _BUDGET_COUNT = 0
 _BUDGET_LOCK = asyncio.Lock()
+
+# Google models departments and on-site services as their own Places. These
+# roles are narrower than the destination a generic brand query ordinarily
+# means. This list is deliberately based on Google place types, not brands.
+_AUXILIARY_PRIMARY_TYPES = {
+    "auto_parts_store",
+    "bakery",
+    "car_repair",
+    "car_wash",
+    "electric_vehicle_charging_station",
+    "equipment_rental_agency",
+    "gas_station",
+    "garden_center",
+    "optician",
+    "optometrist",
+    "pharmacy",
+    "tire_shop",
+}
+_AUXILIARY_NAME_TERMS = (
+    "bakery",
+    "car wash",
+    "food court",
+    "fuel center",
+    "garden center",
+    "gas station",
+    "hearing aid",
+    "home services",
+    "optical",
+    "pharmacy",
+    "photo center",
+    "pro desk",
+    "rental center",
+    "service center",
+    "tire center",
+)
+_MODIFIER_TYPE_ALIASES = {
+    "auto parts": {"auto_parts_store"},
+    "bakery": {"bakery"},
+    "car repair": {"car_repair"},
+    "car wash": {"car_wash"},
+    "charging": {"electric_vehicle_charging_station"},
+    "ev charging": {"electric_vehicle_charging_station"},
+    "fuel": {"gas_station"},
+    "gasoline": {"gas_station"},
+    "garden": {"garden_center"},
+    "garden center": {"garden_center"},
+    "gas": {"gas_station"},
+    "gas station": {"gas_station"},
+    "optical": {"optician", "optometrist"},
+    "pharmacy": {"pharmacy"},
+    "rental": {"equipment_rental_agency"},
+    "rental center": {"equipment_rental_agency"},
+    "repair": {"car_repair"},
+    "tire": {"tire_shop"},
+    "tire center": {"tire_shop"},
+}
+_SAME_SITE_DISTANCE_M = 75.0
 
 
 def _read_key() -> str:
@@ -109,6 +167,103 @@ def _name_tier(query: str, display_name: str) -> int:
     return 2
 
 
+def _place_name(place: dict) -> str:
+    return place.get("displayName", {}).get("text", "")
+
+
+def _place_id(place: dict) -> str:
+    return str(place.get("id") or "").removeprefix("places/")
+
+
+def _containing_ids(place: dict) -> set[str]:
+    ids = set()
+    for parent in place.get("containingPlaces") or []:
+        if isinstance(parent, dict):
+            value = parent.get("id") or parent.get("name")
+        else:
+            value = parent
+        if value:
+            ids.add(str(value).removeprefix("places/"))
+    return ids
+
+
+def _address_key(place: dict) -> str:
+    return re.sub(r"[^a-z0-9]+", " ", _normalized(
+        place.get("formattedAddress") or "")).strip()
+
+
+def _is_auxiliary(query: str, place: dict) -> bool:
+    """Whether this looks like an on-site service rather than the destination."""
+    primary_type = place.get("primaryType")
+    if primary_type in _AUXILIARY_PRIMARY_TYPES:
+        return True
+    query_key = _normalized(query)
+    name_key = _normalized(_place_name(place))
+    return any(term in name_key and term not in query_key
+               for term in _AUXILIARY_NAME_TERMS)
+
+
+def _modifier_match(modifier: str, place: dict) -> int | None:
+    """Return semantic match quality (lower is better), or no match."""
+    key = _normalized(modifier)
+    expected_types = set()
+    for alias, place_types in _MODIFIER_TYPE_ALIASES.items():
+        if re.search(rf"\b{re.escape(alias)}\b", key):
+            expected_types.update(place_types)
+    primary_type = place.get("primaryType")
+    if primary_type in expected_types:
+        return 0
+
+    name_key = _normalized(_place_name(place))
+    meaningful_tokens = [token for token in key.split() if len(token) > 2]
+    if key in name_key or (meaningful_tokens
+                           and all(token in name_key for token in meaningful_tokens)):
+        return 1
+
+    types = set(place.get("types") or [])
+    if expected_types & types:
+        return 2
+    return None
+
+
+def _same_site(left: dict, right: dict) -> bool:
+    left_id, right_id = _place_id(left), _place_id(right)
+    if ((left_id and left_id in _containing_ids(right))
+            or (right_id and right_id in _containing_ids(left))):
+        return True
+    left_address, right_address = _address_key(left), _address_key(right)
+    if left_address and left_address == right_address:
+        return True
+    left_location = left.get("location") or {}
+    right_location = right.get("location") or {}
+    try:
+        distance = _distance_m(
+            float(left_location["latitude"]), float(left_location["longitude"]),
+            float(right_location["latitude"]), float(right_location["longitude"]),
+        )
+    except (KeyError, TypeError, ValueError):
+        return False
+    return distance <= _SAME_SITE_DISTANCE_M
+
+
+def _cluster_candidates(candidates: list[dict]) -> list[list[dict]]:
+    """Group same-brand Place records that represent one physical site."""
+    groups: list[list[dict]] = []
+    for candidate in candidates:
+        matching = [group for group in groups
+                    if any(_same_site(candidate["place"], item["place"])
+                           for item in group)]
+        if not matching:
+            groups.append([candidate])
+            continue
+        primary = matching[0]
+        primary.append(candidate)
+        for extra in matching[1:]:
+            primary.extend(extra)
+            groups.remove(extra)
+    return groups
+
+
 async def _reserve_call() -> int | None:
     """Reserve one application-side call for the local calendar day."""
     global _BUDGET_DAY, _BUDGET_COUNT
@@ -182,13 +337,16 @@ def _distance_m(home_lat: float, home_lon: float,
     return earth_m * 2 * math.atan2(math.sqrt(value), math.sqrt(1 - value))
 
 
-def _matching_nearby(query: str, raw_places: list[dict]) -> list[tuple[dict, float]]:
-    """Return strong name matches inside the configured circle, nearest first."""
+def _matching_nearby(query: str, raw_places: list[dict],
+                     modifier: str | None = None) -> list[tuple[dict, float]]:
+    """Resolve each physical site to the role the user actually requested."""
     query_key = _normalized(query)
-    candidates: list[tuple[dict, float, int]] = []
+    candidates: list[dict] = []
     weak: list[tuple[str, float]] = []
-    for place in raw_places:
-        name = place.get("displayName", {}).get("text", "")
+    for raw_index, place in enumerate(raw_places):
+        if place.get("businessStatus") == "CLOSED_PERMANENTLY":
+            continue
+        name = _place_name(place)
         score = fuzz.WRatio(query_key, _normalized(name)) if name else 0
         if score < _MATCH_THRESHOLD:
             weak.append((name, score))
@@ -199,33 +357,67 @@ def _matching_nearby(query: str, raw_places: list[dict]) -> list[tuple[dict, flo
             continue
         distance = _distance_m(config.HOME_LAT, config.HOME_LON, lat, lon)
         if distance <= config.PLACES_LOCATION_RADIUS_M:
-            candidates.append((place, distance, _name_tier(query, name)))
+            semantic = _modifier_match(modifier, place) if modifier else None
+            candidates.append({
+                "place": place,
+                "distance": distance,
+                "name_tier": _name_tier(query, name),
+                "semantic": semantic,
+                "auxiliary": _is_auxiliary(query, place),
+                "raw_index": raw_index,
+            })
     if not candidates and weak:
         log.info("Places rejected weak matches for %r: %s", query, weak[:3])
     if not candidates:
         return []
 
-    # If Google returned real chain storefronts, suppress departments such as
-    # "Garden Center at The Home Depot" at the same coordinates. If a chain's
-    # official display name is extended ("Chipotle Mexican Grill"), tier 1 is
-    # still retained because it is the best available form.
-    best_tier = min(item[2] for item in candidates)
-    candidates = [item for item in candidates if item[2] == best_tier]
-    candidates.sort(key=lambda item: item[1])
-    nearby: list[tuple[dict, float]] = []
-    seen: set[tuple] = set()
-    for place, distance, _ in candidates:
-        location = place.get("location") or {}
-        identity = (
-            _canonical_name(place.get("displayName", {}).get("text", "")),
-            round(float(location.get("latitude")), 5),
-            round(float(location.get("longitude")), 5),
-        )
-        if identity in seen:
-            continue
-        seen.add(identity)
-        nearby.append((place, distance))
-    return nearby[:config.PLACES_MAX_RESULTS]
+    if modifier:
+        # An explicit service request must never silently turn into the parent
+        # store. It is safer to fall back than speak the wrong hours.
+        candidates = [item for item in candidates if item["semantic"] is not None]
+        if not candidates:
+            log.info("Places found no explicit %r role for %r", modifier, query)
+            return []
+        best_semantic = min(item["semantic"] for item in candidates)
+        candidates = [item for item in candidates
+                      if item["semantic"] == best_semantic]
+    elif any(not item["auxiliary"] for item in candidates):
+        # When a broad destination exists, departments and services are not
+        # alternate locations. If every result is a narrow type (for example
+        # Discount Tire or a bakery), keep them as valid standalone businesses.
+        candidates = [item for item in candidates if not item["auxiliary"]]
+
+    referenced_parent_ids = {
+        parent_id
+        for item in candidates
+        for parent_id in _containing_ids(item["place"])
+    }
+
+    representatives = []
+    for group in _cluster_candidates(candidates):
+        representative = min(group, key=lambda item: (
+            item["semantic"] if modifier else 0,
+            0 if _place_id(item["place"]) in referenced_parent_ids else 1,
+            item["name_tier"],
+            item["raw_index"],
+        ))
+        representatives.append(representative)
+    if not modifier:
+        # Across distinct sites, keep Google's best canonical form. Parent
+        # selection already happened inside each cluster, so a referenced
+        # destination cannot be displaced by a more exact department name.
+        best_tier = min(item["name_tier"] for item in representatives)
+        representatives = [item for item in representatives
+                           if item["name_tier"] == best_tier]
+    representatives.sort(key=lambda item: item["distance"])
+    selected = representatives[:config.PLACES_MAX_RESULTS]
+    log.info(
+        "Places resolved %r modifier=%r -> %s",
+        query, modifier,
+        [(_place_name(item["place"]), item["place"].get("primaryType"))
+         for item in selected],
+    )
+    return [(item["place"], item["distance"]) for item in selected]
 
 
 def _timestamp(raw: str | None, tz: ZoneInfo) -> datetime | None:
@@ -440,11 +632,15 @@ async def handle(parsed: dict) -> dict | None:
     query = (parsed.get("query") or "").strip()
     if not query:
         return None
+    modifier = (parsed.get("place_modifier") or "").strip() or None
+    display_query = f"{query} {modifier}" if modifier else query
     raw_places = await _search(query)
     if not raw_places:
         return None
 
-    nearby = _matching_nearby(query, raw_places)
+    nearby = _matching_nearby(query, raw_places, modifier)
+    if modifier and not nearby:
+        return None
     # Text Search can aggressively spell-correct nonsense (for example,
     # "blorbcorp" -> "Labcorp"). Never turn that into a confident answer.
     strong_match = any(
@@ -465,17 +661,17 @@ async def handle(parsed: dict) -> dict | None:
     action = parsed.get("hours_when") or "location"
     if parsed.get("intent") == "business_hours":
         if not nearby:
-            spoken = f"I couldn't find any {query} locations within 10 miles."
+            spoken = f"I couldn't find any {display_query} locations within 10 miles."
         else:
             spoken = _answer(nearby[0][0], action)
             if not spoken:
                 return None
     else:
-        spoken = _location_answer(query, public_places)
+        spoken = _location_answer(display_query, public_places)
 
     radius_miles = round(config.PLACES_LOCATION_RADIUS_M / 1609.344, 1)
     view = {
-        "query": query,
+        "query": display_query,
         "action": action,
         "summary": spoken,
         "radius_miles": radius_miles,

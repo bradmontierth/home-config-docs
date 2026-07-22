@@ -68,10 +68,25 @@ Clone the sports shape (`sports.py`, dispatch at `app.py:543-560`).
   - The field mask also includes place ID and coordinates. One response supplies
     every pin, address, current status, and weekly schedule; there are no
     per-location Place Details calls.
+  - The same response now requests `primaryType`, `types`, `containingPlaces`,
+    and `businessStatus`. These fields let the local resolver distinguish a
+    destination from its departments and services without another API call or
+    a higher billing tier than the hours fields already require.
   - Results are name-confidence checked, filtered to the exact 10-mile circle,
-    straight-line sorted, deduplicated, and capped at eight display results.
-    Exact canonical storefronts beat same-address departments (for example,
-    `The Home Depot` beats `Garden Center at The Home Depot`).
+    role-resolved, straight-line sorted, deduplicated, and capped at eight
+    display results. Generic brand questions prefer broad destinations over
+    narrow services (`Costco Wholesale` over its tire center, bakery, or gas
+    station; Walgreens over Walgreens Pharmacy). Candidates for the same brand
+    are clustered by a parent relationship, identical address, or coordinates
+    within 75 meters before a representative is selected. `containingPlaces`
+    is supporting evidence when Google supplies it; `primaryType` is the
+    reliable role signal because department-to-parent links are inconsistent.
+  - The intent parser preserves explicit service requests in `place_modifier`.
+    “Costco tire center” selects `tire_shop`, “Costco gas” selects
+    `gas_station`, and “Walgreens pharmacy” selects `pharmacy`. A missing
+    requested subtype falls back instead of silently substituting the parent.
+    Proper service-brand names such as Discount Tire remain whole queries, and
+    narrow place types remain valid when no broad destination exists.
   - per-call `httpx.AsyncClient(timeout=8)` like `sports.py:298`.
 - **Cache:** module dict keyed by normalized business name, max **24h TTL**.
   It expires just after Google's earliest `nextOpenTime` / `nextCloseTime`, so
@@ -137,8 +152,9 @@ Clone the sports shape (`sports.py`, dispatch at `app.py:543-560`).
 
 - Direct Beelink Text Search succeeded with the restricted key and returned
   nearby Home Depot `currentOpeningHours` + `regularOpeningHours`.
-- Thirteen formatter, evidence-payload, distance/radius, canonical-store, cache,
-  and ask regression tests pass in the production image.
+- Twenty-one formatter, evidence-payload, distance/radius, role resolution,
+  explicit-subplace, canonical-store, cache, and ask regression tests pass in
+  the production image.
 - Text bypass passed: Home Depot close, Costco open, Walmart open-now, and El
   Farol hours today; measured latency 2.2–3.5s.
 - Repeating Home Depot logged `Places cache hit` and made no second API call.
@@ -152,6 +168,11 @@ Clone the sports shape (`sports.py`, dispatch at `app.py:543-560`).
   storefront pins with seven-day schedules.
 - Physical-kiosk screenshots verified the raster Google basemap, Google
   attribution, circle, numbered markers, selected details, and today highlight.
+- A production generic Costco request selected `Costco Wholesale` despite the
+  tire center appearing first in Google's raw results. Explicit follow-ups for
+  the Costco tire center and Costco gas selected `tire_shop` and `gas_station`
+  records respectively. Both reused the raw `Costco` cache: all three requests
+  consumed one Text Search call total.
 
 ## Non-goals / later
 
