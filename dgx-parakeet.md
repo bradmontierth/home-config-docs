@@ -226,7 +226,13 @@ false). Max 500 phrases, 200 chars each.
 
 Current profiles: `default` (legacy `["dbt"]`, used by clients that don't send
 `client=` yet), `work` (Windows dictation + STT keyboard terms), `kitchen`
-(voice assistant: music/kid names + home-command aliases + timer phrases).
+(voice assistant: music/kid names + home-command aliases + timer phrases),
+`notes-brad` / `notes-adrienne` (voice-notes app, per user; empty = biasing
+off for that client, delete = fall back to `default`).
+
+**Web editor:** `http://192.168.10.187:8090/bias/ui` (homepage → Home
+Automation → "Bias Profiles"). One phrase per line; save/create/delete
+profiles; shows which worker currently holds which list.
 
 Legacy endpoints kept for compatibility — they now read/write the `default`
 profile instead of broadcasting to workers:
