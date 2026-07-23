@@ -26,7 +26,7 @@ async def transcribe(wav_bytes: bytes) -> str:
     async with httpx.AsyncClient(timeout=30) as client:
         r = await client.post(
             config.ASR_URL,
-            params={"chunk_seconds": 300, "context_seconds": 2},
+            params={"chunk_seconds": 300, "context_seconds": 2, "client": config.ASR_CLIENT},
             content=wav_bytes,
             headers={"Content-Type": "audio/wav"},
         )

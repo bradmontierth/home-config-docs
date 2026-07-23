@@ -12,6 +12,9 @@ import os
 # --- downstream services ---------------------------------------------------
 # Parakeet ASR (GX10): batch transcribe, raw WAV body, ?chunk/context params.
 ASR_URL = os.getenv("ASR_URL", "http://192.168.10.187:8090/parakeet/transcribe")
+# Named bias profile on the GX10 (per-client phrase biasing); the server falls
+# back to its "default" profile if the name doesn't exist.
+ASR_CLIENT = os.getenv("ASR_CLIENT", "kitchen")
 # qwen3-next LLM (GX10), OpenAI-compatible; respects enable_thinking=false.
 LLM_URL = os.getenv("LLM_URL", "http://192.168.10.187:8095/v1/chat/completions")
 LLM_MODEL = os.getenv("LLM_MODEL", "qwen3-next")

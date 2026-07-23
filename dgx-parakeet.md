@@ -193,20 +193,52 @@ GET /jobs/{job_id}/artifacts/benchmark.txt
 GET /jobs/{job_id}/artifacts/run.log
 ```
 
-## Phrase Biasing
+## Phrase Biasing (per-client profiles)
 
-These calls broadcast to all resident workers.
+Since 2026-07-22 biasing is **per-client**: the API stores named profiles
+(`/state/bias_profiles.json` on the GX10) and lazily applies the right one to
+whichever resident worker serves each request. Clients select a profile with
+`?client=<name>` on `/parakeet/transcribe`, `/parakeet/stream`, and the
+realtime WebSocket (job API: `client.bias_profile` or `client.name`). Unknown
+or absent client → the `default` profile. Worker selection is sticky (a client
+tends to land on a worker already holding its list), so decoder rebuilds are
+rare after warm-up.
+
+Profile CRUD:
 
 ```http
-GET /parakeet/bias
-POST /parakeet/bias
-DELETE /parakeet/bias
+GET /parakeet/bias/profiles          # list all profiles
+GET /parakeet/bias/{name}            # one profile + signature
+POST /parakeet/bias/{name}           # create/replace
+DELETE /parakeet/bias/{name}         # remove (client falls back to default)
 ```
-
-Example:
 
 ```bash
-curl -X POST 'http://192.168.10.187:8090/parakeet/bias' \
+curl -X POST 'http://192.168.10.187:8090/parakeet/bias/work' \
   -H 'Content-Type: application/json' \
-  -d '{"enabled":true,"phrases":["dbt","Tuva Project"],"use_triton":false}'
+  -d '{"phrases":["dbt","Tuva Project","the Tuva data model"]}'
 ```
+
+Body fields: `phrases` (required list), plus optional `enabled`, `strategy`
+(`greedy|greedy_batch|malsd_batch|maes_batch`), `alpha`, `context_score`,
+`depth_scaling`, `use_triton` (defaults: enabled, greedy_batch, 1.0, 1.0, 2.0,
+false). Max 500 phrases, 200 chars each.
+
+Current profiles: `default` (legacy `["dbt"]`, used by clients that don't send
+`client=` yet), `work` (Windows dictation + STT keyboard terms), `kitchen`
+(voice assistant: music/kid names + home-command aliases + timer phrases).
+
+Legacy endpoints kept for compatibility — they now read/write the `default`
+profile instead of broadcasting to workers:
+
+```http
+GET /parakeet/bias      # profiles + live per-worker bias states
+POST /parakeet/bias     # edits the default profile
+DELETE /parakeet/bias   # clears the default profile
+```
+
+Transcribe responses include `summary.bias_profile` and `summary.bias_applied`.
+
+Note: the GX10 server code is at `dgx:/home/pi/gx10-parakeet-asr/` (git repo
+since 2026-07-22, no remote yet). The realtime-WebSocket "Windows realtime
+mode" above is aspirational — the Windows LocalDictate app is batch-only today.
