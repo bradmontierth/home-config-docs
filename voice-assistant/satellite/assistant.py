@@ -61,6 +61,15 @@ SOUNDS_DIR = Path(os.getenv("SOUNDS_DIR", "/home/pi/voice-pipeline/sounds"))
 DATA_DIR = Path(os.getenv("DATA_DIR", "/home/pi/voice-pipeline/data"))
 HTTP_PORT = int(os.getenv("HTTP_PORT", "8781"))
 START_MODE = os.getenv("MODE", "active")
+# Which satellite this is, sent on /verify and /command/audio so the
+# orchestrator can arbitrate between mics (first verified wake wins the turn;
+# the other satellite is answered suppressed=true and shadow-captures).
+SATELLITE_ID = os.getenv("SATELLITE_ID", "kitchen")
+# Mic-only satellite: when set, ALL our own audio (chime/TTS/alarm/reply) POSTs
+# to this satellite's /play instead of a local aplay — the kitchen box stays
+# the house's one voice. Relay is synchronous: callers time capture and drains
+# off "playback finished", and /play answers only when the sound has played.
+PLAYBACK_RELAY_URL = os.getenv("PLAYBACK_RELAY_URL", "").rstrip("/")
 
 PREROLL_S = float(os.getenv("PREROLL_S", "2.5"))
 # Endpointing VAD. webrtcvad is energy/spectral and useless near steady noise
@@ -235,6 +244,11 @@ STATE = State(START_MODE)
 
 
 # --- HTTP helpers ----------------------------------------------------------
+def sat_path(path: str) -> str:
+    """Tag an orchestrator path with this satellite's identity."""
+    return path + ("&" if "?" in path else "?") + "sat=" + SATELLITE_ID
+
+
 def post_wav(path: str, wav_bytes: bytes, timeout: float = 30) -> dict:
     req = urllib.request.Request(
         ORCH_BASE + path, data=wav_bytes,
@@ -336,8 +350,32 @@ def _play_scaled(wav_bytes: bytes) -> None:
             log(f"aplay bytes failed: {exc}")
 
 
-def play_wav_bytes(wav_bytes: bytes, is_alarm: bool = False) -> None:
+def _play_local(wav_bytes: bytes, is_alarm: bool = False) -> None:
+    """Scale by OUR volume and play on OUR card. The /play endpoint lands here
+    directly so a relayed clip can never bounce back out (no relay loops)."""
     _play_scaled(_scale_wav(wav_bytes, STATE.volume_factor(is_alarm)))
+
+
+def _relay_play(wav_bytes: bytes, is_alarm: bool) -> None:
+    """POST raw (unscaled) WAV to the speaker satellite's /play. It scales with
+    its own volume — the day-mode /volume flow only drives the kitchen box.
+    Synchronous by contract: returns when the audio has finished playing there,
+    so our capture/drain timing works the same as local aplay."""
+    try:
+        req = urllib.request.Request(
+            f"{PLAYBACK_RELAY_URL}/play?alarm={1 if is_alarm else 0}",
+            data=wav_bytes, headers={"Content-Type": "audio/wav"}, method="POST")
+        with urllib.request.urlopen(req, timeout=120) as r:
+            r.read()
+    except Exception as exc:  # noqa: BLE001 — a mute turn beats a crashed one
+        log(f"playback relay failed: {exc}")
+
+
+def play_wav_bytes(wav_bytes: bytes, is_alarm: bool = False) -> None:
+    if PLAYBACK_RELAY_URL:
+        _relay_play(wav_bytes, is_alarm)
+        return
+    _play_local(wav_bytes, is_alarm)
 
 
 def speak_url(url: str) -> None:
@@ -358,6 +396,12 @@ _SOUND_CACHE: dict[tuple[str, int], bytes] = {}
 
 
 def play_file(path: Path, is_alarm: bool = False) -> None:
+    if PLAYBACK_RELAY_URL:
+        try:
+            _relay_play(path.read_bytes(), is_alarm)
+        except OSError as exc:
+            log(f"read sound failed ({path}): {exc}")
+        return
     factor = STATE.volume_factor(is_alarm)
     key = (str(path), round(factor * 1000))
     data = _SOUND_CACHE.get(key)
@@ -648,9 +692,27 @@ def run_turn(preroll_pcm: bytes, stdout, vad, trigger_t0: float) -> None:
     STATE.stats["turns"] += 1
     t_post = time.time()
     try:
-        v = post_wav("/verify", wrap_wav(preroll_pcm))
+        v = post_wav(sat_path("/verify"), wrap_wav(preroll_pcm))
     except Exception as exc:  # noqa: BLE001
         log(f"/verify failed: {exc}")
+        return
+    if v.get("suppressed"):
+        # The other satellite verified this same utterance first and owns the
+        # turn. Stay silent (no chime — the winner already chimed) but capture
+        # the command anyway and post it as a shadow: the logs then show when
+        # THIS mic had the cleaner take (the v2 dual-transcribe decision data).
+        # partials=False — never fight the winner's live captions.
+        log(f"arbitration: suppressed (winner={v.get('winner')}) -> shadow capture")
+        append_event({"type": "verify", "suppressed": True,
+                      "winner": v.get("winner")})
+        cmd_pcm = capture_command(stdout, vad, min_capture_ms=WAKE_MIN_CAPTURE_MS,
+                                  onset_ms=WAKE_ONSET_MS, partials=False)
+        if cmd_pcm:
+            try:
+                post_wav(sat_path("/command/shadow"),
+                         wrap_wav(preroll_pcm + cmd_pcm), timeout=30)
+            except Exception as exc:  # noqa: BLE001
+                log(f"/command/shadow failed: {exc}")
         return
     # Chime-latency instrumentation (speech-end→trigger lives in the clip's
     # trailing silence; these cover trigger→chime): rtt_ms = full /verify round
@@ -699,7 +761,8 @@ def run_turn(preroll_pcm: bytes, stdout, vad, trigger_t0: float) -> None:
         # Long timeout on purpose: a searched ask can run ~60s and the reply
         # audio only exists in this response. Wake detection is paused while we
         # wait (single mic reader) — acceptable; alarms still fire (HTTP thread).
-        resp = post_wav("/command/audio?stitched=1", wrap_wav(preroll_pcm + cmd_pcm),
+        resp = post_wav(sat_path("/command/audio?stitched=1"),
+                        wrap_wav(preroll_pcm + cmd_pcm),
                         timeout=COMMAND_TIMEOUT_S)
     except Exception as exc:  # noqa: BLE001
         log(f"/command/audio failed: {exc}")
@@ -741,7 +804,8 @@ def run_manual_turn(stdout, vad) -> None:
         log("manual turn: no command captured")
         return
     try:
-        resp = post_wav("/command/audio", wrap_wav(cmd_pcm), timeout=COMMAND_TIMEOUT_S)
+        resp = post_wav(sat_path("/command/audio"), wrap_wav(cmd_pcm),
+                        timeout=COMMAND_TIMEOUT_S)
     except Exception as exc:  # noqa: BLE001
         log(f"manual /command/audio failed: {exc}")
         return
@@ -785,7 +849,7 @@ def run_followups(stdout, vad) -> None:
         if not cmd:
             return                          # quiet window -> conversation over
         try:
-            resp = post_wav("/command/audio?followup=1", wrap_wav(cmd),
+            resp = post_wav(sat_path("/command/audio?followup=1"), wrap_wav(cmd),
                             timeout=COMMAND_TIMEOUT_S)
         except Exception as exc:  # noqa: BLE001
             log(f"followup /command/audio failed: {exc}")
@@ -1180,6 +1244,20 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self._json(200, {"ok": media_play(url)})
         elif self.path == "/media/stop":
             media_stop()
+            self._json(200, {"ok": True})
+        elif self.path.partition("?")[0] == "/play":
+            # Playback relay target: a mic-only satellite (family room) POSTs
+            # its chime/TTS/reply WAV here so this box stays the house's one
+            # voice. Scaled by OUR volume; responds only after playback ends
+            # (the relayer's turn timing depends on it). Each request occupies
+            # one ThreadingHTTPServer thread — fine at this call rate.
+            n = int(self.headers.get("Content-Length", 0) or 0)
+            body = self.rfile.read(n) if n else b""
+            if not body:
+                self._json(400, {"ok": False, "error": "wav body required"})
+                return
+            is_alarm = "alarm=1" in self.path.partition("?")[2]
+            _play_local(body, is_alarm)
             self._json(200, {"ok": True})
         elif self.path == "/trigger":
             if STATE.get_mode() != "active":

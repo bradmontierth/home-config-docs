@@ -42,6 +42,17 @@ SATELLITE_ALARM_DISMISS_URL = os.getenv(
     SATELLITE_ALARM_URL + "/dismiss" if SATELLITE_ALARM_URL else "",
 )
 
+# Forward target for the family-room satellite's playback relay: that box
+# lives on the 40.x VLAN, which can reach this orchestrator but NOT the
+# kitchen satellite directly (inter-VLAN firewall), so it POSTs
+# /satellite/play here and we forward. Derived from SATELLITE_ALARM_URL so
+# one env var moves the whole kitchen box.
+SATELLITE_PLAY_URL = os.getenv(
+    "SATELLITE_PLAY_URL",
+    SATELLITE_ALARM_URL[: -len("/alarm")] + "/play"
+    if SATELLITE_ALARM_URL.endswith("/alarm") else "",
+)
+
 # Voice Notes companion (Beelink :8768) — fans a push notification to every
 # registered household phone. Used for unattended-timer escalation. Empty
 # string disables the call.
@@ -185,6 +196,14 @@ WAKE_FUZZ_THRESHOLD = float(os.getenv("WAKE_FUZZ_THRESHOLD", "80"))
 # phrase itself takes ~0.8-1.0s and stage-1 can fire slightly before it ends,
 # so keep >= 1.5; 0 disables.
 VERIFY_TAIL_S = float(os.getenv("VERIFY_TAIL_S", "1.5"))
+
+# --- multi-satellite wake arbitration --------------------------------------
+# Two mics hear the same "okay computer": the first satellite whose wake
+# VERIFIES claims the turn; /verify calls from any OTHER satellite inside this
+# window are answered suppressed=true (they shadow-capture instead of chiming).
+# Both mics trigger within ~1s of each other, so the window only needs to
+# cover verify skew plus margin — NOT the whole turn.
+ARB_SUPPRESS_S = float(os.getenv("ARB_SUPPRESS_S", "3"))
 
 # --- timers ----------------------------------------------------------------
 DB_PATH = os.getenv("ORCH_DB_PATH", "/home/pi/voice-orchestrator/data/orchestrator.db")

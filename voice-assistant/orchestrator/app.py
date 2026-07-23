@@ -25,6 +25,7 @@ import time
 import uuid
 import wave
 
+import httpx
 from fastapi import Body, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse
 
@@ -121,6 +122,31 @@ def session_context() -> str | None:
     if not _SESSION["summary"] or time.time() - _SESSION["ts"] > SESSION_TTL_S:
         return None
     return _SESSION["summary"]
+
+
+# --------------------------------------------------------------------------
+# wake arbitration (two satellites, one house)
+# --------------------------------------------------------------------------
+# First VERIFIED wake wins the turn (deterministic: arrival order at this
+# single-threaded event loop); the loser is told suppressed=true and shadow-
+# captures. Built-in correctness during music: the drowned kitchen mic fails
+# verify, so the far family-room mic wins by default, not by racing. Checked
+# twice per /verify — at entry (cheap, skips ASR when the race is already
+# lost) and again after our own ASR verifies (the other mic may have finished
+# verifying while ours was decoding).
+_ARB = {"sat": None, "until": 0.0}
+
+
+def _arb_holder(sat: str) -> str | None:
+    """The OTHER satellite currently holding the turn, if any."""
+    if _ARB["sat"] and _ARB["sat"] != sat and time.time() < _ARB["until"]:
+        return _ARB["sat"]
+    return None
+
+
+def _arb_claim(sat: str) -> None:
+    _ARB["sat"] = sat
+    _ARB["until"] = time.time() + config.ARB_SUPPRESS_S
 
 
 # --------------------------------------------------------------------------
@@ -715,7 +741,7 @@ def _wav_tail(wav: bytes, seconds: float) -> bytes | None:
 
 
 @app.post("/verify")
-async def verify_wake(request: Request) -> dict:
+async def verify_wake(request: Request, sat: str = "kitchen") -> dict:
     """Phase 1: stage-2 verification on the pre-roll (wake phrase audio only).
     Fast path so the satellite can chime the instant the wake word is confirmed,
     then start capturing the command. `command` is any speech already trailing
@@ -730,6 +756,13 @@ async def verify_wake(request: Request) -> dict:
     if not wav:
         raise HTTPException(400, "empty audio body")
     t0 = time.time()
+    winner = _arb_holder(sat)
+    if winner:
+        # Race already lost — don't burn an ASR decode (it's the same
+        # utterance the winner just verified) and don't double the dashboard
+        # badge events. The satellite shadow-captures on this response.
+        log.info("verify sat=%s suppressed (winner=%s)", sat, winner)
+        return {"verified": False, "suppressed": True, "winner": winner}
     # Fire-and-forget: this POST to the dashboard sat serially BEFORE the ASR
     # call, putting a cosmetic badge (with a 4s timeout tail) on the chime path.
     asyncio.create_task(events.emit("verifying"))
@@ -746,8 +779,16 @@ async def verify_wake(request: Request) -> dict:
             if t_verified:
                 verified, command, score = t_verified, t_command, t_score
                 transcript, decode = tail_transcript, "tail"
-    log.info("verify transcript=%r verified=%s score=%s decode=%s",
-             transcript, verified, score, decode)
+    log.info("verify sat=%s transcript=%r verified=%s score=%s decode=%s",
+             sat, transcript, verified, score, decode)
+    if verified:
+        winner = _arb_holder(sat)
+        if winner:
+            # The other mic's verify completed while our ASR ran. Its events
+            # already drove the dashboard; go quiet.
+            log.info("verify sat=%s suppressed post-ASR (winner=%s)", sat, winner)
+            return {"verified": False, "suppressed": True, "winner": winner}
+        _arb_claim(sat)
     await events.emit("wake_confirmed" if verified else "wake_rejected",
                       score=score, transcript=transcript)
     return {
@@ -759,7 +800,7 @@ async def verify_wake(request: Request) -> dict:
 
 @app.post("/command/audio")
 async def command_audio(request: Request, followup: bool = False,
-                        stitched: bool = False) -> dict:
+                        stitched: bool = False, sat: str = "kitchen") -> dict:
     """Phase 2: the captured command utterance. Transcribe + act. No wake check —
     /verify already gated this turn. `followup=1` marks a continued-conversation
     turn (no wake word): background speech is dropped silently. `stitched=1`
@@ -771,6 +812,7 @@ async def command_audio(request: Request, followup: bool = False,
         raise HTTPException(400, "empty audio body")
     t0 = time.time()
     transcript = await clients.transcribe(wav)
+    log.info("command sat=%s followup=%s transcript=%r", sat, followup, transcript)
     if stitched and transcript:
         wake_found, command, _ = verify.verify_and_extract(transcript)
         if wake_found:
@@ -790,6 +832,49 @@ async def command_audio(request: Request, followup: bool = False,
     result["transcript"] = transcript
     result["latency_ms"] = round((time.time() - t0) * 1000)
     return result
+
+
+@app.post("/satellite/play")
+async def satellite_play(request: Request, alarm: int = 0) -> dict:
+    """Playback-relay proxy. The family-room satellite POSTs its chime/TTS
+    WAV here (it can't reach the kitchen box across the VLAN firewall) and we
+    forward to the kitchen satellite's /play. Synchronous end-to-end: this
+    responds when the audio has finished playing in the kitchen, because the
+    relayer times its capture/drains off playback completion."""
+    if not config.SATELLITE_PLAY_URL:
+        raise HTTPException(503, "no satellite play target configured")
+    wav = await request.body()
+    if not wav:
+        raise HTTPException(400, "empty audio body")
+    try:
+        async with httpx.AsyncClient(timeout=120) as client:
+            r = await client.post(
+                config.SATELLITE_PLAY_URL, params={"alarm": alarm},
+                content=wav, headers={"Content-Type": "audio/wav"})
+        r.raise_for_status()
+    except Exception as exc:  # noqa: BLE001 — a mute chime must not 500 the turn
+        log.warning("satellite play relay failed: %s", exc)
+        return {"ok": False}
+    return {"ok": True}
+
+
+@app.post("/command/shadow")
+async def command_shadow(request: Request, sat: str = "unknown") -> dict:
+    """The arbitration LOSER's capture of the utterance the winner is already
+    handling. Transcribe and log only — no intents, no events, no reply. The
+    point is the paper trail: grep 'shadow command' next to the winner's
+    'command sat=' line to see which mic had the cleaner take (the go/no-go
+    data for the v2 dual-transcribe chooser)."""
+    wav = await request.body()
+    if not wav:
+        raise HTTPException(400, "empty audio body")
+    transcript = await clients.transcribe(wav)
+    # Same wake-phrase strip as stitched wake turns, so the two log lines are
+    # directly comparable.
+    wake_found, command, _ = verify.verify_and_extract(transcript)
+    log.info("shadow command sat=%s transcript=%r",
+             sat, command if wake_found else transcript)
+    return {"ok": True, "transcript": transcript}
 
 
 @app.post("/partial")
