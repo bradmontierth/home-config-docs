@@ -138,6 +138,30 @@ Recommended workflow:
 
 Avoid broad full-flow deploys unless the task explicitly requires cross-tab config changes.
 
+## Gotchas (learned 2026-07-22, voice-buttons brighten rework)
+
+- **One-sided `link out` does NOT deliver.** Adding a `link out` on a new tab
+  whose `links` array points at an existing `link in` is silently dead unless
+  the TARGET `link in` node's own `links` array also lists the new `link out`
+  id. Always update both sides (requires deploying the target's tab too).
+- **`PUT /flow/TAB_ID` restarts that tab's nodes** — inject-on-deploy fires,
+  walks/init flows re-run. Never deploy a tab and immediately live-test
+  another flow that shares state with it; wait ~30s for the noise to settle.
+- **Subflow definitions are not addressable via `/flow/:id`** — patch the def
+  node inside a full `GET /flows` → `POST /flows` round trip. And a
+  `Node-RED-Deployment-Type: nodes` deploy does NOT rebuild existing subflow
+  *instances* (they keep stale copies of def internals) nor flush
+  rate-limiter (`delay` node, pauseType `rate`) queues — use a `full` deploy
+  for subflow-def changes.
+- **Rate-limiter queues leak stale state:** a message built before a global
+  changed can emerge seconds later and act on old values. Guards that read
+  globals belong *inside* the subflow/function that acts, not (only) upstream
+  of the queue.
+- **Messages sent into the Global CT repaint walk must carry `payload: {}`** —
+  several old call-service nodes in the walk have input overrides enabled and
+  throw `ValidationError: "data" must be one of [string, object]` on plain
+  string/number payloads.
+
 ## Monitoring And Validation
 
 Check container logs:

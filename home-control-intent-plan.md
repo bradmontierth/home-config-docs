@@ -57,6 +57,22 @@ Plus the three lighting commands, unchanged from the original plan:
 
 Total: 12 blind buttons + 3 lighting buttons = 15. Naming convention `button.voice_*` (via discovery `object_id`) so the voice-exposed surface is greppable in HA.
 
+## Brighten rework — as built (2026-07-22 evening, Brad's staged design)
+
+Old brighten (link into the Pico cabinet path) was a live no-op: the Pico "increment 50" floors to BriCurve, and in the evening the cabinets already sit AT BriCurve — plus the cross-tab link-out **never delivered at all** (one-sided `link out` — see gotchas in `nodered-flow-agent-guide.md`; this also means the original lights_normal repaint had been a silent no-op).
+
+New behavior (all in Node-RED "Voice Buttons" tab, `brighten stage 1/2` function):
+- **Press 1:** cabinets **+50pp** from current (HA `api-current-state`), fixture **both sides +50pp** from current combined level (mega calc's `kitchenfixture_levels` global), **cans ON at 50%**. Sets `BriCurveAdj`/`BriCurveDisable` (house override holds cabinets + all while-on kitchen strips), new global **`FixtureBriAdj`** (fixture boost level), `fixtureBothOverride=true`, `KitchenBrightenStage=1`; fires the Global CT repaint; starts a 90-min stoptimer.
+- **Press 2 (within the window):** everything to 100 (cabinets/fixture/cans), timer restarts, stage=2.
+- **Return:** timer expiry or `lights_normal` → `brighten reset`: stage 0, `FixtureBriAdj` cleared, BriCurve override released, `fixtureBothOverride=false`, cans OFF, repaint restores circadian (fixture returns to the normal evening top-only blend).
+
+Making the fixture boost SURVIVE took guards in three places (the fixture has multiple competing writers; each was found by catching a live revert ~5s after boost):
+1. Update CT tab: the 2 fixture `build values` use `FixtureBriAdj || BriCurve`; `both/top` forces the both-sides branch while boosted; **`Global CT In` link-in now lists the voice tab's link-out** (the one-sided-link fix).
+2. Kitchen Motion tab: motion path `build values` (af03d9…) stands down during boost; the two both-sides `build values` use the boost level.
+3. Subflow defs `272ada…` ("build api request top") and `766751e…` **"Kitchen Fixture Dynamic"** (evening top-only driver, `inputValue <= 8` → top-only): both return null while `FixtureBriAdj` is set. Deployed via full `/flows` deploy (nodes-type doesn't rebuild subflow instances; rate-limiter queues also leak stale pre-boost messages — the def-level guard is what finally held).
+
+Verified live 2026-07-22 ~21:10: stage-1 boost held both sides at target through motion and a 5-min repaint tick; stage-2 goes to 100; normal restores everything. Repaint trigger payloads are `{}` (strings tripped ValidationError on old walk nodes with input overrides). Flows backups: `flows.json.backup_before_brighten_rework_*`, `backup_before_topsubflow_guard_*`, `kitchen-motion-tab.backup_before_boost_guards_*`.
+
 ## Phase 1 — as built (2026-07-22)
 
 Tab **"Voice Buttons" `294429bac2b766ff`** (node ids `cafe*`; flows backup `flows.json.backup_before_voice_buttons_*`). Deviations/discoveries vs the plan below:
