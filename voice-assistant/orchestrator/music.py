@@ -438,7 +438,24 @@ async def play(query: str | None, media_type: str | None = None) -> dict:
         log.warning("library resolver failed, falling back to search: %s", exc)
     if sel is None:
         via = "search"
-        results = await client.music.search(query, media_types=SEARCH_TYPES, limit=10)
+        try:
+            results = await client.music.search(query, media_types=SEARCH_TYPES,
+                                                limit=10)
+        except Exception as exc:  # noqa: BLE001
+            # MA search dies whole even when only ONE provider is sick — its
+            # recurring Spotify token-refresh bug (KeyError 'refresh_token')
+            # was killing plays of music we own. Same relaxed-floor gamble as
+            # below: most plays are library music, so a plausible owned match
+            # beats refusing to play anything.
+            log.warning("MA search failed (%s) — trying relaxed library match", exc)
+            try:
+                sel = await _resolve_library(query, media_type, relaxed=True)
+            except Exception:  # noqa: BLE001 — fallback is best-effort
+                sel = None
+            if sel is None:
+                raise
+            via = "library-relaxed-searchdown"
+    if sel is None:
         pick = _rank(query, results, media_type)
         if pick is None:
             raise LookupError(f"no results for {query!r}")
