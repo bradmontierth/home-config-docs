@@ -934,11 +934,14 @@ def music_state() -> dict:
 @app.post("/transcribe")
 async def transcribe_audio(request: Request) -> dict:
     """Raw transcription (no intent). Used by the satellite to listen for a
-    'stop' barge-in while an alarm is ringing."""
+    'stop' barge-in while an alarm is ringing. Optional ?client= picks the
+    GX10 bias profile (satellites send kitchen-alarm for ring windows so
+    'stop' isn't competing with 102 music/command phrases for bias weight)."""
     wav = await request.body()
     if not wav:
         raise HTTPException(400, "empty audio body")
-    return {"transcript": await clients.transcribe(wav)}
+    client_name = request.query_params.get("client") or None
+    return {"transcript": await clients.transcribe(wav, client_name)}
 
 
 @app.post("/command")

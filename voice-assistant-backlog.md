@@ -76,6 +76,31 @@ rule, deliberately). Matcher unit-tested on-device. **Defer** the trained
 "stop" wake-word model (viable via the livekit pipeline; only if this still
 misses). Live test pending: set a timer, say "stop" ONCE while it rings.
 
+**Round 2 (2026-07-23/24, Adrienne verdict "bad feature" — 3 tries):** root
+cause is acoustic: the 2.5s window always contains beep audio (gap is only
+2.0s), and Parakeet mangles masked "stop" ("stay"/"banned"). Three fixes:
+1. `kitchen-alarm` GX10 bias profile (16 stop/cancel phrases) on ring-window
+   transcribes via orchestrator `/transcribe?client=` + `ALARM_ASR_CLIENT`.
+   First live ring after: ~2nd-try dismiss, zero mangled fragments.
+2. Trained "stop" livekit-wakeword model (un-deferred): okay_computer recipe
+   + 400 alarm-ring background clips (real themes at 2.0s gap cadence, 30%
+   with cached TTS announcements over top) + target_fp_per_hour 0.5. Synth
+   eval recall 89.6% / FPPH 0.93 @ threshold 0.5. Satellite scores it every
+   224ms ONLY in the alarm branch (zero idle cost; replaces wake scoring, so
+   ring CPU ≈ idle CPU); fires the same STATE.dismiss; ASR path kept for
+   cancel/turn-it-off; scores ≥0.2 logged for threshold tuning
+   (STOP_MODEL_PATH/STOP_THRESHOLD/STOP_HOP_MS envs). DEPLOYED both
+   satellites 2026-07-24. On-device bench: ring-only peak 0.038, ring+"stop"
+   0.99 — the alarm can't self-trigger the model.
+3. **Coffee self-dismiss bug (2026-07-24 morning):** `_dismiss_in`'s
+   `w.strip() in t` reduced `" off"` to bare substring "off", which matched
+   c-OFF-ee — the announcement "Your coffee timer is done" dismissed its own
+   alarm on the first window. Fixed: word-start regex matching (keeps
+   stopped/cancelled), "off" exact-word (office/offer don't match),
+   punctuation normalized ("Okay, computer." now matches too). Unit-tested.
+Live test pending: a ringing timer dismissed on ONE "stop", ideally by
+Adrienne.
+
 ## 8. Long ask answered on screen but never spoke — P1, FIXED+DEPLOYED 2026-07-09
 
 **Symptom (Brad, 2026-07-09 ~17:21):** asked for the France World Cup score;
@@ -570,3 +595,64 @@ skew can't keep the alarm ringing, and the kiosk's alarm path no longer
 hardcodes the satellite IP (SATELLITE_URL remains only for the mic button +
 wake review). Proxy path e2e-verified live; kiosk reloaded (finger tap on a
 real ringing card still pending).
+
+## Broadcast / intercom to whole-home audio ("tell Simon to come eat") — DESIGNED 2026-07-23, not built
+
+**Use case (Brad):** kid is upstairs, Brad is at the kitchen satellite —
+"tell Simon to come eat dinner" plays the message on Simon's room's
+snapclient; "tell the kids it's time to eat" (or no target) plays on all
+five whole-home audio rooms.
+
+**Delivery goes through Node-RED, NOT Music Assistant.** The snapclients
+are finicky via MA and the working path already lives in a Node-RED
+subflow with two hard-won workarounds that must not be reimplemented:
+(1) ~2s of silence appended to every clip because snapserver sync cuts
+the tail off (known bug); (2) pseudo amp-state tracking — if a room
+hasn't been pinged in ~15 min the amp is in standby, so a known chime
+with enough dB is prepended to wake it reliably. That chime doubles as
+the attention-getting earcon before the message.
+
+**Pipeline:**
+1. New `broadcast` intent in intent.py (LLM parse) → `{message, target?}`.
+2. TTS via existing `clients.synthesize` → WAV into `ANNOUNCE_CACHE_DIR`,
+   served over the existing orchestrator media route (same as timer
+   announcement WAVs).
+3. Orchestrator publishes ONE MQTT message (e.g. `voice/broadcast`) with
+   JSON payload `{"rooms": ["simon"] | "all", "url": "http://…/….wav"}`.
+   Decided over per-room HA buttons (Brad agreed 2026-07-23): buttons are
+   stateless and can't carry the arbitrary message URL; one topic +
+   payload also means adding a room is a lookup-table edit, not a new
+   flow.
+4. New Node-RED tab: subscriber resolves rooms → snapclient devices and
+   fans out into the existing padding/amp-wake subflow (per-room or the
+   full-array path for "all").
+5. Kitchen satellite speaks a short confirm ("Sent to Simon's room" /
+   "Broadcasting upstairs").
+
+**Intent parse rules (few-shot in intent.py):**
+- Primary trigger is "tell <name/group> …"; "broadcast …" and
+  "announce …" map to the same intent.
+- Reported → direct speech: "tell Simon to come eat dinner" broadcasts
+  "Simon, come eat dinner", never the literal "to come eat dinner".
+- "tell me …" is NEVER broadcast (joke/weather/ask stay where they are) —
+  the discriminator is the target; few-shot both directions.
+- Room resolution reuses the home_control pattern: fuzz.ratio ≥80 against
+  a hot-reloadable alias table (per-kid names + group aliases "the kids"/
+  "everyone"/"the boys" → all), editable from the phone alias editor.
+- Fallback: no target OR near-miss on a known name → all rooms; a
+  completely unknown target ("tell Grandma happy birthday") still goes to
+  all but the confirm says so ("I don't know Grandma's room, sent it
+  everywhere") — never silently pretend it matched.
+- Add the kids' names to the kitchen parakeet bias profile — room targets
+  are exactly the proper nouns ASR mangles.
+
+**Optional layer on top:** real dashboard/phone buttons for canned
+messages (a "Dinner time" button publishing a pre-rendered WAV to
+`rooms: all`) — buttons for humans, topic-with-payload for the
+orchestrator.
+
+**Open items at build time:** confirm idle per-room snapclient volumes
+are sane; pick the MQTT topic + room→device lookup-table home (Node-RED
+flow context vs. file). v2 idea (deferred): intercom mode replaying
+Brad's actual captured voice instead of TTS — more attention-grabbing,
+but trimming wake phrase + "tell Simon" prefix from the clip is fiddly.

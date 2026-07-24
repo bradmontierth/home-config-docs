@@ -20,13 +20,16 @@ log = logging.getLogger("orchestrator.clients")
 _THINK_RE = re.compile(r"<think>.*?</think>", re.DOTALL)
 
 
-async def transcribe(wav_bytes: bytes) -> str:
+async def transcribe(wav_bytes: bytes, client_name: str | None = None) -> str:
     """Parakeet batch transcription. Body is raw WAV; returns transcript text
-    ("" on silence — GX10 returns a Hypothesis(...) repr for silent audio)."""
+    ("" on silence — GX10 returns a Hypothesis(...) repr for silent audio).
+    `client_name` overrides the bias profile (e.g. the stop-heavy alarm
+    profile for ring-window listening); default is the kitchen profile."""
     async with httpx.AsyncClient(timeout=30) as client:
         r = await client.post(
             config.ASR_URL,
-            params={"chunk_seconds": 300, "context_seconds": 2, "client": config.ASR_CLIENT},
+            params={"chunk_seconds": 300, "context_seconds": 2,
+                    "client": client_name or config.ASR_CLIENT},
             content=wav_bytes,
             headers={"Content-Type": "audio/wav"},
         )

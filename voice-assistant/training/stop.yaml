@@ -1,0 +1,71 @@
+# Wake word: "stop" — alarm-dismiss barge-in model, NOT a stage-1 wake head.
+# Runs ONLY while an alarm is ringing (satellite alarm loop), so the false-
+# positive budget is far looser than okay_computer/okay_google. Mirrors the
+# okay_computer.yaml bakeoff-winner recipe with two deliberate changes:
+#   1. /work/data/alarm_backgrounds (400 clips, ~15% of background draws):
+#      the real theme WAVs looped at the deployed 2.0s ALARM_GAP_S cadence,
+#      30% with cached TTS announcements overlaid — trains "stop" under the
+#      exact masker it must punch through (ASR provably can't, 2026-07-23).
+#   2. target_fp_per_hour relaxed 0.1 -> 0.5: recall matters more here; the
+#      runtime threshold is chosen at the satellite anyway.
+# "stops"/"stopped"/"stay" deliberately NOT negatives — under ring masking a
+# real "stop" can smear into those; suppressing them would suppress the user
+# (same reasoning as keeping "hey google" out of okay_google negatives).
+model_name: stop
+target_phrases: ["stop", "stop it", "stop the timer"]
+
+n_samples: 25000
+n_samples_val: 5000
+n_background_samples: 2000
+n_background_samples_val: 500
+tts_batch_size: 32
+
+# Adversarial negatives: onset/rhyme neighbors likely in kitchen talk.
+custom_negative_phrases:
+  - "top"
+  - "the top"
+  - "on top"
+  - "pop"
+  - "shop"
+  - "chop"
+  - "drop"
+  - "hop"
+  - "stock"
+  - "the stove"
+  - "step"
+  - "stuff"
+  - "spot"
+  - "soup"
+  - "hot pot"
+  - "step it up"
+
+noise_scales: [0.98]
+noise_scale_ws: [0.98]
+length_scales: [0.75, 1.0, 1.25]
+slerp_weights: [0.2, 0.35, 0.5, 0.65, 0.8]
+
+data_dir: /work/data
+output_dir: /work/output/stop
+
+augmentation:
+  clip_duration: 2.0
+  batch_size: 16
+  rounds: 3
+  background_paths: [/work/data/backgrounds, /work/data/alarm_backgrounds]
+  rir_paths: [/work/data/rirs]
+
+model:
+  model_type: conv_attention
+  model_size: medium
+
+steps: 100000
+learning_rate: 0.0001
+weight_decay: 0.01
+label_smoothing: 0.05
+max_negative_weight: 3000
+target_fp_per_hour: 0.5
+
+batch_n_per_class:
+  positive: 50
+  adversarial_negative: 50
+  ACAV100M_sample: 1024

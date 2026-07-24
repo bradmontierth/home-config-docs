@@ -158,6 +158,19 @@ DISMISS_WORDS = ("stop", "cancel", "okay computer", "ok computer",
 # Fuzzy singles for when Parakeet mangles a word over the ringing ("stopp",
 # "stahp"). Matched per-token at ≥0.8 SequenceMatcher ratio, len≥3.
 DISMISS_FUZZY = ("stop", "cancel", "dismiss", "enough", "quiet")
+# GX10 bias profile for ring-window transcribes: a stop-heavy phrase list so
+# "stop" under the alarm masker decodes as stop, not "top"/"banned"/"stay".
+ALARM_ASR_CLIENT = os.getenv("ALARM_ASR_CLIENT", "kitchen-alarm")
+# Trained "stop" barge-in model (livekit-wakeword, augmented with the alarm
+# themes as background noise). Scored ONLY inside the alarm branch of the main
+# loop — zero cycles when nothing is ringing, and it replaces (not adds to)
+# the idle wake scoring, so ring-time CPU ≈ idle CPU. Missing file = ASR-only
+# dismiss, so deploy order stays flexible. Scores ≥ STOP_LOG_THRESHOLD are
+# logged for threshold tuning against real rings.
+STOP_MODEL_PATH = os.getenv("STOP_MODEL_PATH", "/home/pi/wake-bench/stop.onnx")
+STOP_THRESHOLD = float(os.getenv("STOP_THRESHOLD", "0.5"))
+STOP_HOP_MS = int(os.getenv("STOP_HOP_MS", "224"))
+STOP_LOG_THRESHOLD = float(os.getenv("STOP_LOG_THRESHOLD", "0.2"))
 
 SAMPLE_RATE = 16000
 FRAME_SAMPLES = 512
@@ -877,12 +890,21 @@ def run_followups(stdout, vad) -> None:
 
 # --- alarm: playback in a thread, main loop listens continuously -----------
 def _dismiss_in(transcript: str) -> bool:
-    """The alarm sound / announcement never contain these, so no false stops
-    from our own audio. Substring first (matches 'stopped', 'turn it off'),
-    then per-token fuzzy for ringing-mangled words."""
-    t = transcript.lower()
-    if any(w.strip() in t for w in DISMISS_WORDS):
-        return True
+    """Word-start match first (matches 'stopped', 'turn it off'), then
+    per-token fuzzy for ringing-mangled words. Word-START boundary, not plain
+    substring: bare `in` let "off" match inside "cOFFee" and the announcement
+    'Your coffee timer is done' self-dismissed the alarm (2026-07-24). Labels
+    that themselves start with a dismiss word would still self-dismiss —
+    accepted; the announcement never otherwise contains these words.
+    Punctuation is normalized away first ('Okay, computer.' used to miss)."""
+    t = " ".join(re.sub(r"[^\w\s]", " ", transcript.lower()).split())
+    for w in DISMISS_WORDS:
+        w = w.strip()
+        # "off" must match the exact word: as a prefix it hits office/offer.
+        # The rest keep prefix matching (stopped, cancelled, dismissed).
+        pat = rf"\b{re.escape(w)}\b" if w == "off" else rf"\b{re.escape(w)}"
+        if re.search(pat, t):
+            return True
     for tok in re.findall(r"[a-z]+", t):
         if len(tok) < 3:
             continue
@@ -921,7 +943,8 @@ class DismissChecker:
             if pcm is None or STATE.current_alarm is None:
                 continue
             try:
-                t = post_wav("/transcribe", wrap_wav(pcm), timeout=10).get("transcript", "")
+                t = post_wav(f"/transcribe?client={ALARM_ASR_CLIENT}",
+                             wrap_wav(pcm), timeout=10).get("transcript", "")
             except Exception:  # noqa: BLE001
                 continue
             if t.strip():
@@ -1327,6 +1350,14 @@ def main() -> int:
     vad = SileroVad(SILERO_MODEL)
     log(f"Silero VAD loaded ({SILERO_MODEL}, threshold {SILERO_THRESHOLD})")
 
+    stop_model = stop_key = None
+    if Path(STOP_MODEL_PATH).is_file():
+        stop_model = WakeWordModel(models=[STOP_MODEL_PATH])
+        stop_key = list(stop_model.predict(np.zeros(WINDOW_SAMPLES, dtype=np.int16)).keys())[0]
+        log(f"stop barge-in model loaded ({STOP_MODEL_PATH}, threshold {STOP_THRESHOLD})")
+    else:
+        log(f"no stop model at {STOP_MODEL_PATH}; alarm dismiss is ASR-only")
+
     server = http.server.ThreadingHTTPServer(("0.0.0.0", HTTP_PORT), Handler)
     threading.Thread(target=server.serve_forever, daemon=True).start()
 
@@ -1368,17 +1399,24 @@ def main() -> int:
     alarm_window: deque = deque(maxlen=max(1, ALARM_WINDOW_MS // VAD_FRAME_MS))
     alarm_hop_frames = max(1, ALARM_HOP_MS // VAD_FRAME_MS)
     alarm_frames = 0
+    stop_hop_chunks = max(1, STOP_HOP_MS // VAD_FRAME_MS)
+    stop_window = np.zeros(WINDOW_SAMPLES, dtype=np.int16)
+    stop_chunks = 0
 
     while True:
         # while an alarm is ringing (playback runs in its own thread), the main
         # loop listens continuously for a 'stop' barge-in — no wake word needed.
         # Overlapping windows via a rolling buffer; transcription on the
-        # DismissChecker worker so this read cadence never blocks.
+        # DismissChecker worker so this read cadence never blocks. The trained
+        # stop model scores the same audio every ~224ms and dismisses mid-beep;
+        # the ASR path stays as fallback for "cancel"/"turn it off".
         if STATE.current_alarm is not None:
             if not in_alarm:
                 in_alarm = True
                 alarm_window.clear()
                 alarm_frames = 0
+                stop_window = np.zeros(WINDOW_SAMPLES, dtype=np.int16)
+                stop_chunks = 0
             b = arecord.stdout.read(SileroVad.CHUNK * 2)
             if not b or len(b) < SileroVad.CHUNK * 2:
                 log("arecord stream ended; exiting for restart")
@@ -1388,6 +1426,20 @@ def main() -> int:
             if alarm_frames >= alarm_hop_frames and len(alarm_window) >= alarm_hop_frames:
                 alarm_frames = 0
                 DISMISS_CHECKER.offer(b"".join(alarm_window))
+            if stop_model is not None:
+                stop_window = np.concatenate(
+                    [stop_window[SileroVad.CHUNK:], np.frombuffer(b, dtype=np.int16)])
+                stop_chunks += 1
+                if stop_chunks >= stop_hop_chunks:
+                    stop_chunks = 0
+                    s = float(stop_model.predict(stop_window)[stop_key])
+                    if s >= STOP_LOG_THRESHOLD:
+                        log(f"stop-model score={round(s, 3)}")
+                    if (s >= STOP_THRESHOLD and STATE.current_alarm is not None
+                            and not STATE.dismiss.is_set()):
+                        log(f"stop model fired score={round(s, 3)} -> stopping alarm")
+                        append_event({"type": "alarm_stop_model", "score": round(s, 3)})
+                        STATE.dismiss.set()
             continue
         if in_alarm:
             in_alarm = False
