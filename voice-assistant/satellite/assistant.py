@@ -171,6 +171,12 @@ STOP_MODEL_PATH = os.getenv("STOP_MODEL_PATH", "/home/pi/wake-bench/stop.onnx")
 STOP_THRESHOLD = float(os.getenv("STOP_THRESHOLD", "0.5"))
 STOP_HOP_MS = int(os.getenv("STOP_HOP_MS", "224"))
 STOP_LOG_THRESHOLD = float(os.getenv("STOP_LOG_THRESHOLD", "0.2"))
+# Every ring's mic audio is captured to WAV for offline model eval/retraining:
+# the v1 stop model bench-passed on SYNTHETIC ring mixes (0.038) but false-
+# fired at 0.7-0.9 on the REAL first ding through speakers+room+mic
+# (2026-07-24, two self-dismissals). Train/eval on these, not synthetic.
+ALARM_RING_DIR = DATA_DIR / "alarm_rings"
+ALARM_RING_KEEP = int(os.getenv("ALARM_RING_KEEP", "40"))
 
 SAMPLE_RATE = 16000
 FRAME_SAMPLES = 512
@@ -1388,6 +1394,7 @@ def main() -> int:
     guard_until = 0.0
 
     in_alarm = False
+    ring_wav = None
 
     def resync():
         nonlocal window, frames_since_hop, guard_until
@@ -1417,10 +1424,22 @@ def main() -> int:
                 alarm_frames = 0
                 stop_window = np.zeros(WINDOW_SAMPLES, dtype=np.int16)
                 stop_chunks = 0
+                try:
+                    ALARM_RING_DIR.mkdir(parents=True, exist_ok=True)
+                    ring_wav = wave.open(str(
+                        ALARM_RING_DIR / time.strftime("ring-%Y%m%d-%H%M%S.wav")), "wb")
+                    ring_wav.setnchannels(1)
+                    ring_wav.setsampwidth(2)
+                    ring_wav.setframerate(SAMPLE_RATE)
+                except Exception as exc:  # noqa: BLE001
+                    log(f"ring capture open failed: {exc}")
+                    ring_wav = None
             b = arecord.stdout.read(SileroVad.CHUNK * 2)
             if not b or len(b) < SileroVad.CHUNK * 2:
                 log("arecord stream ended; exiting for restart")
                 return 1
+            if ring_wav is not None:
+                ring_wav.writeframes(b)
             alarm_window.append(b)
             alarm_frames += 1
             if alarm_frames >= alarm_hop_frames and len(alarm_window) >= alarm_hop_frames:
@@ -1443,6 +1462,15 @@ def main() -> int:
             continue
         if in_alarm:
             in_alarm = False
+            if ring_wav is not None:
+                try:
+                    ring_wav.close()
+                    keep = sorted(ALARM_RING_DIR.glob("ring-*.wav"))
+                    for old in keep[:-ALARM_RING_KEEP]:
+                        old.unlink()
+                except Exception as exc:  # noqa: BLE001
+                    log(f"ring capture close failed: {exc}")
+                ring_wav = None
             resync()
 
         chunk = arecord.stdout.read(frame_bytes)
