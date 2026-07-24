@@ -101,6 +101,17 @@ cause is acoustic: the 2.5s window always contains beep audio (gap is only
 Live test pending: a ringing timer dismissed on ONE "stop", ideally by
 Adrienne.
 
+**Round 2 result (2026-07-24 13:05): stop model FALSE-FIRED on the real
+first ding** — 0.833/0.729 within 650ms of ring start, two self-dismissals.
+The synthetic bench (ring-only 0.038) did not transfer to speakers + room +
+mic acoustics. Mitigation (85453d1): STOP_THRESHOLD=2.0 in both satellite
+.envs = shadow mode (scores logged, can't fire; bias+ASR dismisses again),
+and every ring's mic audio is now saved to data/alarm_rings/ (keep 40).
+v2 plan: retrain with captured REAL ring audio as backgrounds (replacing or
+augmenting the synthetic clips), eval on captured clips incl. real spoken
+"stop", and only re-arm (threshold from real DET data) after replay proves
+ring-only stays quiet. Never arm on synthetic bench alone.
+
 ## 8. Long ask answered on screen but never spoke — P1, FIXED+DEPLOYED 2026-07-09
 
 **Symptom (Brad, 2026-07-09 ~17:21):** asked for the France World Cup score;
@@ -596,7 +607,7 @@ hardcodes the satellite IP (SATELLITE_URL remains only for the mic button +
 wake review). Proxy path e2e-verified live; kiosk reloaded (finger tap on a
 real ringing card still pending).
 
-## Broadcast / intercom to whole-home audio ("tell Simon to come eat") — DESIGNED 2026-07-23, not built
+## Broadcast / intercom to whole-home audio ("tell Simon to come eat") — BUILT+DEPLOYED 2026-07-24 (loft-verified)
 
 **Use case (Brad):** kid is upstairs, Brad is at the kitchen satellite —
 "tell Simon to come eat dinner" plays the message on Simon's room's
@@ -656,3 +667,69 @@ are sane; pick the MQTT topic + room→device lookup-table home (Node-RED
 flow context vs. file). v2 idea (deferred): intercom mode replaying
 Brad's actual captured voice instead of TTS — more attention-grabbing,
 but trimming wake phrase + "tell Simon" prefix from the clip is fiddly.
+
+**Build record (2026-07-24, deviations from the design above):**
+- **No orchestrator TTS.** Discovery: the existing Amp Speakers subflow
+  (`e711d48f74f78209`) takes TEXT (`msg.alexa`) + `msg.players` (HA
+  media_player entities) + `msg.volume` (0-100) and does its own TTS
+  (tts.openai via HA, voice picard:calm), tail-pad via tts-pad-service
+  :8097, snapclient isolate via home-audio-adapter :8461, and the amp
+  standby wake chime (14-min `wholeHomeAmpLikelyOn` global). So the
+  orchestrator publishes text, not a WAV URL — announce-cache plumbing
+  never needed. It also filters master bedroom when
+  `DisableBedroomAnnouncements`/`adrienneWorkingDisableAnnounce` is set.
+- **Node-RED tab "Voice Broadcast" `e3a9d4391d545738`**: mqtt-in
+  `voice/broadcast` (broker `82f540b7378c2e35`, same as Voice Buttons)
+  → resolve function (canonical keys loft/claire/simon/master/shower →
+  entities, "all"/null → all five, unknown keys warn+skip, fail-closed)
+  → Amp Speakers subflow instance.
+- **Orchestrator** publishes via HA REST `mqtt.publish` (no broker client
+  dep; verified HA → local mosquitto container). New `broadcast.py`:
+  hot-reload alias table `broadcast_rooms.json` (seed in repo, live copy
+  /data, home_commands pattern), fuzz.ratio ≥80, entries carry a rooms
+  LIST so "the kids" → simon+claire; no-target → all (matched), unknown
+  target → all + "I don't know where X is, so I sent it everywhere."
+  intent.py: `broadcast` intent + `broadcast_target` field. app.py:
+  home_control-style dispatch, no ask fallback. 9 unit tests
+  (test_broadcast.py) + home_control regression pass in-image.
+- **Config:** BROADCAST_TOPIC / BROADCAST_ROOMS_FILE / BROADCAST_VOLUME.
+  The volume=10 rollout guard used during the 2026-07-24 build tests was
+  removed same day (Brad: live tests should be regular volume) —
+  BROADCAST_VOLUME is now unset, so broadcasts fall through to Node-RED's
+  defaultSpeakerVolume global (50), exactly like doorbell announcements.
+- **Verified live (loft only, volume 10, per Brad — master bedroom
+  occupied):** raw MQTT → wake chime + padded TTS on Loft (MA log);
+  full /command E2E "tell the loft that this is a voice broadcast test"
+  → intent broadcast, score-100 resolve, played on Loft, confirm "Sent
+  to the loft.", 3.5s. Parse checks: reported→direct rewrite works
+  ("tell simon to come eat dinner" → "Simon, come eat dinner"), "tell
+  me a joke"→ask, "where is simon"→ask. timer_query + weather
+  regressions pass.
+- **Pending:** live-voice test from the kitchen mic; all-rooms live test
+  (deliberately NOT run — bedroom occupied); kid names into the kitchen
+  parakeet bias profile; "adrienne"/"mom" have no room mapping yet
+  (falls back to all) — add to broadcast_rooms.json (/data copy or seed)
+  if she wants master as her default; optional canned-message dashboard
+  buttons.
+
+**Phone app round (2026-07-24, same day):** Brad wants to broadcast when
+not at a satellite; explicit UI beats parsing (a broadcast is an audible
+multi-room side effect — nothing should be inferred). APK chosen over a
+web tile (Brad's call; his F-Droid HTTPS enrollment now CONFIRMED).
+- Orchestrator REST for the app: `GET /broadcast/rooms` (ordered chip
+  list from broadcast_rooms.json — table edits reach the app with no
+  release) + `POST /broadcast {rooms: "all"|[keys], message, volume?}`
+  (validates keys, no fuzzy/no intent parse; 400 unknown rooms, 502
+  publish failure). broadcast.py send()/rooms_list(); 14 unit tests.
+  Deployed + loft-verified (vol-10 courtesy test).
+- Voice Notes app (voice-notes-android 8ffb592, versionCode 1784904218
+  published via publish.sh): fifth tab "Broadcast" — room chips
+  (single-select, All default, prefs-cached fetch + built-in fallback),
+  message box, Send → toast "Sent to <spoken>". Mic button on this tab
+  DICTATES: VoiceRecorder → cache wav → Parakeet with the existing
+  notes-<user> bias profile → fills the message box for review (never
+  auto-sends). Note-recording carried across a tab switch still ends as
+  a note (broadcastDictation flag guards both directions). Orchestrator
+  base in Settings (orch_base pref). Tab bar now five tabs @12sp.
+- **Pending:** on-phone confirmation (F-Droid auto-update or manual pull
+  of voice-notes-latest.apk), then a real away-from-kitchen broadcast.
