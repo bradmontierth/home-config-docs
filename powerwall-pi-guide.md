@@ -42,6 +42,32 @@ telemetry snapshot to the house MQTT broker.
   **`192.168.10.217:1883`** (Beelink mosquitto), QoS 1, retain off,
   client id `pw3-publisher`. A fresh MQTT connection per publish — simple
   and robust against broker restarts.
+- Grid/outage telemetry (added 2026-07-25) comes from the same local
+  `tedapi.get_status()` call and therefore adds no Tesla cloud/API usage.
+  The payload includes `grid_outage`, `grid_ok`, `microgrid_ok`,
+  `grid_contactor_closed`, island/grid states, utility-side and load-side
+  L1/L2 voltages, site/load/solar/battery power, and active control alerts.
+  `grid_outage` is the explicit inverse of TEDAPI's boolean `gridOK`; it is
+  `null` rather than guessed if TEDAPI does not return a boolean.
+- The Docker Node-RED `Tesla` tab (`7fa25727b15db1f0`) converts that payload
+  to MQTT discovery entity **`binary_sensor.powerwall_grid_outage`**.
+  Its state topic is
+  `homeassistant/binary_sensor/pw3/grid_outage/state`; `on` means the utility
+  grid is unavailable and the Powerwall is islanded. The state is refreshed
+  every poll and has `expire_after: 60`, so stale telemetry becomes
+  `unavailable` instead of silently claiming that grid power is healthy.
+  Island/contact/voltage/power/alert details are attached as entity
+  attributes.
+- That same Node-RED tab sends transition-only Pushover notifications through
+  the existing `a3903de6e20b03dc` Pushover configuration. Node
+  `pw_grid_outage_changed` watches the HA binary sensor with
+  `outputInitially: false` and state-change-only output; function
+  `pw_grid_transition_alert` suppresses startup/repeated/unknown/unavailable
+  states. `off -> on` sends a priority-1 **Grid power is out** notification
+  with live voltage/load/solar/battery details. `on -> off` sends a normal
+  **Grid power restored** notification with outage duration when known. A
+  Node-RED deploy during an existing outage does not fabricate a new outage
+  notification.
 
 Ops: `journalctl -u pw3-mqtt -f` on the box; consumer side is whatever
 subscribes to `pw3/telemetry` on the Beelink broker (Node-RED/HA).

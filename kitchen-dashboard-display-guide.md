@@ -174,12 +174,18 @@ Energy / vehicle details:
 
 - Solar live: `sensor.tesla_powerwall_3_pw3_total_solar`
 - Power out live: `sensor.tesla_powerwall_3_pw3_total_power_out`
+- Grid outage: `binary_sensor.powerwall_grid_outage`
 - Solar today: `sensor.solar_powerwall_energy_daily`
 - Usage today: `sensor.daily_home_and_heat_pump_energy`
 - Usage/solar today are quiet sub-details, not Lovelace-style cards.
 - The Powerwall popup treats `sensor.tesla_powerwall_3_pw3_total_power_out`
   as signed flow: positive means discharging/out; negative means charging/in.
   Negative flow is shown as a charging state instead of a reserve forecast.
+- The Energy panel always shows grid telemetry state. During an outage it
+  displays a prominent amber **GRID OUT · POWERWALL BACKUP** pill and adds a
+  subtle amber border/tint to the full panel. Healthy grid service shows a
+  quiet green **Grid connected** pill. Missing/stale telemetry shows
+  **Grid status unavailable** rather than implying that the grid is healthy.
 - Vehicle charge rate is shown in amps because HA exposes current cleanly; kW
   would need an estimate from amps and voltage.
 
