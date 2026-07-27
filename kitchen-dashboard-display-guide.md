@@ -136,6 +136,23 @@ driver that can evaluate JS and dispatch real touch taps/swipes lives in the
 session scratchpad pattern: connect with websocket-client using
 `suppress_origin=True` (chromium 403s unknown WS origins otherwise).
 
+**Screenshotting a page without touching the live display** (learned 2026-07-27):
+`chromium --screenshot` captures *before first paint* on display-pi (you get a blank
+white PNG, exit 0) and `--virtual-time-budget` hangs indefinitely. Drive CDP instead —
+`diagnostics/touchscreen/headless-shot.py` launches its own headless Chromium on port
+9223, navigates, waits, and captures:
+
+```bash
+scp home_config/diagnostics/touchscreen/headless-shot.py display-pi:/tmp/
+ssh display-pi 'python3 /tmp/headless-shot.py "http://192.168.10.217:8777/" /tmp/x.png --wait 8'
+ssh display-pi 'python3 /tmp/headless-shot.py "http://…" /tmp/x.png --click "#apps .app-card:last-child"'
+```
+
+It renders at real kiosk resolution while the visible session keeps running, which is
+what you want for reviewing a layout. `cdp.py` in the same folder is the other tool:
+it attaches to the *live* kiosk on 9222 to evaluate JS. For the live screen itself,
+`grim` still works. Note `websockets` needs `origin=None` or Chromium 403s the socket.
+
 `--password-store=basic` is REQUIRED (learned 2026-07-09): without it Chromium
 may pop a GNOME "choose password for new keyring" dialog and hang before
 loading anything — symptom is zero HTTP traffic from the kiosk and an empty
