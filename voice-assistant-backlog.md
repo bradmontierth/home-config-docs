@@ -1096,3 +1096,61 @@ reopen the mic ~2.5s and stitch, no spoken prompt) would fix it before she
 hears a question at all. That is closer to what Google actually does. Left
 until the spoken re-prompt is proven in the kitchen; it interacts with the
 stitching path and is fiddlier.
+
+---
+
+## Recipe → shopping list ("add chickpea salad to the shopping list for this week") — SCOPED 2026-07-27, not built
+
+**Where this came from:** discussed with Brad 2026-07-27 while building `cookmode`
+(new sidecar, `:8786`, repo `/home/pi/cookmode`) — the display-first recipe view
+that renders stock Mealie on the kitchen kiosk. Brad's framing: this lands during
+weekly planning, and probably as an intent plus a hook in the Voice Notes APK.
+
+**Why it needs ingredient parsing, and why nothing before it did.** The cook view
+only ever needs *display text*, and for that the raw scraped line is strictly
+better than any parse — it keeps "8 to 10", "or regular mayo", "to taste".
+Merging into a shopping list is the first thing that needs *structured*
+quantities: you cannot fold "2 tablespoons tahini" into a list that already has
+tahini without knowing the 2 and the tablespoons. Servings scaling ("make it for
+eight") has the identical dependency, so build the two together.
+
+**Do not use Mealie's own parse.** Its CRF ingredient parser is lossy. Measured
+across this library on 2026-07-27:
+
+| Mealie's parsed `display` | the actual scraped line |
+| --- | --- |
+| `6 basil` | `6 to 8 fresh basil leaves` |
+| `mayo` | `vegan mayo (or regular mayo), for spreading` |
+| `8 kalamata olives` | `8 to 10 Kalamata olives` |
+| `sea salt freshly ground` | `sea salt and freshly ground black pepper` |
+
+It drops ranges, qualifying adjectives (**vegan**, English, soft, fresh), units
+(leaves), and whole ingredients — every "salt and pepper" line became a salt-only
+row, which is what made one recipe look like it had duplicate salt. cookmode now
+renders `originalText` and ignores `display` (cookmode commit `15a522e`). Only 1
+of 15 recipes had ever been through the parser; the rest were imported raw.
+
+**Design when built:**
+
+- Parsing lives in **cookmode**, writing to its own sqlite. Mealie stays stock —
+  same principle as the rest of that service.
+- Local qwen3-next (GX10 `:8095`, free) with vLLM `guided_json` for
+  schema-valid output. Note `guided_json` is still unverified on this endpoint;
+  the enrichment pass deliberately uses prompt-enforced JSON plus a tolerant
+  extractor instead, so try it behind a fallback.
+- **Verification is the point, not model quality.** Ingredient parsing is span
+  extraction: require every extracted field to be a literal substring of the
+  source line, verify it in code, and on mismatch fall back to "add the raw text,
+  unmerged". That converts hallucination from something you hope didn't happen
+  into a detectable, rejectable condition. Same principle as cookmode's
+  enrichment pass, which only ever returns *indices* into the lists it was sent
+  and so structurally cannot invent an ingredient or restate a quantity.
+- Worst case is a slightly dumb list entry, never a wrong quantity.
+- New endpoint on cookmode, e.g. `GET /api/recipes/{slug}/ingredients/parsed`.
+- The orchestrator intent consumes that and adds to the **existing voice-pipeline
+  shopping list**, not Mealie's — Mealie's list is unused here.
+
+**Open questions:** voice→recipe matching ("chickpea salad" → slug) probably wants
+the same fuzzy match `home_control` uses (`fuzz.ratio` 80, not WRatio); merge and
+dedupe rules against items already on the list; unit normalisation (tbsp vs
+tablespoon) before merging.
