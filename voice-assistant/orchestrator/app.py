@@ -36,6 +36,7 @@ from . import music as music_mod
 from . import broadcast as broadcast_mod
 from . import find_phone as phone_mod
 from . import places as places_mod
+from . import speaker as speaker_mod
 from . import sports as sports_mod
 from . import weather as weather_mod
 from . import clients, config, events, format as fmt, intent as intent_mod, verify
@@ -965,6 +966,10 @@ async def command_audio(request: Request, followup: bool = False,
     result = await handle_command(transcript, followup=followup)
     result["transcript"] = transcript
     result["latency_ms"] = round((time.time() - t0) * 1000)
+    # Speaker-ID shadow: score who spoke, log only (config.SPEAKER_MODE).
+    asyncio.create_task(speaker_mod.shadow(
+        wav, transcript, intent_name=result.get("intent"), sat=sat,
+        followup=followup))
     return result
 
 

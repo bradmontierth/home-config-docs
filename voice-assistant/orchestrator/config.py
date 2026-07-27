@@ -279,3 +279,18 @@ SOUND_THEMES = (
 DEFAULT_THEME = "marimba"
 
 HTTP_PORT = int(os.getenv("ORCH_HTTP_PORT", "8785"))
+
+# --- speaker ID (backlog item 9) --------------------------------------------
+# Resident titanet_large embedder on the GX10; profiles are enrollment
+# centroids built by tools/speaker_enroll.py (hot-reloaded on mtime like
+# HOME_COMMANDS_FILE — re-enrolling never needs a restart). Thresholds come
+# from the 2026-07-27 holdout calibration: impostor max 0.248 vs same-speaker
+# min 0.396, so 0.35/0.15 sit inside the gap with room on both sides.
+SPEAKER_EMBED_URL = os.getenv("SPEAKER_EMBED_URL", "http://192.168.10.187:8096/embed")
+SPEAKER_PROFILES_FILE = os.getenv("SPEAKER_PROFILES_FILE", "/data/speaker_profiles.json")
+# shadow = score every command turn and log to SPEAKER_SHADOW_LOG, route
+# nothing. active = person-dependent intents route by voice. off = disabled.
+SPEAKER_MODE = os.getenv("SPEAKER_MODE", "shadow")
+SPEAKER_THRESHOLD = float(os.getenv("SPEAKER_THRESHOLD", "0.35"))
+SPEAKER_MARGIN = float(os.getenv("SPEAKER_MARGIN", "0.15"))
+SPEAKER_SHADOW_LOG = os.getenv("SPEAKER_SHADOW_LOG", "/data/speaker_shadow.jsonl")
