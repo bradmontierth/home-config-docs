@@ -550,6 +550,19 @@ Notes for whenever this gets built:
   the TTS confirmation can name the list owner — cheap trust-building plus
   an audible correction path when it's wrong.
 
+**BUILD STARTED 2026-07-27** — design + phase 1 shipped, see
+`speaker-id-plan.md`. Model = NeMo titanet_large (NOT Tempo's Qwen3 text
+embedder, NOT Sortformer): resident GX10 service `gx10-speaker-embed` on
+:8096 (sortformer image + command override, gx10-parakeet-asr 98a1fa7),
+12-17ms/clip verified on real captures. Labeling page live on beelink
+**:8791** (tools/speaker_label_server.py, nohup; 205 synced clips — 80 cmd
++ 125 verify-ok, 203 with transcripts) — **Brad labels next**, then
+tools/speaker_enroll.py builds centroids + prints threshold calibration →
+voice-pipeline/data/speaker_profiles.json. Orchestrator speaker.py shadow
+wiring after that. Hardware notes: fridge mic move CANCELLED (channel
+stable), family-room satellite down (boot flash corruption, SSD rebuild
+pending) so kitchen-only enrollment for now.
+
 ---
 
 ## Batch 1 live-test results (Brad, 2026-07-09 night)
