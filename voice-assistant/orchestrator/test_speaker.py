@@ -1,10 +1,12 @@
+import asyncio
 import json
 import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from . import config, speaker
+from . import app as app_mod
+from . import config, find_phone, speaker
 
 
 class DecideTest(unittest.TestCase):
@@ -66,6 +68,43 @@ class ProfilesTest(unittest.TestCase):
         path = self._write({"wrong": "shape"})
         with patch.object(config, "SPEAKER_PROFILES_FILE", path):
             self.assertEqual(speaker._profiles(), {})
+
+
+def _resolve_name(result=None, exc=None):
+    """Run app._speaker_name against a task that returns `result` / raises."""
+    async def _go():
+        async def _fake():
+            if exc:
+                raise exc
+            return result
+        return await app_mod._speaker_name(asyncio.create_task(_fake()))
+    return asyncio.run(_go())
+
+
+class SpeakerNameTest(unittest.TestCase):
+    """The lazy await person-dependent handlers rely on."""
+
+    def test_no_task_means_no_owner(self):
+        self.assertIsNone(asyncio.run(app_mod._speaker_name(None)))
+
+    def test_identified_speaker_resolves(self):
+        self.assertEqual(_resolve_name({"speaker": "adrienne", "score": 0.6}),
+                         "adrienne")
+
+    def test_unsure_and_service_down_fall_back(self):
+        self.assertIsNone(_resolve_name({"speaker": "unsure", "score": 0.3}))
+        self.assertIsNone(_resolve_name(None))          # identify() gave up
+        self.assertIsNone(_resolve_name(exc=RuntimeError("gx10 down")))
+
+
+class FindPhoneIsSelfTest(unittest.TestCase):
+    def test_self_phrases(self):
+        for phrase in ("my", "mine", "me", "", None, " My "):
+            self.assertTrue(find_phone.is_self(phrase), phrase)
+
+    def test_named_owners_are_not_self(self):
+        for phrase in ("brad", "adrienne", "mom", "brad's"):
+            self.assertFalse(find_phone.is_self(phrase), phrase)
 
 
 if __name__ == "__main__":

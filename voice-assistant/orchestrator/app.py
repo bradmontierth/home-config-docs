@@ -363,10 +363,30 @@ async def _parse_clarify_reply(clarify: dict, reply: str) -> dict:
         clarify["partial"], reply, clarify["question"])
 
 
-async def handle_command(command: str, followup: bool = False) -> dict:
+async def _speaker_name(speaker_task: asyncio.Task | None) -> str | None:
+    """This turn's voice-identified speaker, or None (text turn, speaker ID
+    not active, service down, or "unsure"). None ALWAYS means today's
+    fallback behavior — identification never guesses."""
+    if speaker_task is None:
+        return None
+    try:
+        ident = await speaker_task
+    except Exception as exc:  # noqa: BLE001 — identification must not break the turn
+        log.warning("speaker task failed: %s", exc)
+        return None
+    if not ident or ident.get("speaker") == "unsure":
+        return None
+    return ident["speaker"]
+
+
+async def handle_command(command: str, followup: bool = False,
+                         speaker_task: asyncio.Task | None = None) -> dict:
     """Parse a command and act on it. Emits thinking/response events; returns a
     structured result. `followup` = a continued-conversation turn (no wake word):
-    parse with session context and drop non-actionable speech silently."""
+    parse with session context and drop non-actionable speech silently.
+    `speaker_task` resolves to speaker.identify() of this turn's audio (only
+    set by /command/audio in active mode); person-dependent handlers await it
+    lazily to route by voice."""
     command = command.strip()
     if not command:
         return {"intent": "none", "response": "I didn't catch that.", "ok": False}
@@ -535,8 +555,9 @@ async def handle_command(command: str, followup: bool = False) -> dict:
                 result["ok"] = False
 
     elif intent in ("add_items", "set_reminder"):
+        owner = await _speaker_name(speaker_task)
         try:
-            added = await lists_mod.add_from_text(command)
+            added = await lists_mod.add_from_text(command, owner=owner)
         except Exception as exc:  # noqa: BLE001
             log.warning("list add failed: %s", exc)
             result["response"] = "Sorry, I couldn't reach the lists service."
@@ -544,6 +565,11 @@ async def handle_command(command: str, followup: bool = False) -> dict:
         else:
             result["added"] = added
             result["response"] = fmt.summarize_added(added)
+            # Name the voice-resolved owner aloud (shopping is household-
+            # shared, so attribution is only worth speaking for the rest):
+            # cheap trust-building plus the audible correction path.
+            if owner and any(i.get("type") != "shopping" for i in added):
+                result["response"] += f" On {owner.title()}'s list."
             result["ok"] = bool(added)
             session_set_added(added)   # enable a follow-up "scratch my last"
             # Pop the list so the kiosk shows the current state, not just the
@@ -716,9 +742,13 @@ async def handle_command(command: str, followup: bool = False) -> dict:
 
     elif intent == "find_phone":
         # No ask fallback (home_control pattern): a find-phone phrase must
-        # never become a web search. "my phone" can't be attributed until
-        # speaker ID (backlog item 9) — ask whose and stash a pending op so
-        # the one-word answer resolves without another parse.
+        # never become a web search. "my phone" resolves from the voice
+        # (speaker ID); below-confidence keeps the ask-whose flow — the
+        # pending op the one-word answer resolves without another parse.
+        if phone_mod.is_self(parsed.get("phone_owner")):
+            owner = await _speaker_name(speaker_task)
+            if owner:
+                parsed = {**parsed, "phone_owner": owner}
         try:
             fp_result = await phone_mod.handle(parsed)
         except Exception as exc:  # noqa: BLE001 — HA down / notify failed
@@ -963,13 +993,25 @@ async def command_audio(request: Request, followup: bool = False,
                 "intent": "none", "silent": followup}
     if not followup:
         await events.emit("transcript", text=transcript)
-    result = await handle_command(transcript, followup=followup)
+    # Speaker ID: in active mode the embed starts now (concurrent with intent
+    # parsing) and person-dependent handlers await it lazily; in shadow mode
+    # the scoring runs entirely off-turn. Either way every turn is logged to
+    # SPEAKER_SHADOW_LOG — the soak data that watches the thresholds.
+    spk_task = None
+    if config.SPEAKER_MODE == "active":
+        spk_task = asyncio.create_task(speaker_mod.identify(wav))
+    result = await handle_command(transcript, followup=followup,
+                                  speaker_task=spk_task)
     result["transcript"] = transcript
     result["latency_ms"] = round((time.time() - t0) * 1000)
-    # Speaker-ID shadow: score who spoke, log only (config.SPEAKER_MODE).
-    asyncio.create_task(speaker_mod.shadow(
-        wav, transcript, intent_name=result.get("intent"), sat=sat,
-        followup=followup))
+    if spk_task is not None:
+        asyncio.create_task(speaker_mod.log_task(
+            spk_task, transcript, intent_name=result.get("intent"), sat=sat,
+            followup=followup))
+    else:
+        asyncio.create_task(speaker_mod.shadow(
+            wav, transcript, intent_name=result.get("intent"), sat=sat,
+            followup=followup))
     return result
 
 

@@ -91,6 +91,23 @@ async def identify(wav: bytes) -> dict | None:
     return result
 
 
+def _append_log(result: dict, transcript: str, intent_name: str | None,
+                sat: str, followup: bool) -> None:
+    record = {
+        "ts": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+        "mode": config.SPEAKER_MODE,
+        "sat": sat,
+        "followup": followup,
+        "transcript": transcript,
+        "intent": intent_name,
+        **result,
+    }
+    with open(config.SPEAKER_SHADOW_LOG, "a", encoding="utf-8") as fh:
+        fh.write(json.dumps(record, ensure_ascii=False) + "\n")
+    log.info("speaker %s: %s score=%s margin=%s %r", config.SPEAKER_MODE,
+             record["speaker"], record["score"], record["margin"], transcript)
+
+
 async def shadow(wav: bytes, transcript: str, intent_name: str | None = None,
                  sat: str = "unknown", followup: bool = False) -> None:
     """Fire-and-forget per-turn scoring in shadow mode. Never raises."""
@@ -98,19 +115,19 @@ async def shadow(wav: bytes, transcript: str, intent_name: str | None = None,
         return
     try:
         result = await identify(wav)
-        if result is None:
-            return
-        record = {
-            "ts": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
-            "sat": sat,
-            "followup": followup,
-            "transcript": transcript,
-            "intent": intent_name,
-            **result,
-        }
-        with open(config.SPEAKER_SHADOW_LOG, "a", encoding="utf-8") as fh:
-            fh.write(json.dumps(record, ensure_ascii=False) + "\n")
-        log.info("speaker shadow: %s score=%s margin=%s %r",
-                 record["speaker"], record["score"], record["margin"], transcript)
+        if result is not None:
+            _append_log(result, transcript, intent_name, sat, followup)
     except Exception as exc:  # noqa: BLE001 — shadow must be invisible to the turn
         log.warning("speaker shadow failed: %s", exc)
+
+
+async def log_task(task, transcript: str, intent_name: str | None = None,
+                   sat: str = "unknown", followup: bool = False) -> None:
+    """Active mode's turn log: reuse the identify() task the handlers already
+    consumed (one embed per turn, same jsonl as shadow). Never raises."""
+    try:
+        result = await task
+        if result is not None:
+            _append_log(result, transcript, intent_name, sat, followup)
+    except Exception as exc:  # noqa: BLE001 — logging must be invisible to the turn
+        log.warning("speaker turn log failed: %s", exc)

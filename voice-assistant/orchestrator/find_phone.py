@@ -64,6 +64,11 @@ _STOP = {"phone", "phones", "the", "a", "ring", "find", "my", "mine", "me",
 # Owner words that mean the SPEAKER — unresolvable until speaker ID.
 _SELF = {"", "my", "mine", "me", "our", "ours"}
 
+
+def is_self(owner: str | None) -> bool:
+    """True when the parsed phone_owner means the speaker ("my phone")."""
+    return (owner or "").strip().lower() in _SELF
+
 _phones_cache: tuple[float, dict] | None = None  # (mtime, parsed json)
 
 _ring_task: asyncio.Task | None = None  # the active ring loop, if any

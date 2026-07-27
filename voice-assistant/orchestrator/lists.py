@@ -39,10 +39,11 @@ def _now_ms() -> int:
     return int(time.time() * 1000)
 
 
-async def add_from_text(text: str) -> list[dict]:
+async def add_from_text(text: str, owner: str | None = None) -> list[dict]:
     """Sync a note holding `text` and analyze it. Returns the items the
     companion extracted (each {type, text, due_at, confidence}). Empty list if
-    nothing was extractable."""
+    nothing was extractable. `owner` = voice-identified speaker (speaker ID);
+    None falls back to LIST_OWNER, today's attribution."""
     text = text.strip()
     if not text:
         return []
@@ -50,7 +51,7 @@ async def add_from_text(text: str) -> list[dict]:
     ts = _now_ms()
     note = {
         "client_note_id": note_id,
-        "user": config.LIST_OWNER,
+        "user": owner or config.LIST_OWNER,
         "note_date": time.strftime("%Y-%m-%d"),
         "title": "",
         "content": text,
