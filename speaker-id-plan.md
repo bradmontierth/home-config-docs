@@ -91,8 +91,15 @@ holds (`/command/audio`).
       land "unsure") and Adrienne's thin enrollment (9 clips; fatten
       from shadow-logged turns or a 2-min session of her speaking
       commands, then rerun speaker_enroll.py — hot-reloads, no restart).
-- [ ] Arm: SPEAKER_MODE=active + route reminder/to-do adds and
-      find-phone "my" via identify() (handler wiring not written yet) +
-      TTS names the owner + dashboard badge. Live-voice test (incl.
-      "beat Google voice match" check with Adrienne).
+- [x] ARMED 2026-07-27 (Brad's call after his first live shadow turn
+      scored brad 0.63 / adrienne 0.09): SPEAKER_MODE=active in the
+      beelink compose (1fa262a). identify() starts concurrent with
+      intent parsing; reminder/to-do adds file under the voice-resolved
+      owner with the TTS naming non-shopping routing ("On Adrienne's
+      list."), find-phone "my" resolves by voice with ask-whose below
+      confidence. Both modes keep logging every turn to
+      speaker_shadow.jsonl. Disarm = SPEAKER_MODE=shadow + up -d.
+- [ ] Live-voice tests: Brad "remind me" routing; Adrienne at the
+      kitchen mic tonight (the "beat Google voice match" check); kid
+      utterance lands unsure. Dashboard badge still unbuilt.
 - [ ] Post-SSD-rebuild: add family-room-mic clips to centroids
