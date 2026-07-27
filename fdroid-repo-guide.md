@@ -8,11 +8,20 @@ same way Play Store apps update overnight.
 
 - `fdroidserver` (2.4.5, venv install — no root) maintains a signed repo at
   `/home/pi/fdroid`. The public half is copied to `/home/pi/apks/fdroid/repo`,
-  which the Home Services dashboard serves at:
+  which the Home Services dashboard serves. Phones use the HTTPS front
+  (modern F-Droid clients reject plain-HTTP repo URLs — that's why this
+  exists; see `/home/pi/fdroid-https/README.md`):
 
   ```text
-  http://192.168.10.217:3000/apk/fdroid/repo
+  https://fdroid.illuminatehealthanalytics.com/apk/fdroid/repo
   ```
+
+  The hostname is a Cloudflare DNS record pointing at `192.168.10.217`
+  (LAN-only, not internet-reachable); a Caddy container on the Beelink
+  terminates TLS with an auto-renewing Let's Encrypt cert (DNS-01) and
+  proxies `/apk/*` to the homepage container. The old
+  `http://192.168.10.217:3000/apk/fdroid/repo` URL still serves but phones
+  won't accept it.
 
   Repo signing-key fingerprint (shown by phones when adding, for verification):
 
@@ -101,13 +110,18 @@ Served names (same as before): `tts-router-latest.apk`, `home-agent-latest.apk`,
 
 After step 4, publishes flow to the phone with zero interaction. Note: LAN
 only — updates sync when the phone is on home Wi-Fi (or Tailscale if the
-phone's VPN routes to 192.168.10.217).
+phone's VPN routes to 192.168.10.217). The repo hostname resolves to a
+private IP, so it only works from inside the network.
 
 ## Gotchas
 
-- **New file paths 404 until homepage restarts** (Next.js caches public-dir
-  misses). Overwritten files are fine, so routine publishes are unaffected.
-  Only when adding a brand-new served filename:
+- **New file paths 404 until homepage restarts — legacy LAN links only.**
+  The homepage's Next.js only serves public files that existed at its startup.
+  The HTTPS repo URL is immune (Caddy serves `/home/pi/apks` straight from
+  disk — this was mandatory, since every publish creates a brand-new
+  `diff/<timestamp>.json` that phones fetch for incremental index updates).
+  Only when adding a brand-new filename under the old
+  `http://192.168.10.217:3000/apk/...` links:
   `cd /home/pi/homepage && docker compose restart homepage`.
 - **Never regenerate `keystore.p12`** — phones would reject the repo until
   re-added.

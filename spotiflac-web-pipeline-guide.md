@@ -1,6 +1,6 @@
 # SpotiFLAC Web Pipeline Guide
 
-Last updated: 2026-05-20
+Last updated: 2026-07-22
 
 This documents the SpotiFLAC web app integration built for searching Spotify, queueing music downloads on the Plex Pi, importing validated files into the shared music library, and refreshing Navidrome.
 
@@ -183,10 +183,18 @@ Downloaded 360 file(s)
 
 The UI displays:
 
-- completed tracks
+- downloaded, failed, and processed track counts
 - total tracks
 - status counts
 - latest events
+
+Failed tracks have an expandable `Why?` section containing the provider-specific
+failure summary captured in the SpotiFLAC manifest. Jobs that import only some
+tracks use `released_with_failures` instead of appearing as fully released.
+
+Album and playlist manifests live below the collection subdirectory. The backend
+reads them recursively and maps results by Spotify source ID; it does not infer
+track identity from the number or order of files in the inbox.
 
 The progress count is file-count based, not a perfect “currently attempting track N” tracker. Logs are still the best place to see the exact current track number while SpotiFLAC is replaying/skipping or stuck inside provider retries.
 
@@ -268,6 +276,13 @@ Restarting `spotiflac-api` interrupts the active synchronous downloader call. Th
 ## Provider/Rate-Limit Notes
 
 SpotiFLAC uses multiple resolver/downloader providers. Many are public services rather than official first-party APIs.
+
+The backend image includes Deno and `yt-dlp-ejs`, which current yt-dlp releases
+require for full YouTube extraction. `GET /api/health` reports the installed
+yt-dlp/EJS versions, JavaScript runtime path, and a `youtube.ready` result.
+YouTube search ranks multiple candidates by title, artist, and duration and
+penalizes likely karaoke, cover, dialogue, instrumental, reaction, and tutorial
+matches before attempting downloads.
 
 Common failure types seen:
 
