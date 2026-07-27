@@ -1008,3 +1008,78 @@ swipe, so it rang the full window while he hunted for an off switch.
   tap/swipe stop INSIDE the window; voice "found it" while actually
   ringing; confirm the 30s cadence sounds right with the chosen tone;
   kitchen live-voice.
+
+## Timer slot-fill: "set a timer for…" → "Sure, for how long?" — BUILT 2026-07-26 (not yet deployed)
+
+**The live failure (Adrienne, 2026-07-26 23:55).** She said "okay computer,
+set a timer for", paused to think about how long, and VAD endpointed on the
+gap. Two things then went wrong, and the second is the one that mattered:
+
+1. The classifier read the truncated `'set the timer for'` as **`unclear`** →
+   "Sorry, I didn't catch that." The `set_timer`-with-null-duration branch
+   that asks "how long?" already existed; the parse never reached it.
+2. The follow-up window DID open and DID hear **"Eight minutes."** — and
+   dropped it as `none` ("followup dropped as not-for-us"). A bare duration
+   isn't a supported intent, and the follow-up note tells the parser to prefer
+   `none` over talking back to the room. She re-said the whole command at
+   23:56:44 and got her 8-minute timer.
+
+Fixing only (1) would have asked "for how long?" and then thrown the answer
+away. Both halves were required.
+
+**What was built.**
+- *Prompt rule* (`intent.py`): a timer command that stops before its duration
+  is `set_timer` with `duration_seconds` null, never `unclear`.
+- *Deterministic backstop* (`is_truncated_timer`): prompts are probabilistic,
+  and `unclear` is an honest reading of "set the timer for". A narrow anchored
+  regex forces the slot-fill path when the classifier says unclear/none. Safe
+  here precisely because the phrase has exactly one meaning — this is NOT a
+  pattern to reach for in general intent routing.
+- *Clarify pending op* (`app.py`): the question arms
+  `session_set_clarify(partial, question, label, theme)`; the next turn
+  **stitches the reply onto the partial and re-parses the whole thing**
+  (`parse_clarify`). That reuses the entire rule set instead of growing a
+  grammar per slot, and generalises to any future incomplete command. The
+  answer falls through the NORMAL dispatch, so it lands in the same
+  `set_timer` branch a complete command would.
+- *Duration fast path* (`spoken_duration`): "eight minutes" / "half an hour" /
+  "an hour and a half" read locally, skipping a ~2s LLM round trip on the turn
+  where the user is already waiting. Only has to be RIGHT, not complete —
+  misses fall through to the parser. A bare number with no unit deliberately
+  declines (the unit would be a guess; the parser has the original command).
+- *Longer window* (`assistant.py`): `awaiting_slot` in the response makes the
+  satellite hold the mic `CLARIFY_WINDOW_MS` (12s, was 7s). The whole reason
+  we had to ask is that she pauses to think — she will pause again.
+
+**Guards that matter.**
+- Clarify stitching is **follow-up turns only**. A fresh wake word means she
+  gave up and started over; stitching her new command onto the abandoned
+  partial would produce nonsense.
+- **One round only.** If the stitched re-parse still has no duration →
+  "Okay, never mind." A second "for how long?" is a loop, not a conversation.
+- An answer that abandons the request ("actually pause the music") is parsed
+  on its own merits and the timer is dropped.
+- "never mind" lands on `none` → silent drop, not a spoken reply. Silence is a
+  fine answer to "never mind" and much safer than blurting into the room.
+
+94 tests green (22 new: `test_intent_slots.py` for the two deterministic
+pieces, `test_clarify.py` for the wiring, replaying the 23:55 sequence end to
+end with the classifier stubbed). Test-isolation bug found and fixed while
+writing them: `TimerEngine` is sqlite-backed, so the tests were sharing timers
+and would have written into the REAL timer DB — each test now gets a temp
+`DB_PATH`, and `clients.synthesize` is stubbed (timer creation pre-renders
+announcement audio, so the suite was hitting the live TTS server; `--network
+none` now proves it doesn't).
+
+**Pending:** deploy (orchestrator rebuild + satellite push), then live-voice
+test — say "okay computer, set a timer for", pause, answer "eight minutes".
+Watch for: whether 12s is enough thinking time, and whether the classifier's
+new rule fires without the regex backstop having to catch it (log line
+"truncated timer rescued from intent=…" tells you the prompt lost).
+
+**Phase 2 idea, NOT built:** the root cause is endpointing — Silero cut her off
+after 700ms. A dangling-word check (capture ends on "for"/"to"/"and" → silently
+reopen the mic ~2.5s and stitch, no spoken prompt) would fix it before she
+hears a question at all. That is closer to what Google actually does. Left
+until the spoken re-prompt is proven in the kitchen; it interacts with the
+stitching path and is fiddlier.

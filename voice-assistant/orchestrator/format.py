@@ -27,6 +27,12 @@ def timer_name(timer: dict) -> str:
     return f"{timer['label']} timer" if timer.get("label") else "timer"
 
 
+def ask_timer_duration(label: str | None) -> str:
+    """The slot question for a timer command that stopped before its duration.
+    Short on purpose — it's an interruption, and the user is mid-thought."""
+    return f"Sure, how long for the {label}?" if label else "Sure, for how long?"
+
+
 def confirm_set(timer: dict) -> str:
     return f"{timer_name(timer).capitalize()} set for {humanize_seconds(timer['duration_seconds'])}."
 

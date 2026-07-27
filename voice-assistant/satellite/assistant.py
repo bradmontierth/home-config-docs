@@ -118,6 +118,11 @@ FOLLOWUP_ENABLED = os.getenv("FOLLOWUP_ENABLED", "1").lower() not in ("0", "fals
 FOLLOWUP_WINDOW_MS = int(os.getenv("FOLLOWUP_WINDOW_MS", "7000"))  # wait-for-speech window
 FOLLOWUP_MIN_MS = int(os.getenv("FOLLOWUP_MIN_MS", "300"))        # min capture (no chime bleed)
 FOLLOWUP_MAX_TURNS = int(os.getenv("FOLLOWUP_MAX_TURNS", "6"))    # runaway-session cap
+# When the orchestrator answers with awaiting_slot (it asked "for how long?"),
+# hold the mic open longer than a normal follow-up. The whole reason it had to
+# ask is that the user paused to think — they will very likely pause again
+# before answering, and 7s of thinking silence would close the window on them.
+CLARIFY_WINDOW_MS = int(os.getenv("CLARIFY_WINDOW_MS", "12000"))
 # Wake-turn capture: after draining the chime/pre-roll bleed, wait up to
 # WAKE_ONSET_MS for speech to start, then (Silero having endpointed cleanly)
 # only a short min-capture is needed. No 3s floor — that was a webrtcvad crutch.
@@ -809,7 +814,7 @@ def run_turn(preroll_pcm: bytes, stdout, vad, trigger_t0: float) -> None:
                 play_wav_bytes(get_bytes(ORCH_BASE + url))
             except Exception as exc:  # noqa: BLE001
                 log(f"reply playback failed: {exc}")
-        run_followups(stdout, vad)
+        run_followups(stdout, vad, awaiting=bool(resp.get("awaiting_slot")))
     finally:
         unduck_music()
 
@@ -853,14 +858,17 @@ def run_manual_turn(stdout, vad) -> None:
             play_wav_bytes(get_bytes(ORCH_BASE + url))
         except Exception as exc:  # noqa: BLE001
             log(f"manual reply playback failed: {exc}")
-    run_followups(stdout, vad)
+    run_followups(stdout, vad, awaiting=bool(resp.get("awaiting_slot")))
 
 
-def run_followups(stdout, vad) -> None:
+def run_followups(stdout, vad, awaiting: bool = False) -> None:
     """Continued conversation: after the reply, reopen the mic (no wake word) and
     listen for another command; re-arm on each actionable turn. Ends silently on
     a quiet window, on a not-for-us reply (orchestrator intent 'none'), if a timer
-    starts ringing, or at the safety cap. Echo/Google 'Follow-Up Mode'."""
+    starts ringing, or at the safety cap. Echo/Google 'Follow-Up Mode'.
+
+    `awaiting`: the reply we just played was a question the orchestrator needs
+    answered ("for how long?"), so give this turn the longer thinking window."""
     if not FOLLOWUP_ENABLED:
         return
     for _ in range(FOLLOWUP_MAX_TURNS):
@@ -876,7 +884,8 @@ def run_followups(stdout, vad) -> None:
         except Exception:  # noqa: BLE001
             pass
         cmd = capture_command(stdout, vad, min_capture_ms=FOLLOWUP_MIN_MS,
-                              onset_ms=FOLLOWUP_WINDOW_MS, partials=True)
+                              onset_ms=CLARIFY_WINDOW_MS if awaiting else FOLLOWUP_WINDOW_MS,
+                              partials=True)
         if not cmd:
             return                          # quiet window -> conversation over
         try:
@@ -890,6 +899,7 @@ def run_followups(stdout, vad) -> None:
         if resp.get("silent") or intent in (None, "none") or not reply:
             log(f"followup not for us (intent={intent}) -> ending session")
             return
+        awaiting = bool(resp.get("awaiting_slot"))
         log(f"followup -> {intent}: {reply}")
         fup_clip = f"cmd-{datetime.now().strftime('%Y%m%d-%H%M%S')}.wav"
         threading.Thread(target=_persist_cmd, args=(cmd, fup_clip),

@@ -8,6 +8,7 @@ the timer intents for this slice; the schema leaves room for the rest
 from __future__ import annotations
 
 import logging
+import re
 
 from . import clients, config
 
@@ -60,6 +61,12 @@ Rules:
 - Pick sound_theme by the food: poultry->cluck, beef/dairy->moo, frying/searing->sizzle,
   boiling/pasta/rice->steam_whistle, simmering/sauce->bubbling, baking/roasting->oven_ding.
   If unclear or no food, use marimba.
+- A timer command that STOPS BEFORE ITS DURATION is still set_timer, with
+  duration_seconds null — never "unclear". People pause to think about how long
+  they need, and the mic endpoints on the gap: "set a timer", "set the timer
+  for", "start a timer", "set a chicken timer for". Keep any label and theme you
+  can read ("set a chicken timer" -> label chicken, cluck, duration null). The
+  assistant asks for the missing duration itself.
 - timer_query = "how much time is left", "how long on the rice". duration_seconds null.
 - timer_adjust = "add 5 minutes to the rice" -> duration_seconds 300; "take 2 minutes off" -> -120.
 - timer_cancel = "cancel the rice timer" (scope one) or "cancel all timers" (scope all).
@@ -189,6 +196,136 @@ directed at you, use intent "none". When it is not clearly for you, prefer \
 "none" over "unclear" — do not talk back to the room."""
 
 
+# Appended when parsing the answer to a slot question we asked ("for how
+# long?"). The reply is a fragment on its own — parsing it alone yields "none"
+# and the follow-up gate drops it (live 2026-07-26: "Eight minutes." thrown
+# away after "set the timer for"). Stitching it back onto the partial reuses
+# the whole rule set above instead of growing a second grammar per slot.
+_CLARIFY_NOTE = """
+CLARIFY TURN: the user's last command stopped short, so you asked them: \
+"{question}"
+Their incomplete command was: "{partial}"
+The user message below is their reply.
+Normally the reply supplies the missing piece: COMBINE the incomplete command \
+with the reply and parse the COMBINED command ("set the timer for" + "eight \
+minutes" -> set_timer, duration_seconds 480; "set a chicken timer for" + "about \
+twenty" -> set_timer, label chicken, 1200, cluck).
+But the reply may abandon the request instead. If it is a NEW command or \
+question ("actually what's the weather", "play some music"), ignore the \
+incomplete command and parse the reply ALONE on its own merits. If it drops the \
+request without replacing it ("never mind", "forget it", "hang on"), or it is \
+room noise, a fragment, or someone else's conversation, use intent "none"."""
+
+
+async def parse_clarify(partial: str, reply: str, question: str) -> dict:
+    """Parse the answer to a slot question. `partial` is the incomplete command
+    we asked about, `question` what we asked. Returns the same validated dict as
+    parse() — a completed command, a different command if they moved on, or
+    "none" if they dropped it."""
+    system = _SYSTEM + "\n" + _CLARIFY_NOTE.format(question=question, partial=partial)
+    messages = [
+        {"role": "system", "content": system},
+        {"role": "user", "content": reply},
+    ]
+    raw = await clients.parse_intent_raw(messages)
+    return _validate(clients.extract_json(raw))
+
+
+# "set a timer", "set the timer for", "start a chicken timer for" — a timer
+# command that ends before its duration. The classifier honestly reads these as
+# "unclear", so a narrow regex forces the slot-fill path: the phrase has exactly
+# one meaning, and misreading it costs the user the entire turn. Anchored at
+# both ends, so anything following "for" (i.e. an actual duration) fails to
+# match and takes the normal path.
+_TRUNCATED_TIMER_RE = re.compile(
+    r"^(?:please\s+)?(?:can\s+you\s+|could\s+you\s+)?"
+    r"(?:set|start|make|put\s+on)\s+"
+    r"(?:a|an|the)?\s*(?:[a-z]+\s+){0,3}timer"
+    r"(?:\s+(?:for|to))?$"
+)
+
+
+def is_truncated_timer(command: str) -> bool:
+    """True for a timer command cut off before its duration. Deterministic
+    backstop for the prompt rule above — prompts are probabilistic, and this
+    exact phrasing is the one the family actually hits."""
+    return bool(_TRUNCATED_TIMER_RE.match(command.strip().lower().rstrip(".!?,")))
+
+
+_NUM_WORDS = {
+    "one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7,
+    "eight": 8, "nine": 9, "ten": 10, "eleven": 11, "twelve": 12,
+    "thirteen": 13, "fourteen": 14, "fifteen": 15, "sixteen": 16,
+    "seventeen": 17, "eighteen": 18, "nineteen": 19, "twenty": 20,
+    "thirty": 30, "forty": 40, "fifty": 50, "sixty": 60, "seventy": 70,
+    "eighty": 80, "ninety": 90,
+}
+_UNIT_SECONDS = {
+    "hour": 3600, "hours": 3600, "hr": 3600, "hrs": 3600,
+    "minute": 60, "minutes": 60, "min": 60, "mins": 60,
+    "second": 1, "seconds": 1, "sec": 1, "secs": 1,
+}
+# Words that can pad a spoken duration without changing it. Anything outside
+# this set means the reply isn't purely a duration -> hand it to the LLM.
+_DURATION_FILLER = {"and", "for", "about", "around", "roughly", "like",
+                    "make", "it", "just", "maybe", "um", "uh", "please", "say"}
+
+
+def spoken_duration(text: str) -> int | None:
+    """Total seconds from a bare spoken duration — "eight minutes", "90
+    seconds", "an hour and a half", "half an hour", "two and a half minutes" —
+    or None if the reply is anything else.
+
+    Fast path for the clarify turn: the overwhelmingly common answer to "for how
+    long?" is a plain duration, and this skips a ~2s LLM round trip on it. It
+    only has to be RIGHT, not complete — every miss falls through to the parser,
+    so unrecognised phrasings cost latency, not correctness. A bare number with
+    no unit ("eight") deliberately returns None: the unit is a guess, and the
+    parser has the original command for context.
+    """
+    words = re.findall(r"[a-z0-9]+", text.lower())
+    total = 0
+    num: int | None = None
+    article = False     # the current num came from "a"/"an", not a real count
+    half = False
+    last_unit = 0
+    saw_unit = False
+    for w in words:
+        if w in ("a", "an"):
+            # Article, not a quantity: "half an hour" is 30 minutes, not 90.
+            if num is None and not half:
+                num, article = 1, True
+            continue
+        if w == "half":
+            half = True
+            if article:
+                num, article = None, False   # "...and a half" — drop the article
+            continue
+        if w.isdigit():
+            num, article = int(w), False
+            continue
+        if w in _NUM_WORDS:
+            n = _NUM_WORDS[w]
+            # "twenty five" -> 25; anything else replaces.
+            num = num + n if (num and num >= 20 and num % 10 == 0 and n < 10) else n
+            article = False
+            continue
+        if w in _UNIT_SECONDS:
+            mult = _UNIT_SECONDS[w]
+            total += int(((num or 0) + (0.5 if half else 0)) * mult)
+            last_unit, saw_unit = mult, True
+            num, half, article = None, False, False
+            continue
+        if w in _DURATION_FILLER:
+            continue
+        return None                 # not a pure duration -> let the LLM read it
+    if half and saw_unit:
+        total += int(0.5 * last_unit)   # trailing "...and a half"
+    if not saw_unit or total <= 0:
+        return None
+    return total
+
+
 async def parse(command: str, context: str | None = None) -> dict:
     """Parse a command string into a validated intent dict. When `context` is
     given (a follow-up turn), append the follow-up note so ambiguous/background
@@ -202,6 +339,13 @@ async def parse(command: str, context: str | None = None) -> dict:
     ]
     raw = await clients.parse_intent_raw(messages)
     data = clients.extract_json(raw)
+    return _validate(data)
+
+
+def validate(data: dict) -> dict:
+    """Coerce a partial intent dict into the full validated shape. Public so a
+    deterministic shortcut (the clarify duration fast path) can build a parse
+    result without inventing its own field set."""
     return _validate(data)
 
 

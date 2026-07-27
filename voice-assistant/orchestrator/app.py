@@ -66,6 +66,18 @@ def session_set_pending(op: str, items: list[dict], list_type: str | None = None
     _SESSION["ts"] = time.time()
 
 
+def session_set_clarify(partial: str, question: str, label: str | None = None,
+                        theme: str | None = None) -> None:
+    """Stash a command that stopped short, awaiting the missing piece. The
+    partial TEXT is what matters: the next turn stitches the reply onto it and
+    re-parses the whole thing, so a new slot needs no new grammar. Label/theme
+    ride along only so the deterministic duration fast path can skip that
+    re-parse without losing what the first parse already worked out."""
+    _SESSION["pending"] = {"op": "clarify", "partial": partial, "question": question,
+                           "label": label, "sound_theme": theme}
+    _SESSION["ts"] = time.time()
+
+
 def session_pending() -> dict | None:
     if _SESSION.get("pending") and time.time() - _SESSION["ts"] <= SESSION_TTL_S:
         return _SESSION["pending"]
@@ -330,6 +342,26 @@ async def _run_pending(pending: dict) -> dict:
             "response": fmt.confirm_removed(removed)}
 
 
+async def _parse_clarify_reply(clarify: dict, reply: str) -> dict:
+    """Parse the answer to a slot question.
+
+    Fast path first: "eight minutes" is the overwhelmingly common answer to "for
+    how long?", and reading it locally saves a ~2s LLM round trip on the one
+    turn where the user is already waiting on us. The label and theme were
+    resolved when we asked the question, so the fast path loses nothing.
+    Anything the duration reader doesn't recognise goes to the parser with the
+    partial command stitched back on."""
+    seconds = intent_mod.spoken_duration(reply)
+    if seconds is not None:
+        log.info("clarify fast path: %r -> %ss", reply, seconds)
+        return intent_mod.validate({
+            "intent": "set_timer", "duration_seconds": seconds,
+            "label": clarify.get("label"), "sound_theme": clarify.get("sound_theme"),
+        })
+    return await intent_mod.parse_clarify(
+        clarify["partial"], reply, clarify["question"])
+
+
 async def handle_command(command: str, followup: bool = False) -> dict:
     """Parse a command and act on it. Emits thinking/response events; returns a
     structured result. `followup` = a continued-conversation turn (no wake word):
@@ -362,6 +394,22 @@ async def handle_command(command: str, followup: bool = False) -> dict:
             return await _finalize(result, "find_phone")
         pending = None
 
+    # An incomplete command is awaiting its missing piece ("set a timer for" ->
+    # "Sure, for how long?"). Don't return here — stitch the reply onto the
+    # partial, re-parse, and let the answer fall through the normal dispatch
+    # below, so "eight minutes" ends up in exactly the same set_timer branch a
+    # complete command would.
+    #
+    # FOLLOW-UP TURNS ONLY. A fresh wake word means the user gave up on the
+    # question and started over; stitching their new command onto the abandoned
+    # partial would produce nonsense.
+    clarify = None
+    if pending and pending["op"] == "clarify":
+        session_clear_pending()
+        if followup:
+            clarify = pending
+        pending = None
+
     # A destructive bulk op is awaiting a yes/no? Resolve that first.
     if pending:
         decision = _affirmation(command)
@@ -379,9 +427,22 @@ async def handle_command(command: str, followup: bool = False) -> dict:
     context = session_context() if followup else None
     if not followup:
         await events.emit("thinking", command=command)
-    parsed = await intent_mod.parse(command, context=context)
+    if clarify:
+        parsed = await _parse_clarify_reply(clarify, command)
+    else:
+        parsed = await intent_mod.parse(command, context=context)
     intent = parsed["intent"]
-    log.info("intent=%s followup=%s parsed=%s", intent, followup, parsed)
+    log.info("intent=%s followup=%s clarify=%s parsed=%s",
+             intent, followup, bool(clarify), parsed)
+
+    # The classifier reads a timer command that stopped before its duration as
+    # "unclear" — which is honest, but costs the user the turn. Force it onto
+    # the slot-fill path; the duration stays null, so it lands in the "ask how
+    # long" branch below.
+    if intent in ("unclear", "none") and intent_mod.is_truncated_timer(command):
+        log.info("truncated timer rescued from intent=%s: %r", intent, command)
+        parsed = {**parsed, "intent": "set_timer", "duration_seconds": None}
+        intent = "set_timer"
 
     if followup and intent == "none":
         # Background chatter / not addressed to us. Drop silently: no events, no
@@ -399,8 +460,20 @@ async def handle_command(command: str, followup: bool = False) -> dict:
 
     if intent == "set_timer":
         if not parsed["duration_seconds"]:
-            result["response"] = "How long should I set the timer for?"
-            result["ok"] = False
+            if clarify:
+                # We already asked once and still have no duration. A second
+                # "for how long?" is a loop, not a conversation — let it go.
+                result["response"] = "Okay, never mind."
+                result["ok"] = False
+            else:
+                question = fmt.ask_timer_duration(parsed["label"])
+                result["response"] = question
+                result["ok"] = False
+                # Tells the satellite to hold the mic open longer than a normal
+                # follow-up: we just asked a question the user has to think about.
+                result["awaiting_slot"] = True
+                session_set_clarify(command, question, parsed["label"],
+                                    parsed["sound_theme"])
         else:
             timer = await ENGINE.create(
                 parsed["label"], parsed["duration_seconds"], parsed["sound_theme"]
