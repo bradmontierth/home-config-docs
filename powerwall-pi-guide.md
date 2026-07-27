@@ -38,6 +38,11 @@ telemetry snapshot to the house MQTT broker.
   from `POD_nom_energy_remaining / POD_nom_full_pack_energy`, inverter
   power out, per-string PV power A–F) plus site-level rollups (summed
   energies, deduped alerts, string connected/state/voltage/current).
+- Backup reserve is read locally with `pypowerwall.Powerwall.get_reserve()`
+  and published as `backup_reserve_percent` in every telemetry snapshot.
+  This is the Tesla-app-scaled percentage; do not use the raw TEDAPI
+  `site_info.backup_reserve_percent` field directly because it includes
+  Tesla's internal 5% scaling.
 - Publish: one JSON payload per poll to **topic `pw3/telemetry`** on
   **`192.168.10.217:1883`** (Beelink mosquitto), QoS 1, retain off,
   client id `pw3-publisher`. A fresh MQTT connection per publish — simple
@@ -58,6 +63,23 @@ telemetry snapshot to the house MQTT broker.
   `unavailable` instead of silently claiming that grid power is healthy.
   Island/contact/voltage/power/alert details are attached as entity
   attributes.
+- The Docker Node-RED `Tesla` tab also converts the local
+  `backup_reserve_percent` value to MQTT discovery entity
+  **`sensor.powerwall_backup_reserve`**. Its retained state topic remains
+  `homeassistant/sensor/pw3/backup_reserve/state`, and its attributes include
+  `source: local_tedapi`. Node-RED publishes immediately when the reserve
+  changes and refreshes the retained state every five minutes.
+- **Do not poll Tesla Fleet API `site_info` for reserve telemetry.** The old
+  five-minute Node-RED poll was removed on 2026-07-26 because every request
+  went to Tesla's billable cloud Fleet API. Fleet API is retained only for
+  occasional reserve-changing commands. After a command, Node-RED waits for
+  propagation and verifies the result from the local Home Assistant reserve
+  sensor, without a second cloud data request.
+- The Docker Node-RED `Powerwall Reserve Forecast` tab
+  (`8d7289c449f38a92`) reads this local reserve sensor and recalculates both
+  periodically and immediately when the reserve state changes. The Tesla
+  tab's TOU-risk alert compares the reserve embedded in the forecast with
+  the current local reserve and suppresses action if they disagree.
 - That same Node-RED tab sends transition-only Pushover notifications through
   the existing `a3903de6e20b03dc` Pushover configuration. Node
   `pw_grid_outage_changed` watches the HA binary sensor with
@@ -105,7 +127,52 @@ wins wake-over-music by geometry.
 
 - ReSpeaker XVF3800 4-mic array on USB (card `Array`), captured via
   `~/.asoundrc` pcm `respeaker_ch0` (ch0 = processed beam; ch1 is the AEC
-  reference and must not be downmixed in).
+  reference and must not be downmixed in). That file lives only on the box's
+  USB root drive, so here is the canonical copy — rebuild from this, not from
+  memory (it was lost once already, see the outage note below). Mic-only box:
+  no playback alias, replies relay to the kitchen.
+
+  ```
+  pcm.respeaker_ch0 {
+    type plug
+    slave.pcm {
+      type route
+      slave.pcm "hw:CARD=Array"
+      slave.channels 2
+      ttable.0.0 1.0
+    }
+  }
+  ```
+
+  The array advertises exactly `S16_LE / 2ch / 16000` and nothing else
+  (`cat /proc/asound/card3/stream0`), which is a fast way to confirm a
+  capture failure is NOT a rate/format mismatch.
+
+- **Power-outage damage, 2026-07-25 20:59 (two separate faults).** The
+  Powerwalls drained, the Pi lost power mid-write, and it came back needing a
+  manual restart. Two things broke, and they look like one problem:
+  1. *`~/.asoundrc` vanished.* ext4 logged `EFSCORRUPTED` at exactly
+     20:59:26 and the next boot ran `orphan cleanup on readonly fs`, which
+     removed the orphaned inode. The satellite then crash-looped ~1,500 times
+     (`arecord: audio open error: No such file or directory` — that message
+     means the ALSA *alias* is missing, not the mic). Restored 2026-07-26.
+     Also left two block groups with `bad block bitmap checksum` (bg 720,
+     816); the fs was `clean with errors` and had never been checked since it
+     was created in Dec 2025.
+  2. *The ReSpeaker itself wedged.* Separately from the config, the array
+     enumerates normally but every capture read returns `Input/output error`
+     at its own native format. It survived `USBDEVFS_RESET` **and** a
+     `/sys/bus/usb/drivers/usb` unbind/rebind — the XVF3800 runs its own DSP
+     firmware, and a bus-level reset does not power-cycle it. **Only a
+     physical unplug/replug (or a full power-down — a warm reboot can leave
+     USB rails powered) clears this.** Note the root filesystem is a PNY USB
+     flash drive on the same controller; if a replug doesn't fix it, suspect
+     the USB power budget and try a powered hub.
+
+  Lesson: after any outage on this box, check BOTH — that `~/.asoundrc` still
+  exists, and that `arecord -D respeaker_ch0 -d 2 /tmp/t.wav` actually
+  produces more than a 44-byte header. A 44-byte file is a header with no
+  samples, i.e. the device opened but never streamed.
 - Code: `/home/pi/voice-pipeline/assistant.py` — same file as the kitchen,
   deployed from `home_config/voice-assistant/satellite/`. Venv
   `/home/pi/voice-pipeline/.venv` (numpy, onnxruntime, livekit-wakeword).
