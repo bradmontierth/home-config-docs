@@ -73,11 +73,26 @@ holds (`/command/audio`).
 ## Status
 
 - [x] Design + model verified (titanet loads in sortformer container)
-- [ ] GX10 speaker-embed service live + smoke-tested
-- [ ] Clips synced + labeling page up
-- [ ] Brad labels clips
-- [ ] Enrollment + threshold calibration
-- [ ] Orchestrator shadow wiring
-- [ ] Arm + live-voice test (incl. "beat Google voice match" check with
-      Adrienne)
+- [x] GX10 speaker-embed service live + smoke-tested (:8096, 12-17ms)
+- [x] Clips synced + labeling page up (beelink :8791, left running for
+      relabels)
+- [x] Brad labeled all 205 (143 brad / 11 adrienne / 50 skip / 1 other —
+      mixed Brad+kid clips deliberately skipped, centroid purity rule)
+- [x] Enrollment + calibration 2026-07-27: impostor max 0.248 vs
+      same-speaker min 0.396, ZERO misIDs → SPEAKER_THRESHOLD=0.35,
+      SPEAKER_MARGIN=0.15. Profiles: brad 108 clips, adrienne 9.
+- [x] Orchestrator shadow wiring DEPLOYED (0ad679b): speaker.py,
+      SPEAKER_MODE=shadow scores every /command/audio turn →
+      /data/speaker_shadow.jsonl; identify() verified in-container on
+      labeled clips. 101 tests green.
+- [ ] Shadow soak: review speaker_shadow.jsonl after a few days of real
+      turns — especially KID utterances (zero kid clips existed, so the
+      calibration never tested kids-as-impostors; expectation is they
+      land "unsure") and Adrienne's thin enrollment (9 clips; fatten
+      from shadow-logged turns or a 2-min session of her speaking
+      commands, then rerun speaker_enroll.py — hot-reloads, no restart).
+- [ ] Arm: SPEAKER_MODE=active + route reminder/to-do adds and
+      find-phone "my" via identify() (handler wiring not written yet) +
+      TTS names the owner + dashboard badge. Live-voice test (incl.
+      "beat Google voice match" check with Adrienne).
 - [ ] Post-SSD-rebuild: add family-room-mic clips to centroids
