@@ -17,9 +17,10 @@ library item lets MA pick the stream provider PER TRACK, so local lossless
 beats Spotify automatically. Low confidence still plays the best guess: nobody
 wants a "did you mean" dialog mid-cooking.
 
-Ducking: the satellite POSTs /music/duck on a stage-1 wake trigger and on
-alarm start (music at speech volume defeats verify/capture), /music/unduck
-when the turn or alarm ends. Nested duck/unduck pairs are refcounted; a
+Ducking: the satellite POSTs /music/duck on a CONFIRMED wake (stage-2 verify
+pass, not stage-1 triggers — music false-fires made the dips audible as
+playback stutter) and on alarm start (music at speech volume defeats command
+capture), /music/unduck when the turn or alarm ends. Nested duck/unduck pairs are refcounted; a
 watchdog restores the volume anyway if the satellite dies mid-turn and the
 unduck never arrives.
 """

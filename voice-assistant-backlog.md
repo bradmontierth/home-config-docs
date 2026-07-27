@@ -112,6 +112,112 @@ augmenting the synthetic clips), eval on captured clips incl. real spoken
 "stop", and only re-arm (threshold from real DET data) after replay proves
 ring-only stays quiet. Never arm on synthetic bench alone.
 
+**v2 data ready (2026-07-24 eve):** 19 real ring captures on the kitchen
+satellite — Brad 13:16-13:31 (13, incl. oven_ding + steam_whistle themes,
+distractor speech, singing) + 14:32 deliberate speech-only negative
+(swipe-dismissed) + 16:08 organic + Adrienne 17:43-17:45 (4, incl. a
+"cancel"-dismiss negative). All staged to GX10 `wake-train/data/real_rings/`
+with `manifest-20260724.csv` (label/stop-onset/holdout/transcript; onsets
+from parakeet segments cross-checked vs live journal dismiss times).
+**BRAD EAR-REVIEWED all contested clips 2026-07-24 eve** via review page
+(beelink :8790, scratchpad/review, flags-round1.jsonl): final = 16
+positives, 3 negatives (132738/143209/174431). Corrections from his ears:
+132738 says "random STUFF", never stop — the LIVE dismissal at 13:27:57
+was a kitchen-alarm-bias ASR mishear (stuff→"random stop"), i.e. the bias
+profile can FALSE-DISMISS on stop-adjacent words (known cost, logged here
+as the first observed case); its full 18.75s is now a training body (the
+mishear tail is a premium hard negative). 131706 has TWO stops (mid
+~2.6s + end ~6s) — live ASR missed BOTH (+ kiosk-tap dismiss);
+174346 has TWO clear stops at the end (~13.5-15s), live caught one,
+offline parakeet neither. Holdouts (eval-only, no background carve):
+131706, 132716 (oven theme), 143209 (speech negative), 174346 (0.92
+ring-only false-fire). Non-holdout clips carved into stop-free ring
+bodies (tails cut at stop onset −0.3s; 132738 full-length) →
+`data/real_ring_backgrounds/` ×10 dupes (90 files) for draw weight;
+configs/stop.yaml v2 adds that path, output → /work/output/stop_v2.
+Kickoff (GX10): `docker rm wake-train-stop; docker run -d --name
+wake-train-stop-v2 --runtime nvidia -v /home/pi/wake-train:/work
+nvcr.io/nvidia/pytorch:25.10-py3 bash /work/run_stop.sh` (logs:
+/home/pi/wake-train/train_stop.log). Post-train: replay DET over
+real_rings (esp. the 4 holdouts) before picking a threshold; shadow scores
+in kitchen journalctl are the baseline (v1 ring-only peaks 0.9+).
+
+**v2 TRAINED + EVALUATED 2026-07-25 — NOT ARMED. Root cause found and
+fixed, but neither model is armable yet.**
+
+Training ran clean (2h, output /work/output/stop_v2/stop/stop.onnx, synth
+eval recall 88.1% FPPH 0.93 ≈ v1 — the synthetic bench is still useless
+for this decision). Real-ring replay is what mattered, and it took three
+attempts because the first two eval scripts were WRONG:
+
+1. *Bad onsets.* Parakeet merges "Your timer is done. Stop." into ONE
+   segment, so `stop_onset_s` pointed at the ANNOUNCEMENT on 5/16
+   positives (off by up to 11s). Fixed by cross-checking every onset
+   against the live journal dismiss timestamp → `stop_start_s` column
+   (parakeet where delta ≤2.5s, else journal_anchor − 1.2s median ASR
+   lag). AUDITED: every bad onset erred EARLY, so carved training bodies
+   were truncated/skipped, never leaked a stop — v2's training data was
+   valid.
+2. *"Ring-only" regions aren't stop-free.* 131830 scored 0.98 in its
+   "ring-only" region; the live journal shows ASR heard "So" at +7.25s =
+   a real stop mangled by ring masking. That 0.98 was a CORRECT detection.
+   Region-peak metrics can't be trusted where labels are imperfect; use
+   ear-verified negatives + peak-vs-anchor alignment instead.
+3. *THE REAL BUG — startup transient.* `stop_window` is reset to ZEROS at
+   alarm start and scored immediately, so for the first 2s the model sees
+   mostly digital silence + a sliver of ring — an input it never saw in
+   training. A naive replay slides a full 2s window and NEVER reproduces
+   this state, which is why the synthetic bench and both earlier scripts
+   missed it. Faithful replay (`training/replay_stop_faithful.py`,
+   reproduces the live loop chunk-for-chunk) shows v1 peaking 0.5-0.92 in
+   that pre-fill window on **18/19 clips** — including clips with no
+   spoken stop — vs ≤0.26 steady state. v2: 17/19. This IS the
+   2026-07-24 incident: the sim reproduces that ring's live-logged scores
+   (0.241/0.785/0.920/0.455/0.529) to 3 decimals.
+
+FIX DEPLOYED both satellites 2026-07-25: `stop_filled` counter gates
+scoring until the window holds WINDOW_SAMPLES of real audio. Live-verified
+on a real ring — no scores before +2s (was 0.241 at +0.37s). Costs no real
+recall (announcement still playing, ASR path covers it).
+
+STILL NOT ARMABLE. A 38s unattended test ring (ring-20260725-160136.wav,
+parakeet confirms ONLY the TTS announcement, zero human speech — our purest
+and longest negative) scores **v1 peak 0.830 / v2 peak 0.798** in steady
+state, with 21/18 windows ≥0.5. So the earlier 0.259 "ceiling" was an
+artifact of short, attended negatives. Operating points (16 positives,
+peak must align with the spoken stop):
+  thr 0.50 → v1 62% / v2 56% recall, but BOTH below the false-fire ceiling
+  thr 0.80 → v2 50% recall, v2-safe only
+  thr 0.85 → both 44%, both above ceiling (margin only 0.05)
+  thr 0.90 → v1 38% / v2 31%
+v2 is the better candidate (0 excursions ≥0.8 on the pure ring vs v1's 5)
+but 44% recall with a 0.05 margin on ONE long negative is not arm-worthy.
+
+v3 plan: the v2 backgrounds were SHORT bodies carved from ATTENDED rings —
+wrong distribution. Collect several LONG unattended rings (just let timers
+time out; capture is already on) as backgrounds, drop the ×10 duplication
+(90 dupes of 9 clips likely overfit — v2 beat v1 on contaminated clips and
+lost on unseen ones), and add more spoken-stop positives, ideally
+Adrienne's. Model's unique value is real: it caught 131830's mangled stop
+(0.949) that ASR missed entirely.
+
+Second-look analysis 2026-07-25 (consecutive-window voting, independent
+re-eval of stop-v2-eval-20260725.json + fresh faithful replay of the pure
+ring on .251):
+- Pure ring false-fires are PERIODIC at ~2.5s spacing = the ring tone's
+  repeat period. The model fires on a recurring element of the ring itself
+  — systematic, not noise. Long-ring backgrounds in v3 attack exactly this.
+- 2-consecutive-window rule: zeroes all three short negatives (≤0.26) and
+  keeps most real-stop recall, BUT does not unlock arming today:
+  v1 sustains on the pure ring (2-consec 0.812, 3-consec 0.677 — voting
+  can't save v1); v2 drops to 2-consec 0.577 / 3-consec 0.541, so thr 0.6
+  leaves only 0.023 margin on n=1 long negative. Not arm-worthy.
+- KEEP the 2-consec (or 3-consec) rule as the arming criterion for v3:
+  real stops sustain across windows (people draw out "stooop"), ring
+  excursions mostly don't once real-ring negatives suppress the periodic
+  element. Eval v3 on: 2-consec ceiling across SEVERAL long unattended
+  rings vs 2-consec recall at the spoken stop.
+
 ## 8. Long ask answered on screen but never spoke — P1, FIXED+DEPLOYED 2026-07-09
 
 **Symptom (Brad, 2026-07-09 ~17:21):** asked for the France World Cup score;
@@ -733,3 +839,172 @@ web tile (Brad's call; his F-Droid HTTPS enrollment now CONFIRMED).
   base in Settings (orch_base pref). Tab bar now five tabs @12sp.
 - **Pending:** on-phone confirmation (F-Droid auto-update or manual pull
   of voice-notes-latest.apk), then a real away-from-kitchen broadcast.
+
+## Find my phone ("where's my phone" rings it) — BUILT+DEPLOYED 2026-07-24 (live-verified)
+
+**The missing Google Home feature Brad uses most.** Google's Find My
+Device has NO public API (unofficial reverse-engineered projects exist —
+rejected as fragile), but none is needed: the HA companion app is on both
+phones, and a `notify.mobile_app_*` TTS message on `media_stream:
+alarm_stream_max` rings at max alarm volume through silent mode. Piloted
+live on the pixel 8 pro before building: first send without priority
+flags waited for unlock; `ttl: 0` + `priority: high` in `data` delivered
+instantly to the locked, dozing phone. Both flags are therefore always
+sent.
+
+- **find_phone.py** — broadcast-pattern module: hot-reloaded
+  `phones.json` (config `PHONES_FILE`; brad=pixel_8_pro,
+  adrienne=pixel_9_pro, aliases incl. dad/mom + "adrian" ASR variants),
+  `resolve()` strips filler words then fuzz.ratio≥80, `ring()` posts the
+  HA notify with a repeated "Here I am! This is Brad's phone." TTS.
+- **Intent `find_phone`** (intent.py) with `phone_owner` field ("my",
+  "brad", "mom"…). Person/business "where is X" stays ask/place_search.
+- **"my phone" can't be attributed until speaker ID (item 9)** — handler
+  returns needs_owner, app speaks "Whose phone — Brad's or Adrienne's?"
+  and stashes a `find_phone` session pending op; the follow-up answer
+  ("Brad's") is resolved by `resolve()` directly, NO second LLM parse
+  ("no"/"never mind" cancels; anything else abandons + parses normally).
+  home_control-style no-ask-fallback — never a web search.
+- Tests: test_find_phone.py (7) + full suite 55 green (run inside the
+  container image — host python has no httpx). E2E verified via
+  /command: named ring, ask-whose→"brads" followup ring, never-mind.
+- **Speaker ID upgrade path:** when item 9 lands, resolve "my" from the
+  voice embedding and only fall back to ask-whose below confidence.
+  Two-person closed set should easily beat Google's voice match (its
+  constant "I can't identify your voice" to Adrienne was a top complaint).
+- **Pending:** live-voice test from the kitchen mic; Adrienne's phone
+  never actually rung (deliberately — only Brad's during tests); consider
+  kid alias additions if kids' phones ever join HA.
+
+**v2 rework same evening — Brad's two complaints after the first live ring:**
+(a) the robotic TTS "here I am, this is Brad's phone" was grating vs
+Google's musical alarm, and (b) there was NO WAY TO STOP IT — a TTS
+notification produces audio only, no notification entry, nothing to
+swipe, so it rang the full window while he hunted for an off switch.
+- **Sound:** dropped `message: "TTS"` for a REGULAR notification on
+  `channel: alarm_stream` (special channel name — still bypasses
+  silent/DND). The SOUND is then a phone-side Android setting (HA app >
+  Notifications > "Alarm Stream" channel > Sound), so each phone picks
+  its own ringtone and we're out of the sound-choice business. Note this
+  rings at the phone's ALARM volume, not forced max as alarm_stream_max
+  did — revisit if it's ever too quiet to find.
+- **Stopping, three ways:** `actions: [FIND_PHONE_FOUND "Found It"]` +
+  tag `find_phone`; voice "found it" (new `phone_action: stop` field on
+  the intent — "found it", "stop ringing the phone"); or swipe-dismiss.
+  Node-RED tab **"Find Phone" 5888bdf58e18e8f8** bridges BOTH HA events
+  (`mobile_app_notification_action` filtered to FIND_PHONE_FOUND, and
+  `mobile_app_notification_cleared` filtered to tag find_phone) to
+  `POST :8785/phone/found`, which cancels the ring task; cancellation
+  also posts `clear_notification` so the alert leaves the phone.
+- **Ring loop:** same-tagged re-post every FIND_PHONE_INTERVAL_S replays
+  the sound (one notification entry, not a stack) x FIND_PHONE_REPEATS,
+  plus a notification `timeout` so a stale alert can't linger if the
+  orchestrator dies mid-window.
+- **Live test (Brad, tap path):** bridge CONFIRMED — tap reached
+  /phone/found. But it landed at +29s against a 30s window ("ring not
+  active"): he couldn't cross the house in time. **Window raised 6->24
+  repeats = 2 minutes**, which is only reasonable BECAUSE stopping is now
+  easy. Redeployed; 60 tests green.
+- **Cadence fix (Brad, immediately after):** a same-tag re-post RESTARTS
+  the sound from the top, and at 5s against a ~20-30s alarm tone it "kept
+  building then abruptly restarting" — every ring cut off mid-phrase,
+  never once playing through. **INTERVAL must exceed the phone's ringtone
+  length:** now 4 x 30s (same 2-min window, each ring completes). Rule for
+  any future tweak: shortening the interval below the tone length
+  re-creates this; lengthen the window with REPEATS, not a faster cadence.
+- **Volume pegging (Brad: "peg it at 100 — the point is to FIND it").**
+  Regular notifications IGNORE `alarm_stream_max` (verified in the android
+  app source: media_stream is only read by the COMMAND_VOLUME_LEVEL
+  handler; TTS-only otherwise). So volume takes
+  `message: command_volume_level` + `data: {media_stream: alarm_stream,
+  command: 0-255}` (app clamps to the stream's real step max) — and
+  `setStreamVolume` PERSISTS: the app never reverts it. Pegging blind would
+  leave their real morning alarms at full.
+  **Therefore pegging is gated on being able to READ the level first** —
+  `phones.json "volume_sensor"` (sensor.<phone>_volume_level_alarm):
+  capture → peg to max → restore the captured step when the ring ends
+  (natural end, voice stop, or tap — restore is shielded so a cancel
+  mid-teardown can't strand it at max). No sensor = no peg, ring at
+  whatever the phone is set to; a guessed restore is worse than a quiet
+  ring. Plus a plausibility guard: a value >30 means the sensor reports a
+  PERCENTAGE, and restoring e.g. 71 would clamp to max — refuse to peg.
+  Config: FIND_PHONE_PEG_VOLUME, FIND_PHONE_MAX_VOLUME.
+  ONE-TIME per phone to activate: HA app > Settings > Companion app >
+  Manage sensors > Volume Levels > enable alarm volume. Entity IDs are
+  already in phones.json, so pegging starts working the moment the sensor
+  appears — no redeploy.
+- **LIVE-VERIFIED 2026-07-24 (Brad's pixel 8 pro).** Brad flipped the
+  sensor; it registered as `unknown` and needed `command_update_sensors`
+  pushes to populate (useful trick: notify message `command_update_sensors`
+  forces a companion sensor refresh; new sensors otherwise wait for the
+  next cycle / app foreground). It reports **steps, not percent —
+  min 1 / max 7, read 3** — so the plausibility guard passes and restore
+  is exact. Full pegged ring: `pegged on brad (was 3)` -> ring -> Brad's
+  in-window tap at +23s -> `phone found (ring stopped)` -> `restored to 3`,
+  and the phone's OWN sensor independently read 3 afterwards. The v2 tap
+  path is now confirmed INSIDE the window (the earlier +29s tap only
+  missed because the window was 30s).
+- **Two robustness fixes found while testing (both live-verified):**
+  1. *Restart stranding.* A deploy/crash mid-ring skips the in-loop
+     restore and would leave their REAL morning alarm at max. The pegged
+     level is now journalled to `/data/find_phone_volume.json` (host
+     volume, survives container recreation) before the ring window, and
+     `restore_stranded()` runs on startup, pushes the restore, and deletes
+     the journal (corrupt/unknown journals are dropped; a failed restore
+     retries next startup). Verified by planting a journal and restarting:
+     "alarm volume was left pegged on brad by a restart — restored to 3".
+  2. *Last ring cut short.* Android applies a stream-volume change to
+     audio already playing, so restoring immediately after the final
+     re-post chopped that ring mid-tone. The loop now waits one INTERVAL
+     after the last post before restoring (natural end only — a voice/tap
+     stop still restores at once, since silence is the point).
+  Also fixed a would-be import crash: the new config default referenced
+  DB_PATH, which is defined LOWER in config.py — re-read the env default
+  instead. 69 tests green.
+- **DND-PERMISSION GATE (hit live, Brad 2026-07-24).** With the sensor
+  enabled and the code correct, the pegged ring still came out QUIET and the
+  phone showed "Please open the Home Assistant app and send the command
+  again to grant the proper permissions". `command_volume_level` requires
+  **Do Not Disturb access**; without it the app DROPS the command silently
+  (HA's REST call still returns 200, so nothing appears in our logs) —
+  which also means a failed peg is harmless, there's nothing to restore.
+  Grant per phone: tap that notice, or Settings > Apps > Special app access
+  > Do Not Disturb access > Home Assistant > Allow. So each phone needs
+  THREE one-time grants: Volume Levels sensor, DND access, and (optional)
+  a musical ringtone on the Alarm Stream channel.
+  **Diagnostic added:** after pegging, a background task pushes
+  command_update_sensors and reads the level back ~8s later; if it hasn't
+  risen above the prior value it logs "alarm volume peg had NO effect on
+  <phone> — grant Do Not Disturb access…". Best-effort, never blocks or
+  fails a ring. 71 tests green.
+  Also unexplained in that same run: the ring notification itself didn't
+  sound until Brad unlocked the phone ~10s later, despite ttl 0 +
+  priority high (the 02:55 ring was instant). Watch whether it recurs —
+  possibly the permission-prompt notification taking precedence.
+- **DND grant CONFIRMED working (Brad 2026-07-24): "loud and worked this
+  time."** On current Pixels the Special-app-access entry is renamed
+  **"Modes access"** (Android replaced Do Not Disturb with Modes) — same
+  permission, that's the one to grant. That same ring ALSO closes the
+  live-voice test: it came in by voice, the FAMILY-ROOM satellite winning
+  arbitration ("Okay, computer." verified 100 while the kitchen mic heard
+  "Okay, from here." at 66.7) -> find_phone, owner brad -> pegged (was 3)
+  -> tap at +6s -> restored to 3.
+- **Diagnostic false positive (found immediately, fixed).** That +6s tap
+  made the new readback log "peg had NO effect (still 3)" — the early stop
+  had ALREADY restored the level before the 8s readback, which looks
+  identical to a dropped command. The readback now bails when the ring is
+  no longer active, and `stop()` cancels the diagnostic task outright.
+  Lesson for any future post-hoc verification here: a check that races the
+  cleanup path will cry wolf on the FAST, HAPPY path. 72 tests green.
+  Re-tested with a ring held past 10s: **"alarm volume peg confirmed on brad
+  (now 7)"** — the phone's OWN sensor read 7 mid-ring (peg is real, not just
+  audible), then stop -> "restored to 3". Peg/restore is now proven from
+  both ends: our log AND the device sensor.
+- **Pending after v2:** pick a musical ringtone on each phone's Alarm
+  Stream channel (one-time, per phone — the channel only exists after the
+  first notification arrives); enable the Volume Levels sensor to unlock
+  pegging, then VERIFY the sensor's scale is steps-not-percent and that the
+  restore lands (compare the sensor before/after a ring); re-test the
+  tap/swipe stop INSIDE the window; voice "found it" while actually
+  ringing; confirm the 30s cadence sounds right with the chosen tone;
+  kitchen live-voice.

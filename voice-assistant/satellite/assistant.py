@@ -290,11 +290,13 @@ def get_bytes(url: str, timeout: float = 30) -> bytes:
 
 
 # --- music ducking -----------------------------------------------------------
-# Music at speech volume on the same speakers defeats stage-2 verify, command
-# capture, AND the alarm 'stop' barge-in listener (the TONOR can't AEC audio it
-# didn't play). Duck on every stage-1 active trigger and on alarm start; unduck
-# when the turn (incl. follow-ups) or alarm ends. The orchestrator refcounts
-# nested pairs and has a watchdog, so these are safe to fire blind.
+# Music at speech volume on the same speakers defeats command capture AND the
+# alarm 'stop' barge-in listener (the mic can't AEC audio it didn't play).
+# Duck on a CONFIRMED wake (stage-2 verify pass), manual trigger, and alarm
+# start; unduck when the turn (incl. follow-ups) or alarm ends. NOT on stage-1
+# triggers: verify decodes pre-trigger audio so ducking can't help it, and
+# music false-fires made every dip audible as stutter. The orchestrator
+# refcounts nested pairs and has a watchdog, so these are safe to fire blind.
 def _music_post(path: str) -> None:
     """Fire-and-forget on its own thread — must never delay /verify or capture."""
     def _post():
@@ -756,50 +758,60 @@ def run_turn(preroll_pcm: bytes, stdout, vad, trigger_t0: float) -> None:
         f"server={v.get('latency_ms')}ms trigger_to_chime={chime_ms}ms")
     threading.Thread(target=_persist_verify, args=(preroll_pcm, event),
                      daemon=True).start()
-    play_file(SOUNDS_DIR / "wake.wav")
-    # Deliberately NO drain: the buffered audio holds a run-together command
-    # ("okay computer, download a car") spoken without waiting for the chime.
-    # capture_command still processes it (Silero catches the speech in it); the
-    # onset timeout is wall-clock, so the buffer doesn't steal the wait budget.
-    cmd_pcm = capture_command(stdout, vad, min_capture_ms=WAKE_MIN_CAPTURE_MS,
-                              onset_ms=WAKE_ONSET_MS, partials=True)
-    play_file(SOUNDS_DIR / "vad.wav")
-    if not cmd_pcm:
-        log("no command captured")
-        return
+    # Duck only on a CONFIRMED wake. Ducking used to fire on every stage-1
+    # trigger, but /verify decodes the pre-roll — audio captured BEFORE any
+    # duck could land — so early ducking never helped verification, and music
+    # false-fires turned into ~400ms volume dips on the big speakers that read
+    # as playback stutter (live diagnosis 2026-07-24: ~17 dips in a 21-min
+    # jukebox session, both satellites ducking the same kitchen queue).
+    duck_music()
     try:
-        # Stitch the pre-roll in front of the command. Capture starts AT the
-        # stage-1 trigger, but a run-together command ("okay computer set a
-        # timer…") begins DURING the ~0.5s detect lag, so its first word(s)
-        # exist only in the pre-roll (live bug 2026-07-12: "set a" showed in
-        # /verify's transcript, command decoded as just "timer for 30
-        # seconds"). The buffers are gapless — the pre-roll ends on the last
-        # frame the main loop read, capture reads the pipe from the next — so
-        # prepending reassembles the utterance; the orchestrator strips the
-        # leading wake phrase from the stitched transcript (?stitched=1).
-        # Long timeout on purpose: a searched ask can run ~60s and the reply
-        # audio only exists in this response. Wake detection is paused while we
-        # wait (single mic reader) — acceptable; alarms still fire (HTTP thread).
-        resp = post_wav(sat_path("/command/audio?stitched=1"),
-                        wrap_wav(preroll_pcm + cmd_pcm),
-                        timeout=COMMAND_TIMEOUT_S)
-    except Exception as exc:  # noqa: BLE001
-        log(f"/command/audio failed: {exc}")
-        return
-    log(f"command -> {resp.get('intent')}: {resp.get('response')}")
-    cmd_clip = f"cmd-{datetime.now().strftime('%Y%m%d-%H%M%S')}.wav"
-    threading.Thread(target=_persist_cmd, args=(preroll_pcm + cmd_pcm, cmd_clip),
-                     daemon=True).start()
-    append_event({"type": "command", "intent": resp.get("intent"),
-                  "transcript": resp.get("transcript"), "response": resp.get("response"),
-                  "clip": cmd_clip})
-    url = resp.get("audio_url")
-    if url:
+        play_file(SOUNDS_DIR / "wake.wav")
+        # Deliberately NO drain: the buffered audio holds a run-together command
+        # ("okay computer, download a car") spoken without waiting for the chime.
+        # capture_command still processes it (Silero catches the speech in it); the
+        # onset timeout is wall-clock, so the buffer doesn't steal the wait budget.
+        cmd_pcm = capture_command(stdout, vad, min_capture_ms=WAKE_MIN_CAPTURE_MS,
+                                  onset_ms=WAKE_ONSET_MS, partials=True)
+        play_file(SOUNDS_DIR / "vad.wav")
+        if not cmd_pcm:
+            log("no command captured")
+            return
         try:
-            play_wav_bytes(get_bytes(ORCH_BASE + url))
+            # Stitch the pre-roll in front of the command. Capture starts AT the
+            # stage-1 trigger, but a run-together command ("okay computer set a
+            # timer…") begins DURING the ~0.5s detect lag, so its first word(s)
+            # exist only in the pre-roll (live bug 2026-07-12: "set a" showed in
+            # /verify's transcript, command decoded as just "timer for 30
+            # seconds"). The buffers are gapless — the pre-roll ends on the last
+            # frame the main loop read, capture reads the pipe from the next — so
+            # prepending reassembles the utterance; the orchestrator strips the
+            # leading wake phrase from the stitched transcript (?stitched=1).
+            # Long timeout on purpose: a searched ask can run ~60s and the reply
+            # audio only exists in this response. Wake detection is paused while we
+            # wait (single mic reader) — acceptable; alarms still fire (HTTP thread).
+            resp = post_wav(sat_path("/command/audio?stitched=1"),
+                            wrap_wav(preroll_pcm + cmd_pcm),
+                            timeout=COMMAND_TIMEOUT_S)
         except Exception as exc:  # noqa: BLE001
-            log(f"reply playback failed: {exc}")
-    run_followups(stdout, vad)
+            log(f"/command/audio failed: {exc}")
+            return
+        log(f"command -> {resp.get('intent')}: {resp.get('response')}")
+        cmd_clip = f"cmd-{datetime.now().strftime('%Y%m%d-%H%M%S')}.wav"
+        threading.Thread(target=_persist_cmd, args=(preroll_pcm + cmd_pcm, cmd_clip),
+                         daemon=True).start()
+        append_event({"type": "command", "intent": resp.get("intent"),
+                      "transcript": resp.get("transcript"), "response": resp.get("response"),
+                      "clip": cmd_clip})
+        url = resp.get("audio_url")
+        if url:
+            try:
+                play_wav_bytes(get_bytes(ORCH_BASE + url))
+            except Exception as exc:  # noqa: BLE001
+                log(f"reply playback failed: {exc}")
+        run_followups(stdout, vad)
+    finally:
+        unduck_music()
 
 
 def run_manual_turn(stdout, vad) -> None:
@@ -1409,6 +1421,11 @@ def main() -> int:
     stop_hop_chunks = max(1, STOP_HOP_MS // VAD_FRAME_MS)
     stop_window = np.zeros(WINDOW_SAMPLES, dtype=np.int16)
     stop_chunks = 0
+    # Real samples shifted into stop_window since the alarm started. Until it
+    # reaches WINDOW_SAMPLES the window is still part digital silence from the
+    # alarm-start reset, and the model must NOT be asked to score it — see the
+    # startup-transient note at the scoring site below.
+    stop_filled = 0
 
     while True:
         # while an alarm is ringing (playback runs in its own thread), the main
@@ -1424,6 +1441,7 @@ def main() -> int:
                 alarm_frames = 0
                 stop_window = np.zeros(WINDOW_SAMPLES, dtype=np.int16)
                 stop_chunks = 0
+                stop_filled = 0
                 try:
                     ALARM_RING_DIR.mkdir(parents=True, exist_ok=True)
                     ring_wav = wave.open(str(
@@ -1448,8 +1466,25 @@ def main() -> int:
             if stop_model is not None:
                 stop_window = np.concatenate(
                     [stop_window[SileroVad.CHUNK:], np.frombuffer(b, dtype=np.int16)])
+                stop_filled += SileroVad.CHUNK
                 stop_chunks += 1
-                if stop_chunks >= stop_hop_chunks:
+                # STARTUP TRANSIENT GUARD (2026-07-25). stop_window is reset to
+                # ZEROS at alarm start, so for the first 2s it is mostly digital
+                # silence with a sliver of ring at the end — an input the model
+                # never saw in training (every training clip is a full 2s of
+                # audio). Scoring it is meaningless and it is what actually
+                # caused the 2026-07-24 self-dismissals: replaying the 19 real
+                # captured rings through this exact loop, v1 peaks 0.5-0.92 in
+                # that pre-fill window on 18/19 clips — including clips with no
+                # spoken "stop" anywhere — while the same clips score <=0.26 in
+                # steady state. (v2, trained with real ring backgrounds, was no
+                # better: 17/19.) The replay reproduced the live incident's
+                # logged scores to 3 decimals, so this is the mechanism, not a
+                # guess. Waiting for a full window costs no real recall: the
+                # announcement is still playing and nobody has barged in yet,
+                # and the ASR dismiss path covers the gap either way.
+                # See training/replay_stop_faithful.py.
+                if stop_chunks >= stop_hop_chunks and stop_filled >= WINDOW_SAMPLES:
                     stop_chunks = 0
                     s = float(stop_model.predict(stop_window)[stop_key])
                     if s >= STOP_LOG_THRESHOLD:
@@ -1519,11 +1554,7 @@ def main() -> int:
 
         preroll = b"".join(list(ring)[-int(PREROLL_S * FPS):])
         media_stop()   # slideshow video audio would talk over the turn
-        duck_music()
-        try:
-            run_turn(preroll, arecord.stdout, vad, now)
-        finally:
-            unduck_music()
+        run_turn(preroll, arecord.stdout, vad, now)
         resync()
 
 

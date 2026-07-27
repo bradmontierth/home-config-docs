@@ -11,6 +11,15 @@
 # "stops"/"stopped"/"stay" deliberately NOT negatives — under ring masking a
 # real "stop" can smear into those; suppressing them would suppress the user
 # (same reasoning as keeping "hey google" out of okay_google negatives).
+#
+# v2 (2026-07-24): v1 false-fired 0.7-0.9 on the REAL first ding (synthetic
+# bench 0.038 didn't transfer). /work/data/real_ring_backgrounds = ring-body
+# carves from 19 real captured rings (data/real_rings + manifest-20260724.csv:
+# stop tails cut at parakeet/live-log onset minus margin; each body ×10 so 90
+# files get real draw weight vs 400 synthetic). 4 clips held out of
+# backgrounds as the untouched eval set (oven theme, live-ASR-missed stop,
+# speech-only negative, the 0.92 ring-only false-fire clip). Eval/threshold
+# from replay over data/real_rings — NEVER re-arm on synthetic bench alone.
 model_name: stop
 target_phrases: ["stop", "stop it", "stop the timer"]
 
@@ -45,13 +54,13 @@ length_scales: [0.75, 1.0, 1.25]
 slerp_weights: [0.2, 0.35, 0.5, 0.65, 0.8]
 
 data_dir: /work/data
-output_dir: /work/output/stop
+output_dir: /work/output/stop_v2
 
 augmentation:
   clip_duration: 2.0
   batch_size: 16
   rounds: 3
-  background_paths: [/work/data/backgrounds, /work/data/alarm_backgrounds]
+  background_paths: [/work/data/backgrounds, /work/data/alarm_backgrounds, /work/data/real_ring_backgrounds]
   rir_paths: [/work/data/rirs]
 
 model:

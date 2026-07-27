@@ -1,0 +1,37 @@
+{
+  "loft": {
+    "rooms": ["loft"],
+    "spoken": "the loft",
+    "aliases": ["loft", "the loft"]
+  },
+  "simon": {
+    "rooms": ["simon"],
+    "spoken": "Simon's room",
+    "aliases": ["simon", "simon's room", "simons room"]
+  },
+  "claire": {
+    "rooms": ["claire"],
+    "spoken": "Claire's room",
+    "aliases": ["claire", "claire's room", "claires room"]
+  },
+  "master": {
+    "rooms": ["master"],
+    "spoken": "the master bedroom",
+    "aliases": ["master", "the master", "master bedroom", "the master bedroom", "our room", "your room", "the bedroom"]
+  },
+  "shower": {
+    "rooms": ["shower"],
+    "spoken": "the shower",
+    "aliases": ["shower", "the shower", "the master shower", "the master bathroom"]
+  },
+  "kids": {
+    "rooms": ["simon", "claire"],
+    "spoken": "the kids' rooms",
+    "aliases": ["the kids", "kids", "both kids", "the children"]
+  },
+  "all": {
+    "rooms": "all",
+    "spoken": "all the speakers",
+    "aliases": ["everyone", "everybody", "all", "upstairs", "everyone upstairs", "the house", "the whole house"]
+  }
+}

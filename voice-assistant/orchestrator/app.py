@@ -33,6 +33,8 @@ from . import ask as ask_mod
 from . import home_control as home_mod
 from . import lists as lists_mod
 from . import music as music_mod
+from . import broadcast as broadcast_mod
+from . import find_phone as phone_mod
 from . import places as places_mod
 from . import sports as sports_mod
 from . import weather as weather_mod
@@ -173,6 +175,8 @@ async def _startup() -> None:
     music_mod.start()
     # Render the ask filler WAVs now so the first ask doesn't pay TTS latency.
     asyncio.create_task(ask_mod.ensure_fillers())
+    # A restart during a find-phone ring skips its volume restore; undo it.
+    asyncio.create_task(phone_mod.restore_stranded())
     log.info("orchestrator up; %d active timer(s) restored", len(ENGINE.active()))
 
 
@@ -280,6 +284,15 @@ def _summarize_turn(intent: str, result: dict) -> str:
         return "you asked what music is playing"
     if intent == "home_control":
         return f"you gave a home command and heard: {(result.get('response') or '')[:100]}"
+    if intent == "broadcast" and result.get("broadcast"):
+        b = result["broadcast"]
+        return f"you broadcast {parsed.get('query')!r} to {b['spoken']}"
+    if intent == "find_phone":
+        if "stopped" in result:
+            return "you stopped the find-my-phone ringing"
+        p = result.get("phone")
+        return (f"you rang {p['spoken']}" if p
+                else "you asked whose phone should ring")
     return (result.get("response") or "")[:120]
 
 
@@ -325,8 +338,31 @@ async def handle_command(command: str, followup: bool = False) -> dict:
     if not command:
         return {"intent": "none", "response": "I didn't catch that.", "ok": False}
 
-    # A destructive bulk op is awaiting a yes/no? Resolve that first.
+    # "Whose phone?" is awaiting a name? Resolve without an LLM parse: the
+    # answer is one word ("Brad's", "adrienne"), and find_phone.resolve
+    # strips the filler. Anything that is neither a name nor a "no" means
+    # the user moved on -> abandon and fall through to a normal parse.
     pending = session_pending()
+    if pending and pending["op"] == "find_phone":
+        session_clear_pending()
+        entry = phone_mod.resolve(command)
+        if entry is not None or _affirmation(command) == "no":
+            if followup:
+                await events.emit("transcript", text=command)
+            if entry is None:
+                return await _finalize(
+                    {"intent": "none", "response": "Okay.", "ok": True}, "none")
+            try:
+                result = {"intent": "find_phone",
+                          **await phone_mod.ring_and_reply(entry)}
+            except Exception as exc:  # noqa: BLE001 — HA down / notify failed
+                log.warning("find phone ring failed: %s", exc)
+                result = {"intent": "find_phone", "ok": False,
+                          "response": "Sorry, I couldn't reach the phone."}
+            return await _finalize(result, "find_phone")
+        pending = None
+
+    # A destructive bulk op is awaiting a yes/no? Resolve that first.
     if pending:
         decision = _affirmation(command)
         if decision is not None:
@@ -593,6 +629,31 @@ async def handle_command(command: str, followup: bool = False) -> dict:
             # a control phrase must never turn into a web search or a guess.
             result["response"] = "I don't control that."
             result["ok"] = False
+
+    elif intent == "broadcast":
+        # Like home_control: no ask fallback — a relay phrase must never turn
+        # into a web search. Delivery is Node-RED's job past the MQTT publish.
+        try:
+            result.update(await broadcast_mod.handle(parsed))
+        except Exception as exc:  # noqa: BLE001 — HA down / publish failed
+            log.warning("broadcast failed: %s", exc)
+            result["response"] = "Sorry, I couldn't reach the speakers."
+            result["ok"] = False
+
+    elif intent == "find_phone":
+        # No ask fallback (home_control pattern): a find-phone phrase must
+        # never become a web search. "my phone" can't be attributed until
+        # speaker ID (backlog item 9) — ask whose and stash a pending op so
+        # the one-word answer resolves without another parse.
+        try:
+            fp_result = await phone_mod.handle(parsed)
+        except Exception as exc:  # noqa: BLE001 — HA down / notify failed
+            log.warning("find phone failed: %s", exc)
+            fp_result = {"response": "Sorry, I couldn't reach the phones.",
+                         "ok": False}
+        result.update(fp_result)
+        if fp_result.get("needs_owner"):
+            session_set_pending("find_phone", [])
 
     elif intent == "sports":
         sports_result = None
@@ -1115,3 +1176,40 @@ def home_commands_ui() -> FileResponse:
     return FileResponse(
         os.path.join(os.path.dirname(__file__), "home_commands_ui.html"),
         media_type="text/html")
+
+
+# -- broadcast REST (Voice Notes phone app) ---------------------------------
+@app.post("/phone/found")
+async def phone_found() -> dict:
+    """Phone-side find-my-phone stop: the notification's Found It action (or
+    a swipe-dismiss) fires an HA mobile_app event; Node-RED (tab "Find
+    Phone") bridges it here. Cancelling the loop also clears the alert."""
+    stopped = phone_mod.stop()
+    log.info("phone found (ring %s)", "stopped" if stopped else "not active")
+    return {"stopped": stopped}
+
+
+@app.get("/broadcast/rooms")
+def broadcast_rooms() -> dict:
+    """Room chips for the phone UI — table edits reach the app without an
+    app release."""
+    return {"ok": True, "rooms": broadcast_mod.rooms_list()}
+
+
+@app.post("/broadcast")
+async def broadcast_send(payload: dict = Body(...)) -> dict:
+    """Explicit-rooms send (no intent parse, no fuzzy matching): the phone
+    UI already made both target and message unambiguous."""
+    volume = payload.get("volume")
+    if volume is not None and not (
+            isinstance(volume, int) and 0 <= volume <= 100):
+        raise HTTPException(400, "volume must be an int 0-100")
+    try:
+        sent = await broadcast_mod.send(
+            payload.get("rooms"), payload.get("message") or "", volume)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+    except Exception as exc:  # noqa: BLE001 — HA down / publish failed
+        log.warning("broadcast REST publish failed: %s", exc)
+        raise HTTPException(502, "couldn't reach the speakers")
+    return {"ok": True, "sent": sent}

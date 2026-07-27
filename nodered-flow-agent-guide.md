@@ -161,6 +161,13 @@ Avoid broad full-flow deploys unless the task explicitly requires cross-tab conf
   several old call-service nodes in the walk have input overrides enabled and
   throw `ValidationError: "data" must be one of [string, object]` on plain
   string/number payloads.
+- **`ha-api` nodes silently drop messages right after a `full` deploy**
+  (learned 2026-07-24, kitchen-volume rework): the HA websocket config node
+  takes ~30-60s to reconnect after a full restart, and messages sent through
+  an `ha-api` node before then vanish with no log line. A live test fired
+  ~30s post-deploy did nothing; the identical inject a minute later worked.
+  Wait a minute after a full deploy before live-testing anything that goes
+  through HA nodes.
 
 ## Monitoring And Validation
 

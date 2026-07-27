@@ -18,7 +18,7 @@ INTENTS = (
     "add_items", "set_reminder", "show_todos", "show_shopping", "complete_item",
     "remove_items", "clear_list", "play_music", "music_control", "music_query",
     "sports", "weather", "business_hours", "place_search", "home_control",
-    "ask", "show_answer", "unclear", "none",
+    "broadcast", "find_phone", "ask", "show_answer", "unclear", "none",
 )
 
 WEATHER_WHEN = ("now", "today", "tonight", "tomorrow", "monday", "tuesday",
@@ -40,7 +40,10 @@ Schema:
   "duration_seconds": integer total seconds for set_timer / timer_adjust (adjust may be negative to remove time), else null,
   "sound_theme": one of {list(config.SOUND_THEMES)},
   "scope": "one" or "all" — "all" only when the user clearly means every timer (e.g. "cancel all timers"), else "one",
-  "query": for intent "ask" the cleaned question text; for "play_music" the name of what to play; for "business_hours" or "place_search" the named business; else null,
+  "query": for intent "ask" the cleaned question text; for "play_music" the name of what to play; for "business_hours" or "place_search" the named business; for "broadcast" the message to speak; else null,
+  "broadcast_target": for "broadcast", the person or room the message is for, close to as spoken ("simon", "the kids", "the loft"); null when none was named,
+  "phone_owner": for "find_phone", whose phone as spoken — "my", "brad", "adrienne", "mom", "dad"; else null,
+  "phone_action": for "find_phone", "stop" when they say the phone is found or to stop the ringing; else "ring",
   "place_modifier": for "business_hours" or "place_search", a specifically requested department or service such as "tire center", "gas", "pharmacy", or "garden center"; otherwise null,
   "item_text": for complete_item / remove_items, a phrase describing WHICH item(s) to act on — one item ("eggs"), several ("milk and bread"), a category ("the dairy", "produce"), or a property ("everything orange", "all of it"); else null,
   "list_type": for clear_list / show, which list — "shopping", "todo", or "all"; else null,
@@ -99,6 +102,26 @@ Rules:
   unsupported ("open the garage") — the control layer decides what it controls. But music
   playback stays music_control ("turn it up", "stop the music"), and QUESTIONS about the house
   state ("are the blinds closed", "is the kitchen light on") are "ask", never home_control.
+- broadcast = relaying a message to a person or room ELSEWHERE in the house over its speaker:
+  "tell simon to come eat dinner" -> query "Simon, come eat dinner", broadcast_target "simon";
+  "tell the kids it's time to leave" -> query "It's time to leave", broadcast_target "the kids";
+  "broadcast that dinner is ready" -> query "Dinner is ready", broadcast_target null;
+  "announce to claire that her show is starting" -> query "Claire, your show is starting",
+  broadcast_target "claire"; "tell the loft testing one two three" -> query "Testing one two
+  three", broadcast_target "the loft". REWRITE the message as natural direct speech addressed
+  to the listener — never leave a reported-speech fragment like "to come eat dinner"; when a
+  specific person is the target, start the message with their name. "tell me ..." is NEVER
+  broadcast ("tell me a joke" is ask, "tell me the weather" is weather); a QUESTION about a
+  person is ask ("where is simon", "how old is claire") — broadcast is only for relaying a
+  message TO someone.
+- find_phone = locating or ringing a lost PHONE (it rings so it can be found): "where's my
+  phone" -> find_phone, phone_owner "my", phone_action "ring"; "find adrienne's phone" ->
+  phone_owner "adrienne"; "where is mom's phone" -> "mom"; "ring my phone", "make dad's phone
+  ring", "I can't find my phone", "I lost my phone". Ending the ringing is phone_action "stop":
+  "found it" -> find_phone, phone_action "stop"; "I found my phone" (owner "my", action "stop"),
+  "stop ringing the phone", "you can stop the phone now". Only for phones: where a PERSON is
+  stays "ask" ("where is simon"), a named BUSINESS stays place_search, and questions ABOUT a
+  phone ("is my phone charged") are "ask".
 - ask = a general knowledge or factual question NOT about timers: "how many tablespoons in a cup",
   "when do babies start walking", "what temperature is chicken done at", "how do I dice an onion".
   Put the cleaned question in "query". No keyword is needed — natural questions route here.
@@ -213,6 +236,22 @@ def _validate(data: dict) -> dict:
     else:
         query = None
 
+    broadcast_target = data.get("broadcast_target")
+    if isinstance(broadcast_target, str):
+        broadcast_target = broadcast_target.strip().lower() or None
+    else:
+        broadcast_target = None
+
+    phone_owner = data.get("phone_owner")
+    if isinstance(phone_owner, str):
+        phone_owner = phone_owner.strip().lower() or None
+    else:
+        phone_owner = None
+
+    phone_action = data.get("phone_action")
+    if phone_action != "stop":
+        phone_action = "ring"
+
     place_modifier = data.get("place_modifier")
     if isinstance(place_modifier, str):
         place_modifier = place_modifier.strip().lower() or None
@@ -264,6 +303,9 @@ def _validate(data: dict) -> dict:
         "sound_theme": theme,
         "scope": scope,
         "query": query,
+        "broadcast_target": broadcast_target,
+        "phone_owner": phone_owner,
+        "phone_action": phone_action,
         "place_modifier": place_modifier,
         "item_text": item_text,
         "list_type": list_type,

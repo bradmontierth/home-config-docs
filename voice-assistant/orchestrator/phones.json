@@ -1,0 +1,14 @@
+{
+  "brad": {
+    "aliases": ["brad", "brads", "dad", "dads", "daddy"],
+    "spoken": "Brad's phone",
+    "service": "mobile_app_pixel_8_pro",
+    "volume_sensor": "sensor.pixel_8_pro_volume_level_alarm"
+  },
+  "adrienne": {
+    "aliases": ["adrienne", "adriennes", "adrian", "adrians", "adrien", "mom", "moms", "mommy", "mama"],
+    "spoken": "Adrienne's phone",
+    "service": "mobile_app_pixel_9_pro",
+    "volume_sensor": "sensor.pixel_9_pro_volume_level_alarm"
+  }
+}

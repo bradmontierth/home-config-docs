@@ -72,6 +72,60 @@ HA_TOKEN_FILE = os.getenv("HA_TOKEN_FILE", "/secrets/ha_token")
 HOME_COMMANDS_FILE = os.getenv(
     "HOME_COMMANDS_FILE",
     os.path.join(os.path.dirname(__file__), "home_commands.json"))
+
+# --- broadcast (whole-home audio intercom via Node-RED) ---------------------
+# Published through HA mqtt.publish; the "Voice Broadcast" Node-RED tab
+# subscribes and drives the Amp Speakers subflow (padding + amp wake).
+BROADCAST_TOPIC = os.getenv("BROADCAST_TOPIC", "voice/broadcast")
+# Target alias table, hot-reloaded on mtime like HOME_COMMANDS_FILE.
+BROADCAST_ROOMS_FILE = os.getenv(
+    "BROADCAST_ROOMS_FILE",
+    os.path.join(os.path.dirname(__file__), "broadcast_rooms.json"))
+# Announcement volume 0-100; unset/empty -> the subflow's own default
+# (global defaultSpeakerVolume in Node-RED).
+_bv = os.getenv("BROADCAST_VOLUME", "").strip()
+BROADCAST_VOLUME = int(_bv) if _bv else None
+
+# --- find phone (ring via HA companion app) ---------------------------------
+# Owner alias table -> notify.mobile_app_* service, hot-reloaded on mtime
+# like the tables above.
+PHONES_FILE = os.getenv(
+    "PHONES_FILE",
+    os.path.join(os.path.dirname(__file__), "phones.json"))
+# Ring window: the same-tagged notification is re-posted every INTERVAL
+# (each re-post RESTARTS the channel sound from the top) REPEATS times
+# total, then the notification auto-times-out. Stopped early by voice
+# ("found it") or the notification's Found It / swipe (Node-RED tab "Find
+# Phone" -> /phone/found).
+# INTERVAL must EXCEED the phone's ringtone length or each re-post cuts the
+# previous one off mid-phrase — Brad heard exactly that at 5s against a
+# ~20-30s alarm tone ("kept building then abruptly restarting"). 4 x 30s
+# keeps the 2-minute window (30s was too short: his first live tap landed
+# at +29s, after the ring had ended).
+FIND_PHONE_REPEATS = int(os.getenv("FIND_PHONE_REPEATS", "4"))
+FIND_PHONE_INTERVAL_S = float(os.getenv("FIND_PHONE_INTERVAL_S", "30"))
+# Peg the alarm stream to full for the ring window, then put it back.
+# Regular notifications ignore `alarm_stream_max` (TTS-only), so volume has
+# to be set with command_volume_level — and the app does NOT restore it
+# (setStreamVolume persists), which would leave real morning alarms at max.
+# So pegging only happens when the phone's alarm-volume sensor is readable
+# (phones.json "volume_sensor"; enable "Volume Levels" in the companion
+# app's sensor list, one-time per phone) — no sensor, no peg, because
+# guessing a restore level would silently change their alarm setting.
+FIND_PHONE_PEG_VOLUME = os.getenv("FIND_PHONE_PEG_VOLUME", "1") not in (
+    "0", "false", "no", "")
+# Clamped by the app to the alarm stream's real max (Brad's pixel 8 pro
+# reports min 1 / max 7, and read 3 before the first pegged ring).
+FIND_PHONE_MAX_VOLUME = int(os.getenv("FIND_PHONE_MAX_VOLUME", "255"))
+# Crash/restart insurance: the pegged level is journalled here so a deploy
+# or crash mid-ring can't strand the alarm at max (restored on startup).
+# (DB_PATH itself is defined further down — re-read the same env default so
+# this doesn't depend on definition order.)
+FIND_PHONE_VOLUME_STATE_FILE = os.getenv(
+    "FIND_PHONE_VOLUME_STATE_FILE",
+    os.path.join(os.path.dirname(os.getenv(
+        "ORCH_DB_PATH", "/home/pi/voice-orchestrator/data/orchestrator.db")),
+        "find_phone_volume.json"))
 # Local weather-station sensors (accurate on-site readings) + the met.no
 # entity that backs the dashboard's condition + forecast strip.
 WEATHER_ENTITY = os.getenv("WEATHER_ENTITY", "weather.forecast_home_2")

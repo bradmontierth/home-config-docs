@@ -49,4 +49,4 @@ echo "=== $(date) stop ==="
 livekit-wakeword run configs/stop.yaml
 
 echo "=== $(date) ALL DONE ==="
-ls -la /work/output/stop/
+ls -la /work/output/stop_v2/
