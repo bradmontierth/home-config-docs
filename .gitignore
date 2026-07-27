@@ -29,6 +29,13 @@ tmp/
 *.bak-*
 *.bak.*
 
+# Grafana migration verification dumps: raw query API request/response bodies
+# captured to prove a panel returned the same data before and after a change.
+# ~38 MB of transient proof (33 MB of it 5 preflight responses) against 230 KB
+# of actual dashboard JSON — keep the dashboards, drop the dumps.
+grafana-dashboard-backups/**/*-request.json
+grafana-dashboard-backups/**/*-response.json
+
 # Editors / OS
 .DS_Store
 .idea/

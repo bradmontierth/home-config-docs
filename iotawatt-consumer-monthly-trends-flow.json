@@ -1,0 +1,609 @@
+{
+  "id": "7b4ea8c23b72358e",
+  "label": "Monthly Trends",
+  "disabled": false,
+  "info": "",
+  "env": [],
+  "nodes": [
+    {
+      "id": "1e7f225ac4313084",
+      "type": "inject",
+      "z": "7b4ea8c23b72358e",
+      "name": "daily",
+      "props": [
+        {
+          "p": "payload"
+        },
+        {
+          "p": "topic",
+          "vt": "str"
+        }
+      ],
+      "repeat": "",
+      "crontab": "00 22 * * *",
+      "once": false,
+      "onceDelay": 0.1,
+      "topic": "",
+      "payload": "",
+      "payloadType": "date",
+      "x": 190,
+      "y": 180,
+      "wires": [
+        [
+          "32b5ab7650abf721"
+        ]
+      ]
+    },
+    {
+      "id": "766481eca32d3b60",
+      "type": "function",
+      "z": "7b4ea8c23b72358e",
+      "name": "Build the query",
+      "func": "var years = msg.payload;\n\nlet sql = `\nDROP TABLE IF EXISTS hubitat_logging.WaterMonthlyTrackingNew;\nCREATE TABLE hubitat_logging.WaterMonthlyTrackingNew AS\nWITH base AS (\n    SELECT DISTINCT MonthBeginDate, MonthNBR\n    FROM dimDate\n    WHERE YearNBR = YEAR(NOW()) - 1\n), \nwater_usage AS (\n    SELECT MONTH(Time) AS month,\n           YEAR(Time) AS year,\n           SUM(value) AS Gallons\n    FROM flume\n    GROUP BY MONTH(Time), YEAR(Time)\n)\nSELECT base.MonthBeginDate`;\n\nyears.forEach(row => {\n    sql += `,\n    MAX(CASE WHEN water_usage.year = ${row.YearNBR} THEN water_usage.Gallons ELSE NULL END) AS '${row.YearNBR}'`;\n});\n\nsql += `\nFROM base\nLEFT JOIN water_usage ON base.MonthNBR = water_usage.month\nGROUP BY base.MonthBeginDate\nORDER BY base.MonthBeginDate;`;\n\nmsg.topic = sql;\nreturn msg;\n",
+      "outputs": 1,
+      "timeout": 0,
+      "noerr": 0,
+      "initialize": "",
+      "finalize": "",
+      "libs": [],
+      "x": 860,
+      "y": 160,
+      "wires": [
+        [
+          "e2340a11e38be4cb",
+          "3470aa17331b5aee"
+        ]
+      ]
+    },
+    {
+      "id": "0e57c58ffc17b57c",
+      "type": "mysql",
+      "z": "7b4ea8c23b72358e",
+      "mydb": "50d88d05b3f142e9",
+      "name": "",
+      "x": 670,
+      "y": 160,
+      "wires": [
+        [
+          "766481eca32d3b60"
+        ]
+      ]
+    },
+    {
+      "id": "32b5ab7650abf721",
+      "type": "template",
+      "z": "7b4ea8c23b72358e",
+      "name": "Distinct Years",
+      "field": "topic",
+      "fieldType": "msg",
+      "format": "sql",
+      "syntax": "mustache",
+      "template": "Select Distinct year(time) YearNBR\nFROM flume;",
+      "output": "str",
+      "x": 500,
+      "y": 160,
+      "wires": [
+        [
+          "0e57c58ffc17b57c"
+        ]
+      ]
+    },
+    {
+      "id": "b6b43cded190bc33",
+      "type": "debug",
+      "z": "7b4ea8c23b72358e",
+      "name": "debug 198",
+      "active": true,
+      "tosidebar": true,
+      "console": false,
+      "tostatus": false,
+      "complete": "false",
+      "statusVal": "",
+      "statusType": "auto",
+      "x": 1210,
+      "y": 120,
+      "wires": []
+    },
+    {
+      "id": "e2340a11e38be4cb",
+      "type": "mysql",
+      "z": "7b4ea8c23b72358e",
+      "mydb": "50d88d05b3f142e9",
+      "name": "",
+      "x": 1030,
+      "y": 160,
+      "wires": [
+        [
+          "b6b43cded190bc33",
+          "b3c1445085023a40"
+        ]
+      ]
+    },
+    {
+      "id": "e7721e310b796f93",
+      "type": "inject",
+      "z": "7b4ea8c23b72358e",
+      "name": "",
+      "props": [
+        {
+          "p": "payload"
+        },
+        {
+          "p": "topic",
+          "vt": "str"
+        }
+      ],
+      "repeat": "",
+      "crontab": "",
+      "once": false,
+      "onceDelay": 0.1,
+      "topic": "",
+      "payload": "",
+      "payloadType": "date",
+      "x": 200,
+      "y": 320,
+      "wires": [
+        [
+          "b3c1445085023a40"
+        ]
+      ]
+    },
+    {
+      "id": "f418849c7b171125",
+      "type": "function",
+      "z": "7b4ea8c23b72358e",
+      "name": "Build the query",
+      "func": "var years = msg.payload;\n\nlet sql = `\nDROP TABLE IF EXISTS hubitat_logging.SolarMonthlyTracking;\nCREATE TABLE hubitat_logging.SolarMonthlyTracking AS\nWITH base AS (\n    SELECT DISTINCT MonthBeginDate, MonthNBR\n    FROM dimDate\n    WHERE YearNBR = YEAR(NOW()) - 1\n), \nsolar_usage AS (\n    SELECT MONTH(DateDTS) AS month,\n           YEAR(DateDTS) AS year,\n           SUM(TotalSolarHours) AS Gallons\n    FROM v_iotawatt_solar_energy_all\n    GROUP BY MONTH(DateDTS), YEAR(DateDTS)\n)\nSELECT base.MonthBeginDate`;\n\nyears.forEach(row => {\n    sql += `,\n    MAX(CASE WHEN solar_usage.year = ${row.YearNBR} THEN solar_usage.Gallons ELSE NULL END) AS '${row.YearNBR}'`;\n});\n\nsql += `\nFROM base\nLEFT JOIN solar_usage ON base.MonthNBR = solar_usage.month\nGROUP BY base.MonthBeginDate\nORDER BY base.MonthBeginDate;`;\n\nmsg.topic = sql;\nreturn msg;\n",
+      "outputs": 1,
+      "timeout": 0,
+      "noerr": 0,
+      "initialize": "",
+      "finalize": "",
+      "libs": [],
+      "x": 740,
+      "y": 320,
+      "wires": [
+        [
+          "dba56a2658c83084",
+          "2c40558ada99780b"
+        ]
+      ],
+      "template": null
+    },
+    {
+      "id": "2afc4679efab2642",
+      "type": "mysql",
+      "z": "7b4ea8c23b72358e",
+      "mydb": "50d88d05b3f142e9",
+      "name": "",
+      "x": 550,
+      "y": 320,
+      "wires": [
+        [
+          "f418849c7b171125"
+        ]
+      ]
+    },
+    {
+      "id": "b3c1445085023a40",
+      "type": "template",
+      "z": "7b4ea8c23b72358e",
+      "name": "Distinct Years",
+      "field": "topic",
+      "fieldType": "msg",
+      "format": "sql",
+      "syntax": "mustache",
+      "template": "Select Distinct year(DateDTS) YearNBR\nFROM v_iotawatt_solar_energy_all;",
+      "output": "str",
+      "x": 380,
+      "y": 320,
+      "wires": [
+        [
+          "2afc4679efab2642"
+        ]
+      ],
+      "func": null
+    },
+    {
+      "id": "8428694a8560974f",
+      "type": "debug",
+      "z": "7b4ea8c23b72358e",
+      "name": "debug 199",
+      "active": true,
+      "tosidebar": true,
+      "console": false,
+      "tostatus": false,
+      "complete": "false",
+      "statusVal": "",
+      "statusType": "auto",
+      "x": 830,
+      "y": 440,
+      "wires": []
+    },
+    {
+      "id": "dba56a2658c83084",
+      "type": "mysql",
+      "z": "7b4ea8c23b72358e",
+      "mydb": "50d88d05b3f142e9",
+      "name": "",
+      "x": 770,
+      "y": 380,
+      "wires": [
+        [
+          "8428694a8560974f",
+          "d10e75b26972d98d"
+        ]
+      ]
+    },
+    {
+      "id": "0b5563833a3191b0",
+      "type": "comment",
+      "z": "7b4ea8c23b72358e",
+      "name": "flume",
+      "info": "",
+      "x": 130,
+      "y": 20,
+      "wires": []
+    },
+    {
+      "id": "9b6cc5379f9b9cd8",
+      "type": "comment",
+      "z": "7b4ea8c23b72358e",
+      "name": "Solar",
+      "info": "",
+      "x": 190,
+      "y": 280,
+      "wires": []
+    },
+    {
+      "id": "2c40558ada99780b",
+      "type": "debug",
+      "z": "7b4ea8c23b72358e",
+      "name": "debug 200",
+      "active": true,
+      "tosidebar": true,
+      "console": false,
+      "tostatus": false,
+      "complete": "true",
+      "targetType": "full",
+      "statusVal": "",
+      "statusType": "auto",
+      "x": 970,
+      "y": 340,
+      "wires": []
+    },
+    {
+      "id": "243fddfb24ce3843",
+      "type": "inject",
+      "z": "7b4ea8c23b72358e",
+      "name": "",
+      "props": [
+        {
+          "p": "payload"
+        },
+        {
+          "p": "topic",
+          "vt": "str"
+        }
+      ],
+      "repeat": "",
+      "crontab": "",
+      "once": false,
+      "onceDelay": 0.1,
+      "topic": "",
+      "payload": "",
+      "payloadType": "date",
+      "x": 200,
+      "y": 520,
+      "wires": [
+        [
+          "d10e75b26972d98d"
+        ]
+      ]
+    },
+    {
+      "id": "7739ac6bbacc8aa2",
+      "type": "function",
+      "z": "7b4ea8c23b72358e",
+      "name": "Build the query",
+      "func": "var years = msg.payload;\n\nlet sql = `\nDROP TABLE IF EXISTS hubitat_logging.ElectricityMonthlyTracking;\nCREATE TABLE hubitat_logging.ElectricityMonthlyTracking AS\nWITH base AS (\n    SELECT DISTINCT MonthBeginDate, MonthNBR\n    FROM dimDate\n    WHERE YearNBR = YEAR(NOW()) - 1\n), \nsolar_usage AS (\n    SELECT MONTH(DateDTS) AS month,\n           YEAR(DateDTS) AS year,\n           SUM(TotalGridHours) AS Gallons\n    FROM v_iotawatt_solar_energy_all\n    GROUP BY MONTH(DateDTS), YEAR(DateDTS)\n)\nSELECT base.MonthBeginDate`;\n\nyears.forEach(row => {\n    sql += `,\n    MAX(CASE WHEN solar_usage.year = ${row.YearNBR} THEN solar_usage.Gallons ELSE NULL END) AS '${row.YearNBR}'`;\n});\n\nsql += `\nFROM base\nLEFT JOIN solar_usage ON base.MonthNBR = solar_usage.month\nGROUP BY base.MonthBeginDate\nORDER BY base.MonthBeginDate;`;\n\nmsg.topic = sql;\nreturn msg;\n",
+      "outputs": 1,
+      "timeout": 0,
+      "noerr": 0,
+      "initialize": "",
+      "finalize": "",
+      "libs": [],
+      "x": 740,
+      "y": 520,
+      "wires": [
+        [
+          "019379bb61533f48",
+          "e3b07bb97952ac10"
+        ]
+      ],
+      "template": null
+    },
+    {
+      "id": "f5e716f7359d2452",
+      "type": "mysql",
+      "z": "7b4ea8c23b72358e",
+      "mydb": "50d88d05b3f142e9",
+      "name": "",
+      "x": 550,
+      "y": 520,
+      "wires": [
+        [
+          "7739ac6bbacc8aa2"
+        ]
+      ]
+    },
+    {
+      "id": "d10e75b26972d98d",
+      "type": "template",
+      "z": "7b4ea8c23b72358e",
+      "name": "Distinct Years",
+      "field": "topic",
+      "fieldType": "msg",
+      "format": "sql",
+      "syntax": "mustache",
+      "template": "Select Distinct year(DateDTS) YearNBR\nFROM v_iotawatt_solar_energy_all;",
+      "output": "str",
+      "x": 380,
+      "y": 520,
+      "wires": [
+        [
+          "f5e716f7359d2452"
+        ]
+      ],
+      "func": null
+    },
+    {
+      "id": "c2b3247409a5fde7",
+      "type": "debug",
+      "z": "7b4ea8c23b72358e",
+      "name": "debug 201",
+      "active": true,
+      "tosidebar": true,
+      "console": false,
+      "tostatus": false,
+      "complete": "false",
+      "statusVal": "",
+      "statusType": "auto",
+      "x": 830,
+      "y": 640,
+      "wires": []
+    },
+    {
+      "id": "019379bb61533f48",
+      "type": "mysql",
+      "z": "7b4ea8c23b72358e",
+      "mydb": "50d88d05b3f142e9",
+      "name": "",
+      "x": 770,
+      "y": 580,
+      "wires": [
+        [
+          "c2b3247409a5fde7",
+          "068fbaef02a6ae42"
+        ]
+      ]
+    },
+    {
+      "id": "7065c18caf3e1ef5",
+      "type": "comment",
+      "z": "7b4ea8c23b72358e",
+      "name": "Grid",
+      "info": "",
+      "x": 190,
+      "y": 480,
+      "wires": []
+    },
+    {
+      "id": "e3b07bb97952ac10",
+      "type": "debug",
+      "z": "7b4ea8c23b72358e",
+      "name": "debug 202",
+      "active": true,
+      "tosidebar": true,
+      "console": false,
+      "tostatus": false,
+      "complete": "true",
+      "targetType": "full",
+      "statusVal": "",
+      "statusType": "auto",
+      "x": 970,
+      "y": 540,
+      "wires": []
+    },
+    {
+      "id": "406df57fa669fedd",
+      "type": "inject",
+      "z": "7b4ea8c23b72358e",
+      "name": "",
+      "props": [
+        {
+          "p": "payload"
+        },
+        {
+          "p": "topic",
+          "vt": "str"
+        }
+      ],
+      "repeat": "",
+      "crontab": "",
+      "once": false,
+      "onceDelay": 0.1,
+      "topic": "",
+      "payload": "",
+      "payloadType": "date",
+      "x": 180,
+      "y": 720,
+      "wires": [
+        [
+          "068fbaef02a6ae42"
+        ]
+      ]
+    },
+    {
+      "id": "6b80268925dbb07a",
+      "type": "function",
+      "z": "7b4ea8c23b72358e",
+      "name": "Build the query",
+      "func": "var years = msg.payload;\n\nlet sql = `\nDROP TABLE IF EXISTS hubitat_logging.SprinklerMonthlyTracking;\nCREATE TABLE hubitat_logging.SprinklerMonthlyTracking AS\nWITH base AS (\n    SELECT DISTINCT MonthBeginDate, MonthNBR\n    FROM dimDate\n    WHERE YearNBR = YEAR(NOW()) - 1\n), \nsolar_usage AS (\n    SELECT MONTH(DateDTS) AS month,\n           YEAR(DateDTS) AS year,\n           SUM(RunTimeSeconds)/60 AS Gallons\n    FROM Rachio\n    GROUP BY MONTH(DateDTS), YEAR(DateDTS)\n)\nSELECT base.MonthBeginDate`;\n\nyears.forEach(row => {\n    sql += `,\n    MAX(CASE WHEN solar_usage.year = ${row.YearNBR} THEN solar_usage.Gallons ELSE NULL END) AS '${row.YearNBR}'`;\n});\n\nsql += `\nFROM base\nLEFT JOIN solar_usage ON base.MonthNBR = solar_usage.month\nGROUP BY base.MonthBeginDate\nORDER BY base.MonthBeginDate;`;\n\nmsg.topic = sql;\nreturn msg;\n",
+      "outputs": 1,
+      "timeout": 0,
+      "noerr": 0,
+      "initialize": "",
+      "finalize": "",
+      "libs": [],
+      "x": 720,
+      "y": 720,
+      "wires": [
+        [
+          "2b7c2cfd45d6c618",
+          "08e1558d0dc1279e"
+        ]
+      ]
+    },
+    {
+      "id": "fe758b79370dae71",
+      "type": "mysql",
+      "z": "7b4ea8c23b72358e",
+      "mydb": "50d88d05b3f142e9",
+      "name": "",
+      "x": 530,
+      "y": 720,
+      "wires": [
+        [
+          "6b80268925dbb07a"
+        ]
+      ]
+    },
+    {
+      "id": "068fbaef02a6ae42",
+      "type": "template",
+      "z": "7b4ea8c23b72358e",
+      "name": "Distinct Years",
+      "field": "topic",
+      "fieldType": "msg",
+      "format": "sql",
+      "syntax": "mustache",
+      "template": "Select Distinct year(DateDTS) YearNBR\nFROM Rachio;",
+      "output": "str",
+      "x": 360,
+      "y": 720,
+      "wires": [
+        [
+          "fe758b79370dae71"
+        ]
+      ]
+    },
+    {
+      "id": "7b43a6615b229055",
+      "type": "debug",
+      "z": "7b4ea8c23b72358e",
+      "name": "debug 203",
+      "active": true,
+      "tosidebar": true,
+      "console": false,
+      "tostatus": false,
+      "complete": "false",
+      "statusVal": "",
+      "statusType": "auto",
+      "x": 810,
+      "y": 840,
+      "wires": []
+    },
+    {
+      "id": "2b7c2cfd45d6c618",
+      "type": "mysql",
+      "z": "7b4ea8c23b72358e",
+      "mydb": "50d88d05b3f142e9",
+      "name": "",
+      "x": 750,
+      "y": 780,
+      "wires": [
+        [
+          "7b43a6615b229055"
+        ]
+      ]
+    },
+    {
+      "id": "98e405f5dd6fadf5",
+      "type": "comment",
+      "z": "7b4ea8c23b72358e",
+      "name": "Sprinkler",
+      "info": "",
+      "x": 180,
+      "y": 680,
+      "wires": []
+    },
+    {
+      "id": "08e1558d0dc1279e",
+      "type": "debug",
+      "z": "7b4ea8c23b72358e",
+      "name": "debug 204",
+      "active": true,
+      "tosidebar": true,
+      "console": false,
+      "tostatus": false,
+      "complete": "true",
+      "targetType": "full",
+      "statusVal": "",
+      "statusType": "auto",
+      "x": 950,
+      "y": 740,
+      "wires": []
+    },
+    {
+      "id": "6759e7e8bc3b22b1",
+      "type": "function",
+      "z": "7b4ea8c23b72358e",
+      "name": "DROP TABLE IF EXISTS",
+      "func": "msg.topic = 'DROP TABLE IF EXISTS hubitat_logging.WaterMonthlyTracking;'\nreturn msg;",
+      "outputs": 1,
+      "timeout": 0,
+      "noerr": 0,
+      "initialize": "",
+      "finalize": "",
+      "libs": [],
+      "x": 290,
+      "y": 80,
+      "wires": [
+        [
+          "e37357fdbea6afe2"
+        ]
+      ]
+    },
+    {
+      "id": "e37357fdbea6afe2",
+      "type": "mysql",
+      "z": "7b4ea8c23b72358e",
+      "mydb": "50d88d05b3f142e9",
+      "name": "",
+      "x": 470,
+      "y": 80,
+      "wires": [
+        [
+          "32b5ab7650abf721"
+        ]
+      ]
+    },
+    {
+      "id": "3470aa17331b5aee",
+      "type": "debug",
+      "z": "7b4ea8c23b72358e",
+      "name": "debug 235",
+      "active": true,
+      "tosidebar": true,
+      "console": false,
+      "tostatus": false,
+      "complete": "false",
+      "statusVal": "",
+      "statusType": "auto",
+      "x": 1090,
+      "y": 80,
+      "wires": []
+    }
+  ]
+}

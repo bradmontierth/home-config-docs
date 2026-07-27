@@ -1,0 +1,281 @@
+{
+  "id": "97e23c7dbbaa481c",
+  "label": "IotaWatt Retention",
+  "disabled": false,
+  "info": "Permanent hourly archive with guarded retention pruning. Calls maintain_iotawatt_retention() daily at 03:40 America/Denver, retains 14 days of raw data and 30 days of minute data, and alerts if archive or enabled prune success is older than 36 hours.",
+  "env": [],
+  "nodes": [
+    {
+      "id": "iotawatt_archive_daily",
+      "type": "inject",
+      "z": "97e23c7dbbaa481c",
+      "name": "Daily archive + prune 03:40",
+      "props": [
+        {
+          "p": "payload"
+        },
+        {
+          "p": "topic",
+          "vt": "str"
+        }
+      ],
+      "repeat": "",
+      "crontab": "40 03 * * *",
+      "once": false,
+      "onceDelay": 0.1,
+      "topic": "",
+      "payload": "",
+      "payloadType": "date",
+      "x": 170,
+      "y": 100,
+      "wires": [
+        [
+          "iotawatt_archive_call_tpl"
+        ]
+      ]
+    },
+    {
+      "id": "iotawatt_archive_manual",
+      "type": "inject",
+      "z": "97e23c7dbbaa481c",
+      "name": "Manual archive + prune",
+      "props": [
+        {
+          "p": "payload"
+        },
+        {
+          "p": "topic",
+          "vt": "str"
+        }
+      ],
+      "repeat": "",
+      "crontab": "",
+      "once": false,
+      "onceDelay": 0.1,
+      "topic": "",
+      "payload": "",
+      "payloadType": "date",
+      "x": 160,
+      "y": 160,
+      "wires": [
+        [
+          "iotawatt_archive_call_tpl"
+        ]
+      ]
+    },
+    {
+      "id": "iotawatt_archive_call_tpl",
+      "type": "template",
+      "z": "97e23c7dbbaa481c",
+      "name": "CALL archive + guarded prune",
+      "field": "topic",
+      "fieldType": "msg",
+      "format": "sql",
+      "syntax": "mustache",
+      "template": "CALL maintain_iotawatt_retention();",
+      "output": "str",
+      "x": 430,
+      "y": 120,
+      "wires": [
+        [
+          "iotawatt_archive_mysql"
+        ]
+      ]
+    },
+    {
+      "id": "iotawatt_archive_mysql",
+      "type": "mysql",
+      "z": "97e23c7dbbaa481c",
+      "mydb": "50d88d05b3f142e9",
+      "name": "Archive + prune retention",
+      "x": 690,
+      "y": 120,
+      "wires": [
+        [
+          "iotawatt_archive_success"
+        ]
+      ]
+    },
+    {
+      "id": "iotawatt_archive_success",
+      "type": "function",
+      "z": "97e23c7dbbaa481c",
+      "name": "Retention succeeded",
+      "func": "msg.payload = { status: 'success', job: 'maintain_iotawatt_retention', completed_at: new Date().toISOString() };\nnode.status({fill:'green',shape:'dot',text:'archive + prune succeeded'});\nreturn msg;",
+      "outputs": 1,
+      "timeout": 0,
+      "noerr": 0,
+      "initialize": "",
+      "finalize": "",
+      "libs": [],
+      "x": 920,
+      "y": 120,
+      "wires": [
+        [
+          "iotawatt_retention_debug"
+        ]
+      ]
+    },
+    {
+      "id": "iotawatt_watchdog_hourly",
+      "type": "inject",
+      "z": "97e23c7dbbaa481c",
+      "name": "Retention watchdog hourly",
+      "props": [
+        {
+          "p": "payload"
+        },
+        {
+          "p": "topic",
+          "vt": "str"
+        }
+      ],
+      "repeat": "3600",
+      "crontab": "",
+      "once": true,
+      "onceDelay": 10,
+      "topic": "",
+      "payload": "",
+      "payloadType": "date",
+      "x": 180,
+      "y": 280,
+      "wires": [
+        [
+          "iotawatt_watchdog_query_tpl"
+        ]
+      ]
+    },
+    {
+      "id": "iotawatt_watchdog_query_tpl",
+      "type": "template",
+      "z": "97e23c7dbbaa481c",
+      "name": "Check archive + prune success",
+      "field": "topic",
+      "fieldType": "msg",
+      "format": "sql",
+      "syntax": "mustache",
+      "template": "SELECT\n    LastArchiveSuccessUTC,\n    TIMESTAMPDIFF(HOUR, LastArchiveSuccessUTC, UTC_TIMESTAMP()) AS ArchiveAgeHours,\n    LastPruneSuccessUTC,\n    TIMESTAMPDIFF(HOUR, LastPruneSuccessUTC, UTC_TIMESTAMP()) AS PruneAgeHours,\n    PruningEnabled,\n    ReadyToPrune\nFROM v_iotawatt_pruning_readiness\nWHERE Id=1;",
+      "output": "str",
+      "x": 450,
+      "y": 280,
+      "wires": [
+        [
+          "iotawatt_watchdog_mysql"
+        ]
+      ]
+    },
+    {
+      "id": "iotawatt_watchdog_mysql",
+      "type": "mysql",
+      "z": "97e23c7dbbaa481c",
+      "mydb": "50d88d05b3f142e9",
+      "name": "Read retention health",
+      "x": 700,
+      "y": 280,
+      "wires": [
+        [
+          "iotawatt_watchdog_check"
+        ]
+      ]
+    },
+    {
+      "id": "iotawatt_watchdog_check",
+      "type": "function",
+      "z": "97e23c7dbbaa481c",
+      "name": "Alert if older than 36h",
+      "func": "const rows = Array.isArray(msg.payload) ? msg.payload : [];\nconst row = rows[0] || {};\nconst archiveAge = Number(row.ArchiveAgeHours);\nconst pruneAge = Number(row.PruneAgeHours);\nconst pruningEnabled = Number(row.PruningEnabled) === 1 || row.PruningEnabled === true;\nconst archiveStale = !row.LastArchiveSuccessUTC || !Number.isFinite(archiveAge) || archiveAge > 36;\nconst pruneStale = pruningEnabled && (!row.LastPruneSuccessUTC || !Number.isFinite(pruneAge) || pruneAge > 36);\nconst stale = archiveStale || pruneStale;\n\nif (!stale) {\n    const pruneText = pruningEnabled ? `${pruneAge}h` : 'disabled';\n    node.status({fill:'green',shape:'dot',text:`archive ${archiveAge}h, prune ${pruneText}`});\n    msg.payload = {\n        status: 'healthy',\n        archive_age_hours: archiveAge,\n        prune_age_hours: pruningEnabled ? pruneAge : null,\n        pruning_enabled: pruningEnabled,\n        last_archive_utc: row.LastArchiveSuccessUTC,\n        last_prune_utc: row.LastPruneSuccessUTC\n    };\n    return [null, msg];\n}\n\nnode.status({fill:'red',shape:'ring',text:'retention stale'});\nconst now = Date.now();\nconst lastAlert = flow.get('iotawattRetentionLastStaleAlert') || 0;\nif (now - lastAlert < 12 * 60 * 60 * 1000) return [null, null];\nflow.set('iotawattRetentionLastStaleAlert', now);\nmsg.title = 'IotaWatt retention is stale';\nmsg.payload = `IotaWatt retention health failed. Archive last success UTC: ${row.LastArchiveSuccessUTC || 'never'} (age ${Number.isFinite(archiveAge) ? archiveAge : 'unknown'}h). Prune enabled: ${pruningEnabled}. Prune last success UTC: ${row.LastPruneSuccessUTC || 'never'} (age ${Number.isFinite(pruneAge) ? pruneAge : 'unknown'}h).`;\nmsg.device = global.get('BradPhoneNM') || 'pixel8';\nreturn [msg, null];",
+      "outputs": 2,
+      "timeout": 0,
+      "noerr": 0,
+      "initialize": "",
+      "finalize": "",
+      "libs": [],
+      "x": 940,
+      "y": 280,
+      "wires": [
+        [
+          "iotawatt_retention_pushover"
+        ],
+        [
+          "iotawatt_retention_debug"
+        ]
+      ]
+    },
+    {
+      "id": "iotawatt_retention_catch",
+      "type": "catch",
+      "z": "97e23c7dbbaa481c",
+      "name": "Catch retention DB errors",
+      "scope": [
+        "iotawatt_archive_mysql",
+        "iotawatt_watchdog_mysql"
+      ],
+      "uncaught": false,
+      "x": 180,
+      "y": 400,
+      "wires": [
+        [
+          "iotawatt_retention_error"
+        ]
+      ]
+    },
+    {
+      "id": "iotawatt_retention_error",
+      "type": "function",
+      "z": "97e23c7dbbaa481c",
+      "name": "Build retention failure alert",
+      "func": "const detail = (msg.error && msg.error.message) ? msg.error.message : String(msg.payload || 'unknown database error');\nconst now = Date.now();\nconst lastAlert = flow.get('iotawattRetentionLastErrorAlert') || 0;\nif (now - lastAlert < 30 * 60 * 1000) return null;\nflow.set('iotawattRetentionLastErrorAlert', now);\nmsg.title = 'IotaWatt retention failure';\nmsg.payload = `IotaWatt archive/prune/watchdog database error: ${detail}. Guarded pruning stops on validation failure.`;\nmsg.device = global.get('BradPhoneNM') || 'pixel8';\nreturn msg;",
+      "outputs": 1,
+      "timeout": 0,
+      "noerr": 0,
+      "initialize": "",
+      "finalize": "",
+      "libs": [],
+      "x": 450,
+      "y": 400,
+      "wires": [
+        [
+          "iotawatt_retention_pushover"
+        ]
+      ]
+    },
+    {
+      "id": "iotawatt_retention_pushover",
+      "type": "pushover api",
+      "z": "97e23c7dbbaa481c",
+      "keys": "a3903de6e20b03dc",
+      "title": "IotaWatt retention alert",
+      "name": "IotaWatt retention alert",
+      "x": 730,
+      "y": 400,
+      "wires": []
+    },
+    {
+      "id": "iotawatt_retention_debug",
+      "type": "debug",
+      "z": "97e23c7dbbaa481c",
+      "name": "Retention health/status",
+      "active": true,
+      "tosidebar": true,
+      "console": false,
+      "tostatus": false,
+      "complete": "payload",
+      "targetType": "msg",
+      "statusVal": "",
+      "statusType": "auto",
+      "x": 1190,
+      "y": 220,
+      "wires": []
+    },
+    {
+      "id": "iotawatt_retention_comment",
+      "type": "comment",
+      "z": "97e23c7dbbaa481c",
+      "name": "Permanent hourly archive + guarded 14d raw / 30d minute pruning",
+      "info": "Daily maintenance archives complete hours first, validates exact archive coverage, then prunes source rows in bounded timestamp-key batches. Pruning requires GrafanaMigrated=1, ConsumersMigrated=1, and PruningEnabled=1; any validation mismatch aborts deletion and is logged.",
+      "x": 340,
+      "y": 40,
+      "wires": []
+    }
+  ]
+}

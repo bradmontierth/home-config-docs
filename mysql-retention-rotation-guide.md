@@ -4,7 +4,7 @@ Reference for the data-retention scheme on the **`hubitat_logging`** database. T
 this scheme is to stop "write-once, read-never" telemetry from filling the disk while keeping
 the long-term history that's actually useful.
 
-_Last verified: 2026-06-21._
+_Last verified: 2026-07-22._
 
 ## Where it runs
 
@@ -12,7 +12,8 @@ _Last verified: 2026-06-21._
   were migrated here). This is also the MySQL all the Grafana dashboards now point at
   (datasource `n100mini`, uid `eebnvy9j8hmgwb`).
 - **Container:** `mariadb-mariadb-1`, defined in `/home/pi/mariadb/docker-compose.yml`.
-  Started with `--event-scheduler=ON` so MariaDB scheduled EVENTS can run.
+  The live container currently reports `event_scheduler=OFF`. Weather/device retention no
+  longer depends on the MariaDB event scheduler; it is called and monitored by Node-RED.
 - **Database / creds:** `hubitat_logging`, user `hubitat_logger` (root pw and user pw are in the
   compose file).
 
@@ -21,38 +22,108 @@ _Last verified: 2026-06-21._
 docker exec -it mariadb-mariadb-1 mariadb -uhubitat_logger -p hubitat_logging
 ```
 
-## The two retention jobs (MariaDB EVENTS, run daily)
+## Guarded weather and device retention
 
-Confirm they're enabled / when they last ran:
+The production entry point is:
+
+```sql
+CALL maintain_weather_device_retention();
+```
+
+The live Docker Node-RED tab is:
+
+```text
+c518fa408132989c    Weather & Device Retention
+```
+
+It calls the procedure daily at **03:20 America/Denver**. An hourly watchdog sends a
+Pushover alert if a complete successful run is more than 36 hours old, if pruning is
+disabled, or if the safety state is not ready.
+
+The legacy MariaDB events remain present for provenance but are explicitly `DISABLED`:
+
+Confirm their disabled status and historical last-execution timestamps:
 
 ```sql
 SELECT EVENT_NAME, STATUS, INTERVAL_VALUE, INTERVAL_FIELD, STARTS, LAST_EXECUTED
 FROM information_schema.EVENTS WHERE EVENT_SCHEMA='hubitat_logging';
 ```
 
-| Event | Runs | Calls | What it does |
-|-------|------|-------|--------------|
-| `ev_maintain_weather_retention` | daily @ 03:20 | `maintain_weather_retention()` | rolls up + prunes the `weather` table |
-| `ev_prune_device_monitoring`    | daily @ 03:00 | `prune_device_monitoring(90)`   | hard-deletes `DeviceMonitoring` rows older than 90 days |
+| Legacy event | Last execution | Current status |
+|---|---|---|
+| `ev_maintain_weather_retention` | 2026-07-03 03:20 UTC | `DISABLED` |
+| `ev_prune_device_monitoring` | 2026-07-04 03:00 UTC | `DISABLED` |
 
-Every run is logged to the **`maintenance_runs`** table
-(`id, job_name, started_at, finished_at, status, rows_affected, note`). Check recent activity:
+Every complete Node-RED-triggered run is logged to **`maintenance_runs`** as
+`maintain_weather_device_retention`. Every archive, validation, and prune stage is also
+logged to **`WeatherRetentionAudit`**. Check recent activity:
 
 ```sql
 SELECT job_name, started_at, finished_at, status, rows_affected, note
 FROM maintenance_runs ORDER BY id DESC LIMIT 20;
+
+SELECT *
+FROM WeatherRetentionAudit
+ORDER BY id DESC LIMIT 20;
 ```
 
-### 1. Weather — downsample, don't delete
+### Implementation record — 2026-07-22
 
-`maintain_weather_retention()` does two steps, both keyed off a 14-day cutoff
-(snapped to the top of the hour, `NOW() - INTERVAL 14 DAY`):
+The prior events looked enabled in metadata but silently stopped because the live MariaDB
+container was restarted without the compose file's newer `--event-scheduler=ON` command.
+The weather job had not run since July 3.
 
-1. **`rollup_weather_hourly(14)`** — for every raw `weather` row **older than 14 days**, insert/update
-   an hourly aggregate into **`weather_hourly`**: one row per metric `name` per hour bucket
-   (`ON DUPLICATE KEY UPDATE`, so it's idempotent / re-runnable).
-2. **`prune_weather_raw(14)`** — deletes those same >14-day rows from raw `weather`
-   (batched `DELETE ... LIMIT 100000` with a brief sleep to avoid lock storms).
+The guarded rollout:
+
+- Archived and exactly validated 9,120 missing weather hour/metric groups.
+- Removed 1,693,499 weather rows beyond the 14-day boundary.
+- Removed the 1,762,010-row initial DeviceMonitoring backlog, plus newly eligible rows
+  encountered by the final steady-state tests.
+- Left zero weather rows beyond the fixed 14-day cutoff.
+- Validated all remaining source groups with zero missing or mismatched archives.
+- Successfully ran the wrapper directly and through Node-RED.
+- Successfully ran all 41 weather SQL targets across 11 Grafana dashboards for both
+  archive-only and recent ranges after physical pruning.
+
+Reproducible implementation and live-flow copy:
+
+```text
+/home/pi/home_config/weather-device-guarded-retention.sql
+/home/pi/home_config/weather-device-retention-nodered-flow.json
+```
+
+Primary Node-RED rollback backup:
+
+```text
+/home/pi/nodered/data/projects/nodered_n100_mini/flows.json.backup_before_weather_retention_20260722_213538
+```
+
+Grafana validation requests and responses:
+
+```text
+/home/pi/home_config/grafana-dashboard-backups/weather-retention-post-prune-20260722_213713
+```
+
+The verified full database backup taken immediately before the IotaWatt/weather retention
+work contains every weather row eligible in this cleanup:
+
+```text
+/home/pi/backups/iotawatt-prune-20260722_203533/hubitat_logging_pre_prune.sql.zst
+```
+
+### 1. Weather — downsample, validate, then prune
+
+`maintain_weather_device_retention()` calculates one fixed UTC cutoff, snapped to the
+top of the hour at `UTC_TIMESTAMP() - INTERVAL 14 DAY`, then:
+
+1. Upserts every eligible source group into `weather_hourly`.
+2. Validates every source `name`/hour against the archive: sample count, minimum,
+   maximum, average, first timestamp, and last timestamp.
+3. Aborts with a SQL error if any archive group is missing or mismatched.
+4. Deletes raw weather in complete UTC-hour units. Whole-hour progress preserves exact
+   revalidation and safe resume after interruption.
+5. Records the cutoff, eligible rows, archive groups, mismatches, deleted rows, remaining
+   rows, status, and runtime in `WeatherRetentionAudit`.
 
 Net result — the boundary is clean, **no overlap and no gap** (rollup writes `created < cutoff`,
 prune deletes `created < cutoff`, same cutoff):
@@ -68,12 +139,23 @@ prune deletes `created < cutoff`, same cutoff):
 So historical weather is **not lost** — it lives in `weather_hourly` at hourly min/max/avg grain.
 Only the raw per-sample detail older than 14 days is dropped.
 
-### 2. Device monitoring — hard purge
+Safety configuration and health timestamps are stored in `WeatherRetentionState` and
+exposed through `v_weather_retention_readiness`. Pruning requires:
 
-`prune_device_monitoring(90)` just batch-deletes `DeviceMonitoring` rows where
-`Created < NOW() - INTERVAL 90 DAY`. **No rollup / aggregate table** — telemetry older than
-90 days is gone for good (intentional; it has no value past 90 days). Nothing for dashboards to
-combine here; they simply can't show >90 days.
+```text
+ConsumersMigrated=1
+PruningEnabled=1
+ReadyToPrune=1
+```
+
+### 2. Device monitoring — guarded hard purge
+
+`prune_device_monitoring_to_cutoff()` deletes `DeviceMonitoring` rows older than the fixed
+90-day cutoff in timestamp/ID order, in bounded 50,000-row transactions. It uses the same
+enable gate, audit table, wall-clock/row limits, failure handler, and daily wrapper.
+
+There is **no rollup / aggregate table** for DeviceMonitoring—telemetry older than 90 days
+is gone for good, intentionally.
 
 ## What this means for Grafana dashboards
 
@@ -106,31 +188,35 @@ Weather Trends, Weather Trends by City, Weather by City.
 ## Inspecting / changing the jobs
 
 ```sql
--- read a procedure body
-SELECT ROUTINE_DEFINITION FROM information_schema.ROUTINES
-WHERE ROUTINE_SCHEMA='hubitat_logging' AND ROUTINE_NAME='rollup_weather_hourly';
+SELECT * FROM v_weather_retention_readiness;
+SELECT * FROM WeatherRetentionAudit ORDER BY Id DESC LIMIT 20;
 
--- procedures present: maintain_weather_retention, rollup_weather_hourly,
---                     prune_weather_raw, prune_device_monitoring
+-- Archive only; never deletes:
+CALL archive_weather_guarded();
 
--- run a job manually (e.g. to backfill the rollup or force a prune)
-CALL maintain_weather_retention();
-CALL prune_device_monitoring(90);
+-- Validate only; never deletes:
+CALL dry_run_weather_retention();
 
--- pause / resume a job
-ALTER EVENT ev_maintain_weather_retention DISABLE;
-ALTER EVENT ev_maintain_weather_retention ENABLE;
+-- Production archive + validate + guarded prune:
+CALL maintain_weather_device_retention();
+
+-- Emergency pruning lock:
+UPDATE WeatherRetentionState
+SET PruningEnabled=0,
+    LastNote='Pruning manually paused'
+WHERE Id=1;
 ```
 
-To change a retention window, edit the parameter the event passes (e.g. `prune_device_monitoring(90)`
-→ `(120)`) via `ALTER EVENT ... DO CALL ...`, or change the `14` in `maintain_weather_retention()`.
-If the scheduler ever appears dead, check `SHOW VARIABLES LIKE 'event_scheduler';` (should be `ON`)
-— it's set by `--event-scheduler=ON` in the mariadb compose command.
+After pausing, archive and dry-run validation remain available. Re-enable only after reviewing
+the audit and resolving the reason for the pause.
+
+Do not re-enable the legacy MariaDB events while Node-RED owns the schedule. The MariaDB
+`event_scheduler` may remain `OFF`.
 
 ## Applying the same pattern to another table
 
-To downsample a different high-volume table instead of hard-purging it: create a `<table>_hourly`
-aggregate (mirror `weather_hourly`), write a `rollup_<table>_hourly(days)` + `prune_<table>_raw(days)`
-pair modeled on the weather procedures, wrap them in a `maintain_<table>_retention()` proc, and add a
-daily `ev_maintain_<table>_retention` EVENT. Log each run to `maintenance_runs`. Then update any
-Grafana panels to UNION raw + hourly as shown above.
+To downsample another high-volume table, use the guarded pattern in
+`weather-device-guarded-retention.sql`: one fixed cutoff, idempotent archive, exact
+source-to-archive validation, enable gate, bounded deletion, audit records, failure handlers,
+visible Node-RED scheduling, and a stale-success watchdog. Then update Grafana consumers to
+combine recent and hourly history.
