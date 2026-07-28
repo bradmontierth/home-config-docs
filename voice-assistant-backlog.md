@@ -1241,3 +1241,55 @@ that future command. Reuse, don't re-invent:
 **Test shape:** extend `test_clarify.py` replaying tonight's sequence; unit
 the regex in `test_intent_slots.py`; assert the stitched text (not the bare
 reply) reaches `add_from_text` and that the owner survives the hop.
+
+## Reminder fires → kitchen display pop — SCOPED 2026-07-27, not built
+
+**Where this came from:** Brad, 2026-07-27, same conversation as the two entries
+above. Reminders currently fire phone-only: the companion's `reminder_loop()`
+(voice-notes-android/companion/app/main.py) scans for due items and
+`notify_item()` sends FCM to the OWNER's phone tokens. Nothing reaches the
+kitchen — reminders are the only list type with zero kiosk presence
+(`app.py`: "reminders are push-only"). Google-Home-style display pop is wanted;
+Brad's concern is personal reminders surfacing in front of guests.
+
+**Key privacy insight — use provenance, not content classification.** Never ask
+an LLM "is this personal?"; a false "not personal" in front of guests is the
+one failure that matters. Instead:
+
+- **Voice-created reminders → display + phone.** You already said it out loud
+  in that room when you created it; showing it again leaks nothing new (mostly
+  — see residue below). Provenance is already recorded: voice adds sync notes
+  with `mode: "assistant"`, so item → `client_note_id` → note mode
+  distinguishes kitchen-spoken from phone-typed with zero new signals.
+- **Phone-typed reminders → phone-only** (today's behavior). Typed quietly on
+  a phone = never uttered in shared space; don't promote it there.
+- **Explicit escape hatch:** "remind me **privately** to…" → phone-only even
+  though spoken. Deterministic keyword, set at creation (orchestrator detects
+  it, flags the item — companion needs a `private` column). Covers the
+  deliberate case (gift reminder spoken while spouse is out).
+- **Honest residue:** a benign-at-creation reminder can still fire at an
+  awkward moment (guests present days later). That residue is real but small;
+  the backstop if it ever actually bites is a general "guest mode" toggle
+  suppressing all popups/announcements — a separate primitive, not worth
+  building speculatively, and its own weakness is remembering to arm it.
+
+**Mechanics:**
+
+- Companion `notify_item()` is the single choke point: after the FCM send,
+  fire-and-forget POST to the orchestrator (`/reminder/due`: owner, text,
+  item_id, due_at). Env-configured URL; webhook failure must never block or
+  delay the phone push.
+- Orchestrator endpoint → `events.emit("reminder_due", …)` → dashboard card:
+  owner name pill + text, "Done" tap wired to the existing complete-by-id
+  path, auto-timeout + ✕ + touch re-arm (reuse the ask-answer popup pattern,
+  90s read).
+- **Chime yes, TTS no.** A soft chime via the existing satellite audio path
+  catches attention; SPEAKING the content is the actually-obnoxious part of
+  the Google Home behavior (and the real guest exposure — audio carries).
+  Glanceable card + chime is the quiet version. Spoken content could be a
+  later per-reminder opt-in ("remind me out loud to…") if anyone misses it.
+
+**Open (Brad's calls):** whether phone-typed reminders ever get a "also show
+in kitchen" toggle in the app; chime choice/volume (defaultSpeakerVolume
+domain rules apply); whether the card should also land on the family-room
+satellite's display if that ever grows one.
