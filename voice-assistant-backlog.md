@@ -1154,3 +1154,90 @@ of 15 recipes had ever been through the parser; the rest were imported raw.
 the same fuzzy match `home_control` uses (`fuzz.ratio` 80, not WRatio); merge and
 dedupe rules against items already on the list; unit normalisation (tbsp vs
 tablespoon) before merging.
+
+---
+
+## Per-person to-do READ path: "show me my to-dos" — SCOPED 2026-07-27, not built
+
+**Where this came from:** Brad, 2026-07-27 evening, right after the first
+successful two-person speaker-ID live test (Adrienne's "remind me to…" filed
+under her, Brad's find-my-phone rang his). Brad asked whether we can *add* to
+per-person to-do lists by voice — **we already can, and it's verified live**:
+`add_items`/`set_reminder` forward the whole command to the companion's
+analyze, and since active-mode arming `owner =` the voice-identified speaker
+(`app.py` add_items branch → `lists.add_from_text(command, owner=…)`). The TTS
+even names the list ("On Adrienne's list."). Adrienne's reminder from tonight
+sits in the companion as `user: adrienne`. **The write half of this item needs
+nothing.**
+
+**The actual gap is the read path.** `lists.fetch()` deliberately has no user
+filter ("the household has one shopping/todo/reminder list") — so `show_todos`
+reads everyone's items regardless of who asks. The companion API already
+supports `GET /api/items?user=` (verified live against :8768), so this is
+orchestrator-only:
+
+- `show_todos` runs speaker ID (task already exists on every audio turn) and
+  filters `user=<speaker>` when the phrasing is possessive ("**my** to-dos");
+  "the/our to-dos" keeps today's household view. Unsure → household view,
+  never guess (same fallback philosophy as everything else in item 9).
+- Speak the attribution back ("Adrienne, you have 3 to-dos") — same
+  trust-building + audible-correction pattern as the add path.
+- Shopping stays household-shared on BOTH paths, per Brad — it's the
+  household we shop for.
+- Kiosk `show_list` event: the popped view should show the same filtered set
+  that was spoken, not the full household list.
+
+**Open questions / edges:**
+- `complete_item`/`remove_items` resolve over the shared list today — probably
+  fine (LLM target resolution sees exact texts), but "check off my dentist
+  one" could scope resolution to the speaker's items first.
+- Cross-attribution ("add X to **Adrienne's** list" spoken by Brad) is NOT
+  supported — owner is always the speaker. Punt until someone actually wants
+  it; the companion prompt doesn't extract an addressee.
+- Items added before arming are attributed to `LIST_OWNER=brad`; Adrienne's
+  historical to-dos (if any) may need a one-time re-attribution in the
+  companion DB.
+
+## Reminder slot-fill: "remind me to…" → "Remind you to do what?" — SCOPED 2026-07-27, not built
+
+**The live failure (Brad demoing to Adrienne, 2026-07-27).** Same shape as the
+timer one, new slot: she said "remind me to…", paused to compose the actual
+reminder, and VAD endpointed on the gap. The timer slot-fill entry above
+(668f34d, deployed with the speaker-ID rebuilds) explicitly predicted this:
+the clarify machinery "generalises to any future incomplete command". This is
+that future command. Reuse, don't re-invent:
+
+- **Prompt rule** (`intent.py`): "remind me to" / "add to my to-do list" with
+  no content is `set_reminder`/`add_items` with empty content, never
+  `unclear`.
+- **Deterministic backstop:** `is_truncated_reminder` — narrow anchored regex
+  (`remind me( to)?$`, `add( something)? to (my|the) (to.?do|todo|shopping)
+  list$` variants), same rationale and same warning as `is_truncated_timer`:
+  safe only because the phrase has exactly one meaning.
+- **Ask + hold the mic:** "Remind you to do what?" with `awaiting_slot: true`
+  so the satellite holds `CLARIFY_WINDOW_MS` (12s) — she's composing a
+  sentence, which needs the long window even more than a duration does.
+- **One round only / never-mind drop** come free from the existing clarify
+  plumbing.
+
+**Two wrinkles that make this NOT a pure clone of the timer path:**
+
+1. **Stitching must reach the companion.** The `add_items`/`set_reminder`
+   branch forwards the RAW turn text to the companion analyze, and the
+   companion's typing keys off framing words ("remind me", "todo") —
+   documented at the top of `lists.py`. On a clarify turn the raw text is
+   just the reply ("call the dentist at 5"), which the companion could
+   mistype as a todo. The branch must forward the stitched `partial + reply`
+   when the turn came through clarify. (Timers never hit this because
+   `parse_clarify`'s output dict carries everything.)
+2. **Carry the owner across the clarify hop.** Speaker ID runs per audio
+   turn; the clarify REPLY is short (1–2s) and much more likely to score
+   "unsure" → falls back to `LIST_OWNER=brad` → Adrienne's reminder pushes to
+   Brad's phone, the exact misroute item 9 exists to prevent. Stash the
+   identified speaker from the FIRST turn in `session_set_clarify` and prefer
+   it for the stitched command. (The first turn — the full "remind me to…"
+   utterance — is also simply better audio for identification.)
+
+**Test shape:** extend `test_clarify.py` replaying tonight's sequence; unit
+the regex in `test_intent_slots.py`; assert the stitched text (not the bare
+reply) reaches `add_from_text` and that the owner survives the hop.
