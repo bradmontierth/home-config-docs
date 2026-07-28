@@ -59,6 +59,93 @@ class TruncatedTimerTest(unittest.TestCase):
                 self.assertFalse(intent.is_truncated_timer(text))
 
 
+class TruncatedAddTest(unittest.TestCase):
+    """Add/reminder commands that stop before naming what to add."""
+
+    def test_catches_the_live_failure(self):
+        # Adrienne, 2026-07-27: "remind me to", then a pause to compose it.
+        self.assertEqual(intent.is_truncated_add("remind me to"), "set_reminder")
+
+    def test_reminder_phrasings(self):
+        for text in ("remind me", "remind me to", "remind me that",
+                     "set a reminder", "set a reminder to", "set a reminder for",
+                     "set me a reminder", "add a reminder", "make a reminder",
+                     "create a reminder to", "set reminder",
+                     "can you remind me to", "please remind me"):
+            with self.subTest(text=text):
+                self.assertEqual(intent.is_truncated_add(text), "set_reminder")
+
+    def test_list_phrasings(self):
+        for text in ("add to my to-do list", "add to the shopping list",
+                     "add something to my todo list", "put on the shopping list",
+                     "add to the list", "add a todo", "add a to-do",
+                     "add an item to my list", "add a new todo",
+                     "put something on the grocery list"):
+            with self.subTest(text=text):
+                self.assertEqual(intent.is_truncated_add(text), "add_items")
+
+    def test_punctuation_and_case(self):
+        for text in ("Remind me to.", "REMIND ME TO", "  remind me to  ",
+                     "Add to my to-do list!"):
+            with self.subTest(text=text):
+                self.assertIsNotNone(intent.is_truncated_add(text))
+
+    def test_commands_that_name_something_are_left_alone(self):
+        # The rescue exists only for commands with no content in them at all.
+        for text in ("remind me to call mom", "remind me to take the roast out at 5",
+                     "add eggs to the shopping list", "add milk",
+                     "put paper towels on the list", "add a todo to call the plumber",
+                     "set a reminder to water the plants"):
+            with self.subTest(text=text):
+                self.assertIsNone(intent.is_truncated_add(text))
+
+    def test_other_commands_are_left_alone(self):
+        for text in ("set a timer for", "cancel the timer", "show my to-dos",
+                     "clear the shopping list", "what's on the list",
+                     "add a timer to the shopping list", "play some music", ""):
+            with self.subTest(text=text):
+                self.assertIsNone(intent.is_truncated_add(text))
+
+
+class ListScopeTest(unittest.TestCase):
+    """Whose list "show my to-dos" means."""
+
+    def test_possessive_asks_for_their_own(self):
+        for text in ("show my to-dos", "what's on my to-do list",
+                     "read me my todos", "what are mine"):
+            with self.subTest(text=text):
+                self.assertTrue(intent.wants_own_list(text))
+
+    def test_household_phrasing_is_not_possessive(self):
+        # "show me the list" has "me" but not "my" — it is the house's list.
+        for text in ("show the to-do list", "what's on our to-do list",
+                     "show me the to-dos", "read the todo list", "show todos"):
+            with self.subTest(text=text):
+                self.assertFalse(intent.wants_own_list(text))
+
+
+class PrivateFlagTest(unittest.TestCase):
+    """The opt-out that keeps a reminder off the kitchen display."""
+
+    def test_explicit_phrasings(self):
+        for text in ("remind me privately to call the lawyer",
+                     "remind me in private to book the trip",
+                     "add a private reminder to cancel the subscription",
+                     "make a private note to check the balance"):
+            with self.subTest(text=text):
+                self.assertTrue(intent.wants_private(text))
+
+    def test_private_as_ordinary_content_does_not_trigger(self):
+        # A privacy switch that fires by accident is worse than one you have to
+        # say plainly — "private" inside the content itself must not count.
+        for text in ("remind me to book the private school tour",
+                     "remind me to call the private investigator",
+                     "add private jet tickets to the shopping list",
+                     "remind me to call mom"):
+            with self.subTest(text=text):
+                self.assertFalse(intent.wants_private(text))
+
+
 class SpokenDurationTest(unittest.TestCase):
     """The fast path for "for how long?" answers."""
 

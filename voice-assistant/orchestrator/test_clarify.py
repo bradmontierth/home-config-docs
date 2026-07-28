@@ -1,12 +1,15 @@
-"""Timer slot-fill wiring in handle_command.
+"""Slot-fill wiring in handle_command, for both slots that use it.
 
 The pieces the unit tests in test_intent_slots.py can't reach: that the slot
 question arms a pending clarify, that the answer stitches onto it, that only a
 FOLLOW-UP turn is allowed to stitch, and that we never ask twice.
 
-Reproduces the live 2026-07-26 sequence end to end with the classifier stubbed:
-"set the timer for" -> "unclear" -> (rescued) "Sure, for how long?" ->
-"Eight minutes." -> an 8 minute timer.
+Reproduces two live failures end to end with the classifier stubbed:
+  2026-07-26  "set the timer for" -> "unclear" -> (rescued) "Sure, for how
+              long?" -> "Eight minutes." -> an 8 minute timer.
+  2026-07-27  "remind me to" -> (rescued) "Remind you to do what?" -> "call the
+              dentist at five" -> a reminder built from the STITCHED command,
+              on the list of whoever started the sentence.
 """
 
 import asyncio
@@ -24,7 +27,9 @@ def _parsed(**over):
     return intent.validate({"intent": "none", **over})
 
 
-class ClarifyFlowTest(unittest.TestCase):
+class _SlotTestBase(unittest.TestCase):
+    """Isolation shared by both slots: a private timer DB, a clean session, and
+    no reach outside the process."""
 
     def setUp(self):
         # TimerEngine is sqlite-backed, so give each test its own database —
@@ -52,6 +57,9 @@ class ClarifyFlowTest(unittest.TestCase):
 
     def _run(self, command, followup=False):
         return asyncio.run(app.handle_command(command, followup=followup))
+
+
+class ClarifyFlowTest(_SlotTestBase):
 
     # -- the live failure, end to end ------------------------------------
     def test_truncated_timer_asks_then_completes(self):
@@ -182,6 +190,227 @@ class ClarifyFlowTest(unittest.TestCase):
             self._run("eight minutes", followup=True)
         plain.assert_awaited_once()
         slow.assert_not_called()
+
+
+class AddSlotFlowTest(_SlotTestBase):
+    """"remind me to…" / "add to my to-do list…" cut off before the content.
+
+    Two things make this more than a copy of the timer slot: the companion
+    types items from the framing words, so it must be handed the STITCHED
+    command rather than the bare reply; and speaker ID has to survive the hop,
+    because the one-phrase answer is much weaker audio than the full utterance
+    and an unsure read would file her reminder under Brad.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.added = [{"id": 7, "type": "reminder", "text": "call the dentist",
+                       "due_at": None, "user": "adrienne"}]
+        self.add = AsyncMock(return_value=self.added)
+        for target, attr, mock in (
+                (app.lists_mod, "add_from_text", self.add),
+                # The add path pops/refreshes the kiosk list view afterwards.
+                (app.lists_mod, "fetch", AsyncMock(return_value=[]))):
+            p = patch.object(target, attr, mock)
+            p.start()
+            self.addCleanup(p.stop)
+
+    def _voice(self, name):
+        """Patch this turn's speaker identification to `name` (None = unsure)."""
+        return patch.object(app, "_speaker_name", AsyncMock(return_value=name))
+
+    # -- the live failure, end to end ------------------------------------
+    def test_truncated_reminder_asks_then_stitches(self):
+        # Turn 1: the classifier reads the bare fragment as "unclear" (exactly
+        # what it did to the truncated timer); the rescue makes it a reminder
+        # with nothing to remind about, which is the question branch.
+        with patch.object(app.intent_mod, "parse",
+                          AsyncMock(return_value=_parsed(intent="unclear"))), \
+             self._voice("adrienne"):
+            first = self._run("remind me to")
+        self.assertEqual(first["intent"], "set_reminder")
+        self.assertEqual(first["response"], "Remind you to do what?")
+        self.assertTrue(first["awaiting_slot"])
+        self.assertFalse(first["ok"])
+        self.add.assert_not_awaited()          # nothing filed on a question
+        pending = app.session_pending()
+        self.assertEqual(pending["op"], "clarify")
+        self.assertEqual(pending["kind"], "add")
+        self.assertEqual(pending["owner"], "adrienne")
+
+        # Turn 2: the companion must see the whole command. Handing it just
+        # "call the dentist at five" would lose the "remind me" framing it
+        # types the item from, and the reminder would come back a to-do.
+        with patch.object(app.intent_mod, "parse_clarify", AsyncMock(
+                return_value=_parsed(intent="set_reminder"))) as slow, \
+             self._voice(None):
+            second = self._run("call the dentist at five", followup=True)
+        slow.assert_awaited_once()
+        self.assertEqual(self.add.await_args.args[0],
+                         "remind me to call the dentist at five")
+        self.assertTrue(second["ok"])
+        self.assertIsNone(app.session_pending())   # slot consumed
+
+    def test_owner_survives_the_hop(self):
+        # The reply is a second or two of audio and often scores "unsure". The
+        # speaker identified on the FULL first utterance is the one that counts
+        # — otherwise her reminder silently lands on Brad's phone, which is the
+        # exact misroute speaker ID exists to prevent.
+        with patch.object(app.intent_mod, "parse", AsyncMock(
+                return_value=_parsed(intent="set_reminder", missing_content=True))), \
+             self._voice("adrienne"):
+            self._run("remind me to")
+
+        with patch.object(app.intent_mod, "parse_clarify", AsyncMock(
+                return_value=_parsed(intent="set_reminder"))), \
+             self._voice(None):                     # unsure on the short reply
+            self._run("pick simon up at four", followup=True)
+        self.assertEqual(self.add.await_args.kwargs["owner"], "adrienne")
+
+    def test_unsure_first_turn_falls_back_to_the_reply(self):
+        # Nothing to carry over -> use whatever the reply scores as, and if
+        # that is unsure too, owner stays None (LIST_OWNER, today's behavior).
+        with patch.object(app.intent_mod, "parse", AsyncMock(
+                return_value=_parsed(intent="set_reminder", missing_content=True))), \
+             self._voice(None):
+            self._run("remind me to")
+
+        with patch.object(app.intent_mod, "parse_clarify", AsyncMock(
+                return_value=_parsed(intent="set_reminder"))), \
+             self._voice("brad"):
+            self._run("take the trash out tonight", followup=True)
+        self.assertEqual(self.add.await_args.kwargs["owner"], "brad")
+
+    def test_bare_duration_answer_does_not_become_a_timer(self):
+        # The duration fast path reads "five minutes" perfectly well — which is
+        # why it must not run on this slot. Answering "remind you to do what?"
+        # that way has to reach the parser, not the timer engine.
+        with patch.object(app.intent_mod, "parse", AsyncMock(
+                return_value=_parsed(intent="set_reminder", missing_content=True))), \
+             self._voice("brad"):
+            self._run("remind me to")
+
+        with patch.object(app.intent_mod, "parse_clarify", AsyncMock(
+                return_value=_parsed(intent="set_reminder"))) as slow, \
+             self._voice("brad"):
+            self._run("five minutes", followup=True)
+        slow.assert_awaited_once()
+        self.assertEqual(app.ENGINE.active(), [])
+
+    def test_timer_slot_never_stitches_into_a_list_add(self):
+        # She abandoned the timer for a list command. The reply is parsed on
+        # its own merits, so the companion must get the reply ALONE — stitching
+        # "set a timer for actually add milk…" would be nonsense.
+        with patch.object(app.intent_mod, "parse", AsyncMock(
+                return_value=_parsed(intent="set_timer"))):
+            self._run("set a timer for")
+
+        with patch.object(app.intent_mod, "parse_clarify", AsyncMock(
+                return_value=_parsed(intent="add_items"))), \
+             self._voice("brad"):
+            self._run("actually add milk to the shopping list", followup=True)
+        self.assertEqual(self.add.await_args.args[0],
+                         "actually add milk to the shopping list")
+        self.assertEqual(app.ENGINE.active(), [])
+
+    def test_never_asks_twice(self):
+        with patch.object(app.intent_mod, "parse", AsyncMock(
+                return_value=_parsed(intent="set_reminder", missing_content=True))), \
+             self._voice("brad"):
+            self._run("remind me to")
+
+        with patch.object(app.intent_mod, "parse_clarify", AsyncMock(
+                return_value=_parsed(intent="set_reminder",
+                                     missing_content=True))), \
+             self._voice("brad"):
+            result = self._run("uh, hang on", followup=True)
+        self.assertEqual(result["response"], "Okay, never mind.")
+        self.assertFalse(result["ok"])
+        self.add.assert_not_awaited()
+        self.assertIsNone(app.session_pending())
+
+    def test_complete_add_never_arms_a_slot(self):
+        with patch.object(app.intent_mod, "parse", AsyncMock(
+                return_value=_parsed(intent="add_items"))), \
+             self._voice("brad"):
+            result = self._run("add eggs to the shopping list")
+        self.assertTrue(result["ok"])
+        self.assertNotIn("awaiting_slot", result)
+        self.assertIsNone(app.session_pending())
+        self.assertEqual(self.add.await_args.args[0],
+                         "add eggs to the shopping list")
+
+    def test_private_reminder_is_flagged_and_said_aloud(self):
+        # "privately" reaches add_from_text through the STITCHED text, and the
+        # spoken reply has to say the quiet path took — that acknowledgement is
+        # the only feedback they get that it won't hit the kitchen screen.
+        with patch.object(app.intent_mod, "parse", AsyncMock(
+                return_value=_parsed(intent="set_reminder", missing_content=True))), \
+             self._voice("brad"):
+            self._run("remind me privately to")
+
+        with patch.object(app.intent_mod, "parse_clarify", AsyncMock(
+                return_value=_parsed(intent="set_reminder"))), \
+             self._voice("brad"):
+            result = self._run("order adrienne's birthday gift", followup=True)
+        self.assertTrue(self.add.await_args.kwargs["private"])
+        self.assertIn("Just on your phone.", result["response"])
+        self.assertNotIn("On Brad's list.", result["response"])
+
+    def test_ordinary_add_is_not_private(self):
+        with patch.object(app.intent_mod, "parse", AsyncMock(
+                return_value=_parsed(intent="set_reminder"))), \
+             self._voice("adrienne"):
+            result = self._run("remind me to call mom at noon")
+        self.assertFalse(self.add.await_args.kwargs["private"])
+        self.assertIn("On Adrienne's list.", result["response"])
+
+
+class ShowListScopeTest(_SlotTestBase):
+    """"show my to-dos" narrows to the speaker; everything else stays the
+    household view."""
+
+    def setUp(self):
+        super().setUp()
+        self.fetch = AsyncMock(return_value=[])
+        p = patch.object(app.lists_mod, "fetch", self.fetch)
+        p.start()
+        self.addCleanup(p.stop)
+
+    def _show(self, command, voice, intent_name="show_todos"):
+        with patch.object(app.intent_mod, "parse", AsyncMock(
+                return_value=_parsed(intent=intent_name))), \
+             patch.object(app, "_speaker_name", AsyncMock(return_value=voice)):
+            return self._run(command)
+
+    def test_my_todos_scope_to_the_speaker(self):
+        result = self._show("show my to-dos", "adrienne")
+        self.assertEqual(self.fetch.await_args.kwargs["user"], "adrienne")
+        self.assertEqual(result["owner"], "adrienne")
+
+    def test_household_phrasing_stays_shared(self):
+        for command in ("show the to-do list", "what's on our to-do list",
+                        "show me the to-dos"):
+            with self.subTest(command=command):
+                self.fetch.reset_mock()
+                result = self._show(command, "adrienne")
+                self.assertIsNone(self.fetch.await_args.kwargs["user"])
+                self.assertIsNone(result["owner"])
+
+    def test_unsure_voice_falls_back_to_the_household_list(self):
+        # Never guess whose list to show: below-confidence keeps today's
+        # behavior, exactly like the add path.
+        result = self._show("show my to-dos", None)
+        self.assertIsNone(self.fetch.await_args.kwargs["user"])
+        self.assertIsNone(result["owner"])
+
+    def test_shopping_is_never_narrowed(self):
+        # One house, one shopping trip — "my shopping list" is still the
+        # household's, however it is phrased.
+        result = self._show("show my shopping list", "brad",
+                            intent_name="show_shopping")
+        self.assertIsNone(self.fetch.await_args.kwargs["user"])
+        self.assertIsNone(result["owner"])
 
 
 if __name__ == "__main__":

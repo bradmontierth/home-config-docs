@@ -64,6 +64,24 @@ async def alarm_stop() -> None:
         log.info("satellite alarm stop failed: %s", exc)
 
 
+async def satellite_chime(path: str) -> None:
+    """Play a short sound on the kitchen satellite by URL — it fetches the WAV
+    back from us and plays it through its own volume/ducking path, the same
+    route the ask filler uses.
+
+    Used for the reminder pop, where the chime is the whole audio cue: a card
+    on the screen is glanceable and stays in the kitchen, whereas SPEAKING the
+    reminder is the part that carries to everyone else in the house. Best
+    effort — a silent pop still shows."""
+    if not config.SATELLITE_SPEAK_URL or not path:
+        return
+    try:
+        async with httpx.AsyncClient(timeout=4) as client:
+            await client.post(config.SATELLITE_SPEAK_URL, json={"url": path})
+    except Exception as exc:  # noqa: BLE001
+        log.warning("satellite chime failed: %s", exc)
+
+
 async def phone_alert(title: str, body: str, **data: str) -> None:
     """Fan a push notification to every registered household phone via the
     Voice Notes companion. Best-effort."""

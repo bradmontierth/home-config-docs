@@ -48,6 +48,7 @@ Schema:
   "place_modifier": for "business_hours" or "place_search", a specifically requested department or service such as "tire center", "gas", "pharmacy", or "garden center"; otherwise null,
   "item_text": for complete_item / remove_items, a phrase describing WHICH item(s) to act on — one item ("eggs"), several ("milk and bread"), a category ("the dairy", "produce"), or a property ("everything orange", "all of it"); else null,
   "list_type": for clear_list / show, which list — "shopping", "todo", or "all"; else null,
+  "missing_content": for add_items / set_reminder, true when the command stops before naming WHAT to add; else false,
   "media_type": for play_music, only when the user NAMES a type — "artist", "album", "track", or "playlist"; else null,
   "music_action": for music_control, one of {list(MUSIC_ACTIONS)}; else null,
   "sports_action": for sports, "last" (score/result of the most recent or current game) or "next" (upcoming game); else null,
@@ -141,6 +142,11 @@ Rules:
   the full command is forwarded to the list service, which figures out the items itself.
 - set_reminder = a time-based reminder: "remind me to take the roast out at 5", "remind me to call mom
   tomorrow morning". Also forwarded whole; leave item_text null.
+- An add or reminder command that STOPS BEFORE NAMING WHAT is still add_items / set_reminder, with
+  "missing_content" true — never "unclear". People pause to compose the thing itself and the mic
+  endpoints on the gap: "remind me to", "remind me", "set a reminder", "add to my to-do list", "put
+  on the shopping list". The assistant asks what to add itself. A command that DOES name something
+  ("remind me to call mom", "add eggs to the list") has missing_content false.
 - show_todos = "show my todos", "what's on my to-do list". show_shopping = "show the shopping list",
   "what do I need to buy". No other fields.
 - complete_item = checking something off: "mark eggs as done", "I bought the milk", "cross off call
@@ -209,7 +215,8 @@ The user message below is their reply.
 Normally the reply supplies the missing piece: COMBINE the incomplete command \
 with the reply and parse the COMBINED command ("set the timer for" + "eight \
 minutes" -> set_timer, duration_seconds 480; "set a chicken timer for" + "about \
-twenty" -> set_timer, label chicken, 1200, cluck).
+twenty" -> set_timer, label chicken, 1200, cluck; "remind me to" + "call the \
+dentist at five" -> set_reminder, missing_content false).
 But the reply may abandon the request instead. If it is a NEW command or \
 question ("actually what's the weather", "play some music"), ignore the \
 incomplete command and parse the reply ALONE on its own merits. If it drops the \
@@ -250,6 +257,66 @@ def is_truncated_timer(command: str) -> bool:
     backstop for the prompt rule above — prompts are probabilistic, and this
     exact phrasing is the one the family actually hits."""
     return bool(_TRUNCATED_TIMER_RE.match(command.strip().lower().rstrip(".!?,")))
+
+
+# The same trick one slot over: an add/reminder command that ends before the
+# thing itself. Live 2026-07-27 — Adrienne said "remind me to", paused to
+# compose the reminder, and Silero endpointed on the gap. Anchored at both
+# ends, so anything naming actual content fails to match and takes the normal
+# path. Safe to hard-code for exactly the reason the timer one is: each of
+# these phrasings has one meaning once it stops where it does. NOT a pattern to
+# reach for in general intent routing.
+_TRUNCATED_REMINDER_RE = re.compile(
+    r"^(?:please\s+)?(?:can\s+you\s+|could\s+you\s+)?"
+    r"(?:remind\s+me(?:\s+(?:to|that))?"
+    r"|(?:set|add|make|create)\s+(?:me\s+)?(?:a|an|the)?\s*reminder"
+    r"(?:\s+(?:to|for|that))?)$"
+)
+_LIST_NOUN = r"(?:to.?do|todo|shopping|grocery)"
+_LIST_TAIL = rf"(?:to|on)\s+(?:my|the|our)\s+(?:{_LIST_NOUN}\s+)?list"
+_TRUNCATED_TODO_RE = re.compile(
+    rf"^(?:please\s+)?(?:can\s+you\s+|could\s+you\s+)?"
+    rf"(?:add|put)\s+(?:something\s+)?"
+    rf"(?:(?:a|an)\s+(?:new\s+)?(?:{_LIST_NOUN}|item)(?:\s+{_LIST_TAIL})?"
+    rf"|{_LIST_TAIL})$"
+)
+
+
+def is_truncated_add(command: str) -> str | None:
+    """Which list intent a command that stopped before naming its content
+    belongs to — "set_reminder", "add_items", or None when the command names
+    something (or isn't one of these at all). Deterministic backstop for the
+    prompt rule above, exactly like is_truncated_timer."""
+    text = command.strip().lower().rstrip(".!?,")
+    if _TRUNCATED_REMINDER_RE.match(text):
+        return "set_reminder"
+    if _TRUNCATED_TODO_RE.match(text):
+        return "add_items"
+    return None
+
+
+# "show MY to-dos" wants one person's list; "show THE to-dos" / "our to-dos"
+# wants the household's. Possessive phrasing is the entire signal, read here
+# rather than by the classifier so the same words always scope the same way.
+_POSSESSIVE_RE = re.compile(r"\b(?:my|mine)\b")
+
+
+def wants_own_list(command: str) -> bool:
+    """True when the speaker asked for THEIR list rather than the house's."""
+    return bool(_POSSESSIVE_RE.search(command.lower()))
+
+
+# The explicit opt-out from the kitchen display ("remind me privately to…").
+# Deliberately narrow: a bare "private" would fire on innocent content ("the
+# private school tour"), and a privacy switch that triggers by accident is
+# worse than one the user has to say plainly.
+_PRIVATE_RE = re.compile(
+    r"\bprivately\b|\bin private\b|\bprivate (?:reminder|note|to.?do|todo)\b")
+
+
+def wants_private(command: str) -> bool:
+    """True when the speaker asked to keep this item off the kitchen screen."""
+    return bool(_PRIVATE_RE.search(command.lower()))
 
 
 _NUM_WORDS = {
@@ -412,6 +479,10 @@ def _validate(data: dict) -> dict:
     if list_type not in ("shopping", "todo", "all"):
         list_type = None
 
+    # Meaningless outside an add — a stray true elsewhere must not arm a slot.
+    missing_content = (bool(data.get("missing_content"))
+                       and intent in ("add_items", "set_reminder"))
+
     media_type = data.get("media_type")
     if media_type not in ("artist", "album", "track", "playlist"):
         media_type = None
@@ -453,6 +524,7 @@ def _validate(data: dict) -> dict:
         "place_modifier": place_modifier,
         "item_text": item_text,
         "list_type": list_type,
+        "missing_content": missing_content,
         "media_type": media_type,
         "music_action": music_action,
         "sports_action": sports_action,

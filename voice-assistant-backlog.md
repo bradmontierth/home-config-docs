@@ -1157,7 +1157,7 @@ tablespoon) before merging.
 
 ---
 
-## Per-person to-do READ path: "show me my to-dos" — SCOPED 2026-07-27, not built
+## Per-person to-do READ path: "show me my to-dos" — BUILT + DEPLOYED 2026-07-27
 
 **Where this came from:** Brad, 2026-07-27 evening, right after the first
 successful two-person speaker-ID live test (Adrienne's "remind me to…" filed
@@ -1198,7 +1198,27 @@ orchestrator-only:
   historical to-dos (if any) may need a one-time re-attribution in the
   companion DB.
 
-## Reminder slot-fill: "remind me to…" → "Remind you to do what?" — SCOPED 2026-07-27, not built
+**BUILT 2026-07-27, deployed same evening.**
+
+- `lists.fetch(..., user=)` forwards the companion's existing `?user=` filter
+  (verified live: brad 10 + adrienne 2 = 12 unfiltered).
+- `intent.wants_own_list` reads the possessive deterministically — "my"/"mine"
+  scopes to the speaker, "the"/"our"/"show me the…" stays household. Kept out
+  of the classifier so the same words always scope the same way.
+- Unsure voice → household view, never a guess (same rule as everything else in
+  item 9). Shopping is never narrowed, on either path.
+- Spoken attribution "Adrienne, you have 3 items on your to-do list…", and the
+  kiosk title becomes "Adrienne's To-Dos".
+- The kiosk keeps the owner in `listView.owner` and re-filters on it, because
+  the `list_updated` snapshots that reconcile an open view are household-wide —
+  without that, the next add anywhere in the house silently widened a personal
+  view back to everyone's.
+
+Still open (deliberately): `complete_item`/`remove_items` resolve over the
+shared list, and cross-attribution ("add X to Adrienne's list") is still not a
+thing — owner is always the speaker.
+
+## Reminder slot-fill: "remind me to…" → "Remind you to do what?" — BUILT + DEPLOYED 2026-07-27
 
 **The live failure (Brad demoing to Adrienne, 2026-07-27).** Same shape as the
 timer one, new slot: she said "remind me to…", paused to compose the actual
@@ -1242,7 +1262,33 @@ that future command. Reuse, don't re-invent:
 the regex in `test_intent_slots.py`; assert the stitched text (not the bare
 reply) reaches `add_from_text` and that the owner survives the hop.
 
-## Reminder fires → kitchen display pop — SCOPED 2026-07-27, not built
+**BUILT 2026-07-27, deployed same evening.** Reused the timer clarify plumbing
+wholesale; the satellite needed NO change (it already holds `CLARIFY_WINDOW_MS`
+on any `awaiting_slot` reply).
+
+- New `missing_content` slot on the parse + prompt rule, and
+  `intent.is_truncated_add` as the deterministic backstop (returns which
+  intent: "remind me to…" → set_reminder, "add to my to-do list" → add_items,
+  so the question can be phrased right).
+- Both wrinkles from the scoping proved real and are handled:
+  1. *Stitching reaches the companion.* Live check: turn 2 sent
+     `'remind me to water the plants at 6 tomorrow'` (not the bare reply) and
+     came back typed **reminder** with the right due date. Handing over the
+     reply alone would have produced a to-do.
+  2. *Owner survives the hop.* `session_set_clarify(..., owner=)` stashes the
+     speaker from the FIRST (longer, cleaner) utterance and the stitched add
+     prefers it; an unsure short reply can no longer dump her reminder on
+     Brad's phone.
+- Third thing found while building: `_parse_clarify_reply` ran the spoken-
+  duration fast path unconditionally, so answering "remind you to do what?"
+  with "five minutes" would have quietly created a TIMER and lost the
+  reminder. The fast path is now gated on `kind == "timer"`, and `kind` also
+  stops a timer partial from being stitched onto a list command.
+- `intent.wants_private` + `lists.add_from_text(private=)` file
+  "remind me privately to…" under note mode `assistant_private`, which is what
+  keeps it off the display below. Spoken back as "Just on your phone."
+
+## Reminder fires → kitchen display pop — BUILT + DEPLOYED 2026-07-27
 
 **Where this came from:** Brad, 2026-07-27, same conversation as the two entries
 above. Reminders currently fire phone-only: the companion's `reminder_loop()`
@@ -1293,3 +1339,47 @@ one failure that matters. Instead:
 in kitchen" toggle in the app; chime choice/volume (defaultSpeakerVolume
 domain rules apply); whether the card should also land on the family-room
 satellite's display if that ever grows one.
+
+**BUILT 2026-07-27, deployed same evening.** Brad's call on the privacy
+question: "phone reminders do phone only, voice reminders to phone and screen."
+
+- *Companion* (`voice-notes-android/companion`): `notify_item()` now tails into
+  `post_reminder_webhook()` — AFTER the FCM send, never raising, so a dead
+  orchestrator cannot delay the push. Payload carries `source` = the mode of
+  the note the item came from, which is how provenance reaches firing time.
+  `REMINDER_WEBHOOK_URL` in its compose.
+- *Orchestrator*: `POST /reminder/due` owns the policy (deliberately not the
+  companion — one place, unit-testable, and the display belongs to the
+  assistant). `REMINDER_DISPLAY_SOURCES` defaults to `assistant` only, so
+  phone-typed AND `assistant_private` both decline. Unknown/missing source
+  declines too: new writers of items must opt IN to the kitchen screen, not
+  out. Declines answer 200 — a non-displayed reminder is a normal outcome, and
+  200-with-`shown:false` keeps the companion's log clean.
+- *Chime, not speech.* `events.satellite_chime` POSTs the satellite's existing
+  `/speak` with a URL; the satellite fetches it back from the new
+  `GET /sounds/{name}` route and plays it through its own volume/duck path.
+  `orchestrator/sounds/reminder.wav` is a copy of the satellite's UNUSED
+  `vad_alt_bright.wav` — deliberately not the wake chime or dismiss chirp,
+  which already mean something to the family (a reminder arriving on its own
+  must not sound like the assistant woke up).
+- *Kiosk card*: bottom-anchored, accent-bordered, owner pill + text + Done
+  (wired to the existing complete-by-id proxy) + ✕, 90s auto-hide with
+  touch re-arm. Deliberately NOT full-screen like the list view — it arrives
+  unprompted, so it must not take the display hostage or disturb an answer
+  someone is mid-read.
+- Verified live end to end: phone-typed and `assistant_private` both declined,
+  `assistant` shown; satellite fetched the chime (`GET /sounds/reminder.wav`
+  from .251 in the log); card screenshot-confirmed on the kiosk reading
+  "ADRIENNE · REMINDER / Take the roast out of the oven".
+
+**Deploy note:** the kiosk needs the documented Chromium relaunch
+(kitchen-dashboard-display-guide.md) after a dashboard build — the running page
+keeps the old `app.js` and the card silently never appears.
+
+**Honest residue, unchanged:** a benign-at-creation reminder can still fire at
+an awkward moment days later. The backstop if it ever bites is a general guest
+mode; not worth building speculatively.
+
+**Still pending:** a real due reminder firing on its own schedule (all live
+checks so far poked `/reminder/due` directly), and the phone-app side of
+"should phone-typed reminders get an opt-in toggle".

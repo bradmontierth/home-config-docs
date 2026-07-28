@@ -39,11 +39,19 @@ def _now_ms() -> int:
     return int(time.time() * 1000)
 
 
-async def add_from_text(text: str, owner: str | None = None) -> list[dict]:
+async def add_from_text(text: str, owner: str | None = None,
+                        private: bool = False) -> list[dict]:
     """Sync a note holding `text` and analyze it. Returns the items the
     companion extracted (each {type, text, due_at, confidence}). Empty list if
     nothing was extractable. `owner` = voice-identified speaker (speaker ID);
-    None falls back to LIST_OWNER, today's attribution."""
+    None falls back to LIST_OWNER, today's attribution.
+
+    `private` flips the note's mode, which is how a reminder's PROVENANCE
+    reaches firing time: the companion reports that mode back to us when the
+    reminder comes due, and only "assistant" — spoken to the kitchen satellite,
+    so the room already heard it once — is echoed onto the kitchen display.
+    "remind me privately to…" files as assistant_private and stays phone-only.
+    """
     text = text.strip()
     if not text:
         return []
@@ -55,7 +63,7 @@ async def add_from_text(text: str, owner: str | None = None) -> list[dict]:
         "note_date": time.strftime("%Y-%m-%d"),
         "title": "",
         "content": text,
-        "mode": "assistant",
+        "mode": "assistant_private" if private else "assistant",
         "created_at": ts,
         "updated_at": ts,
     }
@@ -85,12 +93,20 @@ async def add_from_text(text: str, owner: str | None = None) -> list[dict]:
     return resolved
 
 
-async def fetch(types: tuple[str, ...] | None = None, status: str = "active") -> list[dict]:
-    """List SHARED items (every companion user), optionally filtered to `types`.
-    No user filter — the household has one shopping/todo/reminder list. The
-    companion already orders reminders, then todos, then shopping."""
+async def fetch(types: tuple[str, ...] | None = None, status: str = "active",
+                user: str | None = None) -> list[dict]:
+    """List items, optionally filtered to `types` and/or one `user`.
+
+    Default is the SHARED view (every companion user): the shopping list is a
+    household object, and so is the kiosk's list view. `user` narrows to one
+    person's items — what "show MY to-dos" asks for once speaker ID has named
+    who asked. The companion already orders reminders, then todos, then
+    shopping."""
+    params = {"status": status}
+    if user:
+        params["user"] = user
     async with httpx.AsyncClient(timeout=15, base_url=config.COMPANION_URL) as client:
-        r = await client.get("/api/items", params={"status": status})
+        r = await client.get("/api/items", params=params)
         r.raise_for_status()
         items = r.json().get("items") or []
     if types is not None:

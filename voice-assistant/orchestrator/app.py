@@ -67,15 +67,24 @@ def session_set_pending(op: str, items: list[dict], list_type: str | None = None
     _SESSION["ts"] = time.time()
 
 
-def session_set_clarify(partial: str, question: str, label: str | None = None,
-                        theme: str | None = None) -> None:
+def session_set_clarify(partial: str, question: str, kind: str = "timer",
+                        label: str | None = None, theme: str | None = None,
+                        owner: str | None = None) -> None:
     """Stash a command that stopped short, awaiting the missing piece. The
     partial TEXT is what matters: the next turn stitches the reply onto it and
-    re-parses the whole thing, so a new slot needs no new grammar. Label/theme
-    ride along only so the deterministic duration fast path can skip that
-    re-parse without losing what the first parse already worked out."""
+    re-parses the whole thing, so a new slot needs no new grammar.
+
+    `kind` names the slot family ("timer" / "add") so a reply is only ever
+    stitched onto a partial of its own kind, and only that kind's fast path
+    runs — "five minutes" answering "remind you to do what?" must not quietly
+    become a timer. Label/theme ride along so the duration fast path can skip
+    the re-parse without losing what the first parse worked out. `owner` is the
+    speaker identified on THIS turn: the full utterance is longer and cleaner
+    audio than the one-phrase reply, and a list add has to land on the list of
+    whoever started the sentence."""
     _SESSION["pending"] = {"op": "clarify", "partial": partial, "question": question,
-                           "label": label, "sound_theme": theme}
+                           "kind": kind, "label": label, "sound_theme": theme,
+                           "owner": owner}
     _SESSION["ts"] = time.time()
 
 
@@ -351,14 +360,20 @@ async def _parse_clarify_reply(clarify: dict, reply: str) -> dict:
     turn where the user is already waiting on us. The label and theme were
     resolved when we asked the question, so the fast path loses nothing.
     Anything the duration reader doesn't recognise goes to the parser with the
-    partial command stitched back on."""
-    seconds = intent_mod.spoken_duration(reply)
-    if seconds is not None:
-        log.info("clarify fast path: %r -> %ss", reply, seconds)
-        return intent_mod.validate({
-            "intent": "set_timer", "duration_seconds": seconds,
-            "label": clarify.get("label"), "sound_theme": clarify.get("sound_theme"),
-        })
+    partial command stitched back on.
+
+    Gated on the TIMER slot: a reminder's content can read as a bare duration
+    ("remind me to" -> "five minutes"), and silently turning that into a timer
+    would lose the reminder without ever saying so."""
+    if clarify.get("kind") == "timer":
+        seconds = intent_mod.spoken_duration(reply)
+        if seconds is not None:
+            log.info("clarify fast path: %r -> %ss", reply, seconds)
+            return intent_mod.validate({
+                "intent": "set_timer", "duration_seconds": seconds,
+                "label": clarify.get("label"),
+                "sound_theme": clarify.get("sound_theme"),
+            })
     return await intent_mod.parse_clarify(
         clarify["partial"], reply, clarify["question"])
 
@@ -464,6 +479,15 @@ async def handle_command(command: str, followup: bool = False,
         log.info("truncated timer rescued from intent=%s: %r", intent, command)
         parsed = {**parsed, "intent": "set_timer", "duration_seconds": None}
         intent = "set_timer"
+    elif intent in ("unclear", "none"):
+        # Same rescue, one slot over: "remind me to" / "add to my to-do list"
+        # cut off before the thing itself (live 2026-07-27).
+        add_intent = intent_mod.is_truncated_add(command)
+        if add_intent:
+            log.info("truncated %s rescued from intent=%s: %r",
+                     add_intent, intent, command)
+            parsed = {**parsed, "intent": add_intent, "missing_content": True}
+            intent = add_intent
 
     if followup and intent == "none":
         # Background chatter / not addressed to us. Drop silently: no events, no
@@ -493,8 +517,9 @@ async def handle_command(command: str, followup: bool = False,
                 # Tells the satellite to hold the mic open longer than a normal
                 # follow-up: we just asked a question the user has to think about.
                 result["awaiting_slot"] = True
-                session_set_clarify(command, question, parsed["label"],
-                                    parsed["sound_theme"])
+                session_set_clarify(command, question, kind="timer",
+                                    label=parsed["label"],
+                                    theme=parsed["sound_theme"])
         else:
             timer = await ENGINE.create(
                 parsed["label"], parsed["duration_seconds"], parsed["sound_theme"]
@@ -554,10 +579,33 @@ async def handle_command(command: str, followup: bool = False,
                 result["response"] = "I couldn't find that timer."
                 result["ok"] = False
 
+    elif intent in ("add_items", "set_reminder") and parsed.get("missing_content"):
+        if clarify:
+            # We asked once and still have nothing to add. A second "what?" is
+            # a loop, not a conversation — same rule as the timer slot.
+            result["response"] = "Okay, never mind."
+            result["ok"] = False
+        else:
+            question = fmt.ask_add_content(intent)
+            result["response"] = question
+            result["ok"] = False
+            result["awaiting_slot"] = True   # satellite holds the mic longer
+            session_set_clarify(command, question, kind="add",
+                                owner=await _speaker_name(speaker_task))
+
     elif intent in ("add_items", "set_reminder"):
-        owner = await _speaker_name(speaker_task)
+        # The companion types each item from the framing words in the text it
+        # is given ("remind me", "todo" — see lists.py), so on a clarify turn
+        # it must see the STITCHED command: the bare reply ("call the dentist
+        # at five") would come back a to-do instead of a reminder.
+        text, owner = command, None
+        if clarify and clarify.get("kind") == "add":
+            text = f"{clarify['partial']} {command}".strip()
+            owner = clarify.get("owner")
+        owner = owner or await _speaker_name(speaker_task)
+        private = intent_mod.wants_private(text)
         try:
-            added = await lists_mod.add_from_text(command, owner=owner)
+            added = await lists_mod.add_from_text(text, owner=owner, private=private)
         except Exception as exc:  # noqa: BLE001
             log.warning("list add failed: %s", exc)
             result["response"] = "Sorry, I couldn't reach the lists service."
@@ -567,8 +615,12 @@ async def handle_command(command: str, followup: bool = False,
             result["response"] = fmt.summarize_added(added)
             # Name the voice-resolved owner aloud (shopping is household-
             # shared, so attribution is only worth speaking for the rest):
-            # cheap trust-building plus the audible correction path.
-            if owner and any(i.get("type") != "shopping" for i in added):
+            # cheap trust-building plus the audible correction path. A private
+            # item says so instead — they asked for the quiet path and need to
+            # hear that it took.
+            if private:
+                result["response"] += " Just on your phone."
+            elif owner and any(i.get("type") != "shopping" for i in added):
                 result["response"] += f" On {owner.title()}'s list."
             result["ok"] = bool(added)
             session_set_added(added)   # enable a follow-up "scratch my last"
@@ -582,17 +634,28 @@ async def handle_command(command: str, followup: bool = False,
 
     elif intent in ("show_todos", "show_shopping"):
         list_type = "todo" if intent == "show_todos" else "shopping"
+        # "show MY to-dos" narrows to whoever asked; "the/our to-dos" stays the
+        # household view, and so does a voice we can't place — an unsure read
+        # falls back to today's behavior rather than guessing whose list to
+        # show. Shopping is never narrowed: one house, one shopping trip.
+        owner = None
+        if list_type == "todo" and intent_mod.wants_own_list(command):
+            owner = await _speaker_name(speaker_task)
         try:
-            items = await lists_mod.fetch(types=(list_type,))
+            items = await lists_mod.fetch(types=(list_type,), user=owner)
         except Exception as exc:  # noqa: BLE001
             log.warning("list fetch failed: %s", exc)
             result["response"] = "Sorry, I couldn't reach the lists service."
             result["ok"] = False
         else:
             result["items"] = items
-            result["response"] = fmt.summarize_list(list_type, items)
+            result["owner"] = owner
+            result["response"] = fmt.summarize_list(list_type, items, owner=owner)
             result["ok"] = True
-            await events.emit("show_list", list_type=list_type, items=items)
+            # `owner` rides along so the kiosk keeps showing the SAME set it
+            # just read out — a later list_updated snapshot is household-wide.
+            await events.emit("show_list", list_type=list_type, items=items,
+                              owner=owner)
 
     elif intent == "complete_item":
         target = parsed.get("item_text") or command
@@ -1245,6 +1308,47 @@ async def complete_list_item(item_id: int) -> dict:
         raise HTTPException(404, "no active item with that id")
     await _broadcast_lists("list_updated", completed=done)
     return {"ok": True, "item": done}
+
+
+@app.post("/reminder/due")
+async def reminder_due(payload: dict = Body(...)) -> dict:
+    """A reminder just came due and the companion has pushed it to its owner's
+    phone. Decide whether it ALSO belongs on the kitchen display.
+
+    The rule is provenance, never content: a reminder created by voice was
+    already said out loud in that room, so echoing it there tells the room
+    nothing it hasn't heard. A phone-typed one was never uttered in shared
+    space, and "remind me privately to…" filed itself under a mode that is
+    deliberately absent from REMINDER_DISPLAY_SOURCES. We never ask a model
+    whether something is "personal" — a wrong no in front of guests is the one
+    failure that matters, and provenance can't be wrong that way.
+
+    Answering 200 either way: this is the companion's fire-and-forget tail, and
+    a declined display is a normal outcome, not an error."""
+    text = str(payload.get("text") or "").strip()
+    if not text:
+        raise HTTPException(400, "missing 'text'")
+    source = str(payload.get("source") or "")
+    if source not in config.REMINDER_DISPLAY_SOURCES:
+        log.info("reminder %s not displayed (source=%r)", payload.get("item_id"), source)
+        return {"ok": True, "shown": False, "reason": "source"}
+    owner = str(payload.get("user") or "") or None
+    log.info("reminder %s due -> kitchen display (%s): %r",
+             payload.get("item_id"), owner or "unattributed", text)
+    await events.emit("reminder_due", item_id=payload.get("item_id"),
+                      owner=owner, text=text, due_at=payload.get("due_at"))
+    await events.satellite_chime(config.REMINDER_CHIME_PATH)
+    return {"ok": True, "shown": True}
+
+
+@app.get("/sounds/{name}")
+def sound(name: str) -> FileResponse:
+    """Short WAVs the satellite fetches when we ask it to play one by URL."""
+    safe = os.path.basename(name)
+    path = os.path.join(os.path.dirname(__file__), "sounds", safe)
+    if not os.path.exists(path):
+        raise HTTPException(404, "no such sound")
+    return FileResponse(path, media_type="audio/wav")
 
 
 @app.get("/audio/{name}")

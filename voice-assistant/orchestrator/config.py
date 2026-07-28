@@ -208,6 +208,24 @@ LIST_OWNER = os.getenv("LIST_OWNER", "brad")
 # rapidfuzz score (0-100) an item must clear to be matched for completion.
 LIST_MATCH_THRESHOLD = float(os.getenv("LIST_MATCH_THRESHOLD", "70"))
 
+# --- reminder display pop ---------------------------------------------------
+# When a reminder comes due the companion pushes it to the owner's phone and
+# calls our /reminder/due. Whether it ALSO lands on the kitchen screen is
+# decided by provenance, not by reading the text: a reminder created by voice
+# was already spoken aloud in that room, so showing it there leaks nothing new,
+# while one typed quietly in the phone app was never uttered in shared space
+# and stays phone-only. The signal is the mode of the note it came from (see
+# lists.add_from_text) — "assistant" for spoken, "assistant_private" for
+# "remind me privately to…", anything else for phone-typed.
+REMINDER_DISPLAY_SOURCES = tuple(
+    s.strip() for s in os.getenv("REMINDER_DISPLAY_SOURCES", "assistant").split(",")
+    if s.strip())
+# Short chime played on the satellite when a reminder pops, served from
+# orchestrator/sounds. Speech is deliberately NOT used: the text is on screen,
+# and audio is what actually carries a personal reminder to a room of guests.
+# Empty disables the sound and leaves the card silent.
+REMINDER_CHIME_PATH = os.getenv("REMINDER_CHIME_PATH", "/sounds/reminder.wav")
+
 # --- music (Music Assistant) ------------------------------------------------
 # MA server (Beelink). API is WebSocket JSON-RPC at /ws via the official
 # music-assistant-client package — there is no REST search. See music.py.

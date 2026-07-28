@@ -33,6 +33,15 @@ def ask_timer_duration(label: str | None) -> str:
     return f"Sure, how long for the {label}?" if label else "Sure, for how long?"
 
 
+def ask_add_content(intent: str) -> str:
+    """The slot question for an add/reminder command that stopped before naming
+    what. Short for the same reason the timer one is — the user is mid-thought
+    and we just interrupted them."""
+    if intent == "set_reminder":
+        return "Remind you to do what?"
+    return "Sure, what should I add?"
+
+
 def confirm_set(timer: dict) -> str:
     return f"{timer_name(timer).capitalize()} set for {humanize_seconds(timer['duration_seconds'])}."
 
@@ -142,19 +151,26 @@ def summarize_added(items: list[dict]) -> str:
     return sentence + "."
 
 
-def summarize_list(list_type: str, items: list[dict]) -> str:
-    """Spoken summary when showing a list on the dashboard."""
+def summarize_list(list_type: str, items: list[dict], owner: str | None = None) -> str:
+    """Spoken summary when showing a list on the dashboard. `owner` names the
+    voice-identified speaker whose list this was narrowed to — said aloud for
+    the same reason an add names it: it builds trust when right, and gives them
+    something to correct when wrong."""
     label = _LIST_LABEL.get(list_type, "list")
     if not items:
-        return f"Your {label} is empty."
-    names = [_item_phrase(it) for it in items]
-    head = names[:5]
-    spoken = join_natural(head)
-    if len(names) > len(head):
-        spoken += f", and {len(names) - len(head)} more"
-    n = len(names)
-    noun = "item" if n == 1 else "items"
-    return f"You have {n} {noun} on your {label}: {spoken}."
+        body = f"your {label} is empty."
+    else:
+        names = [_item_phrase(it) for it in items]
+        head = names[:5]
+        spoken = join_natural(head)
+        if len(names) > len(head):
+            spoken += f", and {len(names) - len(head)} more"
+        n = len(names)
+        noun = "item" if n == 1 else "items"
+        body = f"you have {n} {noun} on your {label}: {spoken}."
+    if owner:
+        return f"{owner.title()}, {body}"
+    return body[0].upper() + body[1:]
 
 
 def confirm_removed(items: list[dict]) -> str:
