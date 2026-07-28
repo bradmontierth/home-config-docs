@@ -16,7 +16,8 @@ log = logging.getLogger("orchestrator.intent")
 
 INTENTS = (
     "set_timer", "timer_query", "timer_adjust", "timer_cancel",
-    "add_items", "set_reminder", "show_todos", "show_shopping", "complete_item",
+    "add_items", "set_reminder", "show_todos", "show_shopping", "show_reminders",
+    "complete_item",
     "remove_items", "clear_list", "play_music", "music_control", "music_query",
     "sports", "weather", "business_hours", "place_search", "home_control",
     "broadcast", "find_phone", "ask", "show_answer", "unclear", "none",
@@ -148,7 +149,9 @@ Rules:
   on the shopping list". The assistant asks what to add itself. A command that DOES name something
   ("remind me to call mom", "add eggs to the list") has missing_content false.
 - show_todos = "show my todos", "what's on my to-do list". show_shopping = "show the shopping list",
-  "what do I need to buy". No other fields.
+  "what do I need to buy". show_reminders = "show my reminders", "what reminders do I have", "what
+  am I being reminded about", "do I have any reminders", "what's my next reminder". No other fields.
+  A request to SET one ("remind me to…") is set_reminder, never show_reminders.
 - complete_item = checking something off: "mark eggs as done", "I bought the milk", "cross off call
   the dentist", "I got the dairy". Put the description in "item_text" (may name one item or many).
 - remove_items = removing item(s) or UNDOING the last add: "take the eggs off the list", "remove milk

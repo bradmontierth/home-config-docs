@@ -404,6 +404,21 @@ class ShowListScopeTest(_SlotTestBase):
         self.assertIsNone(self.fetch.await_args.kwargs["user"])
         self.assertIsNone(result["owner"])
 
+    def test_my_reminders_scope_to_the_speaker(self):
+        # The most personal list of the three, and the one Brad actually wants
+        # to pull up ("that reminder tomorrow is stale, let me cancel it").
+        result = self._show("show me my reminders", "brad",
+                            intent_name="show_reminders")
+        self.assertEqual(self.fetch.await_args.kwargs["user"], "brad")
+        self.assertEqual(self.fetch.await_args.kwargs["types"], ("reminder",))
+        self.assertEqual(result["owner"], "brad")
+
+    def test_household_reminders_stay_shared(self):
+        result = self._show("what reminders do we have", "brad",
+                            intent_name="show_reminders")
+        self.assertIsNone(self.fetch.await_args.kwargs["user"])
+        self.assertIsNone(result["owner"])
+
     def test_shopping_is_never_narrowed(self):
         # One house, one shopping trip — "my shopping list" is still the
         # household's, however it is phrased.

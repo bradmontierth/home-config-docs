@@ -237,8 +237,8 @@ async def _broadcast_lists(event_type: str, **extra) -> None:
     await events.emit(event_type, items=items, **extra)
 
 
-# The overlay only has todo/shopping views; reminders are push-only.
-_VIEWABLE = ("shopping", "todo")
+# List views the kiosk can render, in the order an add prefers them.
+_VIEWABLE = ("shopping", "todo", "reminder")
 
 
 def _view_type_for(items: list[dict]) -> str | None:
@@ -282,7 +282,7 @@ def _summarize_turn(intent: str, result: dict) -> str:
         return f"you adjusted the {fmt.timer_name(result['timer'])}"
     if intent == "timer_cancel":
         return "you cancelled a timer"
-    if intent in ("show_todos", "show_shopping"):
+    if intent in ("show_todos", "show_shopping", "show_reminders"):
         return "you were shown a list"
     if intent == "timer_query":
         return "you asked how much time was left"
@@ -632,14 +632,15 @@ async def handle_command(command: str, followup: bool = False,
             else:
                 await _broadcast_lists("list_updated", added=added)
 
-    elif intent in ("show_todos", "show_shopping"):
-        list_type = "todo" if intent == "show_todos" else "shopping"
+    elif intent in ("show_todos", "show_shopping", "show_reminders"):
+        list_type = {"show_todos": "todo", "show_shopping": "shopping",
+                     "show_reminders": "reminder"}[intent]
         # "show MY to-dos" narrows to whoever asked; "the/our to-dos" stays the
         # household view, and so does a voice we can't place — an unsure read
         # falls back to today's behavior rather than guessing whose list to
         # show. Shopping is never narrowed: one house, one shopping trip.
         owner = None
-        if list_type == "todo" and intent_mod.wants_own_list(command):
+        if list_type in ("todo", "reminder") and intent_mod.wants_own_list(command):
             owner = await _speaker_name(speaker_task)
         try:
             items = await lists_mod.fetch(types=(list_type,), user=owner)

@@ -1383,3 +1383,40 @@ mode; not worth building speculatively.
 **Still pending:** a real due reminder firing on its own schedule (all live
 checks so far poked `/reminder/due` directly), and the phone-app side of
 "should phone-typed reminders get an opt-in toggle".
+
+## "Show me my reminders" + stop reciting to-dos aloud — BUILT + DEPLOYED 2026-07-27
+
+**Where this came from:** Brad, minutes after the three items above went live.
+He asked for his to-dos and got them read back one by one — his to-dos are
+whole sentences ("Calculate and set the Powerwall dynamic reserve to 50%"), so
+five in a row is a monologue. And "show me my reminders" didn't work at all: it
+landed on `unclear` → "Sorry, I didn't catch that", because there was no
+`show_reminders` intent and reminders had no kiosk view (`_VIEWABLE` was
+shopping + todo only, from back when reminders were push-only).
+
+**What changed:**
+
+- **Count, don't recite — for to-dos and reminders.** "You have 4 to-dos —
+  they are on the screen." The screen shows all of them at once and far
+  faster than speech can. **Shopping deliberately still reads its items
+  aloud**: those are two words each ("eggs", "prunes"), and hearing them is
+  the hands-busy case the kitchen actually has. Grammar trap fixed on the way:
+  the empty case needed its own table, or reminders read "your reminders is
+  empty".
+- **New `show_reminders` intent** + kiosk reminder view. Scopes by voice like
+  to-dos ("show MY reminders" → speaker; "what reminders do we have" →
+  household; unsure → household).
+- **Due time on every reminder row, and overdue ones outlined in amber.**
+  This is the whole point of Brad's use case — pulling the list up to find one
+  that is stale and cancelling it. Tapping the circle completes it through the
+  existing complete-by-id path, so "cancel that" is one tap.
+- `_VIEWABLE` now includes reminder, so a reminder-only add pops the reminders
+  view instead of silently refreshing nothing.
+
+Verified on the kiosk: 4 reminders rendered, the 25 Jul cable one and the
+15:00 roast-coffee one both amber, tonight's 21:00 and the 1 Sept tax one
+normal. 146 tests green.
+
+**Open:** shopping could get the same count-only treatment if the list ever
+grows long, but nobody has complained; the spoken/screen split is a judgment
+call per list, not a global rule.

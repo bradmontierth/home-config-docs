@@ -151,22 +151,40 @@ def summarize_added(items: list[dict]) -> str:
     return sentence + "."
 
 
+_LIST_EMPTY = {
+    "todo": "your to-do list is empty.",
+    "shopping": "your shopping list is empty.",
+    "reminder": "you have no reminders.",
+}
+# Lists we only COUNT aloud. To-dos and reminders are whole sentences
+# ("Calculate and set the Powerwall dynamic reserve to 50%"); reading five of
+# those back is a monologue nobody listens to, and the screen shows them better
+# and all at once. Shopping items are two words each, and reading THOSE back is
+# the hands-busy case the kitchen actually has — so they stay spoken.
+_COUNT_ONLY_NOUN = {"todo": ("to-do", "to-dos"),
+                    "reminder": ("reminder", "reminders")}
+
+
 def summarize_list(list_type: str, items: list[dict], owner: str | None = None) -> str:
-    """Spoken summary when showing a list on the dashboard. `owner` names the
+    """Spoken summary when a list goes up on the dashboard. `owner` names the
     voice-identified speaker whose list this was narrowed to — said aloud for
     the same reason an add names it: it builds trust when right, and gives them
     something to correct when wrong."""
-    label = _LIST_LABEL.get(list_type, "list")
-    if not items:
-        body = f"your {label} is empty."
+    n = len(items)
+    if not n:
+        body = _LIST_EMPTY.get(list_type, "that list is empty.")
+    elif list_type in _COUNT_ONLY_NOUN:
+        one, many = _COUNT_ONLY_NOUN[list_type]
+        body = (f"you have {n} {one if n == 1 else many} — "
+                f"{'it is' if n == 1 else 'they are'} on the screen.")
     else:
         names = [_item_phrase(it) for it in items]
         head = names[:5]
         spoken = join_natural(head)
         if len(names) > len(head):
             spoken += f", and {len(names) - len(head)} more"
-        n = len(names)
         noun = "item" if n == 1 else "items"
+        label = _LIST_LABEL.get(list_type, "list")
         body = f"you have {n} {noun} on your {label}: {spoken}."
     if owner:
         return f"{owner.title()}, {body}"
