@@ -1,0 +1,15 @@
+[Unit]
+# Optional watchdog. The start script is idempotent (`compose up -d` on a
+# healthy container is a no-op), so re-running it every 10 minutes restarts
+# anything that died without ever producing a crash-loop against the GPU —
+# which is the failure mode `restart: always` would risk on this box.
+# Enable only if you want crash recovery; the .service alone covers reboots.
+Description=Re-check the GX10 production GPU stack every 10 minutes
+
+[Timer]
+OnBootSec=15min
+OnUnitActiveSec=10min
+Unit=gx10-prod-stack.service
+
+[Install]
+WantedBy=timers.target

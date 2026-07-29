@@ -79,6 +79,9 @@ scp -q "$BLOBS/silero_vad.onnx" "$TARGET":/home/pi/voice-pipeline/
 scp -q "$BLOBS/okay_computer.onnx" "$BLOBS/okay_google.onnx" "$BLOBS/stop.onnx" "$TARGET":/home/pi/wake-bench/
 scp -q "$HERE/satellite/satellite.env" "$TARGET":/home/pi/voice-pipeline/.env
 scp -q "$HERE/asoundrc" "$TARGET":/home/pi/.asoundrc
+# canonical copy the unit restores from if ~/.asoundrc disappears again
+scp -q "$HERE/asoundrc" "$TARGET":/home/pi/voice-pipeline/asoundrc.canonical
+ssh "$TARGET" sync   # this file has been lost to unflushed writes before
 ssh "$TARGET" 'test -d /home/pi/voice-pipeline/.venv || python3 -m venv /home/pi/voice-pipeline/.venv'
 ssh "$TARGET" '/home/pi/voice-pipeline/.venv/bin/pip install -q --upgrade pip && \
                /home/pi/voice-pipeline/.venv/bin/pip install -q -r /dev/stdin' \

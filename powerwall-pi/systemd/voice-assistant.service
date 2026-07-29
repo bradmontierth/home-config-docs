@@ -7,6 +7,11 @@ Wants=network-online.target
 User=pi
 WorkingDirectory=/home/pi/voice-pipeline
 EnvironmentFile=-/home/pi/voice-pipeline/.env
+# ~/.asoundrc has now been lost THREE times on this box to ext4 orphan
+# cleanup after unclean shutdowns (2026-07-25, 2026-07-26, 2026-07-28).
+# Without it the satellite crash-loops on 'audio open error'. Restore it
+# from the canonical copy rather than requiring a human to notice.
+ExecStartPre=/bin/sh -c 'test -s /home/pi/.asoundrc || { cp /home/pi/voice-pipeline/asoundrc.canonical /home/pi/.asoundrc && sync; }'
 ExecStart=/home/pi/voice-pipeline/.venv/bin/python /home/pi/voice-pipeline/assistant.py
 Restart=always
 RestartSec=15

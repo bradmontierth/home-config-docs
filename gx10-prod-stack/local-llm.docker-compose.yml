@@ -1,0 +1,71 @@
+# GX10 local LLM — deploy to /home/pi/local-llm/docker-compose.yml
+#
+# This is the house's general-purpose local LLM. It is what the kitchen voice
+# assistant parses every command with: orchestrator LLM_URL -> :8095 ->
+# music-llm-openai-proxy -> 127.0.0.1:8102 -> this container. It was first
+# stood up for a music use case that didn't pan out, hence the old
+# "music-llm-qwen36-aeon-dflash-test" name; nothing about it is music-specific
+# or a test any more.
+#
+# DO NOT rename the MODEL. The container name is free to change, but
+# `--served-model-name qwen3-next` is a wire contract: the orchestrator sends
+# {"model": "qwen3-next"} (orchestrator/config.py LLM_MODEL) and the proxy is
+# started with --served-model qwen3-next. Change those three together or not
+# at all.
+#
+# restart: "no" is deliberate. `always`/`unless-stopped` make Docker start the
+# container the moment the daemon comes up, which on this box means this ~54GB
+# GPU allocation races the parakeet/sortformer/speaker-embed stack at boot —
+# the 2026-07-05 unified-memory OOM that took out the whole machine. Boot
+# ordering belongs to gx10-prod-stack.service, which starts this only after the
+# ASR stack is answering, then waits for it to be healthy before starting
+# kokoro. See APPLY.md.
+services:
+  local-llm:
+    image: ghcr.io/aeon-7/vllm-aeon-ultimate-dflash:qwen36-v4
+    container_name: local-llm
+    runtime: nvidia
+    ipc: host
+    restart: "no"
+    ports:
+      - "8102:8000"
+    volumes:
+      - /home/pi/models/qwen36-aeon-xs:/models/xs
+      - /home/pi/models/qwen36-dflash-pi:/models/dflash-drafter
+    environment:
+      NVIDIA_FORWARD_COMPAT: "1"
+      NVIDIA_DISABLE_REQUIRE: "1"
+      VLLM_USE_FLASHINFER_MOE_FP4: "0"
+      VLLM_USE_FLASHINFER_SAMPLER: "1"
+      VLLM_NVFP4_GEMM_BACKEND: "flashinfer-cutlass"
+      TORCH_CUDA_ARCH_LIST: "12.1a"
+      ENABLE_NVFP4_SM100: "0"
+      VLLM_TEST_FORCE_FP8_MARLIN: "0"
+      VLLM_ALLOW_LONG_MAX_MODEL_LEN: "1"
+      PYTORCH_CUDA_ALLOC_CONF: "expandable_segments:True"
+      TORCH_MATMUL_PRECISION: "high"
+    command:
+      - bash
+      - -lc
+      - |
+        exec vllm serve /models/xs \
+          --served-model-name qwen3-next \
+          --host 0.0.0.0 --port 8000 \
+          --tensor-parallel-size 1 \
+          --dtype bfloat16 \
+          --quantization compressed-tensors \
+          --kv-cache-dtype auto \
+          --max-model-len 8192 \
+          --max-num-seqs 1 \
+          --max-num-batched-tokens 8192 \
+          --gpu-memory-utilization 0.45 \
+          --enable-chunked-prefill \
+          --enable-prefix-caching \
+          --generation-config vllm \
+          --load-format fastsafetensors \
+          --trust-remote-code \
+          --reasoning-parser qwen3 \
+          --attention-backend flash_attn \
+          --limit-mm-per-prompt "{\"image\":1,\"video\":0}" \
+          --mm-encoder-tp-mode data \
+          --speculative-config "{\"method\":\"dflash\",\"model\":\"/models/dflash-drafter\",\"num_speculative_tokens\":8,\"attention_backend\":\"flash_attn\"}"

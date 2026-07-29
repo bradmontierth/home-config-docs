@@ -29,9 +29,11 @@ PUBLISHER_SERVICE='pw3-mqtt.service'
 STALE_WINDOW='3 min'
 RESTART_COOLDOWN_SEC=300
 BOUNCE_COOLDOWN_SEC=600     # the AP needs minutes, not seconds, to recover
+CONNECT_COOLDOWN_SEC=300    # ditto for plain re-association attempts
 PARK_SEC=45                 # leave the radio off this long during a bounce
 RESTART_STAMP='/tmp/pw3-watchdog-last-restart'
 BOUNCE_STAMP='/tmp/pw3-watchdog-last-bounce'
+CONNECT_STAMP='/tmp/pw3-watchdog-last-connect'
 
 log() {
   logger -t pw3-watchdog "$*"
@@ -111,9 +113,18 @@ fi
 
 # ---- no fresh telemetry: work out which layer is broken -------------------
 if ! wifi_connected; then
-  log "wifi not associated with ${PW_WIFI_CONN}, connecting"
-  nmcli con up "$PW_WIFI_CONN" ifname "$PW_WIFI_IF" >/dev/null 2>&1 || true
-  sleep 5
+  # Rate-limited on purpose. When the gateway is refusing us
+  # (CTRL-EVENT-ASSOC-REJECT status_code=16) hammering `con up` every 60s
+  # appears to hold the lockout open — Tesla's AP is slow to re-admit a
+  # client that has been cycling. Try occasionally and let it settle.
+  if cooldown_expired "$CONNECT_STAMP" "$CONNECT_COOLDOWN_SEC"; then
+    log "wifi not associated with ${PW_WIFI_CONN}, connecting"
+    stamp "$CONNECT_STAMP"
+    nmcli con up "$PW_WIFI_CONN" ifname "$PW_WIFI_IF" >/dev/null 2>&1 || true
+    sleep 5
+  else
+    log "wifi not associated; connect cooldown active, backing off"
+  fi
 elif ! gateway_alive; then
   log "gateway ${PW_GATEWAY_IP} unreachable on ICMP and tcp/${PW_GATEWAY_PORT} after 3 rounds"
   bounce_wifi

@@ -1,0 +1,23 @@
+[Unit]
+# Staged boot for the GX10's GPU production containers.
+# Installed as a USER unit (~/.config/systemd/user/) because sudo on the GX10
+# needs a password, and user units already work on this box: the pi user has
+# Linger=yes, which is how music-llm-openai-proxy.service survives reboots.
+# Consequence: this cannot order itself After=docker.service (a system unit),
+# so the script polls for the docker daemon itself.
+Description=GX10 production GPU stack (local-llm, kokoro-tts) — staged start
+After=default.target
+
+[Service]
+Type=oneshot
+# Deliberately NOT RemainAfterExit=yes: that would leave the unit permanently
+# "active" after the first run, and systemd will not re-trigger an already
+# active unit — gx10-prod-stack.timer would fire into the void. Letting it go
+# inactive on completion is what makes the watchdog timer work. (Overlap is
+# not a concern: systemd skips a trigger while the unit is still running.)
+ExecStart=/home/pi/local-llm/start-prod-stack.sh
+# Cold vllm start can take several minutes; don't let systemd kill it early.
+TimeoutStartSec=1800
+
+[Install]
+WantedBy=default.target

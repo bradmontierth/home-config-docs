@@ -1,0 +1,40 @@
+# GX10 Kokoro TTS — deploy to /home/pi/kokoro-tts/docker-compose.yml
+#
+# Production TTS fallback for the kitchen voice assistant: the beelink TTS
+# router at :8891 falls back to this on GX10 :8880 (KOKORO_FORCE_FALLBACK,
+# voice-assistant-plan.md). It has been serving continuously for weeks despite
+# the "kokoro-gb10-bench" name it inherited from the benchmark that created it.
+# It is also the obvious tool for generating alternate-TTS wake-word positives
+# (stop-model v4 — see voice-assistant-backlog.md #3).
+#
+# SUPERSEDES /home/pi/kokoro-gb10-benchmark/docker-compose.yml. That file pins
+# container_name: kokoro-gb10-bench and publishes the same :8880 — leaving both
+# in place means a `docker compose up -d` in the benchmark dir silently starts
+# a SECOND container fighting for the port. APPLY.md renames the old file out
+# of the way; do not skip that step.
+#
+# Model weights are baked into the image (DOWNLOAD_MODEL=false, no HF_HOME, no
+# mounts), so this container is unaffected by anything in /data/hf.
+#
+# restart: "no" — boot ordering is owned by gx10-prod-stack.service so GPU
+# containers don't all allocate at once. See local-llm.docker-compose.yml.
+services:
+  kokoro-tts:
+    image: kokoro-tts-arm64:gb10
+    container_name: kokoro-tts
+    runtime: nvidia
+    restart: "no"
+    ports:
+      - "8880:8880"
+    environment:
+      USE_GPU: "true"
+      PYTHONUNBUFFERED: "1"
+      API_LOG_LEVEL: "INFO"
+      DOWNLOAD_MODEL: "false"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: ["gpu"]
