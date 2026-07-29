@@ -29,7 +29,14 @@ PUBLISHER_SERVICE='pw3-mqtt.service'
 STALE_WINDOW='3 min'
 RESTART_COOLDOWN_SEC=300
 BOUNCE_COOLDOWN_SEC=600     # the AP needs minutes, not seconds, to recover
-CONNECT_COOLDOWN_SEC=300    # ditto for plain re-association attempts
+# Escalating backoff for re-association. PROVEN NECESSARY 2026-07-29: after a
+# forced disconnect the Tesla AP refused this client for hours with
+# CTRL-EVENT-ASSOC-REJECT status_code=16, and every retry appeared to refresh
+# the penalty — a fixed 5-min retry could never outlast it. One hour of TRUE
+# silence (box powered off) cleared it, and it associated on the first attempt.
+# So: back off further the longer it keeps failing, up to an hour.
+CONNECT_BACKOFF_SEC=(300 600 1200 2400 3600)
+CONNECT_FAIL_FILE='/tmp/pw3-watchdog-connect-fails'
 PARK_SEC=45                 # leave the radio off this long during a bounce
 RESTART_STAMP='/tmp/pw3-watchdog-last-restart'
 BOUNCE_STAMP='/tmp/pw3-watchdog-last-bounce'
@@ -117,13 +124,24 @@ if ! wifi_connected; then
   # (CTRL-EVENT-ASSOC-REJECT status_code=16) hammering `con up` every 60s
   # appears to hold the lockout open — Tesla's AP is slow to re-admit a
   # client that has been cycling. Try occasionally and let it settle.
-  if cooldown_expired "$CONNECT_STAMP" "$CONNECT_COOLDOWN_SEC"; then
-    log "wifi not associated with ${PW_WIFI_CONN}, connecting"
+  fails=0
+  [[ -f "$CONNECT_FAIL_FILE" ]] && fails=$(cat "$CONNECT_FAIL_FILE" 2>/dev/null || echo 0)
+  idx=$fails
+  (( idx >= ${#CONNECT_BACKOFF_SEC[@]} )) && idx=$(( ${#CONNECT_BACKOFF_SEC[@]} - 1 ))
+  wait_s=${CONNECT_BACKOFF_SEC[$idx]}
+  if cooldown_expired "$CONNECT_STAMP" "$wait_s"; then
+    log "wifi not associated with ${PW_WIFI_CONN}, connecting (attempt $((fails+1)), backoff ${wait_s}s)"
     stamp "$CONNECT_STAMP"
     nmcli con up "$PW_WIFI_CONN" ifname "$PW_WIFI_IF" >/dev/null 2>&1 || true
     sleep 5
+    if wifi_connected; then
+      log "associated; clearing backoff"
+      echo 0 > "$CONNECT_FAIL_FILE"
+    else
+      echo $((fails+1)) > "$CONNECT_FAIL_FILE"
+    fi
   else
-    log "wifi not associated; connect cooldown active, backing off"
+    log "wifi not associated; backing off ${wait_s}s (consecutive failures: ${fails})"
   fi
 elif ! gateway_alive; then
   log "gateway ${PW_GATEWAY_IP} unreachable on ICMP and tcp/${PW_GATEWAY_PORT} after 3 rounds"

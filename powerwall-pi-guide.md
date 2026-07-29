@@ -98,6 +98,39 @@ telemetry snapshot to the house MQTT broker.
   Node-RED deploy during an existing outage does not fabricate a new outage
   notification.
 
+### ⚠️ The Tesla AP locks out a client that gets disconnected (2026-07-28/29)
+
+**Never force-disconnect wlan0 from a Powerwall AP.** Doing so cost ~13 hours
+of telemetry. Sequence:
+
+1. `pw3_watchdog.sh` bounced the wifi because one `ping -c 1 -W 2` to the
+   gateway failed — but the gateway does **not** answer ICMP reliably, and the
+   publisher had logged successful polls seconds earlier. It tore down a
+   healthy link (`CTRL-EVENT-DISCONNECTED reason=3 locally_generated=1`).
+2. The AP then refused every re-association with
+   **`CTRL-EVENT-ASSOC-REJECT status_code=16`** ("timeout waiting for next
+   frame in sequence"). Not a PSK error — this is before the 4-way handshake,
+   so the stored password is irrelevant.
+3. **Every retry appeared to refresh the penalty.** A fixed 5-minute retry
+   could never outlast it; it stayed locked out all night.
+4. **One hour with the box powered off cleared it**, and it associated on the
+   very first attempt of the next boot.
+
+Things that do NOT fix it, all tested: a different MAC (so it is not a MAC
+ban), the other Powerwall's AP (both refuse), `brcmfmac` reload,
+`wpa_supplicant` restart, a full reboot, stopping USB audio, and a 5-minute
+park. Signal was -28 dBm and channel 11 was permitted at 20 dBm throughout,
+so it is never a radio or regulatory problem.
+
+Diagnostic value: another device (a phone, or the Plex Pi, which pulled
+`192.168.91.192/24` off the same AP) **can** associate while this box is
+locked out. That proves credentials and AP health, and narrows it to this
+client's association state.
+
+**Recovery: stop retrying and go completely silent for ~1 hour.** Powering the
+box off is the surest way. The watchdog now escalates its retry backoff
+300→600→1200→2400→3600s for exactly this reason.
+
 Ops: `journalctl -u pw3-mqtt -f` on the box; consumer side is whatever
 subscribes to `pw3/telemetry` on the Beelink broker (Node-RED/HA).
 
