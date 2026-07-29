@@ -1533,3 +1533,23 @@ normal. 146 tests green.
 **Open:** shopping could get the same count-only treatment if the list ever
 grows long, but nobody has complained; the spoken/screen split is a judgment
 call per list, not a global rule.
+
+---
+
+## Music Assistant upgrade 2.6.3 → 2.9.x — OPEN, not scheduled (added 2026-07-29)
+
+MA 2.6.3's snapcast `play_announcement` ends in an unbounded
+`while stream.status != "idle"` poll. A snapserver drop mid-announcement orphans
+the stream object it polls, so it spins forever holding that player's announce
+lock — **every later announcement to that player is silently swallowed** until MA
+restarts. Cost three nights of silent bedtime summaries (Master Bedroom
+2026-07-26 04:29:09, Loft 2026-07-25 23:50:58); ~80 snapserver drops since May
+make it recurring. Upstream rewrote the path in 2.9.x.
+
+Interim safety net **shipped 2026-07-29**: `home_config/ma-announce-watchdog/`
+(2 min user timer, restarts MA on a wedge unless music is playing, pushover).
+
+The upgrade itself needs a window, a rollback plan, and a smoke-test pathway
+covering every MA API consumer — voice orchestrator, NFC jukebox, Amp Speakers
+subflow, home-audio-adapter, tts-router, HA `media_player.*`. Full inventory,
+risk notes and proposed test pathway: **`home_config/music-assistant-upgrade-plan.md`**.

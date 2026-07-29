@@ -91,7 +91,15 @@ def save_state(state: dict) -> None:
 
 
 def pushover(title: str, message: str, priority: int = 0) -> None:
-    """Best-effort alert; never let a notification failure mask the real event."""
+    """Best-effort alert; never let a notification failure mask the real event.
+
+    Targets PUSHOVER_DEVICE from the shared cecret_lake env so this alert lands on
+    one phone rather than every device on the account. That file is the single
+    source of truth for the device name -- a phone upgrade should be one edit
+    there, not a hunt through every project. Never hardcode a device name as a
+    fallback: silently broadcasting to all devices is the better failure than
+    silently notifying a phone that no longer exists.
+    """
     try:
         env = {}
         for line in PUSHOVER_ENV.read_text().splitlines():
@@ -99,15 +107,18 @@ def pushover(title: str, message: str, priority: int = 0) -> None:
             if line and not line.startswith("#") and "=" in line:
                 k, v = line.split("=", 1)
                 env[k.strip()] = v.strip()
-        payload = urllib.parse.urlencode(
-            {
-                "token": env["PUSHOVER_API"],
-                "user": env["PUSHOVER_USER"],
-                "title": title,
-                "message": message,
-                "priority": priority,
-            }
-        ).encode()
+        fields = {
+            "token": env["PUSHOVER_API"],
+            "user": env["PUSHOVER_USER"],
+            "title": title,
+            "message": message,
+            "priority": priority,
+        }
+        if env.get("PUSHOVER_DEVICE"):
+            fields["device"] = env["PUSHOVER_DEVICE"]
+        else:
+            log("WARN PUSHOVER_DEVICE unset; alert goes to all devices")
+        payload = urllib.parse.urlencode(fields).encode()
         req = urllib.request.Request("https://api.pushover.net/1/messages.json", data=payload)
         with urllib.request.urlopen(req, timeout=15) as resp:
             resp.read()
