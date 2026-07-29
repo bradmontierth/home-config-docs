@@ -1,0 +1,12 @@
+[Unit]
+Description=Run the Music Assistant announcement-lock watchdog every 2 minutes
+Documentation=file:/home/pi/home_config/ma-announce-watchdog/README.md
+
+[Timer]
+OnBootSec=3min
+OnUnitActiveSec=2min
+AccuracySec=15s
+Unit=ma-announce-watchdog.service
+
+[Install]
+WantedBy=timers.target

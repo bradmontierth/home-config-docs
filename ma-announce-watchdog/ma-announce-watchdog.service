@@ -1,0 +1,10 @@
+[Unit]
+Description=Music Assistant announcement-lock watchdog
+Documentation=file:/home/pi/home_config/ma-announce-watchdog/README.md
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /home/pi/home_config/ma-announce-watchdog/ma_announce_watchdog.py
+# Exit 1 means "detected but not resolved" -- alerted, not a unit failure.
+SuccessExitStatus=0 1
+TimeoutStartSec=300
