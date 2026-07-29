@@ -1,0 +1,108 @@
+# Wake word: "stop" — alarm-dismiss barge-in model, NOT a stage-1 wake head.
+# Runs ONLY while an alarm is ringing (satellite alarm loop), so the false-
+# positive budget is far looser than okay_computer/okay_google. Mirrors the
+# okay_computer.yaml bakeoff-winner recipe with two deliberate changes:
+#   1. /work/data/alarm_backgrounds (400 clips, ~15% of background draws):
+#      the real theme WAVs looped at the deployed 2.0s ALARM_GAP_S cadence,
+#      30% with cached TTS announcements overlaid — trains "stop" under the
+#      exact masker it must punch through (ASR provably can't, 2026-07-23).
+#   2. target_fp_per_hour relaxed 0.1 -> 0.5: recall matters more here; the
+#      runtime threshold is chosen at the satellite anyway.
+# "stops"/"stopped"/"stay" deliberately NOT negatives — under ring masking a
+# real "stop" can smear into those; suppressing them would suppress the user
+# (same reasoning as keeping "hey google" out of okay_google negatives).
+#
+# v2 (2026-07-24, SUPERSEDED): v1 false-fired 0.7-0.9 on the REAL first ding.
+# Backgrounds were 9 short bodies carved from ATTENDED rings, each x10 = 90
+# files. Trained clean but was never armable: on a long unattended ring it
+# peaked 0.798 steady-state, and the x10 duplication is the prime suspect for
+# why it beat v1 on contaminated clips and lost on unseen ones.
+#
+# v3 (2026-07-28). Two changes, both from the 2026-07-28 capture session
+# (8 timers rung OUT in an empty kitchen — see voice-assistant-backlog.md #3):
+#   1. /work/data_v3/real_ring_backgrounds (77 files) replaces
+#      /work/data/real_ring_backgrounds (90 files). NO duplicated audio: every
+#      file is a distinct non-overlapping slice (slice_ring_backgrounds.py).
+#      Composition — 56 slices of LONG UNATTENDED rings (the distribution v2
+#      lacked) + 21 slices of the 9 v2 attended bodies, x1 each:
+#        marimba      15 (2.5s slices — see below)
+#        oven_ding    17 (3.0s)
+#        bubbling     14 (3.0s)
+#        steam_whistle 10 (4.0s)
+#        v2 bodies    21 (3.0s)
+#      Slice length is the weighting lever: the augmenter draws a random
+#      background FILE and crops 2.0s from it, so weight is per-file, not
+#      per-second. Finer slice = more draws off the same audio, no repeats.
+#   2. Weighting follows the measured v1 false-fire profile, which is
+#      PERIODIC AT THE DING CADENCE and strongly theme-dependent: marimba
+#      fired on essentially every ding (peaks 0.837 and 0.849, 11 and 5
+#      windows >=0.5), bubbling weakly (0.626), oven_ding twice in one ring
+#      of two (0.956) and never in the other, steam_whistle never cleared
+#      0.24. Marimba also matters most in practice: cluck/moo/sizzle have NO
+#      theme WAV on the satellite and fall back to marimba, so most food
+#      timers ring it.
+# Eval holdout (NOT in this pool, kept clean for the arming decision): the
+# second ring of every sound — 20260728-203744 (marimba/cluck, 0.849),
+# 203343 (oven_ding, 0.956), 203112 (bubbling, 0.626), 203510 (steam_whistle,
+# 0.000) — plus the 4 v2 holdouts. Arming criterion stays the 2-consecutive-
+# window rule from the 2026-07-25 second-look analysis: 2-consec ceiling
+# across ALL long unattended negatives vs 2-consec recall at the spoken stop.
+# NEVER re-arm on the synthetic bench alone.
+model_name: stop
+target_phrases: ["stop", "stop it", "stop the timer"]
+
+n_samples: 25000
+n_samples_val: 5000
+n_background_samples: 2000
+n_background_samples_val: 500
+tts_batch_size: 32
+
+# Adversarial negatives: onset/rhyme neighbors likely in kitchen talk.
+custom_negative_phrases:
+  - "top"
+  - "the top"
+  - "on top"
+  - "pop"
+  - "shop"
+  - "chop"
+  - "drop"
+  - "hop"
+  - "stock"
+  - "the stove"
+  - "step"
+  - "stuff"
+  - "spot"
+  - "soup"
+  - "hot pot"
+  - "step it up"
+
+noise_scales: [0.98]
+noise_scale_ws: [0.98]
+length_scales: [0.75, 1.0, 1.25]
+slerp_weights: [0.2, 0.35, 0.5, 0.65, 0.8]
+
+data_dir: /work/data
+output_dir: /work/output/stop_v3
+
+augmentation:
+  clip_duration: 2.0
+  batch_size: 16
+  rounds: 3
+  background_paths: [/work/data/backgrounds, /work/data/alarm_backgrounds, /work/data_v3/real_ring_backgrounds]
+  rir_paths: [/work/data/rirs]
+
+model:
+  model_type: conv_attention
+  model_size: medium
+
+steps: 100000
+learning_rate: 0.0001
+weight_decay: 0.01
+label_smoothing: 0.05
+max_negative_weight: 3000
+target_fp_per_hour: 0.5
+
+batch_n_per_class:
+  positive: 50
+  adversarial_negative: 50
+  ACAV100M_sample: 1024

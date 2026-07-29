@@ -256,6 +256,70 @@ route is its ONLY caller) and recreating the container — restored after. Do it
 there, not via the satellite's UNATTENDED_ALERT_S, because a satellite restart
 resets MODE to shadow.
 
+**v3 corpus + config PREPPED 2026-07-28, NOT LAUNCHED** (needs Brad's go —
+training takes ~2h on the GX10 and the box must not be OOMed mid-session).
+
+Launch with:
+  ssh dgx
+  docker rm -f wake-train-stop-v3 2>/dev/null
+  docker run -d --name wake-train-stop-v3 --runtime nvidia \
+    -v /home/pi/wake-train:/work nvcr.io/nvidia/pytorch:25.10-py3 \
+    bash /work/run_stop_v3.sh
+  # logs: /home/pi/wake-train/train_stop_v3.log ; output: /work/output/stop_v3
+(`--runtime nvidia` is NOT optional — see the v2 launch gotcha above.)
+
+What changed vs v2:
+- `configs/stop_v3.yaml` (from stop.yaml): output_dir -> stop_v3, and
+  background path swapped to `/work/data_v3/real_ring_backgrounds`.
+  data/ on the GX10 is root-owned and sudo there needs a password, so v3 data
+  lives in `/home/pi/wake-train/data_v3/` (pi-writable) — same mount, no sudo.
+- Backgrounds: 77 files, ZERO duplicated audio (v2 was 90 = 9 bodies x10).
+  Every file is a distinct non-overlapping slice cut by
+  `training/slice_ring_backgrounds.py`. 56 slices come from the long
+  unattended rings — the distribution v2 was missing entirely — and 21 from
+  the 9 v2 attended bodies at x1.
+- Slice length IS the weighting lever (the augmenter draws a random background
+  FILE and crops 2.0s, so weight is per-file, not per-second). Weighted by the
+  measured false-fire profile: marimba 2.5s -> 15 files, oven_ding 3.0s -> 17,
+  bubbling 3.0s -> 14, steam_whistle 4.0s -> 10, v2 bodies 3.0s -> 21.
+- Eval holdout, kept fully out of the pool: the SECOND ring of every sound
+  (203744 marimba 0.849, 203343 oven_ding 0.956, 203112 bubbling 0.626,
+  203510 steam_whistle 0.000). Capturing two per sound is what makes a clean
+  1-train/1-eval split per sound possible. Recorded in
+  `training/real-rings-manifest-20260728.csv` (asserted: no clip is both).
+
+Scoring detail that shaped all of the above — the false-fires are PERIODIC AT
+THE DING CADENCE, one per ding, not random excursions. Marimba fired on
+essentially every ding for the whole ring (13 events, ~2.55s apart = the 0.55s
+clip + 2.0s ALARM_GAP_S); bubbling the same at ~2.94s but weaker. This is the
+2026-07-25 "periodic at ~2.5s spacing" finding reproduced across sounds, and
+it is what the real-ring backgrounds are meant to suppress.
+
+The oven_ding pair is the anomaly worth a listen before trusting v3's eval:
+"cake" (202807) scored 0.000 across 51.7s while "bread" (203343) hit 0.956 —
+same tone file, same ding levels (RMS 0.074 vs 0.071, peaks both clipping at
+1.0 on the first ding), same cadence. The only structural difference found is
+announcement length (cake 0.9s, bread 1.2s), which shifts where the
+announcement tail sits inside the 2s window relative to the following ding
+onset; bread's 0.956 lands at +5.7s, the first ding after the announcement.
+If that is the mechanism, the trigger is an announcement-tail/ding ALIGNMENT,
+not the tone — and the background pool needs announcement variety, not just
+more ring.
+
+Cheap non-ML mitigation, independent of any of this: cluck/moo/sizzle have no
+WAV in satellite sounds/themes/ and silently fall back to marimba
+(`theme_sound()`), so most food-labeled timers ring the worst-offending tone.
+Sourcing those three clips (or replacing marimba's tone) would cut real-world
+false-fire exposure without retraining anything.
+
+CORPUS AT RISK: data/alarm_rings on .251 is at 38 files against
+ALARM_RING_KEEP=40, so the next couple of household rings start evicting the
+2026-07-24 originals. All 38 are backed up on the beelink
+(home_config/tmp/alarm_rings_backup_20260728/ + tmp/rings-20260728/) and the 8
+new ones are also on the GX10 at data_v3/real_rings/. Bump ALARM_RING_KEEP on
+the next satellite restart — not before, since a restart resets MODE to
+shadow.
+
 ## 8. Long ask answered on screen but never spoke — P1, FIXED+DEPLOYED 2026-07-09
 
 **Symptom (Brad, 2026-07-09 ~17:21):** asked for the France World Cup score;

@@ -13,11 +13,11 @@ Written 2026-07-23, the day the family-room satellite went on this box.
 
 | | |
 |---|---|
-| Hardware | Raspberry Pi 4 Model B, **1GB RAM**, 4 cores, 455GB SSD root (USB boot) |
-| Hostname | `tesla-pw-listener` |
-| OS | Raspberry Pi OS (Debian trixie, python 3.13, kernel 6.12) |
+| Hardware | Raspberry Pi 4 Model B, **1GB RAM**, 4 cores, 64GB SSD root (X12 in a StarTech USB3 bridge, `uas`) |
+| Hostname | `pw-poller-pi` (was `tesla-pw-listener` until the 2026-07-28 SSD rebuild) |
+| OS | Raspberry Pi OS (Debian trixie, python 3.13, kernel 6.18) |
 | LAN IP | `192.168.40.244` (eth0, VLAN 40) |
-| SSH | `ssh pw_pi` from the Beelink (alias in `~/.ssh/config` → key `id_ed25519_pw_pi`, installed 2026-07-23; the older `id_rpi244` key also works) |
+| SSH | `ssh pw-poller-pi` from the Beelink (the older `pw_pi` alias points at the same IP) |
 | Location | Family room, opposite side of the kitchen/family open space |
 
 RAM is tight but fine: satellite ~91MB RSS + publisher ~54MB, ~480MB still
@@ -180,6 +180,22 @@ wins wake-over-music by geometry.
   exists, and that `arecord -D respeaker_ch0 -d 2 /tmp/t.wav` actually
   produces more than a 44-byte header. A 44-byte file is a header with no
   samples, i.e. the device opened but never streamed.
+
+  **Wedged again on the 2026-07-28 SSD rebuild, and replugging fixed it** —
+  moved from port `1-1.1` to `1-1.4` (a USB2 port; the array is a high-speed
+  USB2 device, so a blue port buys it nothing and the SSD keeps the USB3 bus
+  to itself). No over-current was ever logged, so the power budget was not
+  the culprit that time. Healthy capture reads ~192KB for `-d 3` 2ch/16k.
+
+  **Channel levels, measured on a quiet room 2026-07-28:** ch0 peak 151 /
+  rms 13, ch1 peak 504 / rms 55. ch1 reading *hotter* than ch0 is expected
+  and is NOT a channel swap — ch0 is the processed beam, so the XVF3800's
+  noise suppression strips room ambience out of it while ch1 passes through
+  comparatively raw. Judge ch0 on speech, never on ambient.
+
+  **`audioop` is gone in Python 3.13** (removed, not just deprecated), so
+  the old one-liner for checking levels no longer runs on this box. Use
+  `array.array("h")` over the frames instead.
 - Code: `/home/pi/voice-pipeline/assistant.py` — same file as the kitchen,
   deployed from `home_config/voice-assistant/satellite/`. Venv
   `/home/pi/voice-pipeline/.venv` (numpy, onnxruntime, livekit-wakeword).
