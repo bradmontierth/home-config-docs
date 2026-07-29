@@ -2,6 +2,13 @@
 
 Written 2026-07-23, the day the family-room satellite went on this box.
 
+> **Rebuilding it? Start at [`powerwall-pi/README.md`](powerwall-pi/README.md).**
+> That directory holds every file that lived only on this box's root drive
+> (publisher, watchdog, systemd units, `.asoundrc`, satellite `.env`) plus a
+> `deploy.sh` that reinstalls the lot onto a fresh image. Captured 2026-07-28
+> ahead of the flash-drive→SSD swap. This document explains how the box
+> *behaves*; that one is the *artifacts*.
+
 ## The box
 
 | | |
