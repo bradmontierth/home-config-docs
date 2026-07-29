@@ -268,6 +268,17 @@ Launch with:
   # logs: /home/pi/wake-train/train_stop_v3.log ; output: /work/output/stop_v3
 (`--runtime nvidia` is NOT optional — see the v2 launch gotcha above.)
 
+Pre-launch state VERIFIED 2026-07-28: NGC image present, no name clash, GX10
+disk 64G free (each run writes ~15G of output; the box is at 93%, so free
+space before launching). The leftover `wake-train-stop-v2` container shows
+Exited(1) from 2026-07-25 with `AssertionError: pip replaced NGC torch with a
+CPU build` — that message is MISLEADING and cost time here: a dry-run resolve
+inside the image shows pip does NOT touch torch (it pulls torchaudio 2.11.0,
+which the script already pins back to 2.9.0 with --no-deps). The assert fires
+on `torch.cuda.is_available()`, so what it actually caught was a relaunch
+WITHOUT `--runtime nvidia` — the same gotcha as v2, aborting cleanly as
+designed. Nothing to fix in the script.
+
 What changed vs v2:
 - `configs/stop_v3.yaml` (from stop.yaml): output_dir -> stop_v3, and
   background path swapped to `/work/data_v3/real_ring_backgrounds`.
