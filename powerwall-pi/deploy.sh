@@ -36,6 +36,19 @@ ssh "$TARGET" 'sudo apt-get update -qq && sudo apt-get install -y -qq \
 # Without these the box cannot reach TEDAPI at all — the AP PSKs exist nowhere
 # else. NetworkManager refuses to load a connection file that is not 0600 root.
 say "2/7 Powerwall AP wifi profiles"
+# A fresh Raspberry Pi OS image imaged without wifi leaves NetworkManager's
+# radio soft-disabled ("nmcli radio" -> WIFI: disabled) even though rfkill is
+# clear and the driver loaded — wlan0 then shows STATE "unavailable" and every
+# "con up" fails. Enable it before touching the profiles.
+ssh "$TARGET" 'sudo raspi-config nonint do_wifi_country US >/dev/null 2>&1 || true
+               sudo rfkill unblock wifi 2>/dev/null || true
+               # must be sudo: over a non-interactive ssh session polkit denies
+               # the unprivileged call with "Not authorized to perform this operation"
+               sudo nmcli radio wifi on
+               for i in $(seq 10); do
+                 [ "$(nmcli -t -f WIFI radio)" = "enabled" ] && break; sleep 1
+               done
+               nmcli radio'
 for c in TeslaPW_CDRTMU TeslaPW_PEVPJX; do
   ssh "$TARGET" "sudo tee /etc/NetworkManager/system-connections/$c.nmconnection >/dev/null \
     && sudo chown root:root /etc/NetworkManager/system-connections/$c.nmconnection \
@@ -92,9 +105,23 @@ sleep 5
 ssh "$TARGET" '
   echo "--- wifi ---";       nmcli -t -f DEVICE,STATE,CONNECTION dev | grep -E "^(eth0|wlan0)"
   echo "--- gateway ---";    ping -c1 -W2 192.168.91.1 >/dev/null && echo "192.168.91.1 reachable" || echo "GATEWAY UNREACHABLE"
-  echo "--- mic ---";        arecord -D respeaker_ch0 -d 2 -f S16_LE -r 16000 /tmp/miccheck.wav 2>/dev/null; \
-                             s=$(stat -c%s /tmp/miccheck.wav 2>/dev/null || echo 0); \
-                             [ "$s" -gt 1000 ] && echo "capture ok ($s bytes)" || echo "MIC DEAD ($s bytes — 44 = header only, replug the ReSpeaker)"
+  # The satellite owns the mic exclusively once it is running, so stop it for
+  # the duration of the check — otherwise arecord fails on a HEALTHY mic and
+  # the result is a false "MIC DEAD". A hung arecord must also be killed by
+  # exact PID: the device wedges by BLOCKING, not by returning.
+  echo "--- mic ---";        sudo systemctl stop voice-assistant; sleep 1
+                             rm -f /tmp/miccheck.wav
+                             timeout 10 arecord -D respeaker_ch0 -d 2 -f S16_LE -r 16000 /tmp/miccheck.wav 2>/dev/null || true
+                             p=$(pgrep -x arecord | head -1); [ -n "$p" ] && kill -9 "$p" 2>/dev/null
+                             s=$(stat -c%s /tmp/miccheck.wav 2>/dev/null || echo 0)
+                             if [ "$s" -gt 1000 ]; then echo "capture ok ($s bytes)"
+                             else echo "MIC WEDGED ($s bytes; 44 = header only, 0 = never opened)."
+                                  echo "  XVF3800 runs its own DSP firmware — USB reset and unbind/rebind"
+                                  echo "  do NOT clear this. PHYSICALLY unplug and replug the ReSpeaker."
+                                  echo "  If a replug does not fix it, suspect the USB power budget"
+                                  echo "  (SSD + array share ~1.2A) and try a powered hub."
+                             fi
+                             sudo systemctl start voice-assistant; sleep 3
   echo "--- services ---";   systemctl is-active pw3-mqtt voice-assistant; systemctl is-active pw3-watchdog.timer
   echo "--- satellite ---";  curl -s --max-time 5 localhost:8781/health || echo "no /health"
   echo "--- publisher ---";  journalctl -u pw3-mqtt --since -2min --no-pager | tail -3
