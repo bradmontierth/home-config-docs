@@ -1,0 +1,6 @@
+flatbuffers==25.12.19
+livekit-wakeword==0.2.1
+numpy==2.5.1
+onnxruntime==1.27.0
+packaging==26.2
+protobuf==7.35.1

@@ -1,0 +1,15 @@
+[Unit]
+Description=Family-room voice satellite (mic-only; playback relayed to kitchen)
+After=network-online.target sound.target
+Wants=network-online.target
+
+[Service]
+User=pi
+WorkingDirectory=/home/pi/voice-pipeline
+EnvironmentFile=-/home/pi/voice-pipeline/.env
+ExecStart=/home/pi/voice-pipeline/.venv/bin/python /home/pi/voice-pipeline/assistant.py
+Restart=always
+RestartSec=15
+
+[Install]
+WantedBy=multi-user.target

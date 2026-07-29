@@ -1,0 +1,11 @@
+[Unit]
+Description=Run PW3 watchdog every minute
+
+[Timer]
+OnBootSec=45s
+OnUnitActiveSec=60s
+AccuracySec=10s
+Unit=pw3-watchdog.service
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,19 @@
+[Unit]
+Description=Powerwall 3 to MQTT Telemetry Publisher
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=pi
+Group=pi
+EnvironmentFile=-/etc/default/pw3-mqtt
+ExecStart=/home/pi/.venvs/pypowerwall/bin/python /home/pi/bin/pw3_mqtt_publisher.py
+Restart=always
+RestartSec=5
+WorkingDirectory=/home/pi
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

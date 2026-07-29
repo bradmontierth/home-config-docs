@@ -1,0 +1,10 @@
+[Unit]
+Description=PW3 connectivity watchdog
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/home/pi/bin/pw3_watchdog.sh
+User=root
+Group=root

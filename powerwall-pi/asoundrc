@@ -1,0 +1,18 @@
+# respeaker_ch0: extract ch0 (processed beam) of the XVF3800 4-mic array as
+# mono. The array outputs 2ch S16/16k where ch1 is the AEC reference (near
+# silent); a plain downmix would halve speech level, so route ch0 only.
+#
+# Mic-only satellite: no playback alias — replies relay to the kitchen box.
+#
+# Canonical copy: home_config/powerwall-pi-guide.md. This file has been lost
+# TWICE to unclean shutdowns (2026-07-25 outage, 2026-07-26 power pull) —
+# rebuild it from the guide, do not retype from memory.
+pcm.respeaker_ch0 {
+  type plug
+  slave.pcm {
+    type route
+    slave.pcm "hw:CARD=Array"
+    slave.channels 2
+    ttable.0.0 1.0
+  }
+}
