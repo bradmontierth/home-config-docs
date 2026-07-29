@@ -218,6 +218,44 @@ ring on .251):
   element. Eval v3 on: 2-consec ceiling across SEVERAL long unattended
   rings vs 2-consec recall at the spoken stop.
 
+**v3 background corpus CAPTURED 2026-07-28 20:27-20:38 (empty kitchen).**
+Eight timers rung OUT to timeout, nobody present, no speech but the TTS
+announcement — the long unattended negatives v3 asked for. The satellite has
+only FOUR distinct ring WAVs (marimba, oven_ding, bubbling, steam_whistle;
+cluck/moo/sizzle have no file and fall back to marimba), so the run was two
+rings per sound with different labels to vary the announcement:
+
+  ring-20260728-202807  cake     oven_ding      51.7s   logged 0   max 0.000
+  ring-20260728-202955  pasta    steam_whistle  41.6s   logged 1   max 0.240
+  ring-20260728-203112  sauce    bubbling       43.6s   logged 10  max 0.626  (2 ≥0.5)
+  ring-20260728-203230  (none)   marimba        38.1s   logged 29  max 0.837  (11 ≥0.5)
+  ring-20260728-203343  bread    oven_ding      52.0s   logged 5   max 0.956  (3 ≥0.5)
+  ring-20260728-203510  rice     steam_whistle  41.4s   logged 0   max 0.000
+  ring-20260728-203627  gravy    bubbling       43.5s   logged 6   max 0.408
+  ring-20260728-203744  chicken  cluck→marimba  38.5s   logged 22  max 0.849  (5 ≥0.5)
+
+(live v1 scores, STOP_THRESHOLD=2.0 shadow so nothing self-dismissed;
+"logged" = windows ≥ STOP_LOG_THRESHOLD 0.2. Corpus now 38 files, under the
+keep-40 rotation; pre-run 30 backed up to home_config/tmp/alarm_rings_backup_20260728/.)
+
+Three things this adds beyond the single 20260725 pure ring:
+1. The ~0.8 false-fire ceiling is NOT specific to that one ring — marimba
+   0.837 and cluck→marimba 0.849 reproduce it independently, and oven_ding
+   "bread" beats it at **0.956**. All in steady state, post-transient-guard.
+2. It is theme-dependent, and not simply "loud theme fires": steam_whistle
+   never cleared 0.24 in either ring, while marimba fired on 11 windows.
+   v3 backgrounds must be weighted toward marimba/oven_ding.
+3. Same theme, different outcome: oven_ding "cake" logged nothing at all
+   while "bread" peaked 0.956 — the trigger is not the tone alone. Worth
+   diffing those two clips before training v3; if it tracks the
+   announcement text, the negatives need announcement variety too.
+
+Method note for repeats: phone escalation was disabled for the run by setting
+`COMPANION_ALERT_URL=` in ~/voice-pipeline/docker-compose.yml (the unattended
+route is its ONLY caller) and recreating the container — restored after. Do it
+there, not via the satellite's UNATTENDED_ALERT_S, because a satellite restart
+resets MODE to shadow.
+
 ## 8. Long ask answered on screen but never spoke — P1, FIXED+DEPLOYED 2026-07-09
 
 **Symptom (Brad, 2026-07-09 ~17:21):** asked for the France World Cup score;
