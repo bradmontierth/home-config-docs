@@ -14,7 +14,7 @@ holds (`/command/audio`).
   already ship NeMo 2.8.0, so the service reuses the existing
   `gx10-sortformer-worker:latest` image with a command override — no new
   image build. Load verified in-container 2026-07-27.
-- **Rejected:** Tempo's `Qwen/Qwen3-Embedding-0.6B` (`~/music-llm` on the
+- **Rejected:** Tempo's `Qwen/Qwen3-Embedding-0.6B` (`~/local-llm` on the
   GX10) — TEXT embeddings, wrong modality (embeds what was said, not who
   said it). Sortformer — end-to-end diarizer, no reusable enrollment
   embeddings. pyannote-3.1 (legacy diarize path in gx10_worker.py) — has

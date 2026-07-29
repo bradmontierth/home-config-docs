@@ -1,5 +1,30 @@
 # GX10 prod stack — rename + staged restart (cutover steps)
 
+**APPLIED 2026-07-29 08:12-08:19 MDT.** Kept for the rollback notes and the
+reasoning. Outcome: LLM outage was 3m35s (vllm cold start; the first inference
+after it took 22s, then normal). `local-llm` and `kokoro-tts` are up,
+`/home/pi/music-llm` is now `/home/pi/local-llm`, the proxy unit is
+`local-llm-openai-proxy.service`, and `gx10-prod-stack.service`/`.timer` are
+enabled — the timer's first tick fired 23ms after enabling and was a clean
+276ms no-op, which is the watchdog path proven rather than assumed.
+
+Two things found during the cutover that were not in the original plan:
+
+1. `/home/pi/music-llm/compose.yaml` defines SEVEN other services
+   (qwen-chat, nemotron-chat, qwen-embed, qwen-reranker, gemma4-chat,
+   qwen3-vl-chat, smoke) — the experiment fleet, none running. It has 18
+   references to `/data/hf`, so those services now point at weights deleted in
+   the 2026-07-28 cleanup. Starting one re-downloads; nothing breaks silently.
+2. `llm-orchestrator` hard-codes the directory in `config/models.json`
+   (`project_dir`, x2) and `benchmarks/podcast_v2/report_server.py`
+   (`DOORBELL_ROOT`). Updated. `scripts/memory_watchdog.py` and
+   `guarded_compose_up.py` act on compose SERVICE names via CWD, not container
+   names, so the rename doesn't touch them.
+
+Original plan follows.
+
+---
+
 Written 2026-07-28, **not applied**. Two containers serve production but are
 named and configured like throwaways:
 

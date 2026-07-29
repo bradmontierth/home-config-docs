@@ -247,9 +247,15 @@ first — GPU-side allocations are invisible to RSS accounting, so it kept
 killing the wrong processes (Parakeet, Kokoro followed) while the box
 livelocked; ssh unreachable (banner timeout), only memory-resident HTTP
 servers answered. Recovery: physical power cycle. Containers with restart
-policies self-healed; manually `docker start music-llm-qwen36-aeon-dflash-test
-kokoro-gb10-bench` (no restart policy — the :8095 LLM is that "test"-named
-container). Telemetry = user timer `gx10-telemetry-publish.timer`, self-healed.
+policies self-healed; the two GPU containers had to be started by hand
+(no restart policy). FIXED 2026-07-29: they are now `local-llm` and
+`kokoro-tts`, compose-managed, brought up in sequence by the user unit
+`gx10-prod-stack.service` (see home_config/gx10-prod-stack/). Still no
+`restart: unless-stopped` — deliberately, because that starts every GPU
+container the instant dockerd does, which is this exact OOM. Recovery is
+`gx10-prod-stack.timer` re-running the idempotent start script every 10
+minutes, so a container killed by the memory watchdog comes back on the next
+tick rather than instantly crash-looping against the GPU. Telemetry = user timer `gx10-telemetry-publish.timer`, self-healed.
 
 Guards now baked into run_training.sh / the docker run:
 1. Container `--memory=32g --memory-swap=32g` (CPU side).
