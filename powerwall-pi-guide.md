@@ -344,6 +344,22 @@ wins wake-over-music by geometry.
   noise suppression strips room ambience out of it while ch1 passes through
   comparatively raw. Judge ch0 on speech, never on ambient.
 
+  **Do not treat those numbers as a floor.** On 2026-07-30 a silent-room ch0
+  capture read **peak 4 / rms 1.1** — 30× below that baseline — on an array
+  that was working perfectly (wake word confirmed by voice moments later). The
+  XVF3800's noise suppression keeps converging on the room's noise floor the
+  longer the stream runs, so a settled stream in a quiet room legitimately
+  approaches zero; the 151 baseline was taken seconds after startup. A low
+  ambient reading on ch0 means nothing on its own.
+
+  What DOES distinguish a wedged array from a quiet one, without a human in
+  the room: `hw_ptr` in `/proc/asound/card*/pcm0c/sub0/status` advancing at
+  ~16000 frames/sec (that is what `mic_health.sh` checks), and capture reads
+  not returning `Input/output error`. Level is the wrong signal — a wedged
+  array does not stream quietly, it stops streaming. Note there is also no raw
+  channel to cross-check against: the device exposes exactly two, the processed
+  beam and the AEC reference.
+
   **`audioop` is gone in Python 3.13** (removed, not just deprecated), so
   the old one-liner for checking levels no longer runs on this box. Use
   `array.array("h")` over the frames instead.
