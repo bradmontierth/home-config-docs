@@ -55,7 +55,16 @@ for c in TeslaPW_CDRTMU TeslaPW_PEVPJX; do
     && sudo chmod 600 /etc/NetworkManager/system-connections/$c.nmconnection" \
     < "$SECRETS/$c.nmconnection"
 done
-ssh "$TARGET" 'sudo nmcli connection reload && sudo nmcli con up TeslaPW_CDRTMU ifname wlan0 || true'
+# Autoconnect is deliberately OFF. NetworkManager retries a failed association
+# on its own schedule, and after the Tesla AP starts refusing us
+# (status_code=16) every retry appears to refresh the penalty — NM and the
+# watchdog together hammered it for 10h on 2026-07-30. pw3_watchdog.sh is the
+# SOLE owner of this link, with escalating backoff up to an hour. It brings the
+# link up at boot (pw3-watchdog.timer OnBootSec=45s).
+ssh "$TARGET" 'sudo nmcli connection reload
+               sudo nmcli con mod TeslaPW_CDRTMU connection.autoconnect no
+               sudo nmcli con mod TeslaPW_PEVPJX connection.autoconnect no
+               sudo nmcli con up TeslaPW_CDRTMU ifname wlan0 || true'
 
 # ---- 3. Powerwall publisher ------------------------------------------------
 say "3/7 pw3-mqtt publisher"

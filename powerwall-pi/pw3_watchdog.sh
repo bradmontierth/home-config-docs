@@ -36,11 +36,13 @@ BOUNCE_COOLDOWN_SEC=600     # the AP needs minutes, not seconds, to recover
 # silence (box powered off) cleared it, and it associated on the first attempt.
 # So: back off further the longer it keeps failing, up to an hour.
 CONNECT_BACKOFF_SEC=(300 600 1200 2400 3600)
-CONNECT_FAIL_FILE='/tmp/pw3-watchdog-connect-fails'
+STATE_DIR='/var/lib/pw3-watchdog'
+CONNECT_FAIL_FILE="${STATE_DIR}/connect-fails"
 PARK_SEC=45                 # leave the radio off this long during a bounce
-RESTART_STAMP='/tmp/pw3-watchdog-last-restart'
-BOUNCE_STAMP='/tmp/pw3-watchdog-last-bounce'
-CONNECT_STAMP='/tmp/pw3-watchdog-last-connect'
+RESTART_STAMP="${STATE_DIR}/last-restart"
+BOUNCE_STAMP="${STATE_DIR}/last-bounce"
+CONNECT_STAMP="${STATE_DIR}/last-connect"
+mkdir -p "$STATE_DIR"
 
 log() {
   logger -t pw3-watchdog "$*"
@@ -130,15 +132,18 @@ if ! wifi_connected; then
   (( idx >= ${#CONNECT_BACKOFF_SEC[@]} )) && idx=$(( ${#CONNECT_BACKOFF_SEC[@]} - 1 ))
   wait_s=${CONNECT_BACKOFF_SEC[$idx]}
   if cooldown_expired "$CONNECT_STAMP" "$wait_s"; then
-    log "wifi not associated with ${PW_WIFI_CONN}, connecting (attempt $((fails+1)), backoff ${wait_s}s)"
+    log "wifi not associated with ${PW_WIFI_CONN}, connecting (attempt $((fails+1)), backoff was ${wait_s}s)"
     stamp "$CONNECT_STAMP"
-    nmcli con up "$PW_WIFI_CONN" ifname "$PW_WIFI_IF" >/dev/null 2>&1 || true
+    # Count the attempt BEFORE making it. `nmcli con up` blocks until NM gives
+    # up, and if systemd kills this oneshot first (BUG 2026-07-30) the
+    # post-attempt write never happens — the counter stayed 0 for ten hours and
+    # the backoff never escalated past its 300s floor. --wait bounds the call.
+    echo $((fails+1)) > "$CONNECT_FAIL_FILE"
+    nmcli --wait 25 con up "$PW_WIFI_CONN" ifname "$PW_WIFI_IF" >/dev/null 2>&1 || true
     sleep 5
     if wifi_connected; then
       log "associated; clearing backoff"
       echo 0 > "$CONNECT_FAIL_FILE"
-    else
-      echo $((fails+1)) > "$CONNECT_FAIL_FILE"
     fi
   else
     log "wifi not associated; backing off ${wait_s}s (consecutive failures: ${fails})"
@@ -151,6 +156,11 @@ fi
 if ! systemctl is-active --quiet "$PUBLISHER_SERVICE"; then
   log "${PUBLISHER_SERVICE} not active"
   restart_publisher
+elif ! wifi_connected; then
+  # Restarting the publisher cannot help while there is no link to the gateway,
+  # and doing it every 5 min buried the journal: on 2026-07-30 the entries that
+  # would have shown WHY the AP vanished had already rotated away.
+  :
 elif ! publisher_fresh; then
   log "no fresh poll in ${STALE_WINDOW}"
   restart_publisher

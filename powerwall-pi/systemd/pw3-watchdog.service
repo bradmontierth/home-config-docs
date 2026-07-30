@@ -5,6 +5,9 @@ After=network-online.target
 
 [Service]
 Type=oneshot
+# nmcli can block; without this systemd's 90s default kills the run before it
+# records the failed attempt, which is how the backoff counter got stuck at 0.
+TimeoutStartSec=180
 ExecStart=/home/pi/bin/pw3_watchdog.sh
 User=root
 Group=root
