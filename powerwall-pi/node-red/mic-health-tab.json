@@ -1,0 +1,60 @@
+{
+    "id": "18d1d3ba13e83c7a",
+    "label": "Family Room Mic Health",
+    "disabled": false,
+    "info": "Alerts when the family-room ReSpeaker wedges.\n\npw-poller-pi runs mic_health.sh on a 10-min timer and publishes RETAINED JSON to familyroom/satellite/mic_health. A wedged array shows the ALSA capture substream RUNNING with hw_ptr frozen at 0.\n\nOnly a PHYSICAL replug clears the wedge \u2014 usb reset, unbind/rebind, snd_usb_audio reload and even a full power-down all fail.\n\nTransition-only, and targeted at global.BradPhoneNM (not broadcast).",
+    "env": [],
+    "nodes": [
+        {
+            "id": "b1c2d3e4f5a60718",
+            "type": "mqtt in",
+            "z": "18d1d3ba13e83c7a",
+            "name": "mic health",
+            "topic": "familyroom/satellite/mic_health",
+            "qos": "1",
+            "datatype": "json",
+            "broker": "82f540b7378c2e35",
+            "nl": false,
+            "rap": true,
+            "rh": 0,
+            "inputs": 0,
+            "x": 180,
+            "y": 120,
+            "wires": [
+                [
+                    "c2d3e4f5a6071829"
+                ]
+            ]
+        },
+        {
+            "id": "c2d3e4f5a6071829",
+            "type": "function",
+            "z": "18d1d3ba13e83c7a",
+            "name": "transition -> alert (brad only)",
+            "func": "\n// Family-room ReSpeaker wedge alert.\n//\n// The satellite fails SILENTLY when the mic array wedges: the service stays\n// active, /health returns {\"ok\": true}, nothing is logged. It has been found\n// twice only because someone stood in the family room talking to a dead mic.\n// pw-poller-pi's mic_health.sh publishes this topic (RETAINED) every 10 min.\n\nconst p = msg.payload || {};\nconst cur = p.ok === true;\nconst reason = p.reason || 'unknown';\nconst prev = context.get('last');\ncontext.set('last', cur);\n\nnode.status({fill: cur ? 'green' : 'red', shape: 'dot',\n             text: (cur ? 'ok' : 'WEDGED') + ' \u2014 ' + reason});\n\n// The topic is retained, so a deploy or Node-RED restart replays the current\n// state immediately. Staying quiet on a healthy replay stops every deploy\n// firing a bogus \"recovered\". But if it replays as BROKEN, say so \u2014 a missed\n// alert is the exact failure this flow exists to prevent.\nif (prev === undefined) {\n    if (cur) { return null; }\n    msg.title = 'Family room mic is dead (still)';\n    msg.payload = 'ReSpeaker wedged (' + reason + '). Voice satellite is deaf. '\n                + 'Unplug and replug its USB \u2014 no software reset clears this.';\n    msg.priority = 1;\n    msg.device = global.get('BradPhoneNM');\n    return msg;\n}\n\nif (prev === cur) { return null; }   // transition-only\n\nmsg.device = global.get('BradPhoneNM');\nif (cur) {\n    msg.title = 'Family room mic recovered';\n    msg.payload = 'The ReSpeaker is streaming again.';\n    msg.priority = 0;\n} else {\n    msg.title = 'Family room mic is dead';\n    msg.payload = 'ReSpeaker wedged (' + reason + '). Voice satellite is deaf. '\n                + 'Unplug and replug its USB \u2014 no software reset clears this.';\n    msg.priority = 1;\n}\nreturn msg;\n",
+            "outputs": 1,
+            "noerr": 0,
+            "initialize": "",
+            "finalize": "",
+            "libs": [],
+            "x": 440,
+            "y": 120,
+            "wires": [
+                [
+                    "d3e4f5a607182930"
+                ]
+            ]
+        },
+        {
+            "id": "d3e4f5a607182930",
+            "type": "pushover api",
+            "z": "18d1d3ba13e83c7a",
+            "keys": "a3903de6e20b03dc",
+            "title": "Family Room Mic",
+            "name": "",
+            "x": 740,
+            "y": 120,
+            "wires": []
+        }
+    ]
+}

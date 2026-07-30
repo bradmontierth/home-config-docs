@@ -36,6 +36,8 @@ BOUNCE_COOLDOWN_SEC=600     # the AP needs minutes, not seconds, to recover
 # silence (box powered off) cleared it, and it associated on the first attempt.
 # So: back off further the longer it keeps failing, up to an hour.
 CONNECT_BACKOFF_SEC=(300 600 1200 2400 3600)
+ABSENT_RETRY_SEC=60         # AP off the air: retry briskly, nothing to offend
+REFUSAL_WINDOW='4 min'
 STATE_DIR='/var/lib/pw3-watchdog'
 CONNECT_FAIL_FILE="${STATE_DIR}/connect-fails"
 PARK_SEC=45                 # leave the radio off this long during a bounce
@@ -78,6 +80,35 @@ gateway_alive() {
     [[ $i -lt 3 ]] && sleep 4
   done
   return 1
+}
+
+# Is the AP even on the air? This distinguishes the two failure modes, which
+# need OPPOSITE responses (added 2026-07-30 after a gateway restart at 22:47
+# turned into a 10-hour outage):
+#   * SSID absent  -> the gateway is down/rebooting. There is nothing there to
+#     offend, so retrying is free and we want to be back the instant it returns.
+#   * SSID present but refusing us (CTRL-EVENT-ASSOC-REJECT status_code=16)
+#     -> we are in the penalty box and every attempt feeds it. Back off hard.
+# Returns: present | absent | unknown
+#
+# "unknown" matters. An EMPTY scan means the scan failed — radio down, rfkill,
+# NM busy mid-activation — NOT that the AP is gone. Treating empty as "absent"
+# is a bug that bit on 2026-07-30: with wlan0 administratively down the script
+# called a plainly-present AP absent and picked the fast retry, which is the
+# exact behaviour that feeds the lockout. Only trust "absent" when the scan
+# genuinely returned other networks and ours was not among them.
+ssid_state() {
+  local out
+  out=$(nmcli -t -f SSID dev wifi list --rescan yes 2>/dev/null | grep -v '^$' || true)
+  if [[ -z "$out" ]]; then echo unknown; return; fi
+  if grep -qxF "$PW_WIFI_CONN" <<<"$out"; then echo present; else echo absent; fi
+}
+
+# Did our last association attempt get actively refused, rather than finding
+# nothing? status_code=16 is the AP saying no; ssid-not-found is it being absent.
+recently_refused() {
+  journalctl -u wpa_supplicant --since "-${REFUSAL_WINDOW}" --no-pager 2>/dev/null \
+    | grep -q 'ASSOC-REJECT.*status_code=16'
 }
 
 wifi_connected() {
@@ -131,8 +162,17 @@ if ! wifi_connected; then
   idx=$fails
   (( idx >= ${#CONNECT_BACKOFF_SEC[@]} )) && idx=$(( ${#CONNECT_BACKOFF_SEC[@]} - 1 ))
   wait_s=${CONNECT_BACKOFF_SEC[$idx]}
+  why="refused"
+  if [[ "$(ssid_state)" == "absent" ]] && ! recently_refused; then
+    # Scan saw other networks but not ours: the gateway really is off the air,
+    # so there is nothing to offend. Retry fast and do NOT escalate the penalty
+    # backoff. Any other case (present, or scan unusable) stays conservative.
+    wait_s=$ABSENT_RETRY_SEC
+    why="ssid-absent"
+    fails=0
+  fi
   if cooldown_expired "$CONNECT_STAMP" "$wait_s"; then
-    log "wifi not associated with ${PW_WIFI_CONN}, connecting (attempt $((fails+1)), backoff was ${wait_s}s)"
+    log "wifi not associated with ${PW_WIFI_CONN} [${why}], connecting (attempt $((fails+1)), waited ${wait_s}s)"
     stamp "$CONNECT_STAMP"
     # Count the attempt BEFORE making it. `nmcli con up` blocks until NM gives
     # up, and if systemd kills this oneshot first (BUG 2026-07-30) the
@@ -146,7 +186,7 @@ if ! wifi_connected; then
       echo 0 > "$CONNECT_FAIL_FILE"
     fi
   else
-    log "wifi not associated; backing off ${wait_s}s (consecutive failures: ${fails})"
+    log "wifi not associated [${why}]; backing off ${wait_s}s (consecutive failures: ${fails})"
   fi
 elif ! gateway_alive; then
   log "gateway ${PW_GATEWAY_IP} unreachable on ICMP and tcp/${PW_GATEWAY_PORT} after 3 rounds"
