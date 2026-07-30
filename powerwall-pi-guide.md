@@ -233,7 +233,10 @@ pull, so `journalctl -b -1` needs to work.
 Dual-homed on purpose — this is the whole reason the box exists:
 
 - **wlan0 → Powerwall's own Wi-Fi AP** (`TeslaPW_CDRTMU`, NetworkManager
-  connection of the same name, autoconnect on). Gets `192.168.91.124/24`;
+  connection of the same name, **autoconnect deliberately OFF** — see the
+  lockout section; `pw3_watchdog.sh` is the sole owner of this link, because NM
+  retrying on its own schedule alongside the watchdog hammered the AP for 10h
+  on 2026-07-30). Gets `192.168.91.124/24`;
   the gateway is `192.168.91.1`. TEDAPI is **only** reachable on this
   network — that's a Tesla design constraint, and why a house device must
   physically join the Powerwall AP.
@@ -313,6 +316,27 @@ wins wake-over-music by geometry.
   USB2 device, so a blue port buys it nothing and the SSD keeps the USB3 bus
   to itself). No over-current was ever logged, so the power budget was not
   the culprit that time. Healthy capture reads ~192KB for `-d 3` 2ch/16k.
+
+  **Powered hub fitted 2026-07-30** (Genesys Logic `05e3:0626`/`05e3:0610`).
+  Current topology — the array now draws from the hub's own supply, not the
+  Pi's rails, which is the standing test of the power-budget theory:
+
+  ```
+  Bus 001 (480M)  hub 1-1.1 ──> 1-1.4  reSpeaker XVF3800   (snd-usb-audio, card "Array")
+  Bus 002 (5000M) hub 2-1                                   (USB3 side, nothing on it)
+  Bus 002 (5000M) 2-2      ──>  StarTech 64GB SSD           (uas, DIRECT — not on the hub)
+  ```
+
+  The boot SSD stays on a direct USB3 port deliberately: it is the root
+  filesystem, and putting it behind a hub adds a failure point to the one
+  device that cannot tolerate one. The array is the thing that keeps wedging,
+  so the array is the thing that got the clean supply.
+
+  `.asoundrc` refers to the device as `hw:CARD=Array`, by NAME — so the ALSA
+  card index moving (it became card 3 behind the hub) does not matter. Keep it
+  that way. While the array is absent the satellite exits with
+  `Cannot get card index for Array` and systemd restarts it on a loop; that is
+  correct behaviour, and it recovers by itself once the device reappears.
 
   **Channel levels, measured on a quiet room 2026-07-28:** ch0 peak 151 /
   rms 13, ch1 peak 504 / rms 55. ch1 reading *hotter* than ch0 is expected
