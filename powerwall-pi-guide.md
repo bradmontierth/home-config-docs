@@ -127,9 +127,41 @@ Diagnostic value: another device (a phone, or the Plex Pi, which pulled
 locked out. That proves credentials and AP health, and narrows it to this
 client's association state.
 
-**Recovery: stop retrying and go completely silent for ~1 hour.** Powering the
-box off is the surest way. The watchdog now escalates its retry backoff
-300→600→1200→2400→3600s for exactly this reason.
+**Recovery: POWER-CYCLE THE PI. Nothing else works, and it does not take long.**
+
+Corrected 2026-07-30 after a second lockout. Silence is NOT the cure — the
+2026-07-29 recovery was credited to "an hour of quiet", but the box was also
+powered off for that hour, and the hour was the incidental part:
+
+| Attempted cure | Worked? |
+|---|---|
+| Warm reboot | ✗ |
+| `brcmfmac` module reload | ✗ |
+| SDIO controller unbind/rebind (chip re-init, firmware reloaded) | ✗ |
+| `wpa_supplicant` restart | ✗ |
+| Different MAC | ✗ |
+| 5-min radio park | ✗ |
+| **79 min of total silence, zero attempts, box running** | **✗** |
+| **~2 min with the power physically pulled** | **✓** |
+
+So it survives a warm reboot and a full SDIO re-init but not a power cut —
+the same class of behaviour as the ReSpeaker, whose USB rails also stay
+powered across a warm reboot. Mechanism unknown; the cure is reproducible.
+
+Two minutes is enough. Do not wait an hour.
+
+The watchdog still escalates its backoff 300→600→1200→2400→3600s so a
+recovering AP is not hammered, and its state lives in `/run` so a boot clears
+it — a power cycle is the cure, so the first post-boot attempt must be
+immediate.
+
+**A smart plug on this Pi would make recovery automatic**, which is worth doing
+given this has now happened twice in three days.
+
+**Note the mic:** a power cycle reliably wedges the ReSpeaker (it did on
+2026-07-29 and again on 2026-07-30). Curing the wifi therefore tends to break
+the mic, which needs its own physical USB replug. Different faults, different
+cures — check both after any power event.
 
 Ops: `journalctl -u pw3-mqtt -f` on the box; consumer side is whatever
 subscribes to `pw3/telemetry` on the Beelink broker (Node-RED/HA).

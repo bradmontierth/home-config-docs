@@ -38,7 +38,13 @@ BOUNCE_COOLDOWN_SEC=600     # the AP needs minutes, not seconds, to recover
 CONNECT_BACKOFF_SEC=(300 600 1200 2400 3600)
 ABSENT_RETRY_SEC=60         # AP off the air: retry briskly, nothing to offend
 REFUSAL_WINDOW='4 min'
-STATE_DIR='/var/lib/pw3-watchdog'
+# /run is tmpfs: cleared on every boot, root-owned. Both matter. A reboot or
+# power cycle is the ONE thing known to clear the Tesla AP lockout, so the
+# backoff MUST reset then — carrying a stale counter across a boot made the
+# watchdog sit out the first 600s after the very power cycle that fixed it
+# (BUG 2026-07-30, introduced by moving this off /tmp for ownership reasons;
+# ownership was the real problem, persistence was never wanted).
+STATE_DIR='/run/pw3-watchdog'
 CONNECT_FAIL_FILE="${STATE_DIR}/connect-fails"
 PARK_SEC=45                 # leave the radio off this long during a bounce
 RESTART_STAMP="${STATE_DIR}/last-restart"
