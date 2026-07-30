@@ -103,6 +103,14 @@ for u in pw3-mqtt.service pw3-watchdog.service pw3-watchdog.timer voice-assistan
 done
 ssh "$TARGET" 'sudo systemctl daemon-reload && \
   sudo systemctl enable --now pw3-mqtt.service voice-assistant.service pw3-watchdog.timer'
+# Persistent journal. The failures on this box end in a reboot or a power pull,
+# so a volatile journal loses the evidence exactly when it matters.
+ssh "$TARGET" 'sudo mkdir -p /etc/systemd/journald.conf.d && \
+  sudo tee /etc/systemd/journald.conf.d/persistent.conf >/dev/null' \
+  < "$HERE/systemd/journald-persistent.conf"
+ssh "$TARGET" 'sudo mkdir -p /var/log/journal && sudo systemd-tmpfiles --create --prefix /var/log/journal >/dev/null 2>&1
+               sudo systemctl restart systemd-journald && sudo journalctl --flush
+               echo "boots retained: $(sudo journalctl --list-boots 2>/dev/null | grep -c .)"'
 
 # ---- 6. ssh access ---------------------------------------------------------
 say "6/7 authorized_keys"

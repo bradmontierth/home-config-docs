@@ -20,6 +20,10 @@ set -euo pipefail
 #   3. A bounce is rate-limited and parks the interface long enough for the
 #      AP to clear its stale client entry before reassociating. Reconnecting
 #      too fast is what triggers the status-16 lockout.
+#   4. (2026-07-30) After 45 min of continuous refusal with the AP visible,
+#      escalate to a genuine power cycle of the wifi chip -- see
+#      wifi_cold_reset(). Until now the only known cure was pulling the Pi's
+#      mains power, which also wedges the ReSpeaker every time.
 
 PW_WIFI_CONN='TeslaPW_CDRTMU'
 PW_WIFI_IF='wlan0'
@@ -38,6 +42,14 @@ BOUNCE_COOLDOWN_SEC=600     # the AP needs minutes, not seconds, to recover
 CONNECT_BACKOFF_SEC=(300 600 1200 2400 3600)
 ABSENT_RETRY_SEC=60         # AP off the air: retry briskly, nothing to offend
 REFUSAL_WINDOW='4 min'
+# Last resort: cold-cycle the wifi CHIP. See wifi_cold_reset() for why this is
+# not the same thing as any of the resets we tried on 2026-07-29/30.
+COLD_RESET_AFTER_SEC=2700     # 45 min continuously unassociated
+COLD_RESET_COOLDOWN_SEC=5400  # and never more than once per 90 min
+MMC_HOST='fe300000.mmcnr'     # SDIO host for the wifi chip ONLY (root is on USB)
+WL_ON_CHIP='gpiochip1'        # raspberrypi-exp-gpio
+WL_ON_LINE='WL_ON'
+WL_OFF_SEC=10
 # /run is tmpfs: cleared on every boot, root-owned. Both matter. A reboot or
 # power cycle is the ONE thing known to clear the Tesla AP lockout, so the
 # backoff MUST reset then — carrying a stale counter across a boot made the
@@ -50,6 +62,8 @@ PARK_SEC=45                 # leave the radio off this long during a bounce
 RESTART_STAMP="${STATE_DIR}/last-restart"
 BOUNCE_STAMP="${STATE_DIR}/last-bounce"
 CONNECT_STAMP="${STATE_DIR}/last-connect"
+DOWN_SINCE_FILE="${STATE_DIR}/down-since"
+COLD_RESET_STAMP="${STATE_DIR}/last-cold-reset"
 mkdir -p "$STATE_DIR"
 
 log() {
@@ -148,6 +162,98 @@ restart_publisher() {
   systemctl restart "$PUBLISHER_SERVICE"
 }
 
+# How long have we been continuously unassociated? 0 if we are up.
+down_for() {
+  local now last
+  now=$(date +%s)
+  if [[ ! -f "$DOWN_SINCE_FILE" ]]; then echo 0; return; fi
+  last=$(cat "$DOWN_SINCE_FILE" 2>/dev/null || echo "$now")
+  echo $(( now - last ))
+}
+
+# Cold-cycle the BCM4345 wifi chip by dropping its power-enable line.
+#
+# WHY (established 2026-07-30): the device tree has NO mmc-pwrseq node, and
+# WL_ON (gpiochip1 line 1, raspberrypi-exp-gpio) has NO kernel consumer -- the
+# VideoCore firmware raises it at boot and nothing in Linux ever lowers it.
+# Compare BT_ON one line above, which shows consumer="shutdown" because the
+# bluetooth driver really does own its enable line.
+#
+# So the chip stays powered through EVERYTHING we tried during the 10-hour
+# lockout: rfkill, `nmcli radio wifi off`, `rmmod brcmfmac`, unbind/rebind of
+# the SDIO host, and a warm reboot. Re-downloading firmware into a chip that
+# never lost power re-initialises the MAC and the driver-visible state; it does
+# not reset the PHY, PMU or RF calibration. Pulling the Pi's mains power did,
+# which is why that -- and only that -- ever cleared the status_code=16 refusal.
+#
+# This routine is the software equivalent of that power pull. BT_ON is a
+# separate line, so bluetooth is untouched, and no USB rail moves -- which
+# matters because a real power cycle wedges the ReSpeaker every single time.
+#
+# SAFETY: this is a hard disconnect, and a hard disconnect is exactly what is
+# suspected of triggering the lockout in the first place. It must therefore
+# NEVER run on a healthy link. The caller gates it behind 45 minutes of
+# continuous failure with the AP visible -- by then telemetry is already dead,
+# so the attempt costs nothing and can only help. If the lockout turns out to
+# be AP-side after all, this will simply not work, which is itself the answer.
+wifi_cold_reset() {
+  local why="${1:-escalation}" i
+  log "COLD RESET (${why}): power-cycling the wifi chip via ${WL_ON_LINE}"
+  nmcli dev disconnect "$PW_WIFI_IF" >/dev/null 2>&1 || true
+  for i in brcmfmac_cyw brcmfmac brcmutil; do
+    /usr/sbin/rmmod "$i" 2>/dev/null || true
+  done
+  echo "$MMC_HOST" > /sys/bus/platform/drivers/mmc-bcm2835/unbind 2>/dev/null || true
+
+  # Two separate gpioset calls on purpose: gpioset only guarantees the output
+  # value for as long as it is running, so "hold low" and "drive high" cannot
+  # be one invocation. --hold-period keeps each value for the stated time.
+  if ! gpioset -c "$WL_ON_CHIP" -C pw3-watchdog -p "${WL_OFF_SEC}s" "${WL_ON_LINE}=0"; then
+    log "WARN: could not drive ${WL_ON_LINE} low; chip was NOT power-cycled"
+  fi
+  gpioset -c "$WL_ON_CHIP" -C pw3-watchdog -p 2s "${WL_ON_LINE}=1" || true
+
+  echo "$MMC_HOST" > /sys/bus/platform/drivers/mmc-bcm2835/bind 2>/dev/null || true
+  /usr/sbin/modprobe brcmfmac 2>/dev/null || true
+
+  for i in $(seq 30); do
+    [[ -d "/sys/class/net/${PW_WIFI_IF}" ]] && break
+    sleep 1
+  done
+  if [[ ! -d "/sys/class/net/${PW_WIFI_IF}" ]]; then
+    log "ALERT: ${PW_WIFI_IF} did NOT come back after the cold reset — wifi is down until this Pi reboots"
+    return 1
+  fi
+
+  log "chip is back; reassociating"
+  sleep 3
+  # The old backoff counted attempts made by a chip that no longer exists.
+  echo 0 > "$CONNECT_FAIL_FILE"
+  rm -f "$CONNECT_STAMP"
+  nmcli --wait 25 con up "$PW_WIFI_CONN" ifname "$PW_WIFI_IF" >/dev/null 2>&1 || true
+  sleep 5
+  if wifi_connected; then
+    log "COLD RESET CURED THE LOCKOUT — associated immediately after ${WL_ON_LINE} cycle. The fault is client-side."
+    rm -f "$DOWN_SINCE_FILE"
+  else
+    log "still refused after a genuine chip power cycle — the client-side theory is wrong, look AP-side"
+  fi
+}
+
+# Manual trigger, for use during a confirmed lockout: pw3_watchdog.sh --cold-reset
+if [[ "${1:-}" == "--cold-reset" ]]; then
+  stamp "$COLD_RESET_STAMP"
+  wifi_cold_reset "manual"
+  exit $?
+fi
+
+# Track how long the link has been down; the escalation below keys off it.
+if wifi_connected; then
+  rm -f "$DOWN_SINCE_FILE"
+elif [[ ! -f "$DOWN_SINCE_FILE" ]]; then
+  stamp "$DOWN_SINCE_FILE"
+fi
+
 # ---- rule 1: if telemetry is flowing, the link is good. Do nothing. --------
 if publisher_fresh; then
   if ! systemctl is-active --quiet "$PUBLISHER_SERVICE"; then
@@ -193,6 +299,20 @@ if ! wifi_connected; then
     fi
   else
     log "wifi not associated [${why}]; backing off ${wait_s}s (consecutive failures: ${fails})"
+  fi
+
+  # ---- escalation: nothing else has worked for 45 min, cold-cycle the chip --
+  # Gated on the AP being VISIBLE. If the SSID is absent the gateway is simply
+  # off the air and our radio is not the problem; power-cycling it would prove
+  # nothing and cost us the association we are waiting to make.
+  if ! wifi_connected; then
+    down=$(down_for)
+    if (( down >= COLD_RESET_AFTER_SEC )) \
+       && cooldown_expired "$COLD_RESET_STAMP" "$COLD_RESET_COOLDOWN_SEC" \
+       && [[ "$(ssid_state)" == "present" ]]; then
+      stamp "$COLD_RESET_STAMP"
+      wifi_cold_reset "down ${down}s, AP visible, all retries refused" || true
+    fi
   fi
 elif ! gateway_alive; then
   log "gateway ${PW_GATEWAY_IP} unreachable on ICMP and tcp/${PW_GATEWAY_PORT} after 3 rounds"

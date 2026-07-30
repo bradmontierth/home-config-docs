@@ -7,7 +7,9 @@ After=network-online.target
 Type=oneshot
 # nmcli can block; without this systemd's 90s default kills the run before it
 # records the failed attempt, which is how the backoff counter got stuck at 0.
-TimeoutStartSec=180
+# 300 rather than 180 because the cold-reset escalation adds ~80s (10s with the
+# chip powered off, then re-enumeration and a fresh association attempt).
+TimeoutStartSec=300
 ExecStart=/home/pi/bin/pw3_watchdog.sh
 User=root
 Group=root

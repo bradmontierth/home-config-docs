@@ -137,26 +137,81 @@ powered off for that hour, and the hour was the incidental part:
 |---|---|
 | Warm reboot | ✗ |
 | `brcmfmac` module reload | ✗ |
-| SDIO controller unbind/rebind (chip re-init, firmware reloaded) | ✗ |
+| SDIO controller unbind/rebind | ✗ |
 | `wpa_supplicant` restart | ✗ |
 | Different MAC | ✗ |
 | 5-min radio park | ✗ |
 | **79 min of total silence, zero attempts, box running** | **✗** |
 | **~2 min with the power physically pulled** | **✓** |
 
-So it survives a warm reboot and a full SDIO re-init but not a power cut —
-the same class of behaviour as the ReSpeaker, whose USB rails also stay
-powered across a warm reboot. Mechanism unknown; the cure is reproducible.
-
 Two minutes is enough. Do not wait an hour.
 
-The watchdog still escalates its backoff 300→600→1200→2400→3600s so a
-recovering AP is not hammered, and its state lives in `/run` so a boot clears
-it — a power cycle is the cure, so the first post-boot attempt must be
-immediate.
+### Why only a power cut works
 
-**A smart plug on this Pi would make recovery automatic**, which is worth doing
-given this has now happened twice in three days.
+That table used to describe the SDIO unbind/rebind row as "chip re-init,
+firmware reloaded". **That was wrong**, and it made the result look far more
+mysterious than it is. Established 2026-07-30:
+
+```
+$ find /proc/device-tree -iname '*pwrseq*'      → nothing
+$ ls /proc/device-tree/soc/mmcnr@7e300000/      → no mmc-pwrseq property
+$ gpioinfo | grep -E 'WL_ON|BT_ON'
+	line   0:	"BT_ON"    output consumer="shutdown"
+	line   1:	"WL_ON"    output                       ← no consumer
+```
+
+`WL_ON` is the BCM4345's power-enable line, and **no kernel driver owns it**.
+The VideoCore firmware raises it at boot and nothing in Linux ever lowers it.
+(Contrast `BT_ON`, which shows a consumer because the bluetooth driver really
+does own its enable line.) There is no `mmc-pwrseq` node either, so the SDIO
+host does not toggle it during probe/remove.
+
+Consequence: the wifi chip stays powered through **every** entry in that table
+except the last one. `rfkill`, `nmcli radio wifi off`, `rmmod brcmfmac`,
+unbind/rebind, warm reboot — all of them leave WL_ON high. Re-downloading
+firmware into a chip that never lost power re-initialises the MAC and the
+driver-visible state; it does not reset the PHY, PMU, or RF calibration.
+So the "we already tried a full chip reset" conclusion was never tested.
+
+This also explains two results that otherwise did not fit: a MAC change did
+not help (the fault is not identity-based), and the chip could still join the
+house SSID during the lockout (the fault is narrow, not a dead radio).
+
+Ruled out separately: the AP is plain WPA2-PSK on channel 11
+(`freq=2462 PTK=CCMP GTK=TKIP`), **not** SAE — so the multi-frame-handshake
+theories that would neatly explain a status-16 timeout do not apply.
+
+### The automated cure: `wifi_cold_reset()`
+
+`pw3_watchdog.sh` now escalates to a genuine chip power cycle — rmmod, unbind
+the SDIO host, drive `WL_ON` low for 10s via `gpioset`, drive it high, rebind,
+reassociate. This is the software equivalent of pulling the plug, and it has
+two advantages over one: it is automatic, and **it does not wedge the
+ReSpeaker**, because no USB rail moves.
+
+Gating, deliberately conservative — a hard disconnect is what is suspected of
+*causing* the lockout, so this must never run on a healthy link:
+
+* 45 min continuously unassociated (`COLD_RESET_AFTER_SEC`), and
+* the SSID is **visible** in a scan (if the AP is off the air, our radio is not
+  the problem), and
+* at most once per 90 min (`COLD_RESET_COOLDOWN_SEC`).
+
+By then telemetry is already dead, so the attempt costs nothing. Manual
+trigger during a confirmed lockout:
+
+```bash
+sudo /home/pi/bin/pw3_watchdog.sh --cold-reset
+```
+
+**This is a live hypothesis, not a proven fix.** The next lockout is the
+experiment, and the journal now records the verdict either way:
+
+* `COLD RESET CURED THE LOCKOUT` → the fault is client-side, confirmed.
+* `still refused after a genuine chip power cycle` → it is AP-side after all,
+  and a mains power cycle (or a smart plug) is still the only cure.
+
+A smart plug remains the fallback if the cold reset does not work.
 
 **Note the mic:** a power cycle reliably wedges the ReSpeaker (it did on
 2026-07-29 and again on 2026-07-30). Curing the wifi therefore tends to break
@@ -165,6 +220,13 @@ cures — check both after any power event.
 
 Ops: `journalctl -u pw3-mqtt -f` on the box; consumer side is whatever
 subscribes to `pw3/telemetry` on the Beelink broker (Node-RED/HA).
+
+**The journal is persistent as of 2026-07-30** (`journald.conf.d/persistent.conf`,
+200M cap). It was volatile before — `/var/log/journal` existed but was empty and
+only the current boot survived — which is why every `status_code=16` line from
+the 10-hour lockout was gone by the time we went looking. The failures worth
+diagnosing on this box are exactly the ones that end in a reboot or a power
+pull, so `journalctl -b -1` needs to work.
 
 ## Networking: how it reaches the Powerwall AND the house
 
