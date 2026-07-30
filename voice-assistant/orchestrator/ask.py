@@ -20,6 +20,7 @@ from zoneinfo import ZoneInfo
 
 import httpx
 
+from . import answers as answers_mod
 from . import clients, config, events, openrouter
 
 log = logging.getLogger("orchestrator.ask")
@@ -117,12 +118,19 @@ def _remember(query: str, answer: str) -> dict:
     return entry
 
 
-def remember(query: str, answer: str) -> None:
-    """Public hook: other intents (sports) record their Q+A here so pronoun
-    follow-ups that route to ask ("who do they play next?") have context.
-    Also makes the answer recallable via "show that answer again"."""
+def remember(query: str, answer: str, *, store_as: str | None = None) -> None:
+    """Public hook: other intents (sports, weather, places) record their Q+A
+    here so pronoun follow-ups that route to ask ("who do they play next?")
+    have context. Also makes the answer recallable via "show that answer
+    again".
+
+    `store_as` additionally files it in the durable answers table. Off by
+    default: weather and places answers are transient and would bury the paid
+    ask turns the browser exists to surface."""
     _remember(query, answer)
     _set_last(query, answer, answer)
+    if store_as:
+        answers_mod.record(query, answer, answer, source=store_as)
 
 
 def _history_messages() -> list[dict]:
@@ -212,7 +220,8 @@ def _spoken_fallback(text: str) -> str:
     return spoken or text[:200].strip()
 
 
-async def _stream_full(query: str, entry: dict, last: dict, initial: str, agen) -> None:
+async def _stream_full(query: str, entry: dict, last: dict, initial: str, agen,
+                       row_id: int | None = None, stats: dict | None = None) -> None:
     """Drain the rest of the stream, fanning the growing full answer to the
     dashboard. Runs detached from the request that produced the spoken reply."""
     acc = initial
@@ -234,6 +243,9 @@ async def _stream_full(query: str, entry: dict, last: dict, initial: str, agen) 
             pass
     entry["a"] = f"{entry['a']}\n{acc}".strip()
     last["full"] = acc
+    # Only now does OpenRouter's usage block exist, so the row gets its full
+    # body and its price tag in the same write.
+    answers_mod.finish(row_id, _strip_links(acc), stats)
     await events.emit("ask_full", query=query, text=_strip_links(acc), done=True)
 
 
@@ -256,7 +268,8 @@ async def handle_ask(query: str) -> dict:
         *_history_messages(),
         {"role": "user", "content": query},
     ]
-    agen = openrouter.stream_chat(messages)
+    stats: dict = {}
+    agen = openrouter.stream_chat(messages, stats=stats)
     acc = ""
     spoken: str | None = None
     remainder = ""
@@ -290,6 +303,7 @@ async def handle_ask(query: str) -> dict:
         spoken = _spoken_fallback(full)
         _remember(query, full)
         _set_last(query, spoken, full)
+        answers_mod.record(query, spoken, full, stats=stats)
         await events.emit("ask_full", query=query, text=full, done=True)
         return {"response": spoken, "full": full, "ok": bool(full)}
 
@@ -299,10 +313,16 @@ async def handle_ask(query: str) -> dict:
         # ("but who's playing in it?") already has context.
         entry = _remember(query, spoken)
         last = _set_last(query, spoken, remainder)
-        asyncio.create_task(_stream_full(query, entry, last, remainder, agen))
+        # Filed with what we have NOW: if the background stream dies, the
+        # kitchen still keeps the answer it already paid for and heard.
+        row_id = answers_mod.record(query, spoken, _strip_links(remainder))
+        asyncio.create_task(
+            _stream_full(query, entry, last, remainder, agen, row_id, stats)
+        )
     else:
         _remember(query, f"{spoken}\n{remainder}".strip())
         _set_last(query, spoken, remainder)
+        answers_mod.record(query, spoken, _strip_links(remainder), stats=stats)
         await events.emit("ask_full", query=query, text=_strip_links(remainder), done=True)
 
     if not spoken:

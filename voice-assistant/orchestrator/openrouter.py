@@ -56,12 +56,17 @@ async def stream_chat(
     *,
     model: str | None = None,
     temperature: float = 0.3,
+    stats: dict | None = None,
 ) -> AsyncIterator[str]:
     """Yield assistant content deltas from a streaming chat completion.
 
     Owns its own httpx client for its whole lifetime, so a partially-consumed
     generator can be handed to a background task and finished there. Always
-    aclose() it when done."""
+    aclose() it when done.
+
+    `stats`, if given, is filled in with cost/searches/tokens when the stream
+    ends. It has to be an out-param rather than a return value: the caller
+    hands this generator off half-consumed, so there is no return to read."""
     body = {
         "model": model or config.OPENROUTER_MODEL,
         "messages": messages,
@@ -119,6 +124,14 @@ async def stream_chat(
                 reasoning = (usage or {}).get(
                     "completion_tokens_details", {}
                 ).get("reasoning_tokens", 0)
+                if stats is not None:
+                    stats.update({
+                        "generation_id": gen_id,
+                        "searches": searches,
+                        "reasoning_tokens": reasoning,
+                        "cost": (usage or {}).get("cost"),
+                        "tokens": (usage or {}).get("total_tokens"),
+                    })
                 log.info(
                     "generation %s: web_searches=%s reasoning_tokens=%s "
                     "cost=$%.4f tokens=%s",

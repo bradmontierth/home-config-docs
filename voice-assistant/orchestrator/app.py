@@ -29,6 +29,7 @@ import httpx
 from fastapi import Body, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse
 
+from . import answers as answers_mod
 from . import ask as ask_mod
 from . import home_control as home_mod
 from . import lists as lists_mod
@@ -833,7 +834,10 @@ async def handle_command(command: str, followup: bool = False,
             result.update(sports_result)
             # Seed ask history so a pronoun follow-up ("who do they play
             # next?") routed to the smart model knows what we just said.
-            ask_mod.remember(command, sports_result["response"])
+            # store_as: a score is a real question with a real answer someone
+            # may want back later, so it joins the browsable answers (weather
+            # and places stay out — transient, and each has its own view).
+            ask_mod.remember(command, sports_result["response"], store_as="sports")
         else:
             # Unresolvable team/league or ESPN change -> slow-but-right path.
             await events.emit("ask_thinking", query=command)
@@ -1281,6 +1285,23 @@ def announcement(timer_id: str) -> FileResponse:
     if not path or not os.path.exists(path):
         raise HTTPException(404, "no announcement for that timer")
     return FileResponse(path, media_type="audio/wav")
+
+
+# -- answers REST (dashboard) -----------------------------------------------
+@app.get("/answers")
+async def get_answers(limit: int = 50) -> dict:
+    """Past questions, newest first, without their bodies — enough for the
+    kiosk's sidebar. Proxied by the dashboard like the rest of this API."""
+    return {"answers": answers_mod.recent(limit)}
+
+
+@app.get("/answers/{answer_id}")
+async def get_answer(answer_id: int) -> dict:
+    """One answer with its full on-screen text."""
+    row = answers_mod.get(answer_id)
+    if not row:
+        raise HTTPException(404, "no such answer")
+    return row
 
 
 # -- lists REST (dashboard) -------------------------------------------------
