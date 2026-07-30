@@ -1,0 +1,9 @@
+[Unit]
+Description=ReSpeaker wedge detector (family-room satellite fails silently)
+After=voice-assistant.service
+
+[Service]
+Type=oneshot
+ExecStart=/home/pi/bin/mic_health.sh
+User=root
+Group=root
