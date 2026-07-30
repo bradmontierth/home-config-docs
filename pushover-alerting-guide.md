@@ -36,7 +36,7 @@ copy the values into code, compose files, or logs — reference the path.
 | `site-notifier` | shared `.env` | yes, if set | ✅ |
 | `jobs` | shared `.env` | yes, from its **own** settings store | ⚠️ second place to update |
 | `my_photo_app` | shared `.env` | no → all devices | ⚠️ untargeted |
-| `podcast/bin/notify_pushover.sh` | own env | yes, **hardcoded fallback `pixel8`** | ❌ landmine |
+| `podcast/bin/notify_pushover.sh` | shared `.env` | yes, if set | ✅ fixed 2026-07-30 |
 | `doorbell_tts/shim` | own compose env | yes, if set | ⚠️ separate env |
 | `scripts/homelab_backup` | own config dict | no | ⚠️ separate config |
 | **Node-RED (105 `pushover api` nodes)** | own `pushover-keys` config node | no — `device: null` on all 105 | ⚠️ untargeted |
@@ -49,8 +49,15 @@ misroute on a phone upgrade.
 
 Roughly in value order:
 
-1. **`podcast/bin/notify_pushover.sh`** — drop the `:-pixel8` fallback. One line;
-   the only true breakage on an upgrade.
+1. ~~**`podcast/bin/notify_pushover.sh`**~~ — **DONE 2026-07-30**, and the audit
+   understated it. The script required `PUSHOVER_API`/`PUSHOVER_USER` to be in
+   the environment and exited 0 when they were not; **nothing on the host ever
+   set them**, so every podcast pipeline alert since it was written went
+   nowhere. The `:-pixel8` fallback was therefore unreachable — a dead alert
+   path wearing a landmine costume. It now reads the vault directly (parsed,
+   not sourced), with no device fallback. Lesson for the rest of this table:
+   check whether a consumer's alerts actually FIRE before judging where they
+   are addressed.
 2. **`jobs`** — have `get_alert_device()` default to the shared `PUSHOVER_DEVICE`
    so there is one place to edit, not two.
 3. **Node-RED** — the 105 nodes share one `pushover-keys` credential node, but
