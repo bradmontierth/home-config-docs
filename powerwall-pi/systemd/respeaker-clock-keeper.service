@@ -1,0 +1,21 @@
+[Unit]
+Description=Hold a silent playback stream open to the ReSpeaker so capture keeps running
+# After an unclean power-up the XVF3800 comes up in a state where its capture
+# stream only delivers frames WHILE a playback stream is open (discovered
+# 2026-07-30; capture-alone returns I/O error / hw_ptr frozen at 0, capture
+# with concurrent playback is instantly healthy). Order does not matter: an
+# already-open stalled capture stream resumes the moment playback starts.
+# Playing silence costs ~64KB/s USB and nothing audible — the array has no
+# speaker attached on this box. Keep this running always; on a cleanly
+# powered-up array it is harmless insurance.
+After=sound.target
+
+[Service]
+User=pi
+ExecStart=/usr/bin/aplay -D hw:CARD=Array -f S16_LE -r 16000 -c 2 -t raw /dev/zero
+# aplay exits if the array disappears (replug/re-enumeration); just come back.
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

@@ -69,8 +69,8 @@ ssh "$TARGET" 'sudo nmcli connection reload
 # ---- 3. Powerwall publisher ------------------------------------------------
 say "3/7 pw3-mqtt publisher"
 ssh "$TARGET" 'mkdir -p /home/pi/bin /home/pi/.venvs'
-scp -q "$HERE/pw3_mqtt_publisher.py" "$HERE/pw3_watchdog.sh" "$TARGET":/home/pi/bin/
-ssh "$TARGET" 'chmod +x /home/pi/bin/pw3_mqtt_publisher.py /home/pi/bin/pw3_watchdog.sh'
+scp -q "$HERE/pw3_mqtt_publisher.py" "$HERE/pw3_watchdog.sh" "$HERE/mic_health.sh" "$TARGET":/home/pi/bin/
+ssh "$TARGET" 'chmod +x /home/pi/bin/pw3_mqtt_publisher.py /home/pi/bin/pw3_watchdog.sh /home/pi/bin/mic_health.sh'
 ssh "$TARGET" 'test -d /home/pi/.venvs/pypowerwall || python3 -m venv /home/pi/.venvs/pypowerwall'
 ssh "$TARGET" '/home/pi/.venvs/pypowerwall/bin/pip install -q --upgrade pip && \
                /home/pi/.venvs/pypowerwall/bin/pip install -q -r /dev/stdin' \
@@ -98,11 +98,13 @@ ssh "$TARGET" '/home/pi/voice-pipeline/.venv/bin/pip install -q --upgrade pip &&
 
 # ---- 5. systemd ------------------------------------------------------------
 say "5/7 systemd units"
-for u in pw3-mqtt.service pw3-watchdog.service pw3-watchdog.timer voice-assistant.service; do
+for u in pw3-mqtt.service pw3-watchdog.service pw3-watchdog.timer voice-assistant.service \
+         respeaker-clock-keeper.service mic-health.service mic-health.timer; do
   ssh "$TARGET" "sudo tee /etc/systemd/system/$u >/dev/null" < "$HERE/systemd/$u"
 done
 ssh "$TARGET" 'sudo systemctl daemon-reload && \
-  sudo systemctl enable --now pw3-mqtt.service voice-assistant.service pw3-watchdog.timer'
+  sudo systemctl enable --now pw3-mqtt.service voice-assistant.service pw3-watchdog.timer \
+    respeaker-clock-keeper.service mic-health.timer'
 # Persistent journal. The failures on this box end in a reboot or a power pull,
 # so a volatile journal loses the evidence exactly when it matters.
 ssh "$TARGET" 'sudo mkdir -p /etc/systemd/journald.conf.d && \
@@ -136,10 +138,10 @@ ssh "$TARGET" '
                              s=$(stat -c%s /tmp/miccheck.wav 2>/dev/null || echo 0)
                              if [ "$s" -gt 1000 ]; then echo "capture ok ($s bytes)"
                              else echo "MIC WEDGED ($s bytes; 44 = header only, 0 = never opened)."
-                                  echo "  XVF3800 runs its own DSP firmware — USB reset and unbind/rebind"
-                                  echo "  do NOT clear this. PHYSICALLY unplug and replug the ReSpeaker."
-                                  echo "  If a replug does not fix it, suspect the USB power budget"
-                                  echo "  (SSD + array share ~1.2A) and try a powered hub."
+                                  echo "  First: is respeaker-clock-keeper running? After an unclean"
+                                  echo "  power-up the XVF3800 only delivers capture frames WHILE a"
+                                  echo "  playback stream is open — that unit holds one. If it is running"
+                                  echo "  and capture is still dead, physically replug the ReSpeaker."
                              fi
                              sudo systemctl start voice-assistant; sleep 3
   echo "--- services ---";   systemctl is-active pw3-mqtt voice-assistant; systemctl is-active pw3-watchdog.timer

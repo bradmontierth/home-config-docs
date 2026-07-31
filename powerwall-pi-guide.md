@@ -257,9 +257,11 @@ next — it is the bigger radiator and it runs constantly.
 A smart plug remains the fallback for automating the one cure that does work.
 
 **Note the mic:** a power cycle reliably wedges the ReSpeaker (it did on
-2026-07-29 and again on 2026-07-30). Curing the wifi therefore tends to break
-the mic, which needs its own physical USB replug. Different faults, different
-cures — check both after any power event.
+2026-07-29 and again on 2026-07-30). As of 2026-07-30 evening this no longer
+needs a physical replug — the wedge was characterized as *capture gated on an
+open playback stream* and `respeaker-clock-keeper.service` holds one open
+permanently (see the wedge section below). Still check the mic after any power
+event: `mic_health.sh` runs every 10 min and hw_ptr must advance.
 
 Ops: `journalctl -u pw3-mqtt -f` on the box; consumer side is whatever
 subscribes to `pw3/telemetry` on the Beelink broker (Node-RED/HA).
@@ -343,11 +345,10 @@ wins wake-over-music by geometry.
      enumerates normally but every capture read returns `Input/output error`
      at its own native format. It survived `USBDEVFS_RESET` **and** a
      `/sys/bus/usb/drivers/usb` unbind/rebind — the XVF3800 runs its own DSP
-     firmware, and a bus-level reset does not power-cycle it. **Only a
-     physical unplug/replug (or a full power-down — a warm reboot can leave
-     USB rails powered) clears this.** Note the root filesystem is a PNY USB
-     flash drive on the same controller; if a replug doesn't fix it, suspect
-     the USB power budget and try a powered hub.
+     firmware, and a bus-level reset does not power-cycle it. ~~Only a
+     physical unplug/replug clears this.~~ **Superseded 2026-07-30: the wedge
+     is capture-gated-on-playback and `respeaker-clock-keeper.service` cures
+     it in software — see "The wedge, SOLVED in software" below.**
 
   Lesson: after any outage on this box, check BOTH — that `~/.asoundrc` still
   exists, and that `arecord -D respeaker_ch0 -d 2 /tmp/t.wav` actually
@@ -381,11 +382,53 @@ wins wake-over-music by geometry.
   * The USB power budget was probably never the cause. Three wedges, all around
     power interruptions, and an independent supply changed nothing.
   * A self-powered hub keeps VBUS up when the *Pi* loses mains, so the array no
-    longer gets power-cycled along with the host. Since a physical replug is the
-    only thing that clears the wedge, the hub plausibly makes recovery **less**
-    likely, not more — the array now rides through the event still powered and
-    still confused. If a power cycle is being done specifically to unwedge the
-    mic, pull the HUB's supply too, or just replug the array's cable.
+    longer gets power-cycled along with the host. (This worry is now moot —
+    see the next section — but it remains true that the hub changes what the
+    array experiences during a Pi power event.)
+
+  ### The wedge, SOLVED in software (2026-07-30 evening)
+
+  The wedge was finally characterized instead of cured blind, and the
+  signature is much narrower than "the array is dead":
+
+  * Enumeration is normal, HID binds, and **playback works** (`aplay
+    hw:CARD=Array` streams fine).
+  * Capture **alone** delivers zero frames: `arecord` at the native format
+    returns `Input/output error`, `hw_ptr` sits frozen, a capture WAV is a
+    44-byte header. No kernel/xhci errors are logged at all.
+  * Capture **with a playback stream concurrently open** is instantly,
+    perfectly healthy — 192,044 bytes for `-d 3`, the exact healthy figure.
+  * The gating is live, both directions: stop playback and an open capture
+    stream stalls mid-flight; start playback again and the *same* stream
+    resumes at 16k frames/sec without being reopened.
+
+  So after an unclean power-up the XVF3800 comes up in a state where its
+  capture pipeline only runs while the host's OUT stream is active. This box
+  is mic-only — the satellite never plays to the array — which is exactly why
+  it presented as a total, silent mic failure.
+
+  **The fix: `respeaker-clock-keeper.service`** (deployed + enabled
+  2026-07-30, in the rebuild kit and `deploy.sh`). It holds
+  `aplay -D hw:CARD=Array /dev/zero` open forever: silence, ~64KB/s of USB,
+  nothing audible (no speaker is attached to the array here). Order doesn't
+  matter, so `Restart=always` makes it self-healing; if it dies, capture
+  stalls until it returns and then resumes. Verified end-to-end: satellite
+  capturing at 16k frames/sec, `mic-health` passing (it had correctly caught
+  the wedge at 19:44, before the fix).
+
+  What was tried and disproven on the way, for the record:
+
+  * `uhubctl` (now installed on the box) CAN switch the Genesys hub's port
+    power — needs `-f` (the hub is on uhubctl's ignore list, reports `ganged`
+    switching). `off` genuinely disconnects the device; `on` re-enumerates
+    it. But a 5s cycle and a 25s cycle both left capture-alone dead.
+  * That matches 2026-07-29, when **an hour of pulled power also did not
+    clear it**. The array's own power loss has *never* cured this state; the
+    one thing that ever restored free-running capture was the physical replug
+    on 2026-07-28 (mechanism still unexplained — but with the keeper running
+    it no longer matters, since a "wedged" array captures perfectly).
+  * Fresh finding while testing: the wedge is not cured by re-enumeration
+    either (the uhubctl cycles re-enumerated it twice).
 
   **Hub moved to a USB2 port 2026-07-30** (it was on USB3 for ~40 min). The
   array is a high-speed USB2 device, so the hub's USB3 side was pure liability

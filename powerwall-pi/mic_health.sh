@@ -15,10 +15,16 @@ set -euo pipefail
 # That is readable from /proc while the satellite still owns the device, so
 # this check never has to stop the service or fight for the mic.
 #
-# NOTE: only a PHYSICAL unplug/replug clears the wedge. Verified 2026-07-29
-# that ALL of these fail: deauthorize/authorize, usb driver unbind/rebind,
-# snd_usb_audio reload, USBDEVFS_RESET, and even a full hour of pulled power.
-# So this script alerts; it deliberately does not pretend it can self-heal.
+# NOTE: characterized 2026-07-30 — the "wedge" is a state where capture only
+# delivers frames while a playback stream is concurrently open.
+# respeaker-clock-keeper.service holds a silent aplay open forever, which
+# cures and prevents it. If this check still fails, the keeper is down or the
+# array is genuinely dead — check `systemctl status respeaker-clock-keeper`
+# first, then physically replug. (Historical: on 2026-07-29 unbind/rebind,
+# snd_usb_audio reload, USBDEVFS_RESET, and a full hour of pulled power all
+# failed; only a physical replug restored free-running capture. A uhubctl
+# VBUS cycle on 2026-07-30 also failed — the array's own power loss has
+# never cleared this state.)
 
 CARD_NAME='Array'
 MQTT_HOST='192.168.10.217'

@@ -59,9 +59,14 @@ single-copy — but the Beelink held none until this capture.
 ### Known gotchas that will bite during the rebuild
 
 - **The ReSpeaker XVF3800 runs its own DSP firmware.** If capture returns
-  `Input/output error`, a USB reset or reboot will *not* clear it — only a
-  physical unplug/replug or full power-down. A 44-byte `arecord` output file
-  is a header with no samples, i.e. the device opened but never streamed.
+  `Input/output error`, a USB reset or reboot will *not* clear it. A 44-byte
+  `arecord` output file is a header with no samples, i.e. the device opened
+  but never streamed. **Characterized 2026-07-30:** this "wedge" is a state
+  where capture only delivers frames *while a playback stream is concurrently
+  open* — playback itself always works, and a stalled capture stream resumes
+  the instant playback starts. `respeaker-clock-keeper.service` holds a
+  silent `aplay /dev/zero` open forever, which both cures and prevents it.
+  Physical unplug/replug also restores free-running capture.
 - **`~/.asoundrc` has been lost twice to unclean shutdowns.** It is the
   `respeaker_ch0` alias; without it the satellite crash-loops with
   `audio open error: No such file or directory` — that message means the
@@ -83,6 +88,7 @@ systemd/pw3-mqtt.service
 systemd/pw3-watchdog.service
 systemd/pw3-watchdog.timer
 systemd/voice-assistant.service  family-room variant (differs from the kitchen unit only in Description)
+systemd/respeaker-clock-keeper.service  silent aplay loop; XVF3800 capture gates on an open playback stream after unclean power-up
 satellite/satellite.env          /home/pi/voice-pipeline/.env — no secrets, safe in git
 satellite/requirements-satellite.txt
 deploy.sh                        push-button rebuild
