@@ -42,8 +42,12 @@ BOUNCE_COOLDOWN_SEC=600     # the AP needs minutes, not seconds, to recover
 CONNECT_BACKOFF_SEC=(300 600 1200 2400 3600)
 ABSENT_RETRY_SEC=60         # AP off the air: retry briskly, nothing to offend
 REFUSAL_WINDOW='4 min'
-# Last resort: cold-cycle the wifi CHIP. See wifi_cold_reset() for why this is
-# not the same thing as any of the resets we tried on 2026-07-29/30.
+# Cold-cycling the wifi CHIP. DISABLED 2026-07-30: the escalation ran for real,
+# and it does NOT cure the lockout -- see wifi_cold_reset(). Left in the script
+# because the manual `--cold-reset` flag and the restore path are still useful,
+# but nothing fires it automatically any more. Set to 1 only to re-run the
+# experiment deliberately.
+COLD_RESET_ENABLED=0
 COLD_RESET_AFTER_SEC=2700     # 45 min continuously unassociated
 COLD_RESET_COOLDOWN_SEC=5400  # and never more than once per 90 min
 MMC_HOST='fe300000.mmcnr'     # SDIO host for the wifi chip ONLY (root is on USB)
@@ -171,31 +175,86 @@ down_for() {
   echo $(( now - last ))
 }
 
+# Read WL_ON. gpioget prints e.g. "WL_ON"=active
+wl_on_read() {
+  if gpioget --as-is -c "$WL_ON_CHIP" "$WL_ON_LINE" 2>/dev/null | grep -q '=active'; then
+    echo 1
+  else
+    echo 0
+  fi
+}
+
+# Drive WL_ON to $1 (0|1), holding for $2 seconds, then VERIFY it took.
+#
+# BUG 2026-07-30, and it cost 85 minutes of telemetry: gpioset in libgpiod v2
+# does NOT exit on its own. `--hold-period` is a MINIMUM, not a termination
+# condition -- the process keeps holding the line until something kills it.
+# Called unbounded, it hung with WL_ON LOW; systemd SIGTERMed the unit on
+# TimeoutStartSec 300s later, and the wifi chip sat unpowered until a human
+# noticed the solar data was stale. So: bound every call with `timeout`, and
+# then read the line back, because "gpioset exited" says nothing about whether
+# the value stuck. (It does survive the kill on this hardware -- verified --
+# but that is exactly the kind of thing not to assume.)
+wl_on_set() {
+  local want=$1 hold=${2:-2} i
+  for i in 1 2 3; do
+    timeout "$(( hold + 3 ))" gpioset -c "$WL_ON_CHIP" -C pw3-watchdog \
+      -p "${hold}s" "${WL_ON_LINE}=${want}" >/dev/null 2>&1 || true
+    if [[ "$(wl_on_read)" == "$want" ]]; then return 0; fi
+    log "WARN: ${WL_ON_LINE} did not read back as ${want} (attempt ${i})"
+  done
+  return 1
+}
+
+# Bring the wifi chip back from ANY state, including powered-off and driverless.
+#
+# This must never be gated on something that needs a working radio. A half-
+# finished cold reset leaves no wlan0 at all, and the original escalation was
+# gated on `ssid_state == present` -- which needs a radio to scan with. The box
+# therefore could not dig itself out of a hole it had dug itself: it sat with
+# the chip powered down, logging "wifi not associated" once a minute, unable to
+# ever retry. Recovery has to be unconditional.
+restore_radio() {
+  local i
+  if ! wl_on_set 1 2; then
+    log "ALERT: cannot raise ${WL_ON_LINE} — the wifi chip will stay unpowered"
+  fi
+  if [[ ! -e "/sys/bus/platform/drivers/mmc-bcm2835/${MMC_HOST}" ]]; then
+    echo "$MMC_HOST" > /sys/bus/platform/drivers/mmc-bcm2835/bind 2>/dev/null || true
+    sleep 3
+  fi
+  /usr/sbin/modprobe brcmfmac 2>/dev/null || true
+  for i in $(seq 20); do
+    if [[ -d "/sys/class/net/${PW_WIFI_IF}" ]]; then
+      log "${PW_WIFI_IF} restored"
+      return 0
+    fi
+    sleep 1
+  done
+  log "ALERT: ${PW_WIFI_IF} still missing after a restore attempt — needs hands"
+  return 1
+}
+
 # Cold-cycle the BCM4345 wifi chip by dropping its power-enable line.
 #
-# WHY (established 2026-07-30): the device tree has NO mmc-pwrseq node, and
-# WL_ON (gpiochip1 line 1, raspberrypi-exp-gpio) has NO kernel consumer -- the
-# VideoCore firmware raises it at boot and nothing in Linux ever lowers it.
-# Compare BT_ON one line above, which shows consumer="shutdown" because the
-# bluetooth driver really does own its enable line.
+# The mechanism is real: the device tree has NO mmc-pwrseq node, and WL_ON
+# (gpiochip1 line 1, raspberrypi-exp-gpio) has NO kernel consumer -- the
+# VideoCore firmware raises it at boot and nothing in Linux ever lowers it, so
+# rfkill / `rmmod brcmfmac` / SDIO unbind-rebind / a warm reboot all leave the
+# chip powered. This routine genuinely does power it down; that part works.
 #
-# So the chip stays powered through EVERYTHING we tried during the 10-hour
-# lockout: rfkill, `nmcli radio wifi off`, `rmmod brcmfmac`, unbind/rebind of
-# the SDIO host, and a warm reboot. Re-downloading firmware into a chip that
-# never lost power re-initialises the MAC and the driver-visible state; it does
-# not reset the PHY, PMU or RF calibration. Pulling the Pi's mains power did,
-# which is why that -- and only that -- ever cleared the status_code=16 refusal.
+# BUT IT DOES NOT CURE THE LOCKOUT. Tested for real 2026-07-30: the chip sat
+# unpowered for 85 minutes, came back with a fresh firmware download, and the
+# AP still answered every association with status_code=16 -- while its beacon
+# was arriving at SIGNAL 100. So the "client chip has latched bad state" theory
+# is dead, and a mains power cycle of the whole Pi remains the only known cure.
+# Whatever mains power changes, it is not the state of this chip.
 #
-# This routine is the software equivalent of that power pull. BT_ON is a
-# separate line, so bluetooth is untouched, and no USB rail moves -- which
-# matters because a real power cycle wedges the ReSpeaker every single time.
+# Left here and reachable via `--cold-reset` because it is a clean way to fully
+# re-init the radio, but COLD_RESET_ENABLED=0 -- nothing fires it automatically.
+# Do not re-enable it as a lockout remedy without new evidence.
 #
-# SAFETY: this is a hard disconnect, and a hard disconnect is exactly what is
-# suspected of triggering the lockout in the first place. It must therefore
-# NEVER run on a healthy link. The caller gates it behind 45 minutes of
-# continuous failure with the AP visible -- by then telemetry is already dead,
-# so the attempt costs nothing and can only help. If the lockout turns out to
-# be AP-side after all, this will simply not work, which is itself the answer.
+# SAFETY: this is a hard disconnect, so it must never run on a healthy link.
 wifi_cold_reset() {
   local why="${1:-escalation}" i
   log "COLD RESET (${why}): power-cycling the wifi chip via ${WL_ON_LINE}"
@@ -205,22 +264,17 @@ wifi_cold_reset() {
   done
   echo "$MMC_HOST" > /sys/bus/platform/drivers/mmc-bcm2835/unbind 2>/dev/null || true
 
-  # Two separate gpioset calls on purpose: gpioset only guarantees the output
-  # value for as long as it is running, so "hold low" and "drive high" cannot
-  # be one invocation. --hold-period keeps each value for the stated time.
-  if ! gpioset -c "$WL_ON_CHIP" -C pw3-watchdog -p "${WL_OFF_SEC}s" "${WL_ON_LINE}=0"; then
-    log "WARN: could not drive ${WL_ON_LINE} low; chip was NOT power-cycled"
-  fi
-  gpioset -c "$WL_ON_CHIP" -C pw3-watchdog -p 2s "${WL_ON_LINE}=1" || true
+  # From here the chip is powered off and there is no wlan0. If we die in this
+  # window the box is left with no radio at all, so make every exit path put it
+  # back -- including systemd's SIGTERM, which is precisely what happened on
+  # 2026-07-30 when gpioset hung and took the chip down with it for 85 minutes.
+  trap 'restore_radio || true' EXIT
+  trap 'restore_radio || true; exit 1' TERM INT
 
-  echo "$MMC_HOST" > /sys/bus/platform/drivers/mmc-bcm2835/bind 2>/dev/null || true
-  /usr/sbin/modprobe brcmfmac 2>/dev/null || true
+  wl_on_set 0 "$WL_OFF_SEC" || log "WARN: could not drive ${WL_ON_LINE} low; chip was NOT power-cycled"
 
-  for i in $(seq 30); do
-    [[ -d "/sys/class/net/${PW_WIFI_IF}" ]] && break
-    sleep 1
-  done
-  if [[ ! -d "/sys/class/net/${PW_WIFI_IF}" ]]; then
+  trap - EXIT TERM INT
+  if ! restore_radio; then
     log "ALERT: ${PW_WIFI_IF} did NOT come back after the cold reset — wifi is down until this Pi reboots"
     return 1
   fi
@@ -245,6 +299,15 @@ if [[ "${1:-}" == "--cold-reset" ]]; then
   stamp "$COLD_RESET_STAMP"
   wifi_cold_reset "manual"
   exit $?
+fi
+
+# The radio can be missing entirely -- powered off and driverless -- most
+# easily because a cold reset died halfway through. Recover UNCONDITIONALLY and
+# before anything else: on 2026-07-30 this state persisted for 85 minutes
+# because every recovery path was gated behind a check that needed a radio.
+if [[ ! -d "/sys/class/net/${PW_WIFI_IF}" ]]; then
+  log "${PW_WIFI_IF} is missing entirely — restoring the radio before anything else"
+  restore_radio || true
 fi
 
 # Track how long the link has been down; the escalation below keys off it.
@@ -305,7 +368,7 @@ if ! wifi_connected; then
   # Gated on the AP being VISIBLE. If the SSID is absent the gateway is simply
   # off the air and our radio is not the problem; power-cycling it would prove
   # nothing and cost us the association we are waiting to make.
-  if ! wifi_connected; then
+  if (( COLD_RESET_ENABLED )) && ! wifi_connected; then
     down=$(down_for)
     if (( down >= COLD_RESET_AFTER_SEC )) \
        && cooldown_expired "$COLD_RESET_STAMP" "$COLD_RESET_COOLDOWN_SEC" \
