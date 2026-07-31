@@ -204,14 +204,57 @@ trigger during a confirmed lockout:
 sudo /home/pi/bin/pw3_watchdog.sh --cold-reset
 ```
 
-**This is a live hypothesis, not a proven fix.** The next lockout is the
-experiment, and the journal now records the verdict either way:
+**VERDICT 2026-07-30 evening: IT DOES NOT WORK. `COLD_RESET_ENABLED=0`.**
 
-* `COLD RESET CURED THE LOCKOUT` → the fault is client-side, confirmed.
-* `still refused after a genuine chip power cycle` → it is AP-side after all,
-  and a mains power cycle (or a smart plug) is still the only cure.
+The escalation fired for real at 17:24. The chip was genuinely unpowered for 85
+minutes and came back with a fresh firmware download — and the AP still refused
+every association with `status_code=16`, while its beacon was arriving at
+**SIGNAL 100**. So the client-chip theory is dead. Whatever a mains power cycle
+changes, it is not the state of this chip. Do not re-arm this without new
+evidence; the mechanism is real but the cure is not.
 
-A smart plug remains the fallback if the cold reset does not work.
+It also failed *dangerously*, and both failures are worth remembering:
+
+* **`gpioset` (libgpiod v2) does not exit on its own.** `--hold-period` is a
+  minimum, not a termination condition — the process holds the line until
+  something kills it. Called unbounded it hung with `WL_ON` **low**, systemd
+  SIGTERMed the unit at `TimeoutStartSec` 300s later, and the wifi chip stayed
+  unpowered for 85 minutes. Always `timeout`-bound it, and always read the line
+  back with `gpioget`: "gpioset exited" says nothing about whether the value
+  stuck (it does survive the kill here, but do not assume it).
+* **Never gate a recovery path on something that needs what it is recovering.**
+  The escalation was gated on `ssid_state == present`, which needs a radio to
+  scan with. With no `wlan0` the box could not dig itself out of the hole it had
+  dug: it logged "wifi not associated" once a minute for 85 minutes while
+  holding its own radio down. `restore_radio()` now runs unconditionally, first,
+  whenever `wlan0` is absent.
+
+### The remaining lead: USB3 interference
+
+Unproven, but the correlation is hard to ignore and the fix is nearly free:
+
+* Lockouts began **2026-07-28**, the day root moved from a USB2 flash drive to a
+  **USB3 SSD**.
+* The 2026-07-30 evening lockout began ~6 minutes after a **USB3 hub** was added.
+* The beacon arrives at **SIGNAL 100** yet association fails — the signature of
+  a bad noise floor, not a weak signal.
+* Other clients (phone, Plex Pi) associate fine; they are not inches from the
+  radiator. The Pi 4's antenna is on-board next to the USB ports, and channel 11
+  (2462 MHz) sits in the worst of the USB3 emission band.
+
+What does NOT fit: there is no clean reason a mains power cycle should cure an
+interference problem. (Possible story — association is the fragile operation and
+succeeds in the quiet window right after boot, while an established link
+tolerates noise a new association cannot — but that is a story, not evidence.)
+
+Note the noise floor **cannot be measured here**: `brcmfmac` is a fullmac driver
+and `iw dev wlan0 survey dump` returns nothing.
+
+Hub moved to USB2 on 2026-07-30 evening and the link came straight back. If
+lockouts stop, that is the answer; if they continue, move the **SSD** to USB2
+next — it is the bigger radiator and it runs constantly.
+
+A smart plug remains the fallback for automating the one cure that does work.
 
 **Note the mic:** a power cycle reliably wedges the ReSpeaker (it did on
 2026-07-29 and again on 2026-07-30). Curing the wifi therefore tends to break
@@ -331,6 +374,22 @@ wins wake-over-music by geometry.
   filesystem, and putting it behind a hub adds a failure point to the one
   device that cannot tolerate one. The array is the thing that keeps wedging,
   so the array is the thing that got the clean supply.
+
+  **The hub did NOT stop the array wedging** (2026-07-30 evening: wedged again
+  on the very next mains power cycle, `hw_ptr` frozen at 0). Two consequences:
+
+  * The USB power budget was probably never the cause. Three wedges, all around
+    power interruptions, and an independent supply changed nothing.
+  * A self-powered hub keeps VBUS up when the *Pi* loses mains, so the array no
+    longer gets power-cycled along with the host. Since a physical replug is the
+    only thing that clears the wedge, the hub plausibly makes recovery **less**
+    likely, not more — the array now rides through the event still powered and
+    still confused. If a power cycle is being done specifically to unwedge the
+    mic, pull the HUB's supply too, or just replug the array's cable.
+
+  **Hub moved to a USB2 port 2026-07-30** (it was on USB3 for ~40 min). The
+  array is a high-speed USB2 device, so the hub's USB3 side was pure liability
+  — see the USB3/2.4GHz note in the lockout section.
 
   `.asoundrc` refers to the device as `hw:CARD=Array`, by NAME — so the ALSA
   card index moving (it became card 3 behind the hub) does not matter. Keep it
