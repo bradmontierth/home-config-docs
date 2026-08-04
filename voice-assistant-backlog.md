@@ -329,7 +329,79 @@ ALARM_RING_KEEP=40, so the next couple of household rings start evicting the
 (home_config/tmp/alarm_rings_backup_20260728/ + tmp/rings-20260728/) and the 8
 new ones are also on the GX10 at data_v3/real_rings/. Bump ALARM_RING_KEEP on
 the next satellite restart — not before, since a restart resets MODE to
-shadow.
+shadow. (Confirmed evicting: only 10 of the 19 2026-07-24 rings were still on
+.251 on 2026-08-04. The backups held; eval now runs from a separate
+`wake-bench/eval_rings/` copy that rotation cannot touch.)
+
+**v3 TRAINED + EVALUATED 2026-08-03/04 — NOT ARMED. The v3 hypothesis is
+DISPROVEN, and the arming bar is unreachable by threshold tuning.**
+
+Trained 20:42-22:32 (1h50m, exit 0, no OOM; a memory fail-safe watched the box
+and never had to fire). Synthetic eval recall 88.7% FPPH 0.81 vs v2's 88.1/0.93
+— still a useless signal, recorded only for continuity. Model:
+`/work/output/stop_v3/stop/stop.onnx`, staged on .251 as
+`wake-bench/stop_v3.onnx` (NOT the live `stop.onnx` path; satellites untouched,
+still shadow at STOP_THRESHOLD=2.0).
+
+Eval harness: `training/eval_stop_v3.py` on .251 (deployed CPU + thread caps),
+faithful chunk-for-chunk replay, steady state only (t>=2.0s, since the
+`stop_filled` gate already killed the pre-fill transient). Faithfulness
+re-confirmed: v1 replay reproduces every live-logged 2026-07-28 peak exactly
+(0.240/0.626/0.837/0.956/0.408/0.849); the two "live 0.000" clips replay at
+0.163/0.098, consistent because live only logs windows >= 0.2. Full report:
+`wake-bench/eval-v3-20260804.json` (+ .jsonl per-clip, + .stderr table).
+
+Bar agreed with Brad before launch: some thr <= 0.90 with >= 0.15 margin over
+the 2-consec ceiling across the four held-out long unattended rings, AND >= 60%
+2-consec recall at the spoken stop.
+
+Result — 2-consec ceiling on the held-out long rings / recall at the stop:
+
+  model  ceiling  (excl. bread)  best recall  verdict
+  v1     0.935    0.803          62% @ 0.30   NOT ARMABLE
+  v2     0.772    0.499          56% @ 0.30   NOT ARMABLE
+  v3     0.784    0.534          56% @ 0.30   NOT ARMABLE
+
+1. *v3 did NOT beat v2.* Ceiling 0.784 vs 0.772, and recall equal or worse at
+   every threshold >= 0.45. The v3 premise — that v2's 90 files (9 bodies x10)
+   overfit and de-duplicated long-ring slices would generalize better — is not
+   supported. Two rounds of background work have now landed in the same place.
+2. *What real-ring backgrounds DID fix, in both v2 and v3:* the periodic
+   per-ding false fire, exactly as designed. Marimba holdout 0.803 (v1) ->
+   0.499 (v2) / 0.534 (v3); bubbling 0.416 -> 0.116 / 0.278; steam_whistle
+   stayed near zero throughout. That theory held; it just wasn't sufficient.
+3. *The entire remaining ceiling is ONE two-window event in ONE clip.* Bread
+   (203343, oven_ding) fires 0.889/0.784 at t=5.60/5.82s. Its only other
+   excursion (0.718 at 43.68s) is a single window and the 2-consec rule
+   already kills it. Drop that one clip and v3's ceiling is 0.534.
+4. *The cake/bread divergence is still unexplained — and it is now the whole
+   problem.* Cake (202807) contributed 17 background slices, MORE than any
+   other theme, and the held-out oven_ding still fires: more tone exposure did
+   not help. The "announcement-tail alignment" hypothesis from 2026-07-28 does
+   NOT survive the audio: the announcement plays only on the first alarm loop
+   (`assistant.py` i==0), both rings ding every 3.58s, and the 2s window at the
+   0.889 fire (3.60-5.60s) contains a decaying ding tail plus silence — no
+   speech at all. Both clips have the same gross structure there. Whatever
+   distinguishes them is finer than envelope, and an ear/spectrogram diff of
+   those two windows is the next diagnostic, not another training run.
+5. *3-consecutive is not the escape hatch.* It crushes the negatives (ceilings
+   v1 0.211 / v2 0.161 / v3 0.243, bread included) but crushes recall with them
+   (<= 38%, and <= 31% for v3). At a 224ms hop a spoken "stop" only occupies
+   ~2 windows, so a 3-window rule is structurally too strict. 2-consec stays
+   the right granularity.
+6. *THE BAR IS UNREACHABLE BY TUNING, and recall is now the binding
+   constraint.* v2 and v3 never reach 60% recall at ANY threshold (both cap at
+   56%); v1 reaches it only at 0.30, where the margin is -0.635. Five of the 16
+   positives score < 0.10 on ALL THREE models — their stops are too ring-masked
+   for any of them — which caps achievable recall at 69% before a threshold is
+   even chosen.
+
+Recommendation: stop iterating on backgrounds. The next lever is POSITIVES, not
+negatives — real spoken stops under real ring masking, from more than one voice
+(Adrienne and the kids were never captured; the v3 plan asked for this and it
+was never done, since the trainer builds positives from synthetic TTS). That is
+a capture task. In parallel, diff the bread/cake windows to explain the one
+event that sets the ceiling. Do not re-arm on anything until both move.
 
 ## 8. Long ask answered on screen but never spoke — P1, FIXED+DEPLOYED 2026-07-09
 
