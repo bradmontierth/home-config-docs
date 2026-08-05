@@ -249,6 +249,13 @@ MUSIC_DUCK_TTL_S = float(os.getenv("MUSIC_DUCK_TTL_S", "240"))
 # In-memory library-name index for the ASR-robust fuzzy resolver (music.py);
 # refreshed in the background when older than this.
 MUSIC_INDEX_TTL_S = float(os.getenv("MUSIC_INDEX_TTL_S", "900"))
+# Play ONLY music we own. The kids ask for songs by name all day and a miss
+# used to fall through to MA's online search, which answers anything with
+# something — a stranger's track with a matching title. Owned-only drops the
+# search fallthrough entirely and ignores library entries backed only by an
+# online provider, so an unowned request gets "I couldn't find that" instead.
+# ("builtin" counts as owned: those playlists are drawn from the library.)
+MUSIC_OWNED_ONLY = os.getenv("MUSIC_OWNED_ONLY", "1") != "0"
 
 # --- wake stage-2 ----------------------------------------------------------
 WAKE_PHRASE = os.getenv("WAKE_PHRASE", "okay computer")

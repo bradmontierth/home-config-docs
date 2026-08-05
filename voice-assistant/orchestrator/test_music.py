@@ -1,13 +1,18 @@
 import asyncio
 import unittest
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
-from . import music
+from . import config, music
 
 
 def _entry(kind: str, name: str, artist: str | None, local: bool, uri: str,
-           version: str = "") -> dict:
-    """One library-index row, built exactly the way _refresh_index does."""
+           version: str = "", owned: bool | None = None) -> dict:
+    """One library-index row, built exactly the way _refresh_index does.
+
+    owned defaults to local; pass it explicitly for the two interesting cases —
+    a Spotify-only entry (neither) and a builtin library playlist (owned but
+    with no file of its own)."""
     norm = music._norm(name)
     titled = f"{name} {version}" if version else name
     full = music._norm(f"{artist} {titled}") if artist else music._norm(titled)
@@ -16,7 +21,8 @@ def _entry(kind: str, name: str, artist: str | None, local: bool, uri: str,
             "skel": music._skeleton(norm),
             "full": full, "fullc": music._collapse(full),
             "ftoks": frozenset(full.split()),
-            "artist": artist, "local": local}
+            "artist": artist, "local": local,
+            "owned": local if owned is None else owned}
 
 
 # The library as it stood on 2026-08-05: a favorited Spotify-only single and
@@ -31,6 +37,9 @@ SKELETONS = [
     _entry("album", "Halloween Howls Fun & Scary Music (Deluxe Edition)",
            "Andrew Gold", True, "library://album/61"),
     _entry("artist", "Andrew Gold", None, True, "library://artist/57"),
+    # MA's builtin provider: drawn from the library, so owned without a file.
+    _entry("playlist", "500 Random tracks (from library)", None, False,
+           "builtin://playlist/random_tracks", owned=True),
 ]
 
 
@@ -73,16 +82,38 @@ class ResolveLibraryTest(unittest.TestCase):
 
     def test_exclude_drops_a_uri_and_re_ranks(self):
         hit = self._resolve("spooky scary skeletons",
-                            exclude={"library://track/2431",
-                                     "library://track/2432"})
-        self.assertEqual(hit["uri"], "library://album/104")
+                            exclude={"library://track/2431"})
+        self.assertEqual(hit["uri"], "library://track/2432")
 
     def test_exclude_can_empty_the_field(self):
         hit = self._resolve("spooky scary skeletons",
                             exclude={"library://track/2431",
-                                     "library://track/2432",
-                                     "library://album/104"})
+                                     "library://track/2432"})
         self.assertIsNone(hit)
+
+    def test_owned_only_never_resolves_an_online_entry(self):
+        # The Spotify-only album outscores nothing here, but it must be
+        # invisible even when it would have won outright.
+        for query in ("spooky scary skeletons", "spooky scary skeletons remix"):
+            with self.subTest(query=query):
+                self.assertNotEqual(self._resolve(query)["uri"],
+                                    "library://album/104")
+        hit = self._resolve("spooky scary skeletons",
+                            exclude={"library://track/2431",
+                                     "library://track/2432"})
+        self.assertIsNone(hit)
+
+    def test_owned_only_still_allows_builtin_library_playlists(self):
+        # No file of its own, but nothing foreign either.
+        hit = self._resolve("500 random tracks from library")
+        self.assertEqual(hit["uri"], "builtin://playlist/random_tracks")
+
+    def test_online_entries_return_when_owned_only_is_off(self):
+        with patch.object(config, "MUSIC_OWNED_ONLY", False):
+            hit = self._resolve("spooky scary skeletons",
+                                exclude={"library://track/2431",
+                                         "library://track/2432"})
+        self.assertEqual(hit["uri"], "library://album/104")
 
 
 class PlayFallbackTest(unittest.TestCase):
@@ -90,9 +121,9 @@ class PlayFallbackTest(unittest.TestCase):
 
     def setUp(self):
         self.queues = AsyncMock()
-        client = AsyncMock()
-        client.player_queues = self.queues
-        patcher = patch.object(music, "_ma", return_value=client)
+        self.client = AsyncMock()
+        self.client.player_queues = self.queues
+        patcher = patch.object(music, "_ma", return_value=self.client)
         patcher.start()
         self.addCleanup(patcher.stop)
         patcher = patch.object(music, "_ensure_index",
@@ -133,6 +164,22 @@ class PlayFallbackTest(unittest.TestCase):
             asyncio.run(music.play("spooky scary skeletons"))
         # Winner + fallbacks, capped — never an unbounded retry storm.
         self.assertLessEqual(len(self._played()), music._PLAY_ATTEMPTS)
+
+    def test_an_unowned_request_is_refused_without_searching(self):
+        # The whole point: a song we don't have must not send MA off to find
+        # a stranger's recording of it.
+        with self.assertRaises(LookupError):
+            asyncio.run(music.play("baby shark"))
+        self.queues.play_media.assert_not_awaited()
+        self.client.music.search.assert_not_awaited()
+
+    def test_search_still_runs_when_owned_only_is_off(self):
+        self.client.music.search.return_value = SimpleNamespace(
+            playlists=[], artists=[], albums=[], tracks=[])
+        with patch.object(config, "MUSIC_OWNED_ONLY", False):
+            with self.assertRaises(LookupError):
+                asyncio.run(music.play("baby shark"))
+        self.client.music.search.assert_awaited()
 
     def test_shuffle_is_recomputed_for_the_fallback_kind(self):
         # Album rejected (in-order) -> artist fallback must shuffle.

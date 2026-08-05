@@ -151,6 +151,7 @@ async def _refresh_index() -> None:
                     "ftoks": frozenset(full.split()),
                     "artist": artist,
                     "local": _has_local(it),
+                    "owned": _is_owned(it),
                 })
             if len(page) < _PAGE:
                 break
@@ -292,6 +293,8 @@ async def _resolve_library(query: str, media_type: str | None,
     for e in entries:
         if exclude and e["uri"] in exclude:
             continue
+        if config.MUSIC_OWNED_ONLY and not e.get("owned", True):
+            continue
         s = max(_entry_score(e, *v) for v in variants)
         cur = best.get(e["kind"])
         # Ties go to locally-mapped items: of two library albums named "Baby
@@ -388,6 +391,17 @@ def _has_local(item) -> bool:
                for m in (item.provider_mappings or []))
 
 
+# Providers whose content is ours. "builtin" earns its place because its
+# playlists ("500 Random tracks", "Random Album") are drawn from the library
+# itself — no local file mapping of their own, but nothing foreign either.
+_OWNED_PROVIDERS = frozenset({"filesystem_local", "builtin"})
+
+
+def _is_owned(item) -> bool:
+    return any(m.provider_domain in _OWNED_PROVIDERS
+               for m in (item.provider_mappings or []))
+
+
 def _best(query: str, items) -> tuple[float, object] | None:
     """Best fuzzy match in a bucket; library items win ties (then local-mapped
     ones — of two library albums with the same name, prefer the owned files)."""
@@ -459,6 +473,11 @@ async def play(query: str | None, media_type: str | None = None) -> dict:
         sel = await _resolve_library(query, media_type)
     except Exception as exc:  # noqa: BLE001 — resolver trouble must not kill play
         log.warning("library resolver failed, falling back to search: %s", exc)
+    if sel is None and config.MUSIC_OWNED_ONLY:
+        # Nothing we own is close enough. Say so — the online search that used
+        # to run here is exactly the path that answers a kid's request for a
+        # song we don't have with a stranger's recording of the same title.
+        raise LookupError(f"no owned match for {query!r}")
     if sel is None:
         via = "search"
         try:
