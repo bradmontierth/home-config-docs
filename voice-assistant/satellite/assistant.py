@@ -1410,19 +1410,27 @@ def main() -> int:
                   "model": ",".join(os.path.basename(p) for p in MODEL_PATHS)})
 
     frame_bytes = FRAME_SAMPLES * 2
+    preroll_frames = int(PREROLL_S * FPS)
     ring = RING
     window = np.zeros(WINDOW_SAMPLES, dtype=np.int16)
     frames_since_hop = 0
     guard_until = 0.0
+    # Real samples shifted into `window` since the last resync (and since
+    # startup), and mic frames appended to `ring` over the same span. Both are
+    # turn-boundary fences — see the notes at the scoring and pre-roll sites.
+    wake_filled = 0
+    frames_since_resync = 0
 
     in_alarm = False
     ring_wav = None
 
     def resync():
-        nonlocal window, frames_since_hop, guard_until
+        nonlocal window, frames_since_hop, guard_until, wake_filled, frames_since_resync
         drain_input(arecord.stdout)
         window = np.zeros(WINDOW_SAMPLES, dtype=np.int16)
         frames_since_hop = 0
+        wake_filled = 0
+        frames_since_resync = 0
         guard_until = time.time() + RETRIGGER_GUARD_S
 
     alarm_window: deque = deque(maxlen=max(1, ALARM_WINDOW_MS // VAD_FRAME_MS))
@@ -1524,6 +1532,8 @@ def main() -> int:
             return 1
         ring.append(chunk)
         window = np.concatenate([window[FRAME_SAMPLES:], np.frombuffer(chunk, dtype=np.int16)])
+        wake_filled = min(wake_filled + FRAME_SAMPLES, WINDOW_SAMPLES)
+        frames_since_resync = min(frames_since_resync + 1, preroll_frames)
 
         mode = STATE.get_mode()
         if mode == "off":
@@ -1545,6 +1555,15 @@ def main() -> int:
         if frames_since_hop < HOP_FRAMES:
             continue
         frames_since_hop = 0
+        # Never score a part-silent window. resync() zeroes `window`, but
+        # RETRIGGER_GUARD_S (1.5s) is shorter than the window (2.0s), so for
+        # ~0.5s after every turn the model was being asked to score real audio
+        # zero-padded on the left — the same startup transient the stop model
+        # hits (see the note at its scoring site). Live 2026-08-05: a turn ended
+        # 19:40:39.8, the guard lifted 19:40:41.3, and stage-1 fired on the very
+        # next hop, producing a phantom wake ding with nobody speaking.
+        if wake_filled < WINDOW_SAMPLES:
+            continue
 
         scores = model.predict(window)
         top_key = max(model_keys, key=lambda k: scores.get(k, 0.0))
@@ -1562,7 +1581,16 @@ def main() -> int:
         if mode != "active":
             continue
 
-        preroll = b"".join(list(ring)[-int(PREROLL_S * FPS):])
+        # The pre-roll must not cross a turn boundary. `ring` is appended only
+        # here, so it goes stale for the whole length of a turn: after a 33s ask
+        # the newest frames in it were still the PREVIOUS turn's wake word, and
+        # a pre-roll taken blind carried "okay computer" into /verify, which
+        # scored it 100 and promoted a false trigger into a real turn (live
+        # 2026-08-05). Cap the slice at what has actually been captured since
+        # resync. Clearing the ring instead would break /mark, which wants the
+        # full 20s of context after a missed wake.
+        take = min(preroll_frames, frames_since_resync)
+        preroll = b"".join(list(ring)[-take:]) if take else b""
         media_stop()   # slideshow video audio would talk over the turn
         run_turn(preroll, arecord.stdout, vad, now)
         resync()
