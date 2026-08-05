@@ -1,9 +1,10 @@
 # Recipe → Shopping List Plan (cookmode)
 
 **Status: BUILT + DEPLOYED 2026-08-05**, same day as scoping. Phases 1–4 all
-shipped; live on the real library. Not yet done: Brad's own pantry pass (only 5
-terms are ticked, from a smoke test), the APK is **built but not published**,
-and nothing has been used on a real phone. See "What changed during the build"
+shipped; live on the real library. Voice Notes **0.4.0 published to F-Droid**
+the same day (versionCode 1785967966), so phones pick it up unattended. Not yet
+done: Brad's own pantry pass (only 5 terms are ticked, from a smoke test) and a
+real-phone test of the WebView tab. See "What changed during the build"
 at the end — several design details moved, one of them load-bearing.
 
 Commits: cookmode `1ac2093`, voice-notes-android `a55da9f`, home_config
@@ -481,9 +482,8 @@ self-link and grouping both working end to end.
 - **Brad's pantry pass.** Only salt, water, olive oil, ground cumin and garlic
   are ticked, and only to prove the tiers. The review page is `/pantry` on
   `:8786`; sorted by frequency, the real ones are near the top.
-- **The APK is built, not published.** `app/build/outputs/apk/debug/app-debug.apk`.
-  Publishing silently updates Brad's phone, and nothing has been tested on a
-  real handset yet.
+- **Real-phone test of the WebView tab.** 0.4.0 is published and will land on
+  Brad's phone on its own; nothing has been exercised on a real handset yet.
 - **Two cosmetic vocabulary warts**, both harmless and both visible on the review
   page: "ground cayenne" and "cayenne pepper" are separate groups (different
   head-noun buckets — the safe direction), and "each of saffron and cayenne" is
