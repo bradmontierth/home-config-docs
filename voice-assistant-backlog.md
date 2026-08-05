@@ -1294,7 +1294,18 @@ stitching path and is fiddlier.
 
 ---
 
-## Recipe → shopping list ("add chickpea salad to the shopping list for this week") — SCOPED 2026-07-27, not built
+## Recipe → shopping list ("add chickpea salad to the shopping list for this week") — SUPERSEDED 2026-08-05
+
+> **Superseded by `home_config/cookmode-shopping-plan.md`** (scoped with Brad
+> 2026-08-05). Two reversals: **there is no voice path** (the library collides
+> with itself — "the cauliflower one" / "the lentil one" / "the tofu one" each
+> match two recipes at 18 recipes, and it worsens as the library grows), so this
+> is not a voice-assistant item at all any more; and **full quantity parsing is
+> not a prerequisite** (a shopping row wants the name, not "2 tablespoons").
+> Entry point is the Voice Notes Shopping tab → a WebView of cookmode's grid.
+> The section below is kept for the parsing research, which still holds.
+
+### Original scoping, 2026-07-27
 
 **Where this came from:** discussed with Brad 2026-07-27 while building `cookmode`
 (new sidecar, `:8786`, repo `/home/pi/cookmode`) — the display-first recipe view
