@@ -1317,6 +1317,35 @@ async def get_lists() -> dict:
     return {"items": items}
 
 
+@app.post("/lists/shopping")
+async def add_shopping_items(payload: dict = Body(...)) -> dict:
+    """Add known items to the shared shopping list (cookmode's recipe staging).
+
+    The orchestrator stays the single write path into the household list even
+    though the caller is not a voice turn: it owns the companion's address, and
+    it is what tells the kitchen display something changed. A recipe committed
+    from the phone therefore updates an open list view on the kiosk for free.
+    """
+    texts = payload.get("items") or payload.get("texts") or []
+    if not isinstance(texts, list):
+        raise HTTPException(400, "items must be a list of strings")
+    texts = [str(t) for t in texts if str(t).strip()]
+    if not texts:
+        raise HTTPException(400, "no items")
+    try:
+        result = await lists_mod.add_shopping(texts)
+    except Exception as exc:  # noqa: BLE001
+        log.warning("POST /lists/shopping failed: %s", exc)
+        raise HTTPException(502, f"lists service unreachable: {exc}")
+    added = result.get("added") or []
+    if added:
+        await _broadcast_lists("list_updated", added=added)
+    return {
+        "added": [it.get("text") for it in added],
+        "duplicates": result.get("duplicates") or [],
+    }
+
+
 @app.post("/lists/items/{item_id}/complete")
 async def complete_list_item(item_id: int) -> dict:
     """Check an item off from a touchscreen tap. Emits list_updated with a fresh

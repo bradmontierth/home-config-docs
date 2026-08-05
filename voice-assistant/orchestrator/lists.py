@@ -93,6 +93,39 @@ async def add_from_text(text: str, owner: str | None = None,
     return resolved
 
 
+async def add_shopping(texts: list[str], owner: str | None = None) -> dict:
+    """Put already-known items on the shopping list, without the analyze pass.
+
+    `add_from_text` exists because a spoken sentence has to be understood: what
+    is an item, what type it is, whether "Thursday" is a due date. A recipe's
+    ingredients arrive already understood — cookmode extracted each name and
+    verified it against the source line — so sending them back through an LLM
+    would spend a round trip apiece to re-derive what we have, and give it
+    licence to reword text that was deliberately kept verbatim.
+
+    Returns {"added": [...], "duplicates": [...]}; the companion dedupes
+    against what is already active on the shared list.
+    """
+    texts = [t.strip() for t in texts if t and t.strip()]
+    if not texts:
+        return {"added": [], "duplicates": []}
+    payload = {
+        "user": owner or config.LIST_OWNER,
+        "texts": texts,
+        "item_type": "shopping",
+        "source": "cookmode",
+    }
+    async with httpx.AsyncClient(timeout=30, base_url=config.COMPANION_URL) as client:
+        r = await client.post("/api/items", json=payload)
+        r.raise_for_status()
+        data = r.json()
+    log.info(
+        "add_shopping: %d added, %d duplicate(s)",
+        len(data.get("added") or []), len(data.get("duplicates") or []),
+    )
+    return data
+
+
 async def fetch(types: tuple[str, ...] | None = None, status: str = "active",
                 user: str | None = None) -> list[dict]:
     """List items, optionally filtered to `types` and/or one `user`.
