@@ -396,6 +396,16 @@ Result — 2-consec ceiling on the held-out long rings / recall at the stop:
    for any of them — which caps achievable recall at 69% before a threshold is
    even chosen.
 
+**v4 plan drafted 2026-08-04 → `home_config/stop-model-v4-plan.md`** (nothing
+built). Two hypotheses, both measured: H1 the 2s window is mostly ring (Brad —
+real stops are 180ms median/390ms max, and a 2.0s window can NEVER be ring-free
+for any theme, vs 28-39% ring-free at ~1.0s), H2 the synthetic positives are ~3x
+slower than real speech (TTS p50 700ms vs 180ms real). H2 is config-only. H1
+needs a patched trainer + our own predict, because the 2s window is NOT a design
+choice — 16 embeddings x (76-frame, 80ms-stride) is the classifier's fixed input,
+and `clip_duration: 1.0` would have LEFT-PADDED WITH ZEROS and silently trained
+on garbage. Read the plan before touching either.
+
 Recommendation: stop iterating on backgrounds. The next lever is POSITIVES, not
 negatives — real spoken stops under real ring masking, from more than one voice
 (Adrienne and the kids were never captured; the v3 plan asked for this and it
