@@ -1,9 +1,17 @@
 # Recipe → Shopping List Plan (cookmode)
 
-**Status:** SCOPED 2026-08-05 with Brad, nothing built. Supersedes the older
-scoping in `voice-assistant-backlog.md` ("Recipe → shopping list", scoped
-2026-07-27) in two ways: **there is no voice path**, and **full quantity parsing
-is not a prerequisite**. Read this file, not that section.
+**Status: BUILT + DEPLOYED 2026-08-05**, same day as scoping. Phases 1–4 all
+shipped; live on the real library. Not yet done: Brad's own pantry pass (only 5
+terms are ticked, from a smoke test), the APK is **built but not published**,
+and nothing has been used on a real phone. See "What changed during the build"
+at the end — several design details moved, one of them load-bearing.
+
+Commits: cookmode `1ac2093`, voice-notes-android `a55da9f`, home_config
+`1f484e6`.
+
+Supersedes the older scoping in `voice-assistant-backlog.md` ("Recipe → shopping
+list", scoped 2026-07-27) in two ways: **there is no voice path**, and **full
+quantity parsing is not a prerequisite**. Read this file, not that section.
 
 **Where:** cookmode (`/home/pi/cookmode`, `:8786`) owns everything new — the
 pantry vocabulary, the tier classification, the staging endpoint, the desktop
@@ -358,3 +366,133 @@ Two decisions rest on these numbers:
   entirely pantry items. That is the ceiling on the seeding chore: a couple dozen
   toggles removes or demotes roughly a third of every future shopping list, and
   the 186-term tail is genuinely what you buy.
+
+---
+
+# What changed during the build (2026-08-05)
+
+Everything above is the design as scoped. This section records where the
+implementation departed from it and why, so the next session reads the code's
+actual shape rather than the plan's.
+
+## The alias table replaced the match cache, and tiers stopped being cached
+
+The plan had a `shopping_match` table keyed on `(recipe updatedAt, vocab
+version, prompt version)`. It does not exist. `pantry_alias` is keyed on the
+**quantity-stripped ingredient line**, which turns out to be strictly better:
+
+- the second recipe to call for garlic costs nothing, across the whole library;
+- editing a recipe only re-matches the lines that actually changed;
+- **tiers are derived at read time** from `pantry_term`, so ticking something
+  stocked takes effect everywhere at once with nothing to invalidate — no
+  `vocab_version`, no cache-key versioning, no sweep to re-run.
+
+## The self-link — the one genuinely load-bearing change
+
+A line's own extracted name is always recorded as one of its terms.
+
+Without it the feature is silently inert, and it took a live sweep to see why:
+during a sweep **nothing is stocked yet**, so the model is handed an empty
+vocabulary and correctly returns no terms for anything. Every line is then
+pinned to "no terms" in the alias cache forever, and ticking staples on the
+review page afterwards visibly does nothing. The self-link means every line
+points at *something*, so stocking a group reaches the lines already scanned.
+
+Safe because a freshly created term is never stocked — only a person sets that.
+
+## Grouping: three passes, not one clustering call
+
+The plan proposed one clustering call over all distinct lines labelled by
+shortest member. What shipped:
+
+1. **Head-noun buckets** (free, deterministic). 166 terms → 97 buckets, only 34
+   with more than one member. Two-thirds of the vocabulary needs no call at all.
+2. **The model splits each multi-member bucket.** Small prompts, and a bad
+   answer in one bucket cannot disturb another.
+3. **A deterministic refinement gate over the model's merges** — see below.
+
+Labels are still the shortest member, as planned. 167 terms → 139 groups.
+
+## Merges must satisfy two independent judgments
+
+This was not in the plan and is the most important thing learned.
+
+The model over-merged in ways that would silently lose ingredients: lemon juice
+with lime juice, three different cheeses, chicken with vegetable stock, whole
+with coconut milk, salted with unsalted butter. Tightening the prompt with those
+exact pairs as counter-examples fixed most of them — **and it kept merging lemon
+with lime anyway.**
+
+So a merge now also has to pass `refines()`: every word of the more general name
+must survive in the more specific one. "olive oil" → "extra-virgin olive oil"
+passes; "lemon juice" / "lime juice" merely share a word and fails.
+
+The two checks cover each other's blind spots exactly:
+
+| | catches | cannot see |
+| --- | --- | --- |
+| the model | "black pepper" ≠ "bell pepper" — different foods that look alike to a string comparison | lemon vs lime, repeatedly |
+| `refines()` | lemon vs lime, chicken vs vegetable stock | that "pepper" ⊂ "bell pepper" is a category, not a refinement |
+
+The asymmetry is deliberate and worth preserving: an over-split costs one extra
+row to tick, an over-merge drops an ingredient off a shopping list the moment
+the group is marked always-in-the-house.
+
+## The commit path skips the analyze prompt entirely
+
+The plan flagged "measure the N-item latency before designing the spinner",
+expecting either one run-on sentence or N sequential LLM round trips through the
+companion's analyze. Neither was necessary: the companion gained
+`POST /api/items` for items whose type and text are already known. Ingredient
+names were verified against their source lines upstream; handing them to an LLM
+to be re-read would put that at risk for nothing. Dedupe against the active list
+happens in the same call. **No spinner needed — it is a plain insert.**
+
+Still routed cookmode → orchestrator → companion, as planned, so the kitchen
+display gets its `list_updated`.
+
+## Smaller things
+
+- **Route ordering bites FastAPI.** `POST /api/pantry/{term}` declared before
+  `/api/pantry/rebuild` swallows it and 422s on the missing body. Literal routes
+  first; there is a comment in `main.py` saying so.
+- **`fallback_name` needed `\b` around the unit group.** The abbreviations
+  include a bare `c` for cups and alternation is ordered, so "3 cloves garlic"
+  came out as "loves garlic". `normalize_line` was never affected — it had word
+  boundaries already. Caught by a test, not by eye.
+- **A regroup reports no recipe counts**, so the review page builds its summary
+  sentence from whichever fields are present.
+- **`reset_groups()` clears `shelf_stable` but never `stocked`.** Regrouping is
+  our problem; the household's answers are not ours to discard.
+
+## Measured on the real library after the build
+
+18 recipes, 276 ingredient lines → 186 distinct after normalization (the plan's
+appendix said 216; the shipped normalizer is more aggressive) → 167 names → 139
+groups. Zero rejected name extractions across the whole library — every name the
+model returned was a literal substring of its source line.
+
+Falafel, with five staples ticked: **14 buy, 1 check, 3 hidden**. "sea salt" and
+"extra-virgin olive oil" hid via the groups "salt" and "olive oil", which is the
+self-link and grouping both working end to end.
+
+## Still open
+
+- **Brad's pantry pass.** Only salt, water, olive oil, ground cumin and garlic
+  are ticked, and only to prove the tiers. The review page is `/pantry` on
+  `:8786`; sorted by frequency, the real ones are near the top.
+- **The APK is built, not published.** `app/build/outputs/apk/debug/app-debug.apk`.
+  Publishing silently updates Brad's phone, and nothing has been tested on a
+  real handset yet.
+- **Two cosmetic vocabulary warts**, both harmless and both visible on the review
+  page: "ground cayenne" and "cayenne pepper" are separate groups (different
+  head-noun buckets — the safe direction), and "each of saffron and cayenne" is
+  a bad name extraction from a two-ingredient line that got folded in with
+  cayenne. Neither can hide anything wrongly; `leftover_ingredient` guards the
+  multi-ingredient case at tiering time.
+- **Long names on list rows.** "chopped fresh cilantro leaves and stems" is a
+  verified substring and therefore correct, but clumsier than a shopping list
+  wants. Trimming prep words is a deletion-only change if it ever annoys.
+- **No way to split a bad group from the UI.** The AND-gate makes this rare
+  enough to leave alone; if it does come up, the fix is a "split this out"
+  affordance on the expanded row plus a pinned flag so regrouping respects it.
