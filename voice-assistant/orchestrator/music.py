@@ -131,10 +131,18 @@ async def _refresh_index() -> None:
                     continue
                 arts = getattr(it, "artists", None) or []
                 artist = arts[0].name if arts else None
+                # MA keeps the variant OUT of the name ("Spooky, Scary
+                # Skeletons" + version "Undead Tombstone Remix"), so two
+                # library tracks can be byte-identical by name and a spoken
+                # "remix"/"live"/"acoustic" has nothing to bite on. Fold the
+                # version into the token-set field only — norm/skeleton stay
+                # the bare name, so unqualified queries score as before.
+                version = (getattr(it, "version", None) or "").strip()
+                titled = f"{it.name} {version}" if version else it.name
                 # artist+name in one string lets token-set scoring absorb a
                 # spoken composer/artist qualifier ("Chopin's ballade 4",
                 # "baby beluga by raffi") without stripping heuristics.
-                full = _norm(f"{artist} {it.name}") if artist else norm
+                full = _norm(f"{artist} {titled}") if artist else _norm(titled)
                 entries.append({
                     "kind": kind, "name": it.name, "uri": it.uri,
                     "norm": norm, "collapsed": _collapse(norm),
@@ -247,10 +255,14 @@ def _entry_score(e: dict, qn: str, qc: str, qtokens: list[str], qs: str) -> floa
 
 
 _LIB_THRESHOLDS = {"playlist": 92, "artist": 80, "album": 85, "track": 80}
+# Play attempts (winner + fallbacks) before a play_media failure reaches the
+# user. Kept small: each one is a real round-trip and the kitchen is waiting.
+_PLAY_ATTEMPTS = 3
 
 
 async def _resolve_library(query: str, media_type: str | None,
-                           relaxed: bool = False) -> dict | None:
+                           relaxed: bool = False,
+                           exclude: set[str] | None = None) -> dict | None:
     """Best library match for a (possibly misspelled) query, or None. Same
     bucket precedence + thresholds as the search ranker.
 
@@ -260,7 +272,10 @@ async def _resolve_library(query: str, media_type: str | None,
     track 'demons'). Relaxed mode ignores bucket precedence — with low floors,
     a weak early bucket would steal from a strong later one (a 57-scoring
     artist beat the 90-scoring Day O track in testing) — and just takes the
-    best score anywhere at a flat 60 floor."""
+    best score anywhere at a flat 60 floor.
+
+    exclude drops URIs a previous play attempt already proved unplayable, so
+    play() can re-run the whole ranking for the next-best candidate."""
     entries = await _ensure_index()
     qn = _norm(query)
     if not entries or not qn:
@@ -275,6 +290,8 @@ async def _resolve_library(query: str, media_type: str | None,
         variants.append((qn2, _collapse(qn2), qn2.split(), _skeleton(qn2)))
     best: dict[str, tuple[float, dict]] = {}
     for e in entries:
+        if exclude and e["uri"] in exclude:
+            continue
         s = max(_entry_score(e, *v) for v in variants)
         cur = best.get(e["kind"])
         # Ties go to locally-mapped items: of two library albums named "Baby
@@ -302,19 +319,24 @@ async def _resolve_library(query: str, media_type: str | None,
                  and fuzz.ratio(_collapse(tail_artist),
                                 _collapse(_norm(hit[1]["artist"]))) >= 80]
         if piece:
-            hit = max(piece, key=lambda h: h[0])
+            hit = max(piece, key=lambda h: (h[0], h[1]["local"]))
             return {**hit[1], "score": hit[0]}
     for kind in ("playlist", "artist"):
         hit = best.get(kind)
         if hit and hit[0] >= _LIB_THRESHOLDS[kind]:
             return {**hit[1], "score": hit[0]}
-    # Album vs track compete on SCORE (ties → album): strict bucket order let
-    # any qualifying album beat a better-matching track ("the fourth ballade"
-    # lost to a concert-program album title that merely mentions Ballade 4).
+    # Album vs track compete on SCORE (ties → the one whose files we OWN):
+    # strict bucket order let any qualifying album beat a better-matching track
+    # ("the fourth ballade" lost to a concert-program album title that merely
+    # mentions Ballade 4). The local tiebreak matters because a Spotify-only
+    # entry is a coin flip on MA's provider being alive — a favorited Spotify
+    # single "Spooky, Scary Skeletons" tied the owned Andrew Gold track at 88
+    # and won on list order, then failed to play at all (MA's Spotify provider
+    # had been dead since a failed token refresh on its last restart).
     contenders = [hit for kind in ("album", "track")
                   if (hit := best.get(kind)) and hit[0] >= _LIB_THRESHOLDS[kind]]
     if contenders:
-        hit = max(contenders, key=lambda h: h[0])
+        hit = max(contenders, key=lambda h: (h[0], h[1]["local"]))
         return {**hit[1], "score": hit[0]}
     return None
 
@@ -474,10 +496,34 @@ async def play(query: str | None, media_type: str | None = None) -> dict:
         if sel is None:
             sel = {"kind": kind, "name": item.name, "uri": item.uri,
                    "artist": _artist_of(item)}
-    # Artist/playlist get shuffle (fresh mix each time); album/track play in order.
-    shuffle = sel["kind"] in ("artist", "playlist")
-    await client.player_queues.queue_command_shuffle(qid, shuffle)
-    await client.player_queues.play_media(qid, sel["uri"], option=QueueOption.REPLACE)
+    # A resolved winner is not a PLAYABLE winner: MA expands the URI at play
+    # time and can come back empty (a favorited Spotify single whose provider
+    # is down has no tracks to fetch — "No playable items found"). Treat that
+    # as a rejection of that URI, not of the request, and re-rank without it:
+    # the runner-up is usually the same song from the library.
+    tried: set[str] = set()
+    while True:
+        # Artist/playlist get shuffle (fresh mix each time); album/track in order.
+        shuffle = sel["kind"] in ("artist", "playlist")
+        try:
+            await client.player_queues.queue_command_shuffle(qid, shuffle)
+            await client.player_queues.play_media(qid, sel["uri"],
+                                                  option=QueueOption.REPLACE)
+        except Exception as exc:  # noqa: BLE001
+            tried.add(sel["uri"])
+            log.warning("play_media rejected %s %r (%s: %s) — re-ranking without it",
+                        sel["kind"], sel["name"], type(exc).__name__, exc)
+            alt = None
+            if len(tried) < _PLAY_ATTEMPTS:
+                try:
+                    alt = await _resolve_library(query, media_type, exclude=tried)
+                except Exception:  # noqa: BLE001 — fallback is best-effort
+                    alt = None
+            if alt is None:
+                raise
+            sel, via = alt, "library-fallback"
+            continue
+        break
     asyncio.create_task(_notify_jukebox_takeover())
     log.info("play_music %r -> %s %r (%s, shuffle=%s, via=%s, score=%s)",
              query, sel["kind"], sel["name"], sel["uri"], shuffle, via,
