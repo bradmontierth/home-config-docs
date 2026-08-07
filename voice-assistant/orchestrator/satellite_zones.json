@@ -1,0 +1,8 @@
+{
+  "master": {
+    "rooms": ["shower"],
+    "voice": "fast:doorbell",
+    "volume": 30,
+    "note": "Master closet satellite. Chime/ding stays local on its USB speaker; spoken replies go out the master bath zone. Volume 30 not 50 — the amp runs hot gain on this zone (50 was measured too loud 2026-08-07)."
+  }
+}

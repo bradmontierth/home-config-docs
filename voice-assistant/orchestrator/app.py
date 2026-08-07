@@ -17,6 +17,7 @@ caption, response, and timer cards.
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import io
 import logging
 import os
@@ -41,6 +42,7 @@ from . import speaker as speaker_mod
 from . import sports as sports_mod
 from . import weather as weather_mod
 from . import clients, config, events, format as fmt, intent as intent_mod, verify
+from . import zones
 from .timers import RINGING, TimerEngine
 
 logging.basicConfig(
@@ -172,6 +174,15 @@ def _arb_holder(sat: str) -> str | None:
 def _arb_claim(sat: str) -> None:
     _ARB["sat"] = sat
     _ARB["until"] = time.time() + config.ARB_SUPPRESS_S
+
+
+# Which satellite the in-flight turn belongs to, so _finalize can route the
+# reply (zones.py) without threading `sat` through every intent handler and all
+# six _finalize call sites. A ContextVar rather than a module global because
+# turns from different satellites can interleave on the event loop -- each
+# request coroutine gets its own copy.
+_CUR_SAT: contextvars.ContextVar[str | None] = contextvars.ContextVar(
+    "current_sat", default=None)
 
 
 # --------------------------------------------------------------------------
@@ -321,8 +332,28 @@ def _summarize_turn(intent: str, result: dict) -> str:
 
 async def _finalize(result: dict, intent: str) -> dict:
     """Common tail: render the spoken reply, emit the response event, and record
-    the turn for follow-up context."""
-    result["audio_url"] = await _speak_reply(result["response"])
+    the turn for follow-up context.
+
+    Zone-routed satellites (zones.py) take a different tail: the reply text is
+    published to a whole-home audio zone and no audio_url is produced, which is
+    what stops the satellite playing it locally (assistant.py:811). We skip our
+    own TTS entirely there — Node-RED re-renders from text — so this path is a
+    render cheaper, not more expensive."""
+    route = zones.route_for(_CUR_SAT.get())
+    if route and result.get("response"):
+        try:
+            await broadcast_mod.send(route["rooms"], result["response"],
+                                     route.get("volume"), route.get("voice"))
+            result["audio_url"] = None
+            result["reply_zone"] = route["rooms"]
+        except Exception as exc:  # noqa: BLE001 — HA/MQTT down
+            # Fall back to answering on the satellite rather than losing the
+            # turn: a reply from the wrong speaker beats silence.
+            log.warning("zone reply failed (%s), falling back to satellite: %s",
+                        route["rooms"], exc)
+            result["audio_url"] = await _speak_reply(result["response"])
+    else:
+        result["audio_url"] = await _speak_reply(result["response"])
     await events.emit(
         "response", text=result["response"], audio_url=result["audio_url"], intent=intent
     )
@@ -1061,6 +1092,7 @@ async def command_audio(request: Request, followup: bool = False,
     wav = await request.body()
     if not wav:
         raise HTTPException(400, "empty audio body")
+    _CUR_SAT.set(sat)           # read by _finalize for per-satellite reply routing
     t0 = time.time()
     transcript = await clients.transcribe(wav)
     log.info("command sat=%s followup=%s transcript=%r", sat, followup, transcript)

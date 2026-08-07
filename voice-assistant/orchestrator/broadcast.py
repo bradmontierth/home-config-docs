@@ -108,9 +108,15 @@ def rooms_list() -> list[dict]:
 
 
 async def send(rooms: list[str] | str, message: str,
-               volume: int | None = None) -> dict:
+               volume: int | None = None, voice: str | None = None) -> dict:
     """Direct send with explicit canonical room keys — the phone-app path,
-    no fuzzy resolution. Raises ValueError on unknown keys/empty message."""
+    no fuzzy resolution. Raises ValueError on unknown keys/empty message.
+
+    `voice` is passed straight through to Node-RED, whose resolver forwards it
+    as msg.voice into the Amp Speakers subflow. A "fast:" or "kokoro:" prefix
+    makes tts-router force Kokoro (main.py:1186), which is how the satellite
+    reply path gets the house voice without any flow change. Omitted -> the
+    subflow's own default (picard:calm)."""
     message = (message or "").strip()
     if not message:
         raise ValueError("empty message")
@@ -128,9 +134,11 @@ async def send(rooms: list[str] | str, message: str,
         payload["volume"] = volume
     elif config.BROADCAST_VOLUME is not None:
         payload["volume"] = config.BROADCAST_VOLUME
+    if voice:
+        payload["voice"] = voice
     await _publish(payload)
-    log.info("broadcast sent rooms=%s volume=%s len=%d",
-             rooms, payload.get("volume"), len(message))
+    log.info("broadcast sent rooms=%s volume=%s voice=%s len=%d",
+             rooms, payload.get("volume"), voice, len(message))
     return payload
 
 

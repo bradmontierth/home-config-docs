@@ -87,6 +87,12 @@ BROADCAST_TOPIC = os.getenv("BROADCAST_TOPIC", "voice/broadcast")
 BROADCAST_ROOMS_FILE = os.getenv(
     "BROADCAST_ROOMS_FILE",
     os.path.join(os.path.dirname(__file__), "broadcast_rooms.json"))
+# Per-satellite reply routing (see zones.py): satellites listed here answer
+# out of a whole-home audio zone instead of their own speaker. Hot-reloaded
+# on mtime like the tables above.
+SATELLITE_ZONES_FILE = os.getenv(
+    "SATELLITE_ZONES_FILE",
+    os.path.join(os.path.dirname(__file__), "satellite_zones.json"))
 # Announcement volume 0-100; unset/empty -> the subflow's own default
 # (global defaultSpeakerVolume in Node-RED).
 _bv = os.getenv("BROADCAST_VOLUME", "").strip()
