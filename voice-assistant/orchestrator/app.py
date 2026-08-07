@@ -1075,6 +1075,14 @@ async def verify_wake(request: Request, sat: str = "kitchen") -> dict:
             log.info("verify sat=%s suppressed post-ASR (winner=%s)", sat, winner)
             return {"verified": False, "suppressed": True, "winner": winner}
         _arb_claim(sat)
+        # Zone-routed satellites answer through the whole-home amp, which needs
+        # ~3s to come out of standby. Start that now so it finishes under the
+        # ASR + intent + TTS that follows, instead of eating the reply's first
+        # words. Fire-and-forget: the turn must not wait on it.
+        route = zones.route_for(sat)
+        if route:
+            asyncio.create_task(
+                broadcast_mod.amp_wake(route["rooms"], route.get("volume")))
     await events.emit("wake_confirmed" if verified else "wake_rejected",
                       score=score, transcript=transcript)
     return {

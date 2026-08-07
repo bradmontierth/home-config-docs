@@ -83,6 +83,10 @@ HOME_COMMANDS_FILE = os.getenv(
 # Published through HA mqtt.publish; the "Voice Broadcast" Node-RED tab
 # subscribes and drives the Amp Speakers subflow (padding + amp wake).
 BROADCAST_TOPIC = os.getenv("BROADCAST_TOPIC", "voice/broadcast")
+# Amp pre-wake, published at stage-2 verify for zone-routed satellites so the
+# ~3s amp wake elapses under ASR+intent+TTS rather than in front of the reply.
+# Node-RED decides whether a wake is actually needed.
+AMP_WAKE_TOPIC = os.getenv("AMP_WAKE_TOPIC", "voice/amp_wake")
 # Target alias table, hot-reloaded on mtime like HOME_COMMANDS_FILE.
 BROADCAST_ROOMS_FILE = os.getenv(
     "BROADCAST_ROOMS_FILE",

@@ -87,15 +87,37 @@ def resolve(target: str | None) -> tuple[list[str] | str, str, bool]:
     return "all", table.get("all", {}).get("spoken", "all the speakers"), False
 
 
-async def _publish(payload: dict) -> None:
+async def _publish(payload: dict, topic: str | None = None) -> None:
     """Publish via HA's mqtt.publish — HA and Node-RED share the broker."""
     async with httpx.AsyncClient(timeout=5) as client:
         r = await client.post(
             f"{config.HA_URL}/api/services/mqtt/publish",
             headers={"Authorization": f"Bearer {_token()}"},
-            json={"topic": config.BROADCAST_TOPIC,
+            json={"topic": topic or config.BROADCAST_TOPIC,
                   "payload": json.dumps(payload)})
         r.raise_for_status()
+
+
+async def amp_wake(rooms: list[str], volume: int | None = None) -> None:
+    """Wake the amp for a zone AHEAD of a reply, at stage-2 wake verify.
+
+    The Amp Speakers subflow only wakes the amp when it believes it is off, and
+    the wake costs ~3s. Firing that here means it elapses under ASR + intent +
+    TTS instead of in front of the answer. Node-RED decides whether a wake is
+    actually needed (see the voice/amp_wake chain) -- we just say "a reply is
+    coming to this room".
+
+    Best-effort by design: a failure here costs at worst the opening syllables,
+    which is strictly better than failing the turn.
+    """
+    payload: dict = {"rooms": rooms}
+    if volume is not None:
+        payload["volume"] = volume
+    try:
+        await _publish(payload, topic=config.AMP_WAKE_TOPIC)
+        log.info("amp pre-wake sent rooms=%s", rooms)
+    except Exception as exc:  # noqa: BLE001 — HA down; the reply still tries
+        log.warning("amp pre-wake failed for %s: %s", rooms, exc)
 
 
 def rooms_list() -> list[dict]:
