@@ -80,11 +80,19 @@ are a prerequisite, not a follow-up.
 
 Three consequences that change the build order:
 
-- **Do item 3 (the `msg.ttsUrl` bypass) up front, not as an optimization.** The
-  Amp Speakers subflow takes TEXT and renders its own TTS, so the cheap version
-  of this — publish `{room, text}` on the existing Voice Broadcast path — would
-  put a second TTS engine and a second voice in the house. The ~10-line bypass
-  keeps one Kokoro voice everywhere and drops a render round-trip.
+- **Do item 3 (the `msg.ttsUrl` bypass) up front, not as an optimization.**
+  Verified against the live Admin API, 2026-08-07. Kokoro *is* the house's fast
+  path, but it lives in **tts-router** (`:8891`), not in the subflow:
+  `main.py:1186` treats a `fast:` or `kokoro:` voice prefix as forced-Kokoro,
+  and the orchestrator already speaks with `TTS_VOICE=fast:doorbell`
+  (`config.py:29`) — that is the doorbell voice. Inside Amp Speakers, though,
+  `Prepare ungroup + wake + TTS` defaults to **`tts.openai` with voice
+  `picard:calm`** — a cloud round-trip in a different voice. It honours
+  `msg.ttsEntity` / `msg.voice` overrides, so `tts.kokoro` looks like a
+  one-property fix — except **the `tts.kokoro` entity is `unavailable`** as of
+  this writing, so that override would fail today. The bypass sidesteps both
+  problems: the orchestrator has already rendered the audio in the right voice,
+  and the subflow just pads, wakes, and announces it.
 - **Item 2's `forceBedroom` is now required, not a nicety.**
   `DisableBedroomAnnouncements` and `adrienneWorkingDisableAnnounce` exist to
   silence the master zone — and that zone is now the *reply* path. Without the
@@ -107,6 +115,39 @@ amp it would land ~3 s late, which is worse than no chime at all. Options:
   playing a 200 ms tone is not competing with the installed speakers for
   anything that matters — replies and music still come out of the zone. This
   keeps sub-second feedback without compromising the reason for the decision.
+
+**4c. BLOCKER FOR PATH A — the master and shower player ids don't exist.**
+Found 2026-08-07 while verifying the reply path. Both the Voice Broadcast tab's
+`Resolve rooms -> amp players` and the Amp Speakers `MA_PLAYER_MAP` key on:
+
+| Room | Entity referenced | Exists in HA? |
+| --- | --- | --- |
+| loft | `media_player.loft` | ✅ |
+| claire | `media_player.claire_room` | ✅ |
+| simon | `media_player.simon_room` | ✅ |
+| master | `media_player.master_bedroom` | ❌ **missing** |
+| shower | `media_player.shower` | ❌ **missing** |
+
+Only `media_player.master_bedroom_snapcast_client` / `_snapcast_group*` and
+`media_player.shower_snapcast_client` / `_snapcast_group*` exist. The bare-name
+entities that both maps depend on are gone.
+
+Two consequences. **Path A cannot speak at all until this is fixed** — the
+master closet's entire reply path resolves to a `node.warn` and a dropped
+message. And **the broadcast intercom to the master and the shower is broken
+today**, which fits the record exactly: broadcast was verified E2E in the loft,
+and the master/shower tests were deferred because the bedroom was occupied.
+Nobody has run those two rooms since.
+
+Diagnose before patching: the `ma_master_bedroom` / `ma_shower` player ids in
+`MA_PLAYER_MAP` suggest Music Assistant still knows these players, so the
+likely cause is the HA-side MA entity being renamed or disabled rather than the
+player disappearing. Fixing the map to point at `_snapcast_client` may work but
+would be a different integration path than the three working rooms — prefer
+restoring the MA entity so all five rooms stay symmetrical.
+
+**Path B is unaffected:** `media_player.simon_room` resolves fine, which means
+Simon's room has a working reply target today and the master closet does not.
 
 **4b. Playback muting is promoted to day-one work.** Appendix A's note that the
 mic hears its own reply from the ceiling with no AEC reference now applies to
@@ -143,11 +184,33 @@ program:** it proves the attic route, the switch ports, and the PoE budget for
 $0 extra. Pull two or three while up there.
 
 Playback: **none locally except the chime.** Replies and music both go to the
-master bath / shower zone (`media_player.shower_snapcast_client`) through the
-Amp Speakers subflow — see Part 1 items 4 and 4a. The Pi needs only a ~$10
-speaker on its 3.5 mm jack for the wake chime (`PLAYBACK_DEVICE` already
-defaults to `plughw:CARD=Headphones`), or none at all if the LED-style feedback
-question gets answered some other way.
+master bath / shower zone through the Amp Speakers subflow — see Part 1 items 4,
+4a and **4c, which is a hard blocker: the shower and master player ids the
+subflow depends on do not currently exist in HA.** Fix that before anything
+else in Path A; there is no reply path until it resolves.
+
+The Pi needs only a ~$10 speaker for the wake chime (`PLAYBACK_DEVICE` already
+defaults to `plughw:CARD=Headphones`).
+
+**Shelf tidiness — the real objection (Brad, 2026-08-07).** The top shelf
+already carries the big TRC metal power-supply enclosure and the LED controller
+for the upstairs LEDs, so this is joining an existing equipment cluster rather
+than starting one, and mains power is already there. Two ways to keep the cable
+count down:
+
+- **PoE + splitter: one cable, not two.** The Cat6 run is happening anyway; an
+  802.3af splitter hands the Pi 5 V and RJ45 off that single drop, so no wall
+  wart and no second cable to the shelf. The parts list in Part 4 already
+  contemplated splitters — this is the one place to buy one now.
+- **A USB-audio speaker rather than 3.5 mm.** Power and audio ride the same
+  cable back to the Pi, instead of a barrel supply plus an audio lead.
+- **Best case — no speaker at all:** if the "Jabra knock-off" is a *speakerphone*
+  puck (mic **and** speaker, like the Jabra 510 it imitates) then the chime plays
+  out of the device already sitting there and the whole question evaporates.
+  **Confirm the model before buying anything.**
+
+That puts the realistic shelf load at: Pi, one Cat6, the mic puck, and possibly
+nothing else.
 
 Note the timing quirk this creates: she rides in the **afternoon**, so the
 "don't wake a sleeping spouse at 6 a.m." objection to using the master zone does
