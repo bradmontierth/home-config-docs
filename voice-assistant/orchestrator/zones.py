@@ -24,7 +24,10 @@ from __future__ import annotations
 import json
 import logging
 import shutil
+import time
 from pathlib import Path
+
+from rapidfuzz import fuzz
 
 from . import config
 
@@ -58,13 +61,39 @@ def _table() -> dict:
 def mute_ms_for(text: str) -> int:
     """How long the satellite should ignore its mic after a zone reply.
 
-    The reply is rendered in Node-RED, so we estimate from the text instead of
-    measuring. Errs long (see config), which costs a slightly later follow-up
-    window; erring short costs a self-heard answer, which is worse.
+    Lead only. We do NOT mute through the speech: the mic reopens as the reply
+    starts, hears it, and is_echo() discards it. That makes the follow-up
+    window self-timing instead of estimated, and leaves barge-in possible.
     """
-    speech_ms = len(text or "") / config.ZONE_MUTE_CHARS_PER_SEC * 1000
-    total = config.ZONE_MUTE_LEAD_MS + speech_ms + config.ZONE_MUTE_MARGIN_MS
-    return int(min(total, config.ZONE_MUTE_MAX_MS))
+    return config.ZONE_MUTE_LEAD_MS
+
+
+# What each zone-routed satellite last said, so we can recognise it coming
+# back in through the mic. Tiny and per-satellite; no eviction needed beyond
+# the freshness window, since the key set is the satellite list.
+_last_reply: dict[str, tuple[float, str]] = {}
+
+
+def note_reply(sat: str | None, text: str) -> None:
+    if sat and text:
+        _last_reply[sat] = (time.time(), text)
+
+
+def is_echo(sat: str | None, transcript: str) -> bool:
+    """True if `transcript` is this satellite hearing its own last reply."""
+    if not sat or not transcript:
+        return False
+    entry = _last_reply.get(sat)
+    if not entry:
+        return False
+    said_at, said = entry
+    if time.time() - said_at > config.ZONE_ECHO_WINDOW_S:
+        return False
+    score = fuzz.ratio(transcript.strip().lower(), said.strip().lower())
+    if score >= config.ZONE_ECHO_THRESHOLD:
+        log.info("echo drop sat=%s score=%.0f %r", sat, score, transcript)
+        return True
+    return False
 
 
 def route_for(sat: str | None) -> dict | None:

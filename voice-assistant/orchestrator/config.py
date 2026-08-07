@@ -105,17 +105,33 @@ SATELLITE_ZONES_FILE = os.getenv(
 # natural barrier and the closet satellite fed two of its own weather answers
 # back as follow-up commands on 2026-08-07.
 #
-# Estimated from the reply text rather than measured, because the render
-# happens in Node-RED. 12 chars/sec is deliberately below the measured rate
-# (44 chars -> 3.11s Kokoro / 3.43s Picard, i.e. 12.8-14.1 c/s) so the estimate
-# errs long. The snapcast tail padding is NOT included: it is silence, and
-# muting through it would only delay a legitimate follow-up.
-ZONE_MUTE_CHARS_PER_SEC = float(os.getenv("ZONE_MUTE_CHARS_PER_SEC", "12"))
-# Isolate + MA announcement start + snapclient buffer, before speech is heard.
+# LEAD ONLY -- deliberately does not cover the speech. An earlier version
+# estimated the spoken length from the text (12 chars/sec) and muted through
+# it, which over-muted badly: a 62-char reply speaks for ~4.4s but was muting
+# 8.0s, i.e. 3.6s of pointless deafness, and it made barge-in impossible.
+#
+# Instead the mic reopens as the reply starts, hears it, and the ECHO check
+# below throws it away. That is self-timing rather than estimated: the
+# follow-up window effectively begins when the reply actually ends, and the
+# user can talk over the answer. Costs one extra ASR round trip per zone turn.
+#
+# This value only needs to cover isolate + MA announcement start + snapclient
+# buffer, so the capture does not open on silence and endpoint immediately.
 ZONE_MUTE_LEAD_MS = int(os.getenv("ZONE_MUTE_LEAD_MS", "2000"))
-ZONE_MUTE_MARGIN_MS = int(os.getenv("ZONE_MUTE_MARGIN_MS", "800"))
-# Never mute the mic for longer than this, whatever the text length says.
-ZONE_MUTE_MAX_MS = int(os.getenv("ZONE_MUTE_MAX_MS", "30000"))
+
+# Own-reply echo rejection. A zone-routed satellite hears its own answer off
+# the room speakers; without this it dispatches that answer as a follow-up
+# command (observed twice on 2026-08-07, transcribed verbatim).
+#
+# Plain fuzz.ratio on the whole string, NOT partial_ratio: partial matching
+# would score 100 whenever a short utterance happens to appear inside the
+# reply text ("yes", "stop"), silently eating real commands. Full-string
+# matching is safe because the mic opens at the start of the reply, so an echo
+# capture is the whole thing.
+ZONE_ECHO_THRESHOLD = float(os.getenv("ZONE_ECHO_THRESHOLD", "80"))
+# Only compare against a reply this recent, so a stale one cannot eat a
+# genuine later command that happens to resemble it.
+ZONE_ECHO_WINDOW_S = float(os.getenv("ZONE_ECHO_WINDOW_S", "45"))
 # Announcement volume 0-100; unset/empty -> the subflow's own default
 # (global defaultSpeakerVolume in Node-RED).
 _bv = os.getenv("BROADCAST_VOLUME", "").strip()

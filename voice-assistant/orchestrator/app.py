@@ -346,10 +346,10 @@ async def _finalize(result: dict, intent: str) -> dict:
                                      route.get("volume"), route.get("voice"))
             result["audio_url"] = None
             result["reply_zone"] = route["rooms"]
-            # The satellite has no local playback to block on here, so tell it
-            # how long to stay deaf or it transcribes its own answer off the
-            # room speakers and dispatches it as a follow-up.
+            # Short lead-in mute only; the echo check does the real work of
+            # keeping our own answer out of the follow-up.
             result["mute_ms"] = zones.mute_ms_for(result["response"])
+            zones.note_reply(_CUR_SAT.get(), result["response"])
         except Exception as exc:  # noqa: BLE001 — HA/MQTT down
             # Fall back to answering on the satellite rather than losing the
             # turn: a reply from the wrong speaker beats silence.
@@ -1121,6 +1121,25 @@ async def command_audio(request: Request, followup: bool = False,
             await events.emit("response", text="I didn't catch that.", intent="none")
         return {"ok": False, "transcript": "", "response": "",
                 "intent": "none", "silent": followup}
+    if followup:
+        # A zone-routed satellite hears its own answer off the room speakers.
+        # Drop it and tell the satellite to keep listening rather than ending
+        # the conversation -- this is what makes the follow-up window
+        # self-timing instead of a guess at the reply's length.
+        if zones.is_echo(sat, transcript):
+            return {"ok": False, "echo": True, "transcript": transcript,
+                    "response": "", "intent": "none"}
+        # Saying the wake word again mid-conversation is natural, and without
+        # this it lands in the classifier as part of the command ("okay
+        # computer what's the forecast") or, said bare, ends the session.
+        wake_found, stripped, _ = verify.verify_and_extract(transcript)
+        if wake_found:
+            if not stripped:
+                log.info("followup sat=%s bare wake word -> relisten", sat)
+                return {"ok": False, "rewake": True, "transcript": transcript,
+                        "response": "", "intent": "none"}
+            log.info("followup wake-strip %r -> %r", transcript, stripped)
+            transcript = stripped
     if not followup:
         await events.emit("transcript", text=transcript)
     # Speaker ID: in active mode the embed starts now (concurrent with intent

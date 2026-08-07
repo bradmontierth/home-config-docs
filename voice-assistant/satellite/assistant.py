@@ -118,6 +118,12 @@ FOLLOWUP_ENABLED = os.getenv("FOLLOWUP_ENABLED", "1").lower() not in ("0", "fals
 FOLLOWUP_WINDOW_MS = int(os.getenv("FOLLOWUP_WINDOW_MS", "7000"))  # wait-for-speech window
 FOLLOWUP_MIN_MS = int(os.getenv("FOLLOWUP_MIN_MS", "300"))        # min capture (no chime bleed)
 FOLLOWUP_MAX_TURNS = int(os.getenv("FOLLOWUP_MAX_TURNS", "6"))    # runaway-session cap
+# Play a quiet tap locally when the follow-up window opens. The dashboard gets
+# a "Listening…" badge, but a satellite with no display in the room leaves the
+# user talking into a mic with no way to know it is open (master closet,
+# 2026-08-07). Off by default so the kitchen, which HAS the display, is
+# unchanged.
+FOLLOWUP_TICK = os.getenv("FOLLOWUP_TICK", "0").lower() not in ("0", "false", "no", "")
 # When the orchestrator answers with awaiting_slot (it asked "for how long?"),
 # hold the mic open longer than a normal follow-up. The whole reason it had to
 # ask is that the user paused to think — they will very likely pause again
@@ -897,7 +903,12 @@ def run_followups(stdout, vad, awaiting: bool = False) -> None:
     answered ("for how long?"), so give this turn the longer thinking window."""
     if not FOLLOWUP_ENABLED:
         return
-    for _ in range(FOLLOWUP_MAX_TURNS):
+    turns = 0
+    # Echo/re-wake rounds deliberately don't spend a turn, so bound the loop
+    # separately: a mic that keeps hearing something echo-shaped must not spin.
+    spins = 0
+    while turns < FOLLOWUP_MAX_TURNS and spins < FOLLOWUP_MAX_TURNS * 3:
+        spins += 1
         if STATE.current_alarm is not None or STATE.alarm_queue:
             return                          # a timer needs the mic — don't hold it
         # Drop the reply that just played (it bled into the mic) so we don't
@@ -909,6 +920,11 @@ def run_followups(stdout, vad, awaiting: bool = False) -> None:
             post_json("/session/listening", {}, timeout=2)
         except Exception:  # noqa: BLE001
             pass
+        # ...and cue the room, for satellites with no display in sight. The
+        # follow-up window is otherwise invisible: you talk and cannot tell
+        # whether anything is listening. Quiet tap, not the wake chime.
+        if FOLLOWUP_TICK:
+            play_file(SOUNDS_DIR / "vad_alt_tap.wav")
         cmd = capture_command(stdout, vad, min_capture_ms=FOLLOWUP_MIN_MS,
                               onset_ms=CLARIFY_WINDOW_MS if awaiting else FOLLOWUP_WINDOW_MS,
                               partials=True)
@@ -920,6 +936,20 @@ def run_followups(stdout, vad, awaiting: bool = False) -> None:
         except Exception as exc:  # noqa: BLE001
             log(f"followup /command/audio failed: {exc}")
             return
+        # Our own reply, heard off the room speakers. Listen again WITHOUT
+        # spending a turn — this is the mechanism that lets the follow-up
+        # window start when the reply actually ends instead of at a guessed
+        # time, and it is why we no longer mute through the whole answer.
+        if resp.get("echo"):
+            log("followup was our own reply echoing back -> still listening")
+            continue
+        # A bare "okay computer" mid-conversation: acknowledge and re-open,
+        # rather than treating it as a command and ending the session.
+        if resp.get("rewake"):
+            log("followup: wake word only -> re-arming")
+            play_file(SOUNDS_DIR / "wake.wav")
+            continue
+        turns += 1
         intent = resp.get("intent")
         reply = resp.get("response") or ""
         if resp.get("silent") or intent in (None, "none") or not reply:
