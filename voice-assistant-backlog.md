@@ -1646,3 +1646,37 @@ The upgrade itself needs a window, a rollback plan, and a smoke-test pathway
 covering every MA API consumer — voice orchestrator, NFC jukebox, Amp Speakers
 subflow, home-audio-adapter, tts-router, HA `media_player.*`. Full inventory,
 risk notes and proposed test pathway: **`home_config/music-assistant-upgrade-plan.md`**.
+
+---
+
+## Music: "close matches" A/B/C picker — MAYBE, not scheduled (added 2026-08-06)
+
+When the resolver refuses, the kitchen gets a flat "I couldn't find X to play."
+Brad's proposal: offer the three closest library matches as A/B/C, pickable by
+voice ("the first one") or by tapping the kitchen display.
+
+Deliberately **not** built with the 2026-08-06 threshold work, for two reasons:
+
+* It belongs in the **middle** band, not the bottom. The proposal had it firing
+  wherever nothing cleared the bar; but below ~50 in a 4,933-entry library the
+  three closest are noise, and reading three unrelated songs aloud is worse than
+  an honest "I don't have that". Shape it as: ≥70 play, 50–70 offer, <50 refuse.
+* Nobody knows yet whether the 50–70 band is a real population. `music_log`
+  (shipped 2026-08-06) now records every resolution with its score, so this is
+  answerable from data instead of guessed:
+
+      SELECT query, score, name FROM music_resolutions
+       WHERE decision = 'refuse' ORDER BY score DESC LIMIT 40;
+
+  Run that after a couple of weeks. A cluster in the 50s–60s justifies the
+  picker; a population down at 40 means we simply don't own the music and the
+  picker would only add chatter.
+
+Build notes for whenever it happens: the machinery already exists (slot-fill
+clarify turns, follow-up re-arm, tappable kitchen-display cards). Two design
+constraints — **don't read library titles aloud** (`(1914) The Planets, Op. 32
+(4. Jupiter, the Bringer of Jollity)` × 3 is unspeakable; say track + artist,
+truncated, and let the full title live on the screen), and **choose candidates
+by gap, not by count** (up to 3 within ~10 points of the best, so a second real
+option never gets a manufactured third companion). Must work voice-only —
+not every satellite has a screen.

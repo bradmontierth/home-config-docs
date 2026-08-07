@@ -1,9 +1,33 @@
 import asyncio
+import os
+import tempfile
 import unittest
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
-from . import config, music
+from . import config, music, music_log
+
+
+def _isolate_music_log(test: unittest.TestCase) -> str:
+    """Point music_log at a throwaway database for the duration of a test.
+
+    play() records every resolution now, so without this the suite writes rows
+    into the live orchestrator.db — which it did, once, before this existed."""
+    path = tempfile.mkdtemp(prefix="music-log-test-") + "/test.db"
+    patcher = patch.object(config, "DB_PATH", path)
+    patcher.start()
+    test.addCleanup(patcher.stop)
+    music_log._db = None
+
+    def _close():
+        if music_log._db is not None:
+            music_log._db.close()
+        music_log._db = None
+        if os.path.exists(path):
+            os.unlink(path)
+
+    test.addCleanup(_close)
+    return path
 
 
 def _entry(kind: str, name: str, artist: str | None, local: bool, uri: str,
@@ -41,6 +65,119 @@ SKELETONS = [
     _entry("playlist", "500 Random tracks (from library)", None, False,
            "builtin://playlist/random_tracks", owned=True),
 ]
+
+
+# The Planets, as the library actually holds it: two recordings of the same
+# movement under formal titles long enough that a spoken query explains only a
+# couple of their tokens, plus a title that contains the word "by".
+JUPITER = [
+    _entry("track", "(1914) The Planets, Op. 32 (4. Jupiter, the Bringer of Jollity)",
+           "Gustav Holst", True, "library://track/711"),
+    _entry("track", "Holst: The Planets, Op. 32: IV. Jupiter, the Bringer of Jollity",
+           "Berliner Philharmoniker, Herbert von Karajan, Gustav Holst", True,
+           "library://track/712"),
+    _entry("artist", "Gustav Holst", None, True, "library://artist/57"),
+    _entry("album", "100 Best Ever Pieces of the Greatest Classical Music",
+           "Gustav Holst", True, "library://album/9"),
+    _entry("track", "Stand By Me", "Ben E. King", True, "library://track/900"),
+]
+
+
+class ConnectorAndThresholdTest(unittest.TestCase):
+    """The 2026-08-06 "play Jupiter by Holst" miss and the bars it exposed."""
+
+    def setUp(self):
+        patcher = patch.object(music, "_ensure_index",
+                               new=AsyncMock(return_value=JUPITER))
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def _resolve(self, query: str, **kw):
+        return asyncio.run(music._resolve_library(query, None, **kw))
+
+    def test_a_by_connector_no_longer_costs_the_match(self):
+        # The original failure: "by" is a query-only token, so token_set_ratio
+        # dropped 100 -> 89.66 and the coverage weight took the result to
+        # 79.65 against a bar of 80. The whole request was refused over a third
+        # of a point.
+        hit = self._resolve("jupiter by holst")
+        self.assertEqual(hit["uri"], "library://track/711")
+        self.assertGreater(hit["score"], 85)
+
+    def test_the_connector_variant_cannot_lose_a_title_containing_by(self):
+        # Variants are combined with max(), so dropping "by" can only ever RAISE
+        # a score — a song whose title needs the word still matches on the
+        # original variant.
+        hit = self._resolve("stand by me")
+        self.assertEqual(hit["uri"], "library://track/900")
+        self.assertEqual(hit["score"], 100)
+
+    def test_a_loose_match_now_plays_instead_of_refusing(self):
+        # A stray ASR word ("thing") lands this at ~72: refused under the old
+        # 80/85 bars, played under 70. The bounds are asserted so that a future
+        # scoring change which moves this case out of the interesting band
+        # fails here loudly rather than silently stops testing the bar.
+        hit = self._resolve("holst jupiter thing")
+        self.assertEqual(hit["uri"], "library://track/711")
+        self.assertGreaterEqual(hit["score"], 70)
+        self.assertLess(hit["score"], 80)
+
+    def test_only_the_album_and_track_bars_were_lowered(self):
+        # Playlist and artist are checked BEFORE album/track, so loosening them
+        # would not recover misses, it would steal them into a shuffle.
+        self.assertEqual(music._LIB_THRESHOLDS,
+                         {"playlist": 92, "artist": 80, "album": 70, "track": 70})
+
+    def test_the_trace_carries_the_ranking_even_when_nothing_qualifies(self):
+        trace: dict = {}
+        self.assertIsNone(self._resolve("baby shark", trace=trace))
+        self.assertTrue(trace["candidates"])
+        # Sorted best-first, and every entry says which bar it had to clear.
+        scores = [c["score"] for c in trace["candidates"]]
+        self.assertEqual(scores, sorted(scores, reverse=True))
+        self.assertLess(scores[0], 70)
+        self.assertTrue(all("bar" in c for c in trace["candidates"]))
+
+
+class MusicLogTest(unittest.TestCase):
+    """Every resolution lands in the durable table — refusals especially."""
+
+    def setUp(self):
+        self.queues = AsyncMock()
+        self.client = AsyncMock()
+        self.client.player_queues = self.queues
+        for target, kw in (("_ma", {"return_value": self.client}),
+                           ("_ensure_index", {"new": AsyncMock(return_value=JUPITER)}),
+                           ("_notify_jukebox_takeover", {"new": AsyncMock()})):
+            patcher = patch.object(music, target, **kw)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        _isolate_music_log(self)
+
+    def test_a_play_is_recorded_with_its_winner(self):
+        asyncio.run(music.play("jupiter by holst"))
+        row = music_log.recent()[0]
+        self.assertEqual(row["decision"], "play")
+        self.assertEqual(row["uri"], "library://track/711")
+        self.assertEqual(row["via"], "library-index")
+        self.assertTrue(row["candidates"])
+
+    def test_a_refusal_records_how_close_it_got(self):
+        # The point of the table: a refusal at 79 means the bar is wrong, one
+        # at 40 means we simply don't own the song. That is only answerable if
+        # the near-miss score lands in a real column rather than NULL.
+        with self.assertRaises(LookupError):
+            asyncio.run(music.play("baby shark"))
+        row = music_log.recent()[0]
+        self.assertEqual(row["decision"], "refuse")
+        self.assertIsNotNone(row["score"])
+        self.assertLess(row["score"], 70)
+        self.assertEqual(row["query"], "baby shark")
+
+    def test_recording_failure_never_costs_the_turn_its_song(self):
+        with patch.object(music_log, "_conn", side_effect=RuntimeError("locked")):
+            sel = asyncio.run(music.play("jupiter by holst"))
+        self.assertEqual(sel["uri"], "library://track/711")
 
 
 class ResolveLibraryTest(unittest.TestCase):
@@ -133,6 +270,7 @@ class PlayFallbackTest(unittest.TestCase):
         patcher = patch.object(music, "_notify_jukebox_takeover", new=AsyncMock())
         patcher.start()
         self.addCleanup(patcher.stop)
+        _isolate_music_log(self)
 
     def _played(self):
         return [c.args[1] for c in self.queues.play_media.await_args_list]

@@ -38,7 +38,7 @@ from music_assistant_client.client import MusicAssistantClient
 from music_assistant_models.enums import MediaType, PlayerState, QueueOption
 from rapidfuzz import fuzz
 
-from . import config
+from . import config, music_log
 
 log = logging.getLogger("orchestrator.music")
 
@@ -255,7 +255,18 @@ def _entry_score(e: dict, qn: str, qc: str, qtokens: list[str], qs: str) -> floa
     return score
 
 
-_LIB_THRESHOLDS = {"playlist": 92, "artist": 80, "album": 85, "track": 80}
+# Album/track dropped from 85/80 to 70 on 2026-08-06. The high bars were
+# calibrated against an asymmetric downside that no longer exists: a
+# below-threshold library match used to fall through to MA search, where the
+# prize for a near-miss was a stranger's recording — or Spotify junk — in front
+# of a kid. Spotify is gone and MUSIC_OWNED_ONLY refuses rather than searches,
+# so the worst case now is the wrong song out of our OWN library, which is a
+# shrug and a second command. Playlist (92, near-exact by design) and artist
+# (80) deliberately did NOT move: both are checked BEFORE album/track, so a
+# loosened bar there doesn't recover misses, it STEALS them — a weak artist
+# match turns a request for one piece into a shuffle of everything ("spears"
+# scored 83 against the track "Sparks" once already).
+_LIB_THRESHOLDS = {"playlist": 92, "artist": 80, "album": 70, "track": 70}
 # Play attempts (winner + fallbacks) before a play_media failure reaches the
 # user. Kept small: each one is a real round-trip and the kitchen is waiting.
 _PLAY_ATTEMPTS = 3
@@ -263,7 +274,8 @@ _PLAY_ATTEMPTS = 3
 
 async def _resolve_library(query: str, media_type: str | None,
                            relaxed: bool = False,
-                           exclude: set[str] | None = None) -> dict | None:
+                           exclude: set[str] | None = None,
+                           trace: dict | None = None) -> dict | None:
     """Best library match for a (possibly misspelled) query, or None. Same
     bucket precedence + thresholds as the search ranker.
 
@@ -276,7 +288,11 @@ async def _resolve_library(query: str, media_type: str | None,
     best score anywhere at a flat 60 floor.
 
     exclude drops URIs a previous play attempt already proved unplayable, so
-    play() can re-run the whole ranking for the next-best candidate."""
+    play() can re-run the whole ranking for the next-best candidate.
+
+    trace, if given, is filled with the per-bucket ranking (scores and the bar
+    each one had to clear) even when the answer is None — a refusal's near-miss
+    is the whole point of music_log."""
     entries = await _ensure_index()
     qn = _norm(query)
     if not entries or not qn:
@@ -286,9 +302,21 @@ async def _resolve_library(query: str, media_type: str | None,
     qn2 = re.sub(r"\bby ([a-z0-9 ]+)$", "", qn).strip()
     tail_artist = (m.group(1).strip() if (m := re.search(r"\bby ([a-z0-9 ]+)$", qn))
                    else None)
+    # ...and once more with the connector word itself dropped, artist kept.
+    # "by" is a query-only token — no title has anything for it to intersect —
+    # so token_set_ratio pays full freight for it: "jupiter by holst" scores
+    # 89.7 against "gustav holst ... jupiter ..." where "jupiter holst" scores
+    # 100, and the coverage weight turns that 10-point drag into the whole
+    # difference between 79.65 and a bar of 80. The stripped-tail variant above
+    # can't cover this, because what it leaves ("jupiter") is a single token and
+    # the token-set path needs two. Safe by construction: variants are combined
+    # with max(), so a new one can only RAISE a score — "Stand By Me" still
+    # matches on the original.
+    qn3 = " ".join(t for t in qn.split() if t != "by")
     variants = [(qn, _collapse(qn), qn.split(), _skeleton(qn))]
-    if qn2 and qn2 != qn:
-        variants.append((qn2, _collapse(qn2), qn2.split(), _skeleton(qn2)))
+    for v in (qn2, qn3):
+        if v and v != qn and all(v != x[0] for x in variants):
+            variants.append((v, _collapse(v), v.split(), _skeleton(v)))
     best: dict[str, tuple[float, dict]] = {}
     for e in entries:
         if exclude and e["uri"] in exclude:
@@ -301,6 +329,12 @@ async def _resolve_library(query: str, media_type: str | None,
         # Beluga", play the one whose files we own.
         if cur is None or (s, e["local"]) > (cur[0], cur[1]["local"]):
             best[e["kind"]] = (s, e)
+    if trace is not None:
+        trace["candidates"] = sorted(
+            [{"kind": k, "name": e["name"], "artist": e["artist"],
+              "uri": e["uri"], "score": round(s, 2), "bar": _LIB_THRESHOLDS[k]}
+             for k, (s, e) in best.items()],
+            key=lambda c: c["score"], reverse=True)
     if relaxed:
         hits = [h for h in best.values() if h[0] >= 60]
         if not hits:
@@ -469,14 +503,23 @@ async def play(query: str | None, media_type: str | None = None) -> dict:
     # library has nothing close.
     sel = None
     via = "library-index"
+    trace: dict = {}
     try:
-        sel = await _resolve_library(query, media_type)
+        sel = await _resolve_library(query, media_type, trace=trace)
     except Exception as exc:  # noqa: BLE001 — resolver trouble must not kill play
         log.warning("library resolver failed, falling back to search: %s", exc)
     if sel is None and config.MUSIC_OWNED_ONLY:
         # Nothing we own is close enough. Say so — the online search that used
         # to run here is exactly the path that answers a kid's request for a
         # song we don't have with a stranger's recording of the same title.
+        # Keep the ranking: how far under the bar our refusals land is the
+        # only evidence that can tell a too-high bar from an absent song.
+        near = (trace.get("candidates") or [{}])[0]
+        log.info("play_music %r -> no owned match (best %s %r score=%s bar=%s)",
+                 query, near.get("kind"), near.get("name"), near.get("score"),
+                 near.get("bar"))
+        music_log.record(query, "refuse", winner=near or None,
+                         candidates=trace.get("candidates"))
         raise LookupError(f"no owned match for {query!r}")
     if sel is None:
         via = "search"
@@ -547,6 +590,8 @@ async def play(query: str | None, media_type: str | None = None) -> dict:
     log.info("play_music %r -> %s %r (%s, shuffle=%s, via=%s, score=%s)",
              query, sel["kind"], sel["name"], sel["uri"], shuffle, via,
              sel.get("score"))
+    music_log.record(query, "play", winner=sel, via=via,
+                     candidates=trace.get("candidates"))
     return {"kind": sel["kind"], "name": sel["name"], "artist": sel.get("artist"),
             "uri": sel["uri"], "shuffle": shuffle}
 
