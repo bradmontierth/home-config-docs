@@ -103,23 +103,76 @@ announcements were hard-capped *below* music and every test level above 75 playe
 identically. Raised to **100** on this player 2026-08-06. The other five amp players
 still ship 15/75.
 
+### The clamp is load-bearing for callers that pass no volume
+
+Raising that ceiling is **not** the no-op it appears to be. The clamp is only
+irrelevant to callers that pass an explicit `volume_level`. A caller that passes
+**none** falls through to `announce_volume_strategy`, and the old `percentual` setting
+computed:
+
+```
+player_volume + (player_volume / 100 * announce_volume)  =  85 + 0.85*85  =  157
+```
+
+157 was survivable only because the 75 clamp swallowed it. Moving the clamp to 100
+pushed every unvolumed caller from 75 straight to 100 — audible within a day.
+
+Two unvolumed kitchen callers exist, both Node-RED functions issuing HA `tts.speak`
+to `media_player_entity_id` with no volume:
+
+- Doorbell **Kitchen fast TTS** — `6c4fd7877eb38795`, Doorbell tab
+- Baby monitor **Kitchen fast TTS** — `bmkitchentts01`, Baby Monitor tab
+
+`tts.speak` aimed at an MA-backed player still goes through MA's announcement path
+(the MA log says `Playback announcement to player Kitchen-Big-Speakers`), so the
+strategy and clamp apply to them exactly as to a direct `play_announcement`.
+
+Settled 2026-08-07: `announce_volume_strategy` **absolute**, `announce_volume` **75**,
+ceiling left at **100**. Explicit callers are untouched (`volume_override` wins over the
+strategy branch); unvolumed callers get a flat, predictable 75.
+
+**Before changing `announce_volume_max`/`_min` on any player, list the callers that pass
+no volume — the clamp may be the only thing bounding them.**
+
+### Voice levels are not equal, and not what you'd guess
+
+Measured 2026-08-07 through the `tts-router` stack behind `tts.openai`:
+
+| Voice | Short utterance | Longer utterance |
+| --- | --- | --- |
+| `picard:calm` | -18.5 LUFS | -21.2 LUFS |
+| `fast:doorbell` (fast Kokoro path) | -24.9 LUFS | -25.7 LUFS |
+
+The fast voice is **4-6 dB quieter** than picard, not louder. If a fast-path
+announcement seems loud, look at volume routing, not the voice — and note that
+loudness-normalizing would make that path *louder*.
+
 Announcements are also quieter than music at the same volume number for an honest
-reason: OpenAI TTS renders around **-21 LUFS** (mono, 24 kHz) while pop masters run
-around **-13.7 LUFS**, and speech is peaky where music is dense. `volume_normalization`
+reason: TTS renders around -21 LUFS (mono, 24 kHz) while pop masters run around
+**-13.7 LUFS**, and speech is peaky where music is dense. `volume_normalization`
 is `false` on this player. If you want the 0-100 numbers to mean the same thing for
 speech and music, normalize the TTS — the `tts-pad-service` container (beelink `:8097`)
 already post-processes clips for the Amp Speakers subflow and would be the place to add
 an ffmpeg `loudnorm` pass. Kitchen announcements currently do not pass through it.
+Doing so would invalidate every level below, so re-sweep afterwards.
+
+### Current levels
+
+| Path | Volume | Set by |
+| --- | --- | --- |
+| Kitchen Message subflow (dishwasher, garage, water leak) | Day 95 / Early Morning 80 / Evening 80 / Night 70 / Away 80 | explicit `volume_level` from the mode map |
+| Doorbell fast TTS | 75 | MA `absolute` strategy (no volume passed) |
+| Baby monitor cry alert | 75 | MA `absolute` strategy (no volume passed) |
 
 Kitchen announcement levels live in the Node-RED **Kitchen Message** subflow
-(`587e7ece8eaefef2`), keyed off global `mode`:
+(`587e7ece8eaefef2`), keyed off global `mode`. `msg.volume` overrides the map. Editing
+that subflow requires a **full** Node-RED deploy — a scoped `PUT /flow` leaves existing
+subflow instances holding stale copies.
 
-```
-Day 95 / Early Morning 80 / Evening 80 / Night 70 / Away 80
-```
-
-`msg.volume` overrides the map. Editing that subflow requires a **full** Node-RED
-deploy — a scoped `PUT /flow` leaves existing subflow instances holding stale copies.
+MA does **not** surface a transient announcement volume in the player's reported
+`volume_level`; polling `players/get` during an announcement just returns the resting
+volume. Don't use that to verify an announcement level — check the config and use your
+ears.
 
 ## Troubleshooting
 
