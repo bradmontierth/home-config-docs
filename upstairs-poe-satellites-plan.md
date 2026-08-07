@@ -203,6 +203,12 @@ the closet, or the loft alongside Simon. Don't add such a pair casually.
 
 ## Part 2 — Path A: the master closet Pi
 
+> **Executable build steps live in
+> [`master-closet-satellite-build.md`](master-closet-satellite-build.md)** —
+> fresh-flash provisioning, exact file/model sources, `.env`, verification, and
+> the stage-1/stage-2 split. This section is the reasoning; that file is the
+> procedure.
+
 ### Hardware and network
 
 The `.24` kitchen Pi, freed by the `.251` mini-PC cutover. **Before it rejoins
