@@ -261,8 +261,46 @@ Motion: Hubitat device 911, on the Node-RED **"Upstairs Bathroom"** tab.
 
 ## 6. Stage 2 — backend work
 
-Full rationale in `upstairs-poe-satellites-plan.md` Part 1. Summary of what to
-build, in order:
+### Reply routing — SHIPPED 2026-08-07 (commit `5972476`)
+
+Items 1–3 below are done. What was built:
+
+| Piece | Where |
+| --- | --- |
+| `sat → {rooms, voice, volume}` table | `orchestrator/satellite_zones.json`, hot-reloaded by `orchestrator/zones.py` |
+| Routing decision | `_finalize()` in `app.py`; `sat` arrives via the `_CUR_SAT` ContextVar |
+| `voice` passthrough | `broadcast.send()` |
+| Live table | `/data/satellite_zones.json` (seeded from the image copy) |
+
+`master` routes to `["shower"]`, voice `fast:doorbell`, **volume 30**. 50 was
+measured too loud in the bath on 2026-08-07 — the amp runs hot gain on that
+zone, so the fix is a quieter announcement rather than re-gaining the amp.
+
+**Compose env var — not in git.** `/home/pi/voice-pipeline/docker-compose.yml`
+is not inside any repo, so this line exists in exactly one place on disk:
+
+```yaml
+- SATELLITE_ZONES_FILE=/data/satellite_zones.json
+```
+
+Without it the orchestrator reads the read-only copy baked into the image,
+which still *works* but cannot be edited without a rebuild.
+
+Two properties worth keeping if this is ever refactored:
+
+- **The satellite needs no code change.** `assistant.py:811` plays a reply only
+  when `audio_url` is present, so omitting it is the entire opt-out. The wake
+  chime is a separate `play_file()` and keeps sounding locally — that is what
+  gives "ding on the USB speaker, answer on the bath speakers" for free. The
+  ask filler stays local too, which is desirable: instant acknowledgement.
+- **Zone failure falls back to the satellite.** If HA/MQTT is unreachable,
+  `_finalize` renders locally instead. A reply from the wrong speaker beats
+  silence.
+
+### Remaining items
+
+Full rationale in `upstairs-poe-satellites-plan.md` Part 1. Items 4–5 below are
+still open; 1–3 are superseded by the table above and kept for context:
 
 1. **Per-satellite target map.** `sat_id → {ma_player, ha_player, playback,
    music_policy, quiet_hours}`, hot-reloaded like `home_commands.json` /
