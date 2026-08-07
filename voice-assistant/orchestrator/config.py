@@ -18,6 +18,12 @@ ASR_CLIENT = os.getenv("ASR_CLIENT", "kitchen")
 # qwen3-next LLM (GX10), OpenAI-compatible; respects enable_thinking=false.
 LLM_URL = os.getenv("LLM_URL", "http://192.168.10.187:8095/v1/chat/completions")
 LLM_MODEL = os.getenv("LLM_MODEL", "qwen3-next")
+# Ceiling on the intent parse. The pretty-printed field skeleton alone costs
+# ~160 tokens on a six-word command, so the old 200 left only ~40 for the
+# "query" echo — a 59-word ozone question needed 214 and truncated mid-JSON,
+# 500ing the turn (2026-08-06). Local model, so headroom is free; the parse
+# stops at the closing brace long before this bites.
+LLM_MAX_TOKENS = int(os.getenv("LLM_MAX_TOKENS", "600"))
 # TTS router (Beelink) → Kokoro fast path. OpenAI /audio/speech shape.
 TTS_URL = os.getenv("TTS_URL", "http://192.168.10.217:8891/v1/audio/speech")
 TTS_VOICE = os.getenv("TTS_VOICE", "fast:doorbell")

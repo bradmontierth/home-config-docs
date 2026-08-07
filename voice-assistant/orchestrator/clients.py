@@ -47,7 +47,7 @@ async def parse_intent_raw(messages: list[dict]) -> str:
         "model": config.LLM_MODEL,
         "messages": messages,
         "temperature": 0,
-        "max_tokens": 200,
+        "max_tokens": config.LLM_MAX_TOKENS,
         "chat_template_kwargs": {"enable_thinking": False},
     }
     async with httpx.AsyncClient(timeout=30) as client:

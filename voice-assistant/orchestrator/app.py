@@ -908,6 +908,24 @@ async def handle_command(command: str, followup: bool = False,
     return await _finalize(result, intent)
 
 
+async def _dispatch(command: str, **kw) -> dict:
+    """handle_command with a turn-closing safety net.
+
+    Every entry point emits "transcript"/"thinking" before dispatching, and the
+    dashboard hands its hide timer to the "response" event that normally
+    follows. So an exception escaping as a 500 doesn't just lose the reply — it
+    strands the popup on screen with no way to clear (2026-08-06: a long ozone
+    question overran the intent parser's token ceiling, and the transcript sat
+    pinned all evening). Answer out loud instead, so the turn always closes."""
+    try:
+        return await handle_command(command, **kw)
+    except Exception:  # noqa: BLE001 — a dead turn must still close itself
+        log.exception("command dispatch failed: %r", command)
+        return await _finalize(
+            {"intent": "none", "ok": False,
+             "response": "Sorry, I had trouble with that."}, "none")
+
+
 # --------------------------------------------------------------------------
 # HTTP surface
 # --------------------------------------------------------------------------
@@ -942,7 +960,7 @@ async def wake(request: Request) -> dict:
         return {"verified": False, "transcript": transcript, "score": score}
 
     await events.emit("transcript", text=command, wake_score=score)
-    result = await handle_command(command)
+    result = await _dispatch(command)
     result.update(
         verified=True, transcript=transcript, score=score,
         latency_ms=round((time.time() - t0) * 1000),
@@ -1068,8 +1086,8 @@ async def command_audio(request: Request, followup: bool = False,
     spk_task = None
     if config.SPEAKER_MODE == "active":
         spk_task = asyncio.create_task(speaker_mod.identify(wav))
-    result = await handle_command(transcript, followup=followup,
-                                  speaker_task=spk_task)
+    result = await _dispatch(transcript, followup=followup,
+                             speaker_task=spk_task)
     result["transcript"] = transcript
     result["latency_ms"] = round((time.time() - t0) * 1000)
     if spk_task is not None:
@@ -1201,7 +1219,7 @@ async def command(payload: dict = Body(...)) -> dict:
     if not text:
         raise HTTPException(400, "missing 'text'")
     t0 = time.time()
-    result = await handle_command(text, followup=bool(payload.get("followup")))
+    result = await _dispatch(text, followup=bool(payload.get("followup")))
     result["latency_ms"] = round((time.time() - t0) * 1000)
     return result
 
