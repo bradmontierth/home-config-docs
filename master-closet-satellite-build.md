@@ -297,6 +297,52 @@ Two properties worth keeping if this is ever refactored:
   `_finalize` renders locally instead. A reply from the wrong speaker beats
   silence.
 
+### Amp pre-wake — SHIPPED 2026-08-07
+
+Node-RED tab **Voice Broadcast** (`e3a9d4391d545738`) gained a second chain on
+topic `voice/amp_wake`: *mqtt in → Pre-wake: decide + ungroup → isolate →
+build wake request → MA API*. Node ids are prefixed `vbwake`.
+
+The orchestrator publishes it at stage-2 verify so the amp finishes waking
+under the ASR + intent + TTS time instead of in front of the reply.
+
+**Why it was needed.** The Amp Speakers subflow skips its 3 s wake gate while
+`wholeHomeAmpLikelyOn` is true, and that global is only cleared after 14 min
+idle. On 2026-08-07 a weather reply at **11.5 min idle** lost its opening
+entirely — only the snapcast tail padding was audible. Replies at 2.7 min and
+0.3 min idle were fine. The Dayton MA1240a manual says "approximately 15
+minutes", with no published tolerance, so 11.5 min is not a fault; **14 was
+simply never a safe threshold.**
+
+The confidence window is therefore **10 min**, measured not spec'd:
+
+| Idle | Behaviour | vs before |
+| --- | --- | --- |
+| < 10 min | no wake | unchanged |
+| 10–14 min | wake | **the only new chimes** — and exactly the window where a reply is currently swallowed |
+| > 14 min | wake | no extra chime; the subflow would have woken it anyway, just ~6 s later |
+
+That last column matters: the wake chime is loud by design (it has to wake the
+amp every time), so a too-eager window is a real annoyance. Tune via the
+`ampPreWakeConfidenceMs` global without editing the flow.
+
+### Self-hearing mute — SHIPPED 2026-08-07
+
+Zone routing removed the local playback that used to keep the mic busy, so
+`run_followups()` opened the mic while the answer was still coming out of the
+walls. The closet satellite transcribed two of its own weather answers and
+dispatched them as follow-up commands — proven by the broadcast log's `len=`
+matching the follow-up transcript exactly (44 and 62 chars, verbatim).
+
+`_finalize` now returns `mute_ms` on zone-routed replies and
+`wait_out_zone_reply()` (satellite) sleeps it out then drains the mic. Absent
+for locally-answering satellites, so it is a no-op there.
+
+Estimated from text length because the render happens in Node-RED: 12 chars/s
+(below the measured 12.8–14.1) + 2000 ms lead + 800 ms margin. The snapcast
+tail padding is deliberately **excluded** — it is silence, and muting through
+it would only delay a legitimate follow-up. ~6.5 s for a typical weather reply.
+
 ### Remaining items
 
 Full rationale in `upstairs-poe-satellites-plan.md` Part 1. Items 4–5 below are

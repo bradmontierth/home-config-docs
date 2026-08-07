@@ -814,6 +814,7 @@ def run_turn(preroll_pcm: bytes, stdout, vad, trigger_t0: float) -> None:
                 play_wav_bytes(get_bytes(ORCH_BASE + url))
             except Exception as exc:  # noqa: BLE001
                 log(f"reply playback failed: {exc}")
+        wait_out_zone_reply(stdout, resp)
         run_followups(stdout, vad, awaiting=bool(resp.get("awaiting_slot")))
     finally:
         unduck_music()
@@ -858,7 +859,32 @@ def run_manual_turn(stdout, vad) -> None:
             play_wav_bytes(get_bytes(ORCH_BASE + url))
         except Exception as exc:  # noqa: BLE001
             log(f"manual reply playback failed: {exc}")
+    wait_out_zone_reply(stdout, resp)
     run_followups(stdout, vad, awaiting=bool(resp.get("awaiting_slot")))
+
+
+def wait_out_zone_reply(stdout, resp: dict) -> None:
+    """Stay deaf while a zone-routed reply plays out of the room speakers.
+
+    Satellites that answer locally never need this: play_wav_bytes() blocks
+    for the whole reply, so the mic is busy until it ends. When the
+    orchestrator routes the reply to a whole-home audio zone instead
+    (orchestrator/zones.py) there is no local playback to block on, and
+    run_followups() would otherwise open the mic while the answer is still
+    coming out of the walls -- the closet satellite transcribed two of its own
+    weather answers and dispatched them as follow-up commands on 2026-08-07.
+
+    `mute_ms` is the orchestrator's estimate of the spoken length; absent for
+    every satellite that answers locally, so this is a no-op there. Wake
+    detection is already paused on this path (single mic reader) and alarms
+    still fire on the HTTP thread, so sleeping here costs nothing extra.
+    """
+    mute_ms = resp.get("mute_ms")
+    if not mute_ms:
+        return
+    log(f"zone reply: mic muted {mute_ms}ms")
+    time.sleep(mute_ms / 1000.0)
+    drain_input(stdout)         # discard the reply we just let bleed in
 
 
 def run_followups(stdout, vad, awaiting: bool = False) -> None:

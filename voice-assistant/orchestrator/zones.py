@@ -55,6 +55,18 @@ def _table() -> dict:
     return _cache[1]
 
 
+def mute_ms_for(text: str) -> int:
+    """How long the satellite should ignore its mic after a zone reply.
+
+    The reply is rendered in Node-RED, so we estimate from the text instead of
+    measuring. Errs long (see config), which costs a slightly later follow-up
+    window; erring short costs a self-heard answer, which is worse.
+    """
+    speech_ms = len(text or "") / config.ZONE_MUTE_CHARS_PER_SEC * 1000
+    total = config.ZONE_MUTE_LEAD_MS + speech_ms + config.ZONE_MUTE_MARGIN_MS
+    return int(min(total, config.ZONE_MUTE_MAX_MS))
+
+
 def route_for(sat: str | None) -> dict | None:
     """Reply route for a satellite id, or None to keep the default
     answer-on-the-satellite behaviour. A malformed table must never take the

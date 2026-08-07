@@ -93,6 +93,25 @@ BROADCAST_ROOMS_FILE = os.getenv(
 SATELLITE_ZONES_FILE = os.getenv(
     "SATELLITE_ZONES_FILE",
     os.path.join(os.path.dirname(__file__), "satellite_zones.json"))
+
+# How long a zone-routed satellite should ignore its mic after a reply, so the
+# follow-up listener doesn't transcribe the answer coming back off the room
+# speakers. Answering locally never needed this: play_wav_bytes() blocks until
+# the audio finishes, so the mic was already busy. Zone routing removed that
+# natural barrier and the closet satellite fed two of its own weather answers
+# back as follow-up commands on 2026-08-07.
+#
+# Estimated from the reply text rather than measured, because the render
+# happens in Node-RED. 12 chars/sec is deliberately below the measured rate
+# (44 chars -> 3.11s Kokoro / 3.43s Picard, i.e. 12.8-14.1 c/s) so the estimate
+# errs long. The snapcast tail padding is NOT included: it is silence, and
+# muting through it would only delay a legitimate follow-up.
+ZONE_MUTE_CHARS_PER_SEC = float(os.getenv("ZONE_MUTE_CHARS_PER_SEC", "12"))
+# Isolate + MA announcement start + snapclient buffer, before speech is heard.
+ZONE_MUTE_LEAD_MS = int(os.getenv("ZONE_MUTE_LEAD_MS", "2000"))
+ZONE_MUTE_MARGIN_MS = int(os.getenv("ZONE_MUTE_MARGIN_MS", "800"))
+# Never mute the mic for longer than this, whatever the text length says.
+ZONE_MUTE_MAX_MS = int(os.getenv("ZONE_MUTE_MAX_MS", "30000"))
 # Announcement volume 0-100; unset/empty -> the subflow's own default
 # (global defaultSpeakerVolume in Node-RED).
 _bv = os.getenv("BROADCAST_VOLUME", "").strip()

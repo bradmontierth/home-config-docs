@@ -346,6 +346,10 @@ async def _finalize(result: dict, intent: str) -> dict:
                                      route.get("volume"), route.get("voice"))
             result["audio_url"] = None
             result["reply_zone"] = route["rooms"]
+            # The satellite has no local playback to block on here, so tell it
+            # how long to stay deaf or it transcribes its own answer off the
+            # room speakers and dispatches it as a follow-up.
+            result["mute_ms"] = zones.mute_ms_for(result["response"])
         except Exception as exc:  # noqa: BLE001 — HA/MQTT down
             # Fall back to answering on the satellite rather than losing the
             # turn: a reply from the wrong speaker beats silence.
