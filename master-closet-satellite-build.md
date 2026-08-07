@@ -268,32 +268,56 @@ build, in order:
    music_policy, quiet_hours}`, hot-reloaded like `home_commands.json` /
    `broadcast_rooms.json`. Point `master` at `ma_loft` while developing, so
    testing does not disturb the master bedroom.
-2. **Reply routing.** Orchestrator publishes `{room, ttsUrl, volume,
-   forceBedroom}` on reply; kick the amp wake at **stage-2 verify** so the 3 s
-   gate elapses under ASR + intent + TTS. Add the ~10-line `msg.ttsUrl` bypass
-   to the **Amp Speakers** subflow (`e711d48f74f78209`) so it plays the
-   orchestrator's already-rendered Kokoro audio instead of re-rendering.
-   Deploy via the Admin API per `nodered-flow-agent-guide.md`.
-3. **`forceBedroom` — do not skip.** The subflow filters out the literal string
-   `media_player.master_bedroom` whenever `DisableBedroomAnnouncements` or
-   `adrienneWorkingDisableAnnounce` is set; `msg.forceBedroom === true` is the
-   only override. Without it a closet reply is dropped with nothing but a
-   `node.warn`. **Most likely day-one failure.**
+2. **Reply routing — reuse the broadcast chain; no Node-RED change.**
+   Verified live 2026-08-07. `POST :8785/broadcast` → MQTT `voice/broadcast` →
+   the *Voice Broadcast* tab's resolver → **Amp Speakers**. The resolver
+   already forwards a voice (`if (typeof p.voice === "string" && p.voice)
+   msg.voice = p.voice;`), and the subflow already honours `msg.voice` and
+   `msg.volume`. So the orchestrator only has to send:
+
+   ```json
+   {"rooms": ["shower"], "message": "...", "voice": "fast:doorbell", "volume": 50}
+   ```
+
+   The **only** code change is a `voice` passthrough in `broadcast.send()`
+   (`broadcast.py:110`), which today takes just `(rooms, message, volume)`.
+   Still kick the amp wake at **stage-2 verify** so the 3 s cold-amp gate
+   elapses under ASR + intent + TTS.
+3. **`forceBedroom` is not needed — do not implement it.** The subflow filters
+   exactly one string, `MASTER_BEDROOM_PLAYER = "media_player.master_bedroom"`
+   (verified in the live flow). `media_player.shower` → `ma_shower` is never
+   touched, and the master bath speakers are the intended target anyway.
+
+   Beyond being unnecessary, `forceBedroom: true` would be *wrong*:
+   `adrienneWorkingDisableAnnounce` keys off the power draw of Adrienne's
+   monitor and exists precisely to keep the bedroom quiet while she works.
+   Overriding it would make the closet satellite the one device in the house
+   that ignores it. Route to `shower` and the flag is respected for free.
 4. **Per-room music policy.** `music.py` targets the kitchen queue
    unconditionally (`config.py:239`) and shuffles artists/playlists
    (`music.py:568`). Needs `{queue_id, single_track}`.
 5. **Playback muting.** Suppress this room's detection for the reply duration
    + ~500 ms. Build it now, but see §7 — it cannot be tested from the desk.
 
-### TTS voice — the trap
+### TTS voice — pass `msg.voice`, that is all
 
-Kokoro is the house voice, but it lives in **tts-router** (`:8891`):
-`main.py:1186` treats a `fast:` / `kokoro:` prefix as forced-Kokoro, and the
-orchestrator already speaks as `TTS_VOICE=fast:doorbell` (`config.py:29`).
-Inside Amp Speakers the default is **`tts.openai`, voice `picard:calm`** — cloud,
-wrong voice. It honours `msg.ttsEntity`, but the `tts.kokoro` HA entity was
-`unavailable` as of 2026-08-07, so the override is not a reliable fix. The
-`ttsUrl` bypass sidesteps both.
+**`tts.openai` is not OpenAI.** It is only the *name* of the HA integration;
+it points at the local **tts-router** on the Beelink (`:8891`), which forwards
+to the GX10. Nothing in this path leaves the house. (An earlier draft of this
+guide called it "cloud" — that was wrong.)
+
+Kokoro is reached through that same entity by voice prefix: `main.py:1186`
+treats a `fast:` / `kokoro:` base voice as forced-Kokoro. So sending
+`voice: "fast:doorbell"` through the broadcast chain gets the house Kokoro
+voice with **no subflow edit** — it is the same fast path the doorbell
+announcements already use in production.
+
+The subflow's defaults (`tts.openai`, `picard:calm`) apply only when nothing
+overrides them; `msg.voice` wins. Do **not** chase the `tts.kokoro` HA entity —
+it was `unavailable` as of 2026-08-07 and is not needed. Earlier drafts
+proposed an `msg.ttsUrl` bypass so the orchestrator's already-rendered audio
+could be played directly; that is unnecessary complexity given the above, and
+has been dropped.
 
 ### The "keep the lights on" hold
 

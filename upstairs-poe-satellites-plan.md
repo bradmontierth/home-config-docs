@@ -92,25 +92,31 @@ are a prerequisite, not a follow-up.
 
 Three consequences that change the build order:
 
-- **Do item 3 (the `msg.ttsUrl` bypass) up front, not as an optimization.**
-  Verified against the live Admin API, 2026-08-07. Kokoro *is* the house's fast
-  path, but it lives in **tts-router** (`:8891`), not in the subflow:
-  `main.py:1186` treats a `fast:` or `kokoro:` voice prefix as forced-Kokoro,
-  and the orchestrator already speaks with `TTS_VOICE=fast:doorbell`
-  (`config.py:29`) — that is the doorbell voice. Inside Amp Speakers, though,
-  `Prepare ungroup + wake + TTS` defaults to **`tts.openai` with voice
-  `picard:calm`** — a cloud round-trip in a different voice. It honours
-  `msg.ttsEntity` / `msg.voice` overrides, so `tts.kokoro` looks like a
-  one-property fix — except **the `tts.kokoro` entity is `unavailable`** as of
-  this writing, so that override would fail today. The bypass sidesteps both
-  problems: the orchestrator has already rendered the audio in the right voice,
-  and the subflow just pads, wakes, and announces it.
-- **Item 2's `forceBedroom` is now required, not a nicety.**
-  `DisableBedroomAnnouncements` and `adrienneWorkingDisableAnnounce` exist to
-  silence the master zone — and that zone is now the *reply* path. Without the
-  override, a question asked in the closet gets answered into a muted zone and
-  the user hears nothing, with no error anywhere. This is the most likely
-  day-one "it just doesn't work" failure of Path A.
+- **The voice needs one property, not a bypass.** *Corrected 2026-08-07 — an
+  earlier revision of this bullet called for an `msg.ttsUrl` bypass and
+  described `tts.openai` as a cloud round-trip. Both were wrong.*
+  `tts.openai` is merely the *name* of the HA integration; it points at the
+  local **tts-router** (`:8891`) which forwards to the GX10. Nothing leaves the
+  house. Kokoro is reached through that same entity by prefix —
+  `main.py:1186` treats a `fast:` or `kokoro:` base voice as forced-Kokoro, and
+  the orchestrator already speaks as `TTS_VOICE=fast:doorbell`
+  (`config.py:29`). Passing `voice: "fast:doorbell"` therefore yields the house
+  voice with **no subflow edit at all**: it is the same fast path the doorbell
+  announcements use in production. Ignore the `tts.kokoro` entity (it is
+  `unavailable`); it is not on this path.
+- **`forceBedroom` is NOT required — drop it.** *Corrected 2026-08-07 against
+  the live flow, where an earlier revision called it the most likely day-one
+  failure.* The subflow filters exactly one string,
+  `MASTER_BEDROOM_PLAYER = "media_player.master_bedroom"`.
+  `media_player.shower` → `ma_shower` is never filtered, and the master bath
+  speakers are Path A's intended target anyway. So the suppressors are simply
+  not on the reply path.
+
+  It would also be the wrong thing to build. `adrienneWorkingDisableAnnounce`
+  keys off the power draw of Adrienne's monitor and exists to keep the bedroom
+  quiet while she works; `forceBedroom: true` would make the closet satellite
+  the one device in the house that ignores it. Routing to `shower` respects it
+  for free.
 - **The 3-second amp wake is genuinely cheap, as designed.** Kick it at stage-2
   verify and the gate elapses under ASR + intent + TTS, which is ~1.5–4 s on an
   ordinary turn and far longer on an ask. It costs nothing on the paths that are
@@ -865,13 +871,13 @@ Work items, in order:
 
 1. Per-satellite target map (`sat_id → {playback, ma_player, ha_player,
    quiet_hours}`), hot-reloaded like `home_commands.json`.
-2. Orchestrator publishes `{room, ttsUrl, volume, forceBedroom}` on reply, and
-   kicks the amp wake at verify. `forceBedroom` is needed because
-   `DisableBedroomAnnouncements` / `adrienneWorkingDisableAnnounce` must not
-   silence a reply to someone who just spoke in that room.
-3. Node-RED: new tab mirroring "Voice Broadcast", plus a ~10-line `msg.ttsUrl`
-   bypass in Amp Speakers so Kokoro audio is used instead of a cloud TTS round
-   trip. Deploy via the Admin API per `nodered-flow-agent-guide.md`.
+2. Orchestrator publishes `{rooms, message, voice: "fast:doorbell", volume}` on
+   reply and kicks the amp wake at verify. No `forceBedroom` — see the
+   correction above; `ma_shower` is never filtered.
+3. **No Node-RED work.** *Corrected 2026-08-07:* the existing `voice/broadcast`
+   → *Voice Broadcast* tab → Amp Speakers chain already carries `msg.voice` and
+   `msg.volume` end to end, verified live. The only code change anywhere is a
+   `voice` passthrough in `broadcast.send()` (`broadcast.py:110`).
 4. `orchestrator/streamsat.py`: WS ingest, ring buffer, RMS gate, stage-1 loop,
    Silero endpointing, playback gating, per-client health + Pushover alert.
    Port `capture_command` / `SileroVad` from `satellite/assistant.py:598`/`:561`
