@@ -142,14 +142,29 @@ different integration and break the three rooms that work.
 
 Two real notes survive the correction:
 
-- **Grouping is why the ungroup step exists.** Grouped players cannot be
+- **The HA entities were never missing — they carry legacy entity ids.**
+  Resolved by Brad, 2026-08-07: `media_player.speaker_pi` is the master bedroom
+  and `media_player.speaker_pi_2` is the master shower. Both are online, and
+  both carry the MA-supplied friendly names ("Master Bedroom", "Shower"), which
+  is why an entity-id search finds nothing and a friendly-name search finds them
+  instantly. **Search this house's media players by friendly name, not entity
+  id.** This fills Appendix A item 1's `ha_player` field for both rooms.
+
+  **Recommended cleanup: rename them to `media_player.master_bedroom` and
+  `media_player.shower`.** Nothing references the current ids — verified across
+  the live Node-RED flows, `home_config`, HA dashboards and automations,
+  `dashboard_webapp`, `homepage` and `homebridge`; the only hits are HA's own
+  entity registry, `core.restore_state` and the log. The rename is functionally
+  inert (the announce path is MA-native either way) but it makes the two room
+  maps literally correct instead of coincidentally string-keyed, restores
+  symmetry with loft/claire/simon, and removes the exact trap that produced the
+  false blocker above.
+
+- **Grouping is still why the ungroup step exists.** Grouped players cannot be
   announced to individually, which is what the per-player `/v1/isolate` call is
-  for. It does not, however, explain the missing HA entities right now — nothing
-  is currently synced (`synced_to=None`, empty `group_childs`) and the entities
-  are still absent, so the likeliest cause is that those two are disabled or
-  hidden in the HA entity registry. Only worth chasing if something ever needs
-  the **HA** entity: Appendix A item 1's `ha_player` field would be empty for
-  these two rooms.
+  for. But note these entities do *not* vanish when grouped — they expose a
+  `group_members` attribute (currently empty). Don't rely on presence/absence of
+  an entity as a grouping signal.
 - **`forceBedroom` is confirmed required, from the code.** The subflow filters
   on the literal string `media_player.master_bedroom` whenever
   `DisableBedroomAnnouncements` or `adrienneWorkingDisableAnnounce` is set, and
