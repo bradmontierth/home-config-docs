@@ -42,31 +42,23 @@ you end up unable to tell which layer is lying.
 ## 2. Flash and base OS
 
 Raspberry Pi OS (64-bit). In RPi Imager's advanced options set hostname,
-user `pi`, your SSH key, and locale. Suggested hostname: `closet-pi`.
+user `pi`, your SSH key, and locale. Hostname: `master-closet-assist`.
 
 ### SSH access (done 2026-08-07)
 
 The board keeps its DHCP reservation across a reflash — same NIC MAC
 `e4:5f:01:67:1e:56`, so it comes back at **192.168.10.24**.
 
-Per house convention (one dedicated keypair per host) the Beelink now holds
-`~/.ssh/id_ed25519_closet_pi`, and the `~/.ssh/config` entry that used to be
-named `kitchen-speaker` was **renamed to `closet-pi`** and repointed at the new
-key. That alias was already recorded as a trap — it pointed at the powered-off
-old kitchen Pi while the live kitchen box is `big-speaker-mini-pc`
-(192.168.10.251). Renaming it retires the trap instead of leaving two aliases
-on one address. Stale docs that still say `ssh kitchen-speaker` (e.g.
-`voice-assistant-plan.md:898`) now fail loudly rather than silently connecting
-to the wrong Pi.
+Per house convention (one dedicated keypair per host) the alias is
+**`master-closet-assist`** → `~/.ssh/id_ed25519_master_closet_assist`, and the
+Pi's own hostname is `master-closet-assist`. Passwordless from the Beelink,
+confirmed 2026-08-07.
 
-Install the public key once — needs the password set in RPi Imager, so it is
-run by hand:
-
-```bash
-ssh-copy-id -i ~/.ssh/id_ed25519_closet_pi.pub \
-  -o StrictHostKeyChecking=accept-new pi@192.168.10.24
-ssh closet-pi hostname     # confirms passwordless
-```
+The old `kitchen-speaker` entry on this same address was **deleted**. It was
+already recorded as a trap — it pointed at the powered-off old kitchen Pi while
+the live kitchen box is `big-speaker-mini-pc` (192.168.10.251). Stale docs that
+still say `ssh kitchen-speaker` (e.g. `voice-assistant-plan.md:898`) now fail
+loudly rather than silently connecting to the wrong machine.
 
 The flash also replaced the host key, so the stale `known_hosts` entry for
 `.24` was removed (`ssh-keygen -R`).
@@ -78,7 +70,7 @@ in §3 — packages, venv with pinned versions, code, sounds, models, service un
 and a seeded `.env`. Run it **from the Beelink**:
 
 ```bash
-/home/pi/home_config/voice-assistant/satellite/provision-satellite.sh closet-pi master
+/home/pi/home_config/voice-assistant/satellite/provision-satellite.sh master-closet-assist master
 ```
 
 It deliberately stops short of two things it cannot know: the ALSA device names

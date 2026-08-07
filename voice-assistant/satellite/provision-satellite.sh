@@ -8,7 +8,7 @@
 #
 # Idempotent: safe to re-run. Never overwrites an existing .env.
 #
-#   ./provision-satellite.sh closet-pi master
+#   ./provision-satellite.sh master-closet-assist master
 #
 # After it finishes: edit the .env on the target, then
 #   ssh <alias> 'sudo systemctl enable --now voice-assistant'
