@@ -134,8 +134,8 @@ Not in git, by design. Stage-1 values:
 ```ini
 SATELLITE_ID=master
 ORCH_BASE=http://192.168.10.217:8785
-MIC_DEVICE=plughw:CARD=<from arecord -L>
-PLAYBACK_DEVICE=plughw:CARD=<USB speaker from aplay -L>
+MIC_DEVICE=plughw:CARD=microphone,DEV=0
+PLAYBACK_DEVICE=plughw:CARD=Device,DEV=0
 MODEL_PATHS=/home/pi/wake-bench/okay_computer.onnx,/home/pi/wake-bench/okay_google.onnx
 SILERO_MODEL=/home/pi/voice-pipeline/silero_vad.onnx
 SILERO_THRESHOLD=0.4
@@ -143,6 +143,23 @@ HOP_MS=320
 ORT_THREADS=2
 MODE=active
 ```
+
+**Resolved devices (2026-08-07).** Both are USB, so ALSA card *names* are used
+rather than numbers, which reorder across reboots.
+
+| Role | Hardware | ALSA card |
+| --- | --- | --- |
+| Mic | TONOR G11 (`0d8c:0134`, C-Media) — "the Jabra knock-off" | `microphone` |
+| Chime speaker | GEMBIRD Buildwin Media-Player (`1908:2220`) | `Device` |
+
+The speaker's card name is the generic string **`Device`** — it comes straight
+from a lazy USB descriptor. It is unambiguous today, but plugging in a second
+no-name USB audio dongle would collide. If that ever happens, pin it with a
+udev rule on `1908:2220` rather than renumbering.
+
+Its mixer exposes a single joined-mono `PCM` control (range 0–240, set to 75%).
+The chime is 44.1 kHz stereo and this dongle is mono — `plughw` (not `hw`)
+does the resample and downmix, which is why the prefix matters here.
 
 Rationale for the two tuning values, both inherited rather than invented:
 `SILERO_THRESHOLD=0.4` is the kitchen's setting after the oven-corner
