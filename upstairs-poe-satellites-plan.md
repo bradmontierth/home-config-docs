@@ -116,38 +116,45 @@ amp it would land ~3 s late, which is worse than no chime at all. Options:
   anything that matters — replies and music still come out of the zone. This
   keeps sub-second feedback without compromising the reason for the decision.
 
-**4c. BLOCKER FOR PATH A — the master and shower player ids don't exist.**
-Found 2026-08-07 while verifying the reply path. Both the Voice Broadcast tab's
-`Resolve rooms -> amp players` and the Amp Speakers `MA_PLAYER_MAP` key on:
+**4c. NOT a blocker — the reply path is MA-native and never resolves an HA
+entity.** An earlier revision of this document (commit `0be8ba5`) called the
+missing `media_player.master_bedroom` and `media_player.shower` entities a hard
+blocker for Path A. **That was wrong, and the wrong fix would have broken a
+working path.** Corrected here per Brad's challenge, with the mechanism read out
+of the live subflow:
 
-| Room | Entity referenced | Exists in HA? |
-| --- | --- | --- |
-| loft | `media_player.loft` | ✅ |
-| claire | `media_player.claire_room` | ✅ |
-| simon | `media_player.simon_room` | ✅ |
-| master | `media_player.master_bedroom` | ❌ **missing** |
-| shower | `media_player.shower` | ❌ **missing** |
+- `msg.players` carries HA entity-id **strings used only as keys** into
+  `MA_PLAYER_MAP`. Nothing looks them up in HA.
+- Every audio command is addressed by **MA player id**:
+  `players/cmd/play_announcement` with `player_id: ma_shower`, and
+  home-audio-adapter `/v1/isolate` with the same id.
+- The only HA call in the subflow is `tts_get_url`, which is not
+  player-specific.
+- **All five MA players are live and available**, verified against the MA API
+  2026-08-07: `ma_loft`, `ma_simon_room`, `ma_claire_room`,
+  `ma_master_bedroom`, `ma_shower` — all `available=True`, none synced.
 
-Only `media_player.master_bedroom_snapcast_client` / `_snapcast_group*` and
-`media_player.shower_snapcast_client` / `_snapcast_group*` exist. The bare-name
-entities that both maps depend on are gone.
+So the master and shower reply paths are fine, and **the broadcast intercom to
+those rooms is untested, not broken** — the earlier claim that it had been
+quietly failing is retracted. **Do not "fix" `MA_PLAYER_MAP` by repointing it at
+`_snapcast_client` entities.** That would swap a working MA-native path for a
+different integration and break the three rooms that work.
 
-Two consequences. **Path A cannot speak at all until this is fixed** — the
-master closet's entire reply path resolves to a `node.warn` and a dropped
-message. And **the broadcast intercom to the master and the shower is broken
-today**, which fits the record exactly: broadcast was verified E2E in the loft,
-and the master/shower tests were deferred because the bedroom was occupied.
-Nobody has run those two rooms since.
+Two real notes survive the correction:
 
-Diagnose before patching: the `ma_master_bedroom` / `ma_shower` player ids in
-`MA_PLAYER_MAP` suggest Music Assistant still knows these players, so the
-likely cause is the HA-side MA entity being renamed or disabled rather than the
-player disappearing. Fixing the map to point at `_snapcast_client` may work but
-would be a different integration path than the three working rooms — prefer
-restoring the MA entity so all five rooms stay symmetrical.
-
-**Path B is unaffected:** `media_player.simon_room` resolves fine, which means
-Simon's room has a working reply target today and the master closet does not.
+- **Grouping is why the ungroup step exists.** Grouped players cannot be
+  announced to individually, which is what the per-player `/v1/isolate` call is
+  for. It does not, however, explain the missing HA entities right now — nothing
+  is currently synced (`synced_to=None`, empty `group_childs`) and the entities
+  are still absent, so the likeliest cause is that those two are disabled or
+  hidden in the HA entity registry. Only worth chasing if something ever needs
+  the **HA** entity: Appendix A item 1's `ha_player` field would be empty for
+  these two rooms.
+- **`forceBedroom` is confirmed required, from the code.** The subflow filters
+  on the literal string `media_player.master_bedroom` whenever
+  `DisableBedroomAnnouncements` or `adrienneWorkingDisableAnnounce` is set, and
+  `msg.forceBedroom === true` is the only override. Without it, a closet reply
+  is dropped by that filter with nothing but a `node.warn`.
 
 **4b. Playback muting is promoted to day-one work.** Appendix A's note that the
 mic hears its own reply from the ceiling with no AEC reference now applies to
@@ -184,10 +191,9 @@ program:** it proves the attic route, the switch ports, and the PoE budget for
 $0 extra. Pull two or three while up there.
 
 Playback: **none locally except the chime.** Replies and music both go to the
-master bath / shower zone through the Amp Speakers subflow — see Part 1 items 4,
-4a and **4c, which is a hard blocker: the shower and master player ids the
-subflow depends on do not currently exist in HA.** Fix that before anything
-else in Path A; there is no reply path until it resolves.
+master bath / shower zone through the Amp Speakers subflow, addressed as the MA
+player `ma_shower` — see Part 1 items 4, 4a and 4c. The MA player is live and
+available; the missing `media_player.shower` HA entity is not in this path.
 
 The Pi needs only a ~$10 speaker for the wake chime (`PLAYBACK_DEVICE` already
 defaults to `plughw:CARD=Headphones`).
