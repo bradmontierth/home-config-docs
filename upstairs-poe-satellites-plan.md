@@ -55,6 +55,18 @@ same work whichever device is in the room.
 music_policy, quiet_hours}`, hot-reloaded from JSON like `home_commands.json`
 and `broadcast_rooms.json` already are. Nothing today is per-room.
 
+> **Bootstrap the room→device mapping from Dashy, don't reconstruct it.**
+> (Brad, 2026-08-07.) "Dashy the Dashboard" — `url_path: dash-with-sections`,
+> stored at `homeassistant/config/.storage/lovelace.dash_with_sections` — has 39
+> views, and its **Upstairs** view is already sectioned exactly the way this
+> project needs: Master Bedroom (24 cards), Simon's Room (19), Claire's Room
+> (14), Kitty Bathroom, Loft/Laundry/Stair, Attic. There is also a dedicated
+> **Blinds** view. It is hand-maintained, so it reflects what is actually in
+> each room rather than what entity naming implies — which is the failure mode
+> that produced two wrong turns in this document already (`speaker_pi`, and the
+> "Upstairs Bath" ambiguity). Read the section, then verify against HA; do not
+> infer room membership from entity ids.
+
 **2. Room × state intent allowlist — design the state axis in now.** Not just
 `room → [intents]` but `room × state → [intents]`, because Path B's core
 requirement is state-dependent (below). Retrofitting a state dimension onto a
@@ -310,10 +322,8 @@ or Nap" tab touches the closet too. **Enumerate every branch that can turn any
 of the four off and gate them all on the one global.** Miss one and the lights
 still go out, and the feature reads as broken rather than partial.
 
-**Also confirm before building:** that `cover.upstairs_bath_blind` is the master
-bath blind and not a kids'-bathroom blind. This house uses "Upstairs Bath" for
-both the master closet LED flow and this cover, which is suggestive but not
-proof.
+**Blind confirmed** (Brad, 2026-08-07): `cover.upstairs_bath_blind` *is* the
+master bath blind. No open confirms remain in Path A.
 
 ---
 
@@ -378,7 +388,7 @@ a GX10 night, the same shape as okay_google. Not a surprise; a card to hold.
 | Say | Does | Notes |
 | --- | --- | --- |
 | "goodnight" | Bedtime scene for the room | new Voice Button |
-| "open / close the blind" | Simon's blind | **confirm which cover** — `cover.boys_room_baby_blind` vs `cover.babyblind_windowshade` vs `switch.babyblind` |
+| "open / close the blind" | `cover.boys_room_baby_blind` | confirmed 2026-08-07 |
 | lights | `light.simon_fan_lights`, `light.simon_room_crown_*` | existing entities |
 | "play Raffi" | `media_player.simon_room`, **one track, no shuffle** | needs Part 1 item 3 |
 
