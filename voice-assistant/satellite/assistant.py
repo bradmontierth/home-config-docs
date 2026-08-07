@@ -118,12 +118,6 @@ FOLLOWUP_ENABLED = os.getenv("FOLLOWUP_ENABLED", "1").lower() not in ("0", "fals
 FOLLOWUP_WINDOW_MS = int(os.getenv("FOLLOWUP_WINDOW_MS", "7000"))  # wait-for-speech window
 FOLLOWUP_MIN_MS = int(os.getenv("FOLLOWUP_MIN_MS", "300"))        # min capture (no chime bleed)
 FOLLOWUP_MAX_TURNS = int(os.getenv("FOLLOWUP_MAX_TURNS", "6"))    # runaway-session cap
-# Play a quiet tap locally when the follow-up window opens. The dashboard gets
-# a "Listening…" badge, but a satellite with no display in the room leaves the
-# user talking into a mic with no way to know it is open (master closet,
-# 2026-08-07). Off by default so the kitchen, which HAS the display, is
-# unchanged.
-FOLLOWUP_TICK = os.getenv("FOLLOWUP_TICK", "0").lower() not in ("0", "false", "no", "")
 # When the orchestrator answers with awaiting_slot (it asked "for how long?"),
 # hold the mic open longer than a normal follow-up. The whole reason it had to
 # ask is that the user paused to think — they will very likely pause again
@@ -920,11 +914,13 @@ def run_followups(stdout, vad, awaiting: bool = False) -> None:
             post_json("/session/listening", {}, timeout=2)
         except Exception:  # noqa: BLE001
             pass
-        # ...and cue the room, for satellites with no display in sight. The
-        # follow-up window is otherwise invisible: you talk and cannot tell
-        # whether anything is listening. Quiet tap, not the wake chime.
-        if FOLLOWUP_TICK:
-            play_file(SOUNDS_DIR / "vad_alt_tap.wav")
+        # NO audible listening cue here. Tried 2026-08-07 (a quiet tap) and
+        # removed the same day: this loop also spins on echo-rejected rounds,
+        # so the taps landed mid-reply and read as random noise rather than
+        # "I'm listening". Doing it properly would mean knowing when the zone
+        # audio actually finishes, which is exactly the timing we deliberately
+        # stopped trying to predict. A visual cue (RGB LED on the satellite) is
+        # the right answer for a room with no display -- see the build guide.
         cmd = capture_command(stdout, vad, min_capture_ms=FOLLOWUP_MIN_MS,
                               onset_ms=CLARIFY_WINDOW_MS if awaiting else FOLLOWUP_WINDOW_MS,
                               partials=True)

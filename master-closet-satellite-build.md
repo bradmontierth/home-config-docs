@@ -343,6 +343,27 @@ Estimated from text length because the render happens in Node-RED: 12 chars/s
 tail padding is deliberately **excluded** — it is silence, and muting through
 it would only delay a legitimate follow-up. ~6.5 s for a typical weather reply.
 
+### The follow-up window needs a VISUAL cue, not an audible one
+
+Open item, no code yet. A satellite in a room with no display leaves the user
+talking into a mic with no way to know it is listening — the satellite posts
+`/session/listening` for a "Listening…" badge, but that only reaches the
+kitchen dashboard.
+
+An audible tap was tried and removed the same day (2026-08-07). Two reasons it
+cannot work as built:
+
+1. The follow-up loop also spins on echo-rejected rounds, so taps landed
+   **mid-reply** and read as random noise. Brad heard three per turn.
+2. Placing it correctly would require knowing when the zone audio actually
+   finishes — precisely the timing we deliberately stopped predicting when the
+   estimated blackout was replaced with echo rejection.
+
+**A small RGB LED on the satellite is the right answer** (Brad's call): it
+carries state continuously rather than as an event, so it cannot land at the
+wrong moment, and it costs nothing when you are not looking at it. Path B's
+HAVPE has an LED ring natively — same problem, same shape of solution.
+
 ### Remaining items
 
 Full rationale in `upstairs-poe-satellites-plan.md` Part 1. Items 4–5 below are
