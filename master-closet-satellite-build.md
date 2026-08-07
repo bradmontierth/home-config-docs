@@ -44,9 +44,47 @@ you end up unable to tell which layer is lying.
 Raspberry Pi OS (64-bit). In RPi Imager's advanced options set hostname,
 user `pi`, your SSH key, and locale. Suggested hostname: `closet-pi`.
 
+### SSH access (done 2026-08-07)
+
+The board keeps its DHCP reservation across a reflash — same NIC MAC
+`e4:5f:01:67:1e:56`, so it comes back at **192.168.10.24**.
+
+Per house convention (one dedicated keypair per host) the Beelink now holds
+`~/.ssh/id_ed25519_closet_pi`, and the `~/.ssh/config` entry that used to be
+named `kitchen-speaker` was **renamed to `closet-pi`** and repointed at the new
+key. That alias was already recorded as a trap — it pointed at the powered-off
+old kitchen Pi while the live kitchen box is `big-speaker-mini-pc`
+(192.168.10.251). Renaming it retires the trap instead of leaving two aliases
+on one address. Stale docs that still say `ssh kitchen-speaker` (e.g.
+`voice-assistant-plan.md:898`) now fail loudly rather than silently connecting
+to the wrong Pi.
+
+Install the public key once — needs the password set in RPi Imager, so it is
+run by hand:
+
 ```bash
-sudo apt update && sudo apt install -y python3-venv python3-dev alsa-utils
+ssh-copy-id -i ~/.ssh/id_ed25519_closet_pi.pub \
+  -o StrictHostKeyChecking=accept-new pi@192.168.10.24
+ssh closet-pi hostname     # confirms passwordless
 ```
+
+The flash also replaced the host key, so the stale `known_hosts` entry for
+`.24` was removed (`ssh-keygen -R`).
+
+### One-command provision
+
+`home_config/voice-assistant/satellite/provision-satellite.sh` does everything
+in §3 — packages, venv with pinned versions, code, sounds, models, service unit,
+and a seeded `.env`. Run it **from the Beelink**:
+
+```bash
+/home/pi/home_config/voice-assistant/satellite/provision-satellite.sh closet-pi master
+```
+
+It deliberately stops short of two things it cannot know: the ALSA device names
+(it prints the listings for you) and enabling the service. Re-running is safe,
+and it never overwrites an existing `.env`. The rest of §3 documents what it
+does, and is the fallback if you would rather do it by hand.
 
 Confirm the mic and the speaker enumerate, and capture their ALSA names — you
 need these for `.env`:
@@ -85,7 +123,10 @@ From the **Beelink** (`192.168.10.217`), all paths absolute:
 | `/home/pi/backups/pw_pi-20260728/blobs/silero_vad.onnx` | `/home/pi/voice-pipeline/silero_vad.onnx` |
 
 **The `.onnx` models are not in git.** The backup kit above is the local source
-of truth on the Beelink; the live copies are on `.251` in `~/wake-bench/`. The
+of truth on the Beelink; the live copies are on `.251` in `~/wake-bench/`.
+Verified 2026-08-07 — all three are byte-identical to what the kitchen runs
+today (`okay_computer` `91c922ad…`, `okay_google` `633d08aa…`, `silero_vad`
+`302cb198…`), so the July backup is not a stale fork. The
 `stop.onnx` model in that kit is alarm-dismiss only and is **not needed here** —
 alarms ring in the kitchen (orchestrator `SATELLITE_ALARM_URL` → `.251`), and
 `assistant.py` logs "no stop model … ASR-only" and carries on without it.
@@ -114,9 +155,23 @@ MODE=active
 Rationale for the two tuning values, both inherited rather than invented:
 `SILERO_THRESHOLD=0.4` is the kitchen's setting after the oven-corner
 command-capture miss. `HOP_MS=320` is the family-room "relaxed cycles" value —
-a closet has a generous latency budget and this is a spare Pi 4, so start there
-rather than at the kitchen's 224. Do **not** copy the kitchen's `224` blindly:
-that value came with a thermal soft-limit fight at 81–82 °C.
+a conservative starting point, not a ceiling.
+
+**On `HOP_MS`, corrected 2026-08-07.** The kitchen runs `HOP_MS=192` today
+(verified in `.251:~/voice-pipeline/.env`), not the 224 recorded earlier. The
+"192 is unsafe, thermal soft-limit 81–82 °C" conclusion was measured on *this
+very board* — and Brad had removed the fan from its case. So the limit was a
+missing 5 mm fan, not a Pi 4 ceiling. Two consequences:
+
+- Do not treat 81–82 °C as a property of the hardware. It was an airflow defect.
+- The **PoE hat ships with a fan**, so the permanent closet install has cooling
+  the desk test does not. Start at 320, and once the hat is on, 224 or 192 is
+  fair game — walk it down while watching
+  `vcgencmd measure_temp` and `vcgencmd get_throttled` (expect `0x0`).
+
+Detect lag is roughly linear in hop: the kitchen A/B measured 594–735 ms at the
+old default versus 441–470 ms at 224. Worth reclaiming, but it buys latency
+only — it does not improve wake accuracy, so it is a polish step, not a gate.
 
 Do **not** set `PLAYBACK_RELAY_URL` — that is the family-room mic-only pattern
 that relays audio to the kitchen. This box plays its own chime locally.
