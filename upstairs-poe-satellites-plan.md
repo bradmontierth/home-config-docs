@@ -150,8 +150,10 @@ Two real notes survive the correction:
   instantly. **Search this house's media players by friendly name, not entity
   id.** This fills Appendix A item 1's `ha_player` field for both rooms.
 
-  **Recommended cleanup: rename them to `media_player.master_bedroom` and
-  `media_player.shower`.** Nothing references the current ids — verified across
+  **DONE 2026-08-07 — renamed** to `media_player.master_bedroom` and
+  `media_player.shower`; both verified resolving. Both room maps are now
+  literally correct rather than coincidentally string-keyed. Rationale kept
+  below. Nothing referenced the old ids — verified across
   the live Node-RED flows, `home_config`, HA dashboards and automations,
   `dashboard_webapp`, `homepage` and `homebridge`; the only hits are HA's own
   entity registry, `core.restore_state` and the log. The rename is functionally
@@ -210,8 +212,12 @@ master bath / shower zone through the Amp Speakers subflow, addressed as the MA
 player `ma_shower` — see Part 1 items 4, 4a and 4c. The MA player is live and
 available; the missing `media_player.shower` HA entity is not in this path.
 
-The Pi needs only a ~$10 speaker for the wake chime (`PLAYBACK_DEVICE` already
-defaults to `plughw:CARD=Headphones`).
+The Pi needs only a chime speaker, and **that is already owned** — Brad has a
+cheap Amazon USB speaker of the same family as the mic puck (the Jabra knock-off
+is confirmed mic-only, so it cannot serve). USB is the better outcome anyway:
+power and audio ride one cable back to the Pi instead of a barrel supply plus an
+audio lead. Set `PLAYBACK_DEVICE` to that card rather than the default
+`plughw:CARD=Headphones`. **Nothing needs to be purchased for Path A.**
 
 **Shelf tidiness — the real objection (Brad, 2026-08-07).** The top shelf
 already carries the big TRC metal power-supply enclosure and the LED controller
@@ -254,15 +260,32 @@ Standing still while folding laundry lets the motion timer expire and drops you
 into the dark. The fix is a hold. Three things make it less trivial than it
 sounds.
 
-**There are four lights, and they move in tandem** (Brad, 2026-08-07). There is
-no case for lighting the closet alone, so this is one group command, not four:
+**There are five lights, and they move in tandem** (Brad, 2026-08-07; the fifth
+arrived after the fourth). There is no case for lighting the closet alone, so
+this is one group command. All entities below verified live:
 
-| # | Light | Control path |
-| --- | --- | --- |
-| 1 | Master closet LEDs | `closetleds` ESPHome controller (`light.closetleds_1`…`_5`) |
-| 2 | Ceiling bulb (Zooz) | `light.master_closet_light_switch` — Hubitat device 44 |
-| 3 | Master bath LED fixture | **same controller as #1** — confirm which channels are closet vs bath |
-| 4 | Master toilet light | `light.master_toilet_light` (zigbee) |
+| # | Light | Entity | Control path |
+| --- | --- | --- | --- |
+| 1 | Closet LEDs | `light.closet_leds` → group of `light.closetleds_4` + `_5` | ESPHome `closetleds` |
+| 2 | Ceiling bulb | `light.master_closet_light_switch` | Zooz via Hubitat device 44 |
+| 3 | Vanity (3 lights) | `light.closetleds_1` / `_2` / `_3` | **same ESPHome controller as #1**, driven by a subflow + external rotary encoder with press |
+| 4 | Toilet | `light.master_toilet_light` | zigbee |
+| 5 | Bath floor RGB | `light.masterbathfloor_rgb_light` | ESPHome `masterbathfloor` |
+
+Five lights, seven HA entities, four control paths. The `closetleds` controller
+splits 1–3 to the vanity and 4–5 to the closet, which resolves the channel
+question the earlier draft left open.
+
+**The hold must suppress the motion-driven OFF, not force lights ON.** The
+vanity has a physical rotary encoder with press. If the hold forces state, a
+deliberate press to turn the lights off during the window gets fought back on,
+and the room becomes unusable for thirty minutes. Suppress the timer; leave
+every manual control authoritative. **A manual off should also cancel the
+hold** — that is the least surprising reading of "no, I'm done."
+
+**Check #5 before folding it in.** The bath floor RGB is an accent light and may
+have night-mode behaviour of its own; confirm it should follow the group at all
+hours rather than assuming tandem means always.
 
 **Three control technologies, and the live flows are Hubitat.** Verified against
 the Node-RED Admin API (not `data/flows.json`, which is stale on this host —
