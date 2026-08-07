@@ -70,12 +70,49 @@ today means endless Raffi on the kitchen speakers. Needs
 `{queue_id, single_track}` per room, where `single_track` forces resolution to a
 *track* rather than an artist.
 
-**4. Reply routing — and the good news that it is NOT a blocker.** Appendix A
-items 1–3 (reply out of that room's amp zone, via the Amp Speakers subflow)
-remain the eventual right answer. But **both paths can ship without it**: Path A
-plays out of a speaker on the Pi (`PLAYBACK_DEVICE`), Path B plays out of the
-HAVPE's own speaker. That also dodges the 3-second amp-wake gate entirely. Build
-the amp-zone path when a room actually wants the reply on the big speakers.
+**4. Reply routing — ON the critical path for both paths (Brad, 2026-08-07).**
+An earlier draft of this document called this optional on the grounds that each
+device could use a local speaker. **Rejected.** Both rooms speak out of the
+installed whole-home zones: the HAVPE's own speaker is poor, and the closet Pi
+was never going to have one worth listening to. **Both satellites are therefore
+mic-only**, the same shape as the family-room satellite. Appendix A items 1–3
+are a prerequisite, not a follow-up.
+
+Three consequences that change the build order:
+
+- **Do item 3 (the `msg.ttsUrl` bypass) up front, not as an optimization.** The
+  Amp Speakers subflow takes TEXT and renders its own TTS, so the cheap version
+  of this — publish `{room, text}` on the existing Voice Broadcast path — would
+  put a second TTS engine and a second voice in the house. The ~10-line bypass
+  keeps one Kokoro voice everywhere and drops a render round-trip.
+- **Item 2's `forceBedroom` is now required, not a nicety.**
+  `DisableBedroomAnnouncements` and `adrienneWorkingDisableAnnounce` exist to
+  silence the master zone — and that zone is now the *reply* path. Without the
+  override, a question asked in the closet gets answered into a muted zone and
+  the user hears nothing, with no error anywhere. This is the most likely
+  day-one "it just doesn't work" failure of Path A.
+- **The 3-second amp wake is genuinely cheap, as designed.** Kick it at stage-2
+  verify and the gate elapses under ASR + intent + TTS, which is ~1.5–4 s on an
+  ordinary turn and far longer on an ask. It costs nothing on the paths that are
+  already slow.
+
+**4a. The wake chime is the casualty — decide this before building.** In the
+kitchen the local chime fires the instant `/verify` confirms, and that sub-second
+"I heard you" is what stops people repeating themselves. Routed through a cold
+amp it would land ~3 s late, which is worse than no chime at all. Options:
+
+- **Simon's room: the HAVPE LED ring.** Native, bridge-drivable, silent, and
+  strictly better than a chime in a room where a child is going to sleep.
+- **Master closet: a tiny speaker used *only* for the chime.** A ~$10 speaker
+  playing a 200 ms tone is not competing with the installed speakers for
+  anything that matters — replies and music still come out of the zone. This
+  keeps sub-second feedback without compromising the reason for the decision.
+
+**4b. Playback muting is promoted to day-one work.** Appendix A's note that the
+mic hears its own reply from the ceiling with no AEC reference now applies to
+both rooms immediately: the server must suppress that room's detection for the
+reply duration + ~500 ms. It knows the padded WAV length, so this is arithmetic,
+but it has to exist on day one rather than after the first feedback loop.
 
 **5. Arbitration — record the trigger, don't do the work yet.** `_ARB`
 (`app.py:160`) is one house-global holder with `ARB_SUPPRESS_S=3`. Kitchen,
@@ -105,9 +142,17 @@ new firmware in it. **This run is also the pilot for the eventual ceiling
 program:** it proves the attic route, the switch ports, and the PoE budget for
 $0 extra. Pull two or three while up there.
 
-Playback: a small powered speaker on the Pi to start. Music goes to the master
-bath / shower zone (`media_player.shower_snapcast_client`) via the per-room
-music policy.
+Playback: **none locally except the chime.** Replies and music both go to the
+master bath / shower zone (`media_player.shower_snapcast_client`) through the
+Amp Speakers subflow — see Part 1 items 4 and 4a. The Pi needs only a ~$10
+speaker on its 3.5 mm jack for the wake chime (`PLAYBACK_DEVICE` already
+defaults to `plughw:CARD=Headphones`), or none at all if the LED-style feedback
+question gets answered some other way.
+
+Note the timing quirk this creates: she rides in the **afternoon**, so the
+"don't wake a sleeping spouse at 6 a.m." objection to using the master zone does
+not apply. Quiet-hours handling in the per-satellite target map still should —
+a 2 a.m. answer blasting the master zone is a different matter.
 
 ### Command set
 
@@ -119,26 +164,49 @@ music policy.
 | "what's the weather" | Already built | — | needs Part 1 item 1 only |
 | timers / lists / reminders / ask | Already built | — | needs Part 1 item 1 only |
 
-**The "keep the lights on" item is the one to think about.** The master closet
-lights are motion-driven from the "Upstairs Bathroom" Node-RED tab —
-`binary_sensor.master_closet_motion_zooz_motion` driving
-`light.master_closet_leds` and `light.master_closet_light_switch` — and standing
-still while folding laundry lets the timer expire and drop you into the dark.
+### "Keep the lights on" — the only real new logic in Path A
 
-Design it as a **timed hold**, not a toggle: a `masterClosetHold` global with a
-window (start at 30 min), same shape as the staged-brighten 90-minute window,
-that suppresses the motion-off branch and auto-expires. A toggle you have to
-remember to turn back off will be left on and will silently defeat the motion
-automation forever. Confirm phrasing should state the window out loud —
-"Holding the closet lights for thirty minutes" — so an unattended hold is never
-a surprise.
+Standing still while folding laundry lets the motion timer expire and drops you
+into the dark. The fix is a hold. Three things make it less trivial than it
+sounds.
 
-**Confirm before building:** Brad refers to *four* closet lights; HA exposes
-`light.master_closet_leds` and `light.master_closet_light_switch`. Identify the
-other two (or confirm the LEDs are a 4-zone fixture) before writing the hold.
-Also confirm `cover.upstairs_bath_blind` is the master bath blind and not a
-kids'-bathroom blind — the naming in this house uses "Upstairs Bath" for both
-the master closet LED flow and this cover, which is suggestive but not proof.
+**There are four lights, and they move in tandem** (Brad, 2026-08-07). There is
+no case for lighting the closet alone, so this is one group command, not four:
+
+| # | Light | Control path |
+| --- | --- | --- |
+| 1 | Master closet LEDs | `closetleds` ESPHome controller (`light.closetleds_1`…`_5`) |
+| 2 | Ceiling bulb (Zooz) | `light.master_closet_light_switch` — Hubitat device 44 |
+| 3 | Master bath LED fixture | **same controller as #1** — confirm which channels are closet vs bath |
+| 4 | Master toilet light | `light.master_toilet_light` (zigbee) |
+
+**Three control technologies, and the live flows are Hubitat.** Verified against
+the Node-RED Admin API (not `data/flows.json`, which is stale on this host —
+see `nodered-flow-agent-guide.md:48`): the "Upstairs Bathroom" tab drives this
+group through **Hubitat** — motion is device 911, the switch is device 44 — plus
+four `function` nodes named "closet LEDs". So the hold is a Node-RED job against
+Hubitat, not an HA-entity job, and the HA entity ids above are mirrors, useful
+for state reads and voice-button targets but not the control surface.
+
+**Design it as a timed hold, not a toggle:** a `masterLightsHold` global with a
+window (start at 30 min), the same shape as the staged-brighten 90-minute
+window, auto-expiring. A toggle you have to remember to clear will be left on
+and will silently defeat the motion automation forever. State the window out
+loud in the confirm — "Holding the lights for thirty minutes" — so an
+unattended hold is never a surprise.
+
+**The hold is only as good as the number of off-paths it gates.** More than one
+branch can darken this group: closet motion (Hubitat 911),
+`binary_sensor.master_bath_motion_occupancy`,
+`binary_sensor.master_shower_motion_motion`, and scene flows — the "Sleeping In
+or Nap" tab touches the closet too. **Enumerate every branch that can turn any
+of the four off and gate them all on the one global.** Miss one and the lights
+still go out, and the feature reads as broken rather than partial.
+
+**Also confirm before building:** that `cover.upstairs_bath_blind` is the master
+bath blind and not a kids'-bathroom blind. This house uses "Upstairs Bath" for
+both the master closet LED flow and this cover, which is suggestive but not
+proof.
 
 ---
 
@@ -176,8 +244,17 @@ server. This is the mode that composes with what we already have:
   *source* and the playback *sink*. The mic/playback split is already proven in
   production: the family-room satellite is mic-only and relays all audio via
   `PLAYBACK_RELAY_URL`.
-- **Playback is a URL.** HAVPE's stock YAML carries `audio_http` announcement
-  and media sources, so replies are just a URL to an orchestrator-rendered WAV.
+- **Playback is not the bridge's problem at all.** Brad, 2026-08-07: the HAVPE's
+  own speaker is poor and the room already has installed speakers worth using.
+  So the device is **mic-only** — replies and Raffi both go to
+  `media_player.simon_room` via the Amp Speakers subflow, exactly like the
+  family-room satellite. This *simplifies* the bridge: no `audio_http` path, no
+  speaker component, no I2S playback contention (ESPHome cannot listen and play
+  on the same I2S bus anyway, which would otherwise have forced a stop-listening
+  window on every reply).
+- **The LED ring replaces the wake chime.** It is native to the device, drivable
+  from the bridge, and silent — which is strictly what you want in a room where
+  a child is falling asleep. See Part 1 item 4a.
 
 Where the process runs: the Beelink. **That means no Linux box in Simon's room
 at all** — no SD card to corrupt, no boot flash to lose (pw_pi and the `.24` fan
