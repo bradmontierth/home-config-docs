@@ -1,17 +1,277 @@
-# Upstairs PoE Voice Satellites — Hardware POC Plan
+# Upstairs Voice Satellites — Two Bookshelf Rooms Now, Ceiling Later
 
-Status: **plan only, nothing built** (drafted 2026-07-30, rescoped same day).
+Status: **plan only, nothing built.** Drafted 2026-07-30 as a PoE/ceiling
+hardware POC; **rescoped 2026-08-07** (Brad) to two shelf-mounted satellites,
+with the entire ceiling program deferred 2–3 years.
 
-End state: a PoE-powered ReSpeaker in each of the five upstairs rooms that
-already have whole-home audio zones (loft, Simon, Claire, master, shower),
-streaming audio to the Beelink, with replies coming out of that room's own amp
-zone.
+## The 2026-08-07 decision
 
-**This POC exists to answer one question: can the XVF3800 + ESP32 stack be
-given wired PoE Ethernet without the SPI bus and the I2S bus fighting over
-pins, and will it stream reliably for weeks?** The software side (server-side
-wake detection, in-room reply routing) is understood work and is summarized in
-Appendix A, not staged as a proof.
+Two satellites, built independently, in either order. Neither blocks the other.
+
+| | **Path A** | **Path B** |
+| --- | --- | --- |
+| Room | Master closet | Simon's room |
+| Device | The freed `.24` Pi + the Jabra knock-off USB mic | The Home Assistant Voice PE already on hand |
+| Network | Cat6 drop through the attic to the closet shelf | Wi-Fi |
+| Hardware cost | $0 | $0 |
+| Stage-1 wake | On-device, `assistant.py` unchanged | Server-side, over an ESPHome-protocol bridge |
+| New code | None on the device | The bridge — this is the real work |
+| Answers | Does anyone actually reach for a bedroom mic? | Can ESPHome + a bridge be a first-class satellite? |
+
+Why this shape, recorded so it doesn't get relitigated:
+
+- **The kids can't trigger it yet.** Every command in scope is adult-spoken for
+  the next 2–3 years. That removes the reason to rush the ceiling.
+- **A finished appliance beats a bare board on a shelf** in a kid's room: no
+  wires to grab beyond USB-C, a visible mute switch, and it looks like it
+  belongs on a bookshelf.
+- **A closet shelf is not a ceiling.** The thermal argument that rules a Pi out
+  of an insulated joist bay does not apply to open conditioned air, so the
+  Path A Pi is a *permanent* answer for that room, not a probe to be retired.
+  The master closet may never need to be one of the five ceiling drops.
+- **The ceiling becomes a conversation in 2–3 years**, when both kids want it
+  and cleaning the shelves up is the actual motivation.
+
+### What this decision freezes
+
+Everything in **Part 4** is on ice: the ReSpeaker XVF3800 + XIAO purchase, the
+T1/T2/T3 bench, the ~$215 of parts, the Step 0 multimeter session.
+
+**Do not buy the $54.50 ReSpeaker.** Its entire justification was "nothing is
+thrown away" on the way to the ceiling; with the ceiling years out, that
+argument expires long before the board gets used. Hardware bought now should be
+judged as "a good bookshelf device for three years" — which is the HAVPE and the
+Pi already sitting in this house. If a third room wants one, buy a second HAVPE
+(~$60), one room at a time, as demand proves itself.
+
+---
+
+## Part 1 — the shared foundation (built once, both paths need it)
+
+The hardware was never the bottleneck. These five items are, and they are the
+same work whichever device is in the room.
+
+**1. Per-satellite target map.** `sat_id → {ma_player, ha_player, playback,
+music_policy, quiet_hours}`, hot-reloaded from JSON like `home_commands.json`
+and `broadcast_rooms.json` already are. Nothing today is per-room.
+
+**2. Room × state intent allowlist — design the state axis in now.** Not just
+`room → [intents]` but `room × state → [intents]`, because Path B's core
+requirement is state-dependent (below). Retrofitting a state dimension onto a
+room-only table later is the annoying version of this job. Reading the state is
+already solved: `find_phone.py:138` GETs `/api/states/{entity}`, and
+`input_boolean.simonalarm` is already a real HA entity — **no Node-RED work
+needed for the gate.**
+
+**3. Per-room music policy.** `music.py` targets the kitchen jukebox queue
+unconditionally (`config.py:239`, `MA_QUEUE_ID`) and deliberately shuffles
+anything resolving to an artist or playlist (`music.py:568`). So "play Raffi"
+today means endless Raffi on the kitchen speakers. Needs
+`{queue_id, single_track}` per room, where `single_track` forces resolution to a
+*track* rather than an artist.
+
+**4. Reply routing — and the good news that it is NOT a blocker.** Appendix A
+items 1–3 (reply out of that room's amp zone, via the Amp Speakers subflow)
+remain the eventual right answer. But **both paths can ship without it**: Path A
+plays out of a speaker on the Pi (`PLAYBACK_DEVICE`), Path B plays out of the
+HAVPE's own speaker. That also dodges the 3-second amp-wake gate entirely. Build
+the amp-zone path when a room actually wants the reply on the big speakers.
+
+**5. Arbitration — record the trigger, don't do the work yet.** `_ARB`
+(`app.py:160`) is one house-global holder with `ARB_SUPPRESS_S=3`. Kitchen,
+master closet, and Simon's room are far enough apart that a single "okay
+computer" won't reach two mics, so the existing race is tolerable. **The
+proximity-group rework (Appendix A item 5) becomes mandatory the moment two mics
+land within earshot of each other** — e.g. adding the master *bedroom* alongside
+the closet, or the loft alongside Simon. Don't add such a pair casually.
+
+---
+
+## Part 2 — Path A: the master closet Pi
+
+### Hardware and network
+
+The `.24` kitchen Pi, freed by the `.251` mini-PC cutover. **Before it rejoins
+the network, disable its `voice-assistant` and `squeezelite` units** — it must
+never contend with the kitchen box for the wake path or the Pi player MAC.
+
+Mic: the Jabra knock-off. Known to be poor at kitchen-across-the-room distances
+and entirely adequate at closet distances — one person, arm's length, quiet
+room, hard surfaces. This is the case it is fine for.
+
+Network: a Cat6 drop through the attic to the closet shelf. Wired is the whole
+point — it removes Wi-Fi from the failure surface of the only path that has no
+new firmware in it. **This run is also the pilot for the eventual ceiling
+program:** it proves the attic route, the switch ports, and the PoE budget for
+$0 extra. Pull two or three while up there.
+
+Playback: a small powered speaker on the Pi to start. Music goes to the master
+bath / shower zone (`media_player.shower_snapcast_client`) via the per-room
+music policy.
+
+### Command set
+
+| Say | Does | Entity / mechanism | Status |
+| --- | --- | --- | --- |
+| "close the bathroom blind" | Master bath blind | `cover.upstairs_bath_blind` → new `button.voice_*` in the Voice Buttons tab | new row in `home_commands.json` |
+| "keep the lights on" | Suppresses the motion-off timer while doing laundry | see below | **the only real new logic in Path A** |
+| "play Raffi" | Master bath / shower zone | `media_player.shower_snapcast_client` | needs Part 1 item 3 |
+| "what's the weather" | Already built | — | needs Part 1 item 1 only |
+| timers / lists / reminders / ask | Already built | — | needs Part 1 item 1 only |
+
+**The "keep the lights on" item is the one to think about.** The master closet
+lights are motion-driven from the "Upstairs Bathroom" Node-RED tab —
+`binary_sensor.master_closet_motion_zooz_motion` driving
+`light.master_closet_leds` and `light.master_closet_light_switch` — and standing
+still while folding laundry lets the timer expire and drop you into the dark.
+
+Design it as a **timed hold**, not a toggle: a `masterClosetHold` global with a
+window (start at 30 min), same shape as the staged-brighten 90-minute window,
+that suppresses the motion-off branch and auto-expires. A toggle you have to
+remember to turn back off will be left on and will silently defeat the motion
+automation forever. Confirm phrasing should state the window out loud —
+"Holding the closet lights for thirty minutes" — so an unattended hold is never
+a surprise.
+
+**Confirm before building:** Brad refers to *four* closet lights; HA exposes
+`light.master_closet_leds` and `light.master_closet_light_switch`. Identify the
+other two (or confirm the LEDs are a 4-zone fixture) before writing the hold.
+Also confirm `cover.upstairs_bath_blind` is the master bath blind and not a
+kids'-bathroom blind — the naming in this house uses "Upstairs Bath" for both
+the master closet LED flow and this cover, which is suggestive but not proof.
+
+---
+
+## Part 3 — Path B: HAVPE in Simon's room
+
+### Why Simon's room is the right first HAVPE
+
+It is the lowest-stakes possible first deployment of a brand-new client type:
+adult-triggered, at conversational distance, with a four-command vocabulary, in
+a room where a false accept at 2 a.m. wakes one sleeping child rather than both
+adults. If the bridge misbehaves, the blast radius is one room.
+
+### Architecture: the aioesphomeapi bridge
+
+The ESPHome native API lets any client subscribe as *the* voice-assistant peer
+on port 6053 — Home Assistant is merely one such client, and standalone Python
+bridges against stock firmware are a demonstrated pattern. **Constraint: exactly
+one subscriber**, so the device's assist-satellite entity in HA must be disabled
+before the bridge connects.
+
+**Run it in continuous-stream mode** (`use_wake_word` / `start_continuous`),
+which streams 16 kHz mono to the subscriber and puts wake detection on the
+server. This is the mode that composes with what we already have:
+
+- **Our exact `okay_computer.onnx` and `okay_google.onnx`**, our exact
+  thresholds, full pre-roll — so stage-2 verify (`verify.py`) works unchanged
+  and behaviour matches the kitchen.
+- **No second wake-model training stack.** microWakeWord is TFLite + JSON
+  trained through a different pipeline with its own score scale; after the
+  stop-model score-scale burn, a new scale is a real cost, not a footnote.
+- **Most of `assistant.py` is reusable as-is.** The satellite consumes the mic
+  as a plain byte stream (`arecord.stdout`, `assistant.py:1391`); everything
+  downstream — ring buffer, stage-1 scoring, Silero endpointing,
+  `capture_command`, follow-ups — just reads from it. The bridge swaps the audio
+  *source* and the playback *sink*. The mic/playback split is already proven in
+  production: the family-room satellite is mic-only and relays all audio via
+  `PLAYBACK_RELAY_URL`.
+- **Playback is a URL.** HAVPE's stock YAML carries `audio_http` announcement
+  and media sources, so replies are just a URL to an orchestrator-rendered WAV.
+
+Where the process runs: the Beelink. **That means no Linux box in Simon's room
+at all** — no SD card to corrupt, no boot flash to lose (pw_pi and the `.24` fan
+are both cautionary). The cost is stage-1 CPU moving onto a box already at load
+~1.9; ~0.25 core for one mic with a lazy hop is fine.
+
+**Known escape hatch, banked not built:** at four-plus bookshelf rooms,
+server-side stage-1 approaches a full core. If the fleet grows past ~3, train an
+"okay computer" microWakeWord model and push stage-1 back onto the devices —
+a GX10 night, the same shape as okay_google. Not a surprise; a card to hold.
+
+### Command set and the armed-state gate
+
+| Say | Does | Notes |
+| --- | --- | --- |
+| "goodnight" | Bedtime scene for the room | new Voice Button |
+| "open / close the blind" | Simon's blind | **confirm which cover** — `cover.boys_room_baby_blind` vs `cover.babyblind_windowshade` vs `switch.babyblind` |
+| lights | `light.simon_fan_lights`, `light.simon_room_crown_*` | existing entities |
+| "play Raffi" | `media_player.simon_room`, **one track, no shuffle** | needs Part 1 item 3 |
+
+**The gate is the interesting requirement.** Once `input_boolean.simonalarm` is
+on, the room is asleep and the satellite must stop taking requests — otherwise
+"play Raffi" becomes an infinite bedtime-stalling device the moment Simon is old
+enough to say it.
+
+Implementation: `room × state → allowlist`, with the armed state resolving to an
+**empty** allowlist — log the turn, play nothing. Recommend **silent** rather
+than a spoken refusal: a reply is a reward for asking, and a spoken "no" at
+bedtime is worse than nothing. Accept that this is briefly confusing for an
+adult who forgot the alarm is armed; the shadow log makes it diagnosable.
+
+**The better version is already available.** Speaker ID has been armed in
+production since 2026-07-27 (`SPEAKER_MODE=active`, brad/adrienne profiles), so
+"when armed, honour recognized adults only" is a near-term option rather than a
+someday one. Ship the empty-allowlist version first; add the speaker-scoped
+version once Adrienne's enrollment is fattened past nine clips.
+
+### Gates — what "proven" means for Path B
+
+- **B1 — bridge audio.** Continuous 16 kHz mono arrives from stock firmware with
+  HA's assist-satellite entity disabled. Dump to WAV; confirm rate, channel,
+  and that it is genuinely continuous, not post-wake bursts.
+- **B2 — stage-1 parity.** Existing ONNX models over the bridge stream trigger
+  at comparable rates to the kitchen on the same spoken phrase, with pre-roll
+  intact and `/verify` passing on real utterances.
+- **B3 — reply playback.** Orchestrator WAV URL plays through `audio_http`;
+  measure wake→chime and reply latency against the kitchen's numbers.
+- **B4 — 7-day soak.** No dropped stream, no bridge restarts, no memory growth,
+  no unexplained wake gaps. Watch Beelink load across the week.
+
+**If continuous mode turns out not to work outside Home Assistant**, the
+fallback is on-device microWakeWord — and then the blocking question becomes
+whether the streamed audio includes pre-wake-word audio, because without it
+`verify_and_extract` never sees "okay computer" and stage-2 cannot run as
+written. Measure that before designing around it; don't assume either way.
+
+---
+
+## Part 4 — DEFERRED: the PoE ceiling program
+
+**Everything below this line is on ice until roughly 2028–2029**, when both kids
+want a mic and the shelves need cleaning up. It is preserved intact because the
+analysis is sound and re-deriving it would be waste — but nothing here should be
+bought, ordered, or bench-tested on the strength of this document today. Read
+Part 1's item 5 first: the arbitration rework is the piece that actually gates
+growing the fleet.
+
+### Why the ceiling (Brad, 2026-07-30) — and what it rules out
+
+Not aesthetics. The reasoning, recorded so nobody re-opens it:
+
+- We want **Ethernet data** at each device. Once a drop is being pulled, ending
+  it in the ceiling is strictly less work than attic → top plate → LV box on the
+  wall → patch cable back up to the device.
+- A Pi 4 + PoE + array **will not fit** any ceiling LV box.
+- The device **cannot live in the attic above the insulation** — it hits 140 °F+
+  in summer.
+
+Consequences, which decide the hardware:
+
+- **The permanent endpoint cannot be a Raspberry Pi.** A Pi 4 is rated to 50 °C
+  ambient and dissipates 3–5 W into an insulated cavity. An ESP32-S3 is rated to
+  85 °C and dissipates well under a watt. In a ceiling pocket surrounded by
+  insulation, that is the whole ballgame. The ESP is the *correct* endpoint here,
+  not a cost compromise.
+- **The array and the electronics need not share a box.** Put the mic array at
+  the ceiling surface behind an acoustically open grille and the ESP + PoE front
+  end a few inches away in the joist bay on a short harness. This turns the
+  "two boards on a harness" property of T2/T3 from a drawback into an advantage,
+  and it means only the array has to fit the ceiling opening. **It also demotes
+  T1**, whose entire appeal was stacking onto the ReSpeaker socket.
+- **Keep the whole assembly below the insulation plane**, sealed, grille open to
+  conditioned room air. At ~1 W that is thermally uneventful even with a 140 °F
+  attic above. Verify in G6 anyway.
 
 ### Non-negotiable: data over copper, not just power
 
@@ -107,7 +367,12 @@ in which direction over the harness.
 
 ## 3. Three candidate topologies
 
-### T1 — XIAO in the ReSpeaker socket + bare W5500 module (recommended)
+**Ranking, after the ceiling constraint above: T3 first, then T2, then T1.**
+T1 was the early favourite because it stacks onto the ReSpeaker socket — but
+the ceiling install *wants* the array and the electronics separated, so
+stacking has become a liability rather than a feature.
+
+### T1 — XIAO in the ReSpeaker socket + bare W5500 module
 
 XIAO ESP32S3 sits in the ReSpeaker's socket as designed. A **bare W5500
 module** (not Seeed's carrier — its socket is the whole problem) is wired to
@@ -149,17 +414,76 @@ a large pool of free GPIO with no contention whatsoever.
 
 - **Pros:** the most boring, most proven PoE hardware of the three. Native
   Ethernet MAC is lower-jitter and lower-CPU than SPI Ethernet. Isolated. No
-  pin-budget question at all.
+  pin-budget question at all. Separate boards on a harness is exactly the
+  physical layout the ceiling install wants.
 - **Cons:** ESP32 classic, not S3 — formatBCE's XVF3800 driver targets the S3
   and would need porting/verification. Bigger board. ~$29 vs ~$20.
 
-### Fallback — USB ReSpeaker + PoE splitter + Pi
+**Recommended for Exercise B.**
 
-Zero new firmware, zero soldering; ~$115/room and five more Linux boxes with
-five more filesystems to corrupt. Keep it in the back pocket; do not build it
-unless all three ESP topologies fail.
+### The Pi — right for Exercise A, wrong for the ceiling
+
+USB ReSpeaker on a Pi is the fastest path to a working bedroom satellite (zero
+new firmware, zero soldering, code identical to the two live satellites), which
+is why Exercise A uses it. But it is **not** a candidate for the permanent
+endpoint: it will not fit a ceiling LV box, and a 3–5 W board rated to 50 °C
+ambient does not belong in an insulated cavity under a 140 °F attic. Use it on
+a shelf to answer the demand question, then retire it.
 
 ---
+
+## 3.5. Exercise A vs Exercise B — do the cheap one first
+
+Two separate exercises. Only one is urgent, and it is not the one this document
+is mostly about.
+
+**Exercise A — does anyone actually talk to a bedroom?** Open question, by
+Brad's own reckoning: *"do I think people will use it all the time? not sure.
+Maybe if it catches on and works well — open the blinds, turn off the lights,
+play Raffi, remind me…"* The kids are too young to trigger it today; a 5+ year
+old with a small allowlisted command set is the real prize. **This needs no
+PoE, no ceiling, no enclosure, and no attic** — a satellite on a shelf with a
+wall wart answers it.
+
+**Exercise B — the permanent ceiling endpoint.** Everything else in this
+document. Expensive, irreversible (five ceiling penetrations and attic runs),
+and only worth building once A says yes.
+
+Do A first because A is cheap and B is not. The risk in this project is cutting
+five holes for a feature nobody ends up using — not the soldering.
+
+### The one purchase that serves both — **SUPERSEDED 2026-08-07**
+
+> This recommendation is dead. It rested on "nothing is thrown away" on the way
+> to a ceiling build that is now 2–3 years out, and Exercise A is being answered
+> instead by Path A (the `.24` Pi) and Path B (the HAVPE), both already owned.
+> Kept for the reasoning only. **Do not order this board.**
+
+Buy **one ReSpeaker XVF3800 *with XIAO ESP32S3*** ($54.50) — not the cheaper
+no-ESP32 SKU. That single board:
+
+1. Runs in **USB mode today** on the powered-off `.24` kitchen Pi, on a shelf in
+   the loft or master, wall-wart powered, no holes → Exercise A running this
+   weekend. (Disable that Pi's `voice-assistant` and `squeezelite` units first
+   so it can never contend with the `.251` kitchen box.)
+2. Is the exact board Exercise B needs — nothing is thrown away.
+3. Lets Step 0 below run on hardware we own, resolving T1-vs-T2/T3 for free
+   while Exercise A soaks.
+
+Exercise A also wants the software from Appendix A items 1–3 (reply routed to
+that room's amp zone), which is needed on every path anyway.
+
+**Gate:** ~1 month of real use. If the family reaches for it, build B with T3.
+If not, the cost of finding out was $55 and a Saturday.
+
+### Per-room intent scoping — design in now, not after the incident
+
+The kids' rooms are the highest-value rooms ("turn off my light", "play Raffi",
+"how many minutes until dinner") and the highest-risk ones (a kid discovering
+they can broadcast to the whole house at 2 a.m.). Add a **per-room intent
+allowlist** — a small extension of the hot-reloaded table pattern already used
+by `home_commands.json` and `broadcast_rooms.json`. Much easier now than as a
+retrofit.
 
 ## 4. Step 0: answer the blocking unknown for $0, today
 
@@ -314,6 +638,12 @@ soak between.
 Recorded so the hardware POC lands on a known target, not so it gets built
 first.
 
+> **2026-08-07:** this appendix is no longer deferred material — Part 1 is the
+> near-term subset of it. Items 1–3 (amp-zone reply routing) are explicitly
+> *not* blockers for Path A or Path B, both of which have a local speaker; item
+> 5 (proximity groups) is the gate on growing the fleet; item 6 (per-room mode
+> switch) applies to both paths now.
+
 **The reply path already exists.** Node-RED subflow **Amp Speakers**
 (`e711d48f74f78209`) plays `amp_wake_soft_4s.mp3`, opens a **"Minimum 3s
 gate"**, renders and tail-pads TTS in parallel, and fires the announcement only
@@ -364,6 +694,18 @@ CPU-side is the fallback.
 ---
 
 ## Sources
+
+### Path B — the ESPHome bridge (2026-08-07)
+
+- [ESPHome native API architecture (port 6053, protobuf over TCP)](https://developers.esphome.io/architecture/api/)
+- [aioesphomeapi — the same client library Home Assistant uses](https://github.com/esphome/aioesphomeapi)
+- [Standalone ESP32 voice bridge against stock firmware, HA out of the loop](https://blog.darrenjrobinson.com/going-direct-esp32-voice-for-openclaw/)
+- [ESPHome voice_assistant component (16 kHz mono, start_continuous, TTS URL vs stream)](https://esphome.io/components/voice_assistant/)
+- [ESPHome micro_wake_word (tflite + JSON, kahrendt training pipeline)](https://esphome.io/components/micro_wake_word/)
+- [HAVPE stock firmware YAML (use_wake_word: false, audio_http sources, XMOS firmware)](https://github.com/esphome/home-assistant-voice-pe/blob/dev/home-assistant-voice.yaml)
+- [OHF-Voice/linux-voice-assistant — ESPHome protocol implemented in Python](https://github.com/OHF-Voice/linux-voice-assistant)
+
+### Part 4 — deferred ceiling hardware
 
 - [ReSpeaker XVF3800 with XIAO ESP32S3 — Seeed store](https://www.seeedstudio.com/ReSpeaker-XVF3800-4-Mic-Array-With-XIAO-ESP32S3-p-6489.html)
 - [Seeed wiki — XVF3800 + XIAO getting started](https://wiki.seeedstudio.com/respeaker_xvf3800_xiao_getting_started/)
