@@ -527,7 +527,53 @@ the speaker's satellite. The deliberate escapes are naming the timer
 an optional `sat` and defaults to `DEFAULT_SAT` (kitchen) because its one
 caller is the kitchen touchscreen. Covered by `test_timer_rooms.py`.
 
-**Still open: the ring is on the wrong speaker.** A master-bath timer now
+### Ringing through the bath zone — BUILT 2026-08-07, loft-proven
+
+Measured against MA 2.6 on the loft player before writing a line of it. All
+four findings changed the design:
+
+| Probe | Result |
+| --- | --- |
+| `play_announcement` on a 60.0s clip | **blocks** 60.6s — we get control back per chunk, no polling |
+| `players/cmd/stop` 5s into a 60s clip | **does not interrupt**; clip ran to completion |
+| second `play_announcement` during one | **queues behind**, does not preempt |
+| `players/cmd/volume_set 0` mid-announcement | **takes effect instantly and holds** |
+| volume after MA's own announcement ends | **not restored** once we have set it by hand — loft ended at 0 having started at 50 |
+
+So a single 40-second ring track is out: it would be an alarm that ignores
+"stop" for up to 40 seconds. The shape that survives contact:
+
+- **Pre-rendered chunks**, 3 cycles ≈ 7.6 s each, 5 chunks per ring. Static
+  per theme (not per timer), cached in the announce dir and served by the
+  existing `/audio/{name}` route because MA fetches the URL itself.
+- **A dismiss mutes the player**, which is the only thing that actually
+  silences a room mid-announcement. Chunking is *not* what makes the stop
+  fast — it bounds how long a dismissed alarm keeps the announce slot busy,
+  so a doorbell ten seconds later is not stuck behind a corpse.
+- **Restoring the volume is ours**, and it must wait for MA to finish. The
+  first loft run restored immediately on dismiss, which undid our own mute:
+  the room came back to full volume and kept beeping for ~8 s — precisely the
+  sound the user had just asked to stop. `_settle()` polls
+  `announcement_in_progress` before restoring.
+
+Loft run after the fix: dismiss → `vol=0` within 1.2 s, announcement ends at
+2.5 s, volume back to 50 at 3.7 s, everything idle. Tested at volume 5, which
+MA floors to 15.
+
+`steam_whistle` is deliberately not among the orchestrator's themes — it is a
+recording of a person whistling and is unsettling coming out of the walls of a
+dark bathroom. A timer carrying that theme rings in the zone as marimba.
+
+The satellite still gets its `/alarm` POST, now with `playback: "zone"`: it
+runs the dismiss listener, the biased ASR client, the unattended watchdog and
+the confirmation chirp, and only suppresses the ring audio. The loop becomes
+the timekeeper for a sound playing somewhere else.
+
+**Not yet proven in the master bath** — built and loft-tested only. Needs a
+real timer set from the closet satellite, which means waiting until the house
+is awake.
+
+**Superseded note: the ring was on the wrong speaker.** A master-bath timer now
 rings on the closet Pi's little USB speaker, which is almost certainly
 inaudible from the shower. Moving it to the bath zone means the orchestrator
 driving the loop itself — MA `play_media` of the theme WAV on `ma_shower`

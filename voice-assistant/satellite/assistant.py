@@ -145,6 +145,9 @@ ALARM_VOLUME_FLOOR = int(os.getenv("ALARM_VOLUME_FLOOR", "50"))
 
 ALARM_MAX_LOOPS = int(os.getenv("ALARM_MAX_LOOPS", "14"))
 ALARM_GAP_S = float(os.getenv("ALARM_GAP_S", "2.0"))         # space between beeps
+# Stand-in for the beep length when the ring is playing in a zone rather
+# than here, so the loop below still advances at the same rate.
+ZONE_ALARM_BEEP_S = float(os.getenv("ZONE_ALARM_BEEP_S", "0.6"))
 # Ringing this long with no dismiss = nobody's in the kitchen -> tell the
 # orchestrator, which pushes to the household phones. Deliberately well under
 # the full ring (~45-90s); waiting for ring timeout would delay the phones by
@@ -1054,10 +1057,20 @@ def _unattended_watch(tid: str) -> None:
 
 def alarm_playback(req: dict) -> None:
     """Thread: loop the themed sound + periodic announcement until dismissed or
-    timeout. Does NOT touch the mic — the main loop listens for 'stop'."""
+    timeout. Does NOT touch the mic — the main loop listens for 'stop'.
+
+    `playback: "zone"` means this room's alarm is coming out of the whole-home
+    audio zone (the orchestrator drives that; see zone_alarm.py), because this
+    satellite's own speaker is a small USB thing in a closet. Everything else
+    here still has to run: the dismiss listener, the biased ASR client, the
+    unattended-timer watchdog, the ring capture and the confirmation chirp.
+    Only the ring audio is suppressed — so the loop below is the timekeeper
+    for a sound playing somewhere else."""
     tid = STATE.current_alarm
     theme = req.get("sound_theme") or "marimba"
-    log(f"ALARM start timer={tid} label={req.get('label')} theme={theme}")
+    zone = req.get("playback") == "zone"
+    log(f"ALARM start timer={tid} label={req.get('label')} theme={theme}"
+        f"{' (zone playback)' if zone else ''}")
     if UNATTENDED_ALERT_S > 0 and req.get("timer_id"):
         threading.Thread(
             target=_unattended_watch, args=(req["timer_id"],), daemon=True
@@ -1074,15 +1087,22 @@ def alarm_playback(req: dict) -> None:
         if STATE.dismiss.is_set():
             dismissed = True
             break
-        play_file(sound, is_alarm=True)
-        # announce only on the first loop — replaying it masks the mic and makes
-        # 'stop' harder to catch (seen in the 2026-07-06 live test).
-        if announce_wav and i == 0 and not STATE.dismiss.is_set():
-            play_wav_bytes(announce_wav, is_alarm=True)
+        if zone:
+            # The zone is playing the same beep; sleep its length so this loop
+            # keeps time with it rather than racing ahead.
+            time.sleep(ZONE_ALARM_BEEP_S)
+        else:
+            play_file(sound, is_alarm=True)
+            # announce only on the first loop — replaying it masks the mic and
+            # makes 'stop' harder to catch (seen in the 2026-07-06 live test).
+            if announce_wav and i == 0 and not STATE.dismiss.is_set():
+                play_wav_bytes(announce_wav, is_alarm=True)
         if STATE.dismiss.wait(ALARM_GAP_S):   # woken early if main loop hears stop
             dismissed = True
             break
     if dismissed:
+        # Local even for a zone alarm: the chirp confirms WE heard the stop,
+        # and it wants to come from the box that was listening.
         play_file(SOUNDS_DIR / "dismiss.wav")  # confirmation chirp: "it took"
     with STATE.lock:
         STATE.current_alarm = None

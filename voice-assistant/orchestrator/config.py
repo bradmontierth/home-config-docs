@@ -47,6 +47,13 @@ SATELLITE_ALARM_URL = os.getenv(
 # Which room an un-attributed request belongs to — the kitchen touchscreen's
 # stop button, and timers created before the sat column existed.
 DEFAULT_SAT = os.getenv("DEFAULT_SAT", "kitchen")
+
+# Music Assistant's JSON API, used to ring a timer through a whole-home audio
+# zone (see zone_alarm.py). Same endpoint the Node-RED amp pre-wake uses.
+MA_API_URL = os.getenv("MA_API_URL", "http://192.168.10.217:8095/api")
+# How MA reaches back to us for the ring audio: it fetches the URL itself, so
+# this must be an address valid from the MA container, not localhost.
+PUBLIC_BASE = os.getenv("PUBLIC_BASE", "http://192.168.10.217:8785")
 # Silence a ringing satellite alarm. Derived from the alarm URL so a single
 # env var moves both when the satellite box changes address.
 SATELLITE_ALARM_DISMISS_URL = os.getenv(

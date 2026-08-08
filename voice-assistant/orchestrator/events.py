@@ -12,7 +12,7 @@ from typing import Any
 
 import httpx
 
-from . import config, zones
+from . import config, zone_alarm, zones
 
 log = logging.getLogger("orchestrator.events")
 
@@ -38,7 +38,15 @@ async def alarm(timer: dict[str, Any], announce_url: str | None) -> None:
     global env var — otherwise every alarm in the house rings on whichever box
     that variable happens to name, which is what a bathroom timer ringing in
     the kitchen looked like."""
-    host = zones.host_for(timer.get("sat"))
+    sat = timer.get("sat")
+    route = zones.route_for(sat) or {}
+    if route.get("alarm") == "zone":
+        # This room's speaker is a whole-home audio zone, not the satellite's
+        # own. The satellite is still told (below) so it runs its dismiss
+        # listener; it just plays nothing.
+        await zone_alarm.RINGER.start(sat, timer, announce_url)
+
+    host = zones.host_for(sat)
     if not host:
         return
     body = {
@@ -46,6 +54,10 @@ async def alarm(timer: dict[str, Any], announce_url: str | None) -> None:
         "label": timer.get("label"),
         "sound_theme": timer.get("sound_theme"),
         "announce_url": announce_url,
+        # The satellite runs its whole ring loop -- dismiss listener, biased
+        # ASR, unattended watchdog -- but sends the audio nowhere when this is
+        # set, because the orchestrator is playing it into the zone instead.
+        "playback": "zone" if route.get("alarm") == "zone" else "local",
     }
     try:
         async with httpx.AsyncClient(timeout=4) as client:
@@ -67,6 +79,7 @@ async def alarm_stop(sat: str | None = None) -> None:
     Callers on the satellite's own end-of-ring POST path must await this
     BEFORE responding — the satellite starts its next queued alarm only after
     that response, which orders this dismiss ahead of the next ring."""
+    await zone_alarm.RINGER.stop(sat)
     host = zones.host_for(sat)
     if not host:
         return
