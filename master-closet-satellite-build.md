@@ -562,6 +562,44 @@ The same history shows the false-off signature plainly: off at 14:07:42 then
 back on at 14:07:59 (17 s), and again at 01:44:14 → 01:44:32 (18 s),
 01:45:07 → 01:45:23 (16 s).
 
+### The false-off ladder — SHIPPED 2026-08-07
+
+The EPP loses people in the far corners of the closet, bath and toilet, so
+the lights go out on someone still standing there. The history above shows it:
+off at 14:07:42, motion again at 14:07:59.
+
+Blocking the off outright trades a fast annoyance for a slow one — lights
+burning for half an hour after you leave. Instead each false off makes the
+*next* one harder, on the EPP direct path only:
+
+| Rung | All-clear required | Reached by |
+| --- | --- | --- |
+| 0 | 15 s | normal |
+| 1 | 2 min | one off followed by motion within 15 s |
+| 2 | 10 min | two |
+
+Motion during the window still cancels the pending off outright (it hits the
+same `STOP` fan-out it always did), so the ladder only governs how long an
+*uninterrupted* quiet spell has to be. 30 minutes without a false off drops
+back to rung 0; a manual switch-off resets it immediately, because the person
+deciding to leave settles what the sensors were getting wrong.
+
+`mbladder_watch_v1` hangs off `0b50d71ac38be851`, the node every motion-active
+path already passes through to stop the off timers — so it needs no new taps
+on eight sensors. `mbhold_guard_v1` stamps `masterLastOffAt` as the lights
+actually go out, which is what makes "was that off wrong?" answerable.
+`mbladder_apply_v1` sits in front of `eppmb_direct_timer_v2` and sets
+`msg.delay` (seconds — that node is configured in Seconds, unlike its
+Minute-configured twin, see below).
+
+The ladder numbers live in `mbladder_apply_v1` alone; the watcher only counts
+rungs, so there is no second copy to drift. Tune from real use.
+
+Verified by extracting the four deployed function bodies and running them
+against a stub context: 15 → 120 → 600, capped; no climb when motion arrives
+60 s after an off; decay after 31 min; manual reset; and an off during the
+voice hold returning null.
+
 ### Latent bug found while reading the flow — NOT fixed
 
 `eppmb_norm_set_15s_v1` is named "15s EPP off delay" and sets `msg.delay = 15`,
