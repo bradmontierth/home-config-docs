@@ -249,7 +249,8 @@ Motion: Hubitat device 911, on the Node-RED **"Upstairs Bathroom"** tab.
 
 ### Covers
 
-- `cover.upstairs_bath_blind` — master bath blind (confirmed)
+- `cover.upstairs_bath_blind` — master bath blind (confirmed; voice-wired
+  2026-08-07 as `blind_bath_close` / `blind_bath_open`)
 - `cover.boys_room_baby_blind` — Simon's blind (confirmed)
 
 ### Other
@@ -424,24 +425,100 @@ proposed an `msg.ttsUrl` bypass so the orchestrator's already-rendered audio
 could be played directly; that is unnecessary complexity given the above, and
 has been dropped.
 
-### The "keep the lights on" hold
+### The bath blind — SHIPPED 2026-08-07
 
-Node-RED/Hubitat work, independent of the voice path — buildable and testable
-via a Voice Button press with no satellite at all.
+Two lines of Node-RED and three table entries. On the **Voice Buttons** tab
+(`294429bac2b766ff`), `cover.upstairs_bath_blind` joined the existing
+`blind cmd -> covers` map as `blind_bath`, and the discovery function gained
+`blind_bath_close` / `blind_bath_open`. No new nodes, no new routing — the
+`cont "/blind"` router rule already matches the new topics.
 
-- **Suppress the motion-driven OFF; never force lights ON.** The vanity has a
-  physical rotary encoder with press. A hold that forces state fights a
-  deliberate press and makes the room unusable for the window.
-- **A manual off should cancel the hold.**
-- **Timed, not a toggle** — a `masterLightsHold` global, 30 min, auto-expiring,
-  same shape as the staged-brighten 90-minute window. State the window in the
-  spoken confirm.
-- **Gate every off-path or it reads as broken:** closet motion (Hubitat 911),
-  `binary_sensor.master_bath_motion_occupancy`,
-  `binary_sensor.master_shower_motion_motion`, and the "Sleeping In or Nap"
-  scene tab.
-- **Check light #5 first** — the bath floor RGB is an accent light and may have
-  its own night behaviour; confirm it should follow the group at all hours.
+The real work was on the orchestrator side, below.
+
+### Room-scoped home commands — SHIPPED 2026-08-07
+
+The alias table was flat and satellite-blind, which does not survive a second
+room. Standing in the master bath, "close the blinds" scored 100 against the
+kitchen's `blinds_all_close` and would have shut four blinds downstairs.
+
+`home_commands.json` entries may now carry `"sats": ["master"]`, and
+`_match()` takes the satellite id (threaded from `_CUR_SAT` at
+`app.py:822`). Matching runs the room first and takes any hit outright,
+falling back to the house-wide table only on a miss — so a local phrase can
+never lose a three-point fuzzy race to a near-identical command elsewhere.
+
+Naming a room overrides the room you are standing in (`_ROOM_WORDS`), which
+matters more than it sounds: without it, "close the kitchen blinds" said in
+the bathroom scores exactly 80 against the bath blind's own "close the
+blinds" and shuts the wrong one. With it, every blind in the house is also
+reachable by name from anywhere.
+
+The upshot is that the *same* natural phrase means the local thing in each
+room, instead of one room being forced into an awkward paraphrase. Aliases
+may now legitimately be shared across rooms, so `add_alias()` only rejects a
+duplicate when the two commands are reachable from the same place.
+
+### The "keep the lights on" hold — SHIPPED 2026-08-07
+
+Say **"okay computer, keep the lights on"** in the master bath or closet.
+30 minutes, spoken back in the confirm.
+
+**One guard blocks every off-path.** This looked like it needed four gates —
+closet motion (Hubitat 911), `binary_sensor.master_bath_motion_occupancy`,
+the shower sensor, the fast EPP presence path. Reading the flow, all of them
+already converge: the two Hubitat cascades and the EPP direct path all land on
+`388a70141d329ccd` (*MasterBathOverride true else*) and fan out at
+`8976bc84753a1f6b`. `mbhold_guard_v1` sits between the two, so there is
+exactly one place an off can be suppressed and exactly one place to look when
+it misbehaves.
+
+**The guard checks a deadline, not a flag.** Node-RED persists globals to the
+local filesystem (`settings.js` `contextStorage`), so a `masterLightsHold`
+boolean stuck true would survive restarts and mean bathroom lights that never
+turn off again — the same failure mode as the EPP static-presence stick. The
+authority is `masterLightsHoldUntil`, a timestamp, which can only expire.
+
+**Expiry rechecks; it does not turn anything off.** Someone may still be in
+the room — that was the point of the hold. `mbhold_expire_v1` re-enters the
+flow's *own* all-clear cascade at `98cefd2e34906dab`, which polls all five
+motion sensors plus the HA occupancy sensor and starts the normal off timer
+only if every one is quiet. If anybody is still there it simply stops.
+
+**It also turns the lights back on**, which reverses the design note that
+previously sat here ("suppress OFF; never force ON"). Brad's framing settled
+it: the lights have usually *already* gone out by the time you say this, and
+walking back into the closet sensor's view to undo it is the entire
+annoyance. `mbhold_arm_v1` output 1 enters the flow's motion-on junction
+(`02550db2a14d02e2`), so brightness, colour temp, the `bath` already-on
+dedup and the Sleeping In scene all behave exactly as if someone had walked
+past a sensor. Nothing about "on" is reimplemented.
+
+**A manual off cancels it.** The Lutron wall switch going off
+(`96bd397d9f52ce9d` out 1) and the closet switch going off
+(`26126472f537dbe3` out 1, previously unwired) both clear the hold and stop
+the timer. Saying it again re-arms the full 30 minutes.
+
+Nodes: `mbhold_mqtt_v1` → `mbhold_arm_v1` → `mbhold_timer_v1` →
+`mbhold_expire_v1`, plus `mbhold_cancel_v1` and `mbhold_guard_v1`. MQTT
+topic `voice/button/master_lights_hold`, consumed directly on the Upstairs
+Bathroom tab — no cross-tab link nodes, so no one-sided `link out` to get
+wrong.
+
+Still open: **light #5**, the bath floor RGB — nobody has confirmed it should
+follow the group at all hours.
+
+### Latent bug found while reading the flow — NOT fixed
+
+`eppmb_norm_set_15s_v1` is named "15s EPP off delay" and sets `msg.delay = 15`,
+but it feeds `4de7fac9add48fb7`, whose units are **Minute**. `stoptimer-varidelay`
+reads `msg.delay` in the *node's* configured units, so the Day/Evening bath
+lights linger **15 minutes** after the room empties, not 15 seconds. (The
+Early-Morning/Night twin, `eppmb_quick_set_15s_v1` → `1f1fd245d1819d57`, is on
+a Second node and really is 15 s.) Same reading makes `d2f40e0ebac1ebb5`'s
+`msg.delay = 10` dead code — it is overwritten downstream.
+
+Left alone deliberately: it is outside the ask, and a 15-minute daytime grace
+may well be what Brad wants. It is worth a decision, not a silent change.
 
 ---
 

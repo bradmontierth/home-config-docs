@@ -15,6 +15,13 @@ partial/token heuristics scored "turn on the sprinklers" ≈ "close the sink
 blind" above any usable threshold): fuzzy only absorbs ASR noise and small
 filler, paraphrases belong in the alias table. A wrong action is worse than
 a miss, so prefer misses.
+
+An entry may carry `"sats": ["master", ...]` to make it a room-local command,
+visible only from those satellites. Standing in the master bath, "close the
+blinds" has to mean the one blind in that room — not the four in the kitchen,
+whose aliases differ from it by a single letter. Scoping is what lets the same
+natural phrase mean the local thing in each room instead of forcing one of
+them into an awkward paraphrase.
 """
 
 from __future__ import annotations
@@ -61,6 +68,8 @@ _PIN_WORDS = {
     "big": "blind_slider",
     "small": "blind_small",
     "little": "blind_small",
+    "bath": "blind_bath",
+    "bathroom": "blind_bath",
 }
 
 _commands_cache: tuple[float, dict] | None = None  # (mtime, parsed json)
@@ -105,9 +114,49 @@ def snapshot() -> dict:
     return json.loads(json.dumps(_commands()))
 
 
-def _best(query: str) -> tuple[str, dict, float] | None:
+# Naming a room overrides the room you are standing in. Without this, "close
+# the kitchen blinds" said in the master bath scores 80 against the bath
+# blind's own "close the blinds" and shuts the wrong one; with it, the named
+# room wins and the kitchen blinds are also reachable by name from anywhere.
+_ROOM_WORDS = {
+    "kitchen": "kitchen",
+    "bath": "master",
+    "bathroom": "master",
+    "shower": "master",
+    "closet": "master",
+}
+
+
+def _named_room(query: str) -> str | None:
+    """The room the phrase names, if it names exactly one."""
+    rooms = {_ROOM_WORDS[w] for w in re.findall(r"[a-z']+", query)
+             if w in _ROOM_WORDS}
+    return next(iter(rooms)) if len(rooms) == 1 else None
+
+
+def _visibility(entry: dict) -> set[str] | None:
+    """Satellites an entry may fire from; None means anywhere."""
+    sats = entry.get("sats")
+    return set(sats) if sats else None
+
+
+def _local(commands: dict, sat: str | None) -> dict:
+    """Only the commands scoped to this satellite's own room."""
+    if not sat:
+        return {}
+    return {k: v for k, v in commands.items()
+            if sat in (_visibility(v) or ())}
+
+
+def _house(commands: dict, sat: str | None) -> dict:
+    """Unscoped commands, plus this satellite's own — i.e. everything that is
+    allowed to fire from here at all."""
+    return {k: v for k, v in commands.items()
+            if _visibility(v) is None or sat in _visibility(v)}
+
+
+def _best(query: str, commands: dict) -> tuple[str, dict, float] | None:
     """Best (key, entry, score) for an already-cleaned query, no threshold."""
-    commands = _commands()
     words = set(re.findall(r"[a-z']+", query))
     pins = {_PIN_WORDS[w] for w in words if w in _PIN_WORDS}
     if len(pins) == 1:
@@ -123,24 +172,44 @@ def _best(query: str) -> tuple[str, dict, float] | None:
     return best
 
 
-def _match(query: str) -> tuple[str, dict, float] | None:
-    """Best (key, entry, score) over all aliases, or None below threshold."""
+def _match(query: str, sat: str | None = None) -> tuple[str, dict, float] | None:
+    """Best (key, entry, score) over all aliases, or None below threshold.
+
+    The room is asked first and wins outright on a hit, so a room-local
+    phrase can never lose a three-point fuzzy race to a near-identical
+    command somewhere else in the house. Only when nothing local matches does
+    the house-wide table get a look. The room is whichever one the phrase
+    names, falling back to the one the speaker is standing in.
+    """
     query = _clean(query)
-    best = _best(query) if query else None
-    if best and best[2] >= _THRESHOLD:
-        return best
+    if not query:
+        return None
+    commands = _commands()
+    sat = _named_room(query) or sat
+    for pool in (_local(commands, sat), _house(commands, sat)):
+        if not pool:
+            continue
+        best = _best(query, pool)
+        if best and best[2] >= _THRESHOLD:
+            return best
+    best = _best(query, _house(commands, sat))
     if best:
-        log.info("no home command match for %r (best=%s %.0f)",
-                 query, best[0], best[2])
+        log.info("no home command match for %r (sat=%s best=%s %.0f)",
+                 query, sat, best[0], best[2])
     return None
 
 
 def evaluate(query: str) -> dict:
     """Score a phrase without pressing anything — the editor's phrase tester.
     Reports the best candidate even when it misses, so a failed phrase can be
-    added as an alias of the right command in one tap."""
+    added as an alias of the right command in one tap.
+
+    Scores against the whole table regardless of `sats`: the tester runs from
+    a phone with no room of its own, and hiding room-local commands from it
+    would make them impossible to tune.
+    """
     cleaned = _clean((query or "").strip().lower())
-    best = _best(cleaned) if cleaned else None
+    best = _best(cleaned, _commands()) if cleaned else None
     out = {"query": cleaned, "matched": False, "threshold": _THRESHOLD}
     if best:
         key, entry, score = best
@@ -153,15 +222,23 @@ def evaluate(query: str) -> dict:
 def add_alias(command: str, alias: str) -> dict:
     """Add an alias to a command and persist. Raises ValueError on anything
     invalid — unknown command, empty alias, or the alias already belonging to
-    any command (a phrase must map to exactly one button)."""
+    a command reachable from the same room (a phrase must map to exactly one
+    button *from wherever it can be said*). Two room-local commands in
+    different rooms may share a phrase: that is the whole point of scoping —
+    "close the blinds" means the bath blind in the bath and the kitchen ones
+    in the kitchen."""
     alias = " ".join((alias or "").lower().split())
     if not alias:
         raise ValueError("Alias is empty.")
     commands = snapshot()
     if command not in commands:
         raise ValueError(f"Unknown command {command!r}.")
+    mine = _visibility(commands[command])
     for key, entry in commands.items():
-        if alias in entry["aliases"]:
+        if key == command or alias not in entry["aliases"]:
+            continue
+        theirs = _visibility(entry)
+        if mine is None or theirs is None or (mine & theirs):
             raise ValueError(f'"{alias}" is already an alias of {key}.')
     commands[command]["aliases"].append(alias)
     _save(commands)
@@ -194,20 +271,21 @@ async def _press(entity: str) -> None:
         r.raise_for_status()
 
 
-async def handle(parsed: dict, command: str) -> dict | None:
+async def handle(parsed: dict, command: str,
+                 sat: str | None = None) -> dict | None:
     """Match and press. Returns the spoken confirmation, or None on a miss
     (the app speaks the refusal; nothing to follow up on, so no remember())."""
     query = (parsed.get("query") or command or "").strip().lower()
     if not query:
         return None
-    matched = _match(query)
+    matched = _match(query, sat)
     if not matched:
         return None
     key, entry, score = matched
     started = time.monotonic()
     await _press(entry["entity"])
-    log.info("home control %r -> %s (score %.0f, press %.0fms)",
-             query, key, score, (time.monotonic() - started) * 1000)
+    log.info("home control %r -> %s (sat=%s score %.0f, press %.0fms)",
+             query, key, sat, score, (time.monotonic() - started) * 1000)
     # Optimistic confirmation — the service call returns before the blinds
     # finish moving, and that's correct.
     return {"response": entry["confirm"], "ok": True}

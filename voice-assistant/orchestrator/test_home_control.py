@@ -8,8 +8,8 @@ from unittest.mock import AsyncMock, patch
 from . import config, home_control
 
 
-def _handle(query: str):
-    return asyncio.run(home_control.handle({"query": query}, query))
+def _handle(query: str, sat: str | None = None):
+    return asyncio.run(home_control.handle({"query": query}, query, sat))
 
 
 class HomeControlMatchTest(unittest.TestCase):
@@ -96,6 +96,55 @@ class HomeControlMatchTest(unittest.TestCase):
     def test_confirmation_is_spoken_verbatim(self):
         result = _handle("fix the glare")
         self.assertEqual(result["response"], "Closing the blinds to fix the glare.")
+
+    def test_room_local_commands_win_in_their_own_room(self):
+        """The phrase that means two different things: in the master bath it
+        is the one blind in there, in the kitchen it is the four in there."""
+        for phrase in ("close the blinds", "close the blind", "shut the blind"):
+            with self.subTest(phrase=phrase, sat="master"):
+                self.press.reset_mock()
+                _handle(phrase, "master")
+                self.assertEqual(self._pressed(),
+                                 "button.voice_blind_bath_close")
+        self.press.reset_mock()
+        _handle("open the blinds", "master")
+        self.assertEqual(self._pressed(), "button.voice_blind_bath_open")
+
+    def test_room_local_commands_are_invisible_elsewhere(self):
+        self.press.reset_mock()
+        _handle("close the blinds", "kitchen")
+        self.assertEqual(self._pressed(), "button.voice_blinds_all_close")
+        self.press.reset_mock()
+        self.assertIsNone(_handle("keep the lights on", "kitchen"))
+        self.press.assert_not_awaited()
+
+    def test_bath_satellite_can_still_reach_house_wide_commands(self):
+        """Scoping is a first look, not a cage: nothing local matches these,
+        so the master satellite falls through to the house-wide table."""
+        self.press.reset_mock()
+        _handle("close the kitchen blinds", "master")
+        self.assertEqual(self._pressed(), "button.voice_blinds_all_close")
+        self.press.reset_mock()
+        _handle("back to normal", "master")
+        self.assertEqual(self._pressed(), "button.voice_lights_normal")
+
+    def test_lights_hold_from_the_master_satellite(self):
+        for phrase in ("keep the lights on", "leave the lights on",
+                       "don't turn the lights off"):
+            with self.subTest(phrase=phrase):
+                self.press.reset_mock()
+                result = _handle(phrase, "master")
+                self.assertIsNotNone(result, phrase)
+                self.assertEqual(self._pressed(),
+                                 "button.voice_master_lights_hold")
+
+    def test_naming_a_room_overrides_the_room_you_are_standing_in(self):
+        self.press.reset_mock()
+        _handle("close the bathroom blind", "kitchen")
+        self.assertEqual(self._pressed(), "button.voice_blind_bath_close")
+        self.press.reset_mock()
+        _handle("close the kitchen blinds", "master")
+        self.assertEqual(self._pressed(), "button.voice_blinds_all_close")
 
 
 class HomeCommandsEditTest(unittest.TestCase):

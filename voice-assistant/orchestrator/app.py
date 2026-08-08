@@ -819,7 +819,7 @@ async def handle_command(command: str, followup: bool = False,
     elif intent == "home_control":
         hc_result = None
         try:
-            hc_result = await home_mod.handle(parsed, command)
+            hc_result = await home_mod.handle(parsed, command, _CUR_SAT.get())
         except Exception as exc:  # noqa: BLE001 — HA down/slow; still refuse below
             log.warning("home control failed: %s", exc)
         if hc_result:
@@ -1277,10 +1277,13 @@ async def transcribe_audio(request: Request) -> dict:
 @app.post("/command")
 async def command(payload: dict = Body(...)) -> dict:
     """Text bypass for testing and future text-driven paths. `followup: true`
-    exercises the continued-conversation path (session context + silent none)."""
+    exercises the continued-conversation path (session context + silent none);
+    `sat` names the satellite to answer as, which room-scoped home commands
+    and zone reply routing both key off."""
     text = str(payload.get("text", "")).strip()
     if not text:
         raise HTTPException(400, "missing 'text'")
+    _CUR_SAT.set(payload.get("sat") or None)
     t0 = time.time()
     result = await _dispatch(text, followup=bool(payload.get("followup")))
     result["latency_ms"] = round((time.time() - t0) * 1000)

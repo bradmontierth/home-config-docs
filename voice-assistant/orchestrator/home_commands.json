@@ -65,7 +65,7 @@
     "confirm": "Opening all the kitchen blinds."
   },
   "kitchen_brighten": {
-    "aliases": ["brighten the lights", "brighten the kitchen", "brighter", "make it brighter", "make it brighter in here", "bump up the lights", "turn up the lights"],
+    "aliases": ["brighten the lights", "brighten the kitchen", "brighter", "make it brighter", "make it brighter in here", "bump up the lights", "turn up the lights", "it's too dark"],
     "entity": "button.voice_kitchen_brighten",
     "confirm": "Brightening the kitchen."
   },
@@ -78,5 +78,23 @@
     "aliases": ["back to normal", "normal lights", "reset the lights", "lights back to normal", "put the lights back", "regular lights"],
     "entity": "button.voice_lights_normal",
     "confirm": "Back to normal."
+  },
+  "blind_bath_close": {
+    "aliases": ["close the blind", "close the blinds", "close the bath blind", "close the bathroom blind", "close the shade", "shut the blind"],
+    "entity": "button.voice_blind_bath_close",
+    "confirm": "Closing the bathroom blind.",
+    "sats": ["master"]
+  },
+  "blind_bath_open": {
+    "aliases": ["open the blind", "open the blinds", "open the bath blind", "open the bathroom blind", "open the shade"],
+    "entity": "button.voice_blind_bath_open",
+    "confirm": "Opening the bathroom blind.",
+    "sats": ["master"]
+  },
+  "master_lights_hold": {
+    "aliases": ["keep the lights on", "keep the lights on in here", "keep these lights on", "leave the lights on", "don't turn the lights off", "stop turning the lights off", "quit turning the lights off"],
+    "entity": "button.voice_master_lights_hold",
+    "confirm": "Okay, holding the lights on for thirty minutes.",
+    "sats": ["master"]
   }
 }
