@@ -38,9 +38,15 @@ DASHBOARD_EVENT_TOKEN = os.getenv("DASHBOARD_EVENT_TOKEN", "")
 # Satellite alarm playback (kitchen-speaker). Not built yet in this slice; the
 # orchestrator POSTs best-effort and logs on failure. Contract documented in
 # README. Empty string disables the call.
+# Legacy single-satellite alarm target. Per-satellite hosts now come from the
+# zones table (zones.host_for); this remains the fallback for a satellite the
+# table has never heard of, so an unlisted box still rings.
 SATELLITE_ALARM_URL = os.getenv(
     "SATELLITE_ALARM_URL", "http://192.168.10.24:8781/alarm"
 )
+# Which room an un-attributed request belongs to — the kitchen touchscreen's
+# stop button, and timers created before the sat column existed.
+DEFAULT_SAT = os.getenv("DEFAULT_SAT", "kitchen")
 # Silence a ringing satellite alarm. Derived from the alarm URL so a single
 # env var moves both when the satellite box changes address.
 SATELLITE_ALARM_DISMISS_URL = os.getenv(

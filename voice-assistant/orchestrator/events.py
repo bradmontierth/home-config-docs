@@ -1,6 +1,9 @@
 """Fan-out of assistant events to the kitchen dashboard and alarm dispatch to
-the satellite. Both are best-effort: a dead dashboard or satellite must never
-break the timer engine."""
+the satellites. Both are best-effort: a dead dashboard or satellite must never
+break the timer engine.
+
+Alarm dispatch is addressed per satellite via the zones table, so a timer
+rings in the room it was set in and a stop reaches only that room."""
 
 from __future__ import annotations
 
@@ -9,7 +12,7 @@ from typing import Any
 
 import httpx
 
-from . import config
+from . import config, zones
 
 log = logging.getLogger("orchestrator.events")
 
@@ -29,9 +32,14 @@ async def emit(event_type: str, **fields: Any) -> None:
 
 
 async def alarm(timer: dict[str, Any], announce_url: str | None) -> None:
-    """Tell the satellite to start the themed alarm for an expired timer.
-    Best-effort; satellite service is not built yet in this slice."""
-    if not config.SATELLITE_ALARM_URL:
+    """Ring an expired timer in the room it was set in.
+
+    The satellite is addressed from the timer's own `sat`, not from a single
+    global env var — otherwise every alarm in the house rings on whichever box
+    that variable happens to name, which is what a bathroom timer ringing in
+    the kitchen looked like."""
+    host = zones.host_for(timer.get("sat"))
+    if not host:
         return
     body = {
         "timer_id": timer["id"],
@@ -41,27 +49,32 @@ async def alarm(timer: dict[str, Any], announce_url: str | None) -> None:
     }
     try:
         async with httpx.AsyncClient(timeout=4) as client:
-            await client.post(config.SATELLITE_ALARM_URL, json=body)
+            await client.post(f"{host}/alarm", json=body)
     except Exception as exc:  # noqa: BLE001
-        log.info("satellite alarm dispatch failed (expected until satellite built): %s", exc)
+        log.info("alarm dispatch to %s failed: %s", host, exc)
 
 
-async def alarm_stop() -> None:
-    """Silence any ringing satellite alarm. Fired when a ringing timer is
+async def alarm_stop(sat: str | None = None) -> None:
+    """Silence a ringing satellite alarm. Fired when a ringing timer is
     cancelled/dismissed through the orchestrator, so every client (kiosk,
     phone, curl) stops the sound and not just the card. Safe to blind-fire:
     the satellite clears its dismiss flag before each new alarm.
 
+    Scoped to one satellite. A stop is always about a sound somebody can hear,
+    so it goes to that room and nowhere else; the caller decides which room by
+    passing the timer's `sat`.
+
     Callers on the satellite's own end-of-ring POST path must await this
     BEFORE responding — the satellite starts its next queued alarm only after
     that response, which orders this dismiss ahead of the next ring."""
-    if not config.SATELLITE_ALARM_DISMISS_URL:
+    host = zones.host_for(sat)
+    if not host:
         return
     try:
         async with httpx.AsyncClient(timeout=4) as client:
-            await client.post(config.SATELLITE_ALARM_DISMISS_URL)
+            await client.post(f"{host}/alarm/dismiss")
     except Exception as exc:  # noqa: BLE001
-        log.info("satellite alarm stop failed: %s", exc)
+        log.info("alarm stop to %s failed: %s", host, exc)
 
 
 async def satellite_chime(path: str) -> None:

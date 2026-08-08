@@ -507,6 +507,61 @@ wrong.
 Still open: **light #5**, the bath floor RGB — nobody has confirmed it should
 follow the group at all hours.
 
+### Timers know their room — SHIPPED 2026-08-07 (half of it)
+
+Timers predated there being a second satellite, and it showed: the `timers`
+table had no room column and `SATELLITE_ALARM_URL` was a single global env
+var. A timer set in the master bath rang in the kitchen.
+
+Now every timer records the satellite it was set from, and
+`zones.host_for(sat)` addresses the ring — so a third satellite (Simon's
+room) is a table edit, not a code change. An unlisted satellite falls back to
+the old env var rather than going silent.
+
+**A stop only reaches the room it was said in.** Silencing an alarm you
+cannot hear, in a room you are not standing in, is worse than missing the
+stop — so unlabelled `stop`/`cancel` and `dismiss_any_ringing` are scoped to
+the speaker's satellite. The deliberate escapes are naming the timer
+("cancel the pasta timer" searches your room first, then the house) and
+"cancel all timers", which is house-wide by definition. `/alarm/stop` takes
+an optional `sat` and defaults to `DEFAULT_SAT` (kitchen) because its one
+caller is the kitchen touchscreen. Covered by `test_timer_rooms.py`.
+
+**Still open: the ring is on the wrong speaker.** A master-bath timer now
+rings on the closet Pi's little USB speaker, which is almost certainly
+inaudible from the shower. Moving it to the bath zone means the orchestrator
+driving the loop itself — MA `play_media` of the theme WAV on `ma_shower`
+every `ALARM_GAP_S`, behind an `amp_wake`, until dismissed — because the
+Amp Speakers subflow takes *text* and plays once, and the satellite's own
+loop (announce-once, dismiss listener, unattended watchdog) is local-audio
+only. The orchestrator already serves the WAVs at `/sounds/{name}` and
+`/audio/{name}`, so MA can fetch them.
+
+### The 15-minute Day/Evening timeout — measured, and it was NOT the answer
+
+Recorded here earlier as "Day/Evening lights linger 15 minutes". Wrong in
+practice, and Brad's contrary observation was right. Measured 2026-08-07 from
+HA history, mmWave clearing → closet light off:
+
+| mmWave off (UTC) | Light off | Gap | Path |
+| --- | --- | --- | --- |
+| 12:43:51 | 12:59:08 | **15m 17s** | norm (Hubitat cascade) |
+| 13:48:15 | 13:58:31 | **10m 16s** | `MasterBathOverride` +10 min |
+| 14:07:26 | 14:07:42 | 16s | EPP direct |
+| 14:10:24 | 14:10:40 | 16s | EPP direct |
+| 15:17:54 | 15:18:10 | 16s | EPP direct |
+| 16:31:11 | 16:31:27 | 16s | EPP direct |
+| 17:49:20 | 17:49:36 | 16s | EPP direct |
+
+All three paths are real, but the **EPP direct path wins 5 times out of 7**:
+it checks only the two EPP sensors and waits 15 s, so it beats both Hubitat
+cascades to the punch. The 15-minute misnaming is a genuine bug but mostly
+academic — it only surfaces when the EPP path is blocked.
+
+The same history shows the false-off signature plainly: off at 14:07:42 then
+back on at 14:07:59 (17 s), and again at 01:44:14 → 01:44:32 (18 s),
+01:45:07 → 01:45:23 (16 s).
+
 ### Latent bug found while reading the flow — NOT fixed
 
 `eppmb_norm_set_15s_v1` is named "15s EPP off delay" and sets `msg.delay = 15`,

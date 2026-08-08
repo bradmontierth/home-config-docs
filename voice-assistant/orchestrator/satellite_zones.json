@@ -1,8 +1,13 @@
 {
+  "kitchen": {
+    "host": "http://192.168.10.251:8781",
+    "note": "The kitchen mini PC: mic, speakers and NFC in one box. No rooms key, so its replies stay on its own speaker."
+  },
   "master": {
     "rooms": ["shower"],
     "voice": "fast:doorbell",
-    "volume": 30,
-    "note": "Master closet satellite. Chime/ding stays local on its USB speaker; spoken replies go out the master bath zone. Volume 30 not 50 — the amp runs hot gain on this zone (50 was measured too loud 2026-08-07)."
+    "volume": 20,
+    "host": "http://192.168.10.24:8781",
+    "note": "Mic-only Pi in the master closet. The wake ding stays on its little USB speaker; spoken replies go out the master bath speakers via the broadcast chain. Timer alarms currently ring on the USB speaker too - moving those to the bath zone is the open half of the timer work."
   }
 }

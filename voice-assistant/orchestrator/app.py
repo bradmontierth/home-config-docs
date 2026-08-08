@@ -558,7 +558,8 @@ async def handle_command(command: str, followup: bool = False,
                                     theme=parsed["sound_theme"])
         else:
             timer = await ENGINE.create(
-                parsed["label"], parsed["duration_seconds"], parsed["sound_theme"]
+                parsed["label"], parsed["duration_seconds"],
+                parsed["sound_theme"], _CUR_SAT.get()
             )
             result["timer"] = timer
             result["response"] = fmt.confirm_set(timer)
@@ -576,7 +577,7 @@ async def handle_command(command: str, followup: bool = False,
 
     elif intent == "timer_adjust":
         delta = parsed["duration_seconds"] or 0
-        timer = await ENGINE.adjust(parsed["label"], delta)
+        timer = await ENGINE.adjust(parsed["label"], delta, _CUR_SAT.get())
         if timer:
             result["timer"] = timer
             result["response"] = fmt.confirm_adjust(timer)
@@ -597,13 +598,14 @@ async def handle_command(command: str, followup: bool = False,
                 "Cancelled all timers." if n else "There were no timers to cancel."
             )
             result["ok"] = True
-            if any(t["id"] in ringing_ids for t in cancelled):
-                await events.alarm_stop()
+            for t in cancelled:
+                if t["id"] in ringing_ids:
+                    await events.alarm_stop(t.get("sat"))
             await events.emit("timer_cancelled", scope="all", timers=ENGINE.active())
         else:
-            timer = ENGINE.cancel(parsed["label"])
+            timer = ENGINE.cancel(parsed["label"], _CUR_SAT.get())
             if timer and timer["id"] in ringing_ids:
-                await events.alarm_stop()
+                await events.alarm_stop(timer.get("sat"))
             if timer:
                 result["timer"] = timer
                 result["response"] = fmt.confirm_cancel(timer)
@@ -1304,7 +1306,7 @@ async def dismiss_timer(timer_id: str) -> dict:
     # Awaited before responding (see events.alarm_stop docstring): the
     # satellite's own end-of-ring POST lands here too, and its next queued
     # alarm must not start until this dismiss has been delivered.
-    await events.alarm_stop()
+    await events.alarm_stop(timer.get("sat"))
     await events.emit("timer_dismissed", timer=timer, timers=ENGINE.active())
     return {"ok": True, "timer": timer}
 
@@ -1317,18 +1319,23 @@ async def cancel_timer(timer_id: str) -> dict:
     if not timer:
         raise HTTPException(404, "no active timer with that id")
     if was_ringing:
-        await events.alarm_stop()
+        await events.alarm_stop(timer.get("sat"))
     await events.emit("timer_cancelled", timer=timer, timers=ENGINE.active())
     return {"ok": True, "timer": timer}
 
 
 @app.post("/alarm/stop")
-async def alarm_stop_route() -> dict:
+async def alarm_stop_route(payload: dict | None = Body(None)) -> dict:
     """Front door for 'make the ringing stop' (kiosk tap/swipe, phone). Marks
     the ringing timer dismissed if the engine knows of one, but silences the
-    satellite UNCONDITIONALLY — state skew must never keep the alarm ringing."""
-    timer = ENGINE.dismiss_any_ringing()
-    await events.alarm_stop()
+    satellite UNCONDITIONALLY — state skew must never keep the alarm ringing.
+
+    `sat` scopes it to one room; it defaults to the kitchen because the one
+    caller today is the kitchen touchscreen, and a tap on a screen in the
+    kitchen should not reach into the bathroom."""
+    sat = (payload or {}).get("sat") or config.DEFAULT_SAT
+    timer = ENGINE.dismiss_any_ringing(sat)
+    await events.alarm_stop((timer or {}).get("sat") or sat)
     if timer:
         await events.emit("timer_dismissed", timer=timer, timers=ENGINE.active())
     return {"ok": True, "timer": timer}
