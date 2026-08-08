@@ -148,6 +148,15 @@ ALARM_GAP_S = float(os.getenv("ALARM_GAP_S", "2.0"))         # space between bee
 # Stand-in for the beep length when the ring is playing in a zone rather
 # than here, so the loop below still advances at the same rate.
 ZONE_ALARM_BEEP_S = float(os.getenv("ZONE_ALARM_BEEP_S", "0.6"))
+# A zone alarm starts with its dismiss listener DISARMED, because the mic hears
+# the spoken announcement coming off the room speakers and Parakeet mangles it
+# into a dismiss word -- "Your timer is done" decoded as "You're turn it off"
+# and killed the alarm 3s in (2026-08-08, first live bath test). The
+# orchestrator arms us the instant that announcement finishes, since it is the
+# one that played it. This cap is the backstop for an orchestrator that never
+# calls: better a few seconds of self-dismiss risk than an alarm nobody can
+# stop by voice.
+DISMISS_ARM_CAP_S = float(os.getenv("DISMISS_ARM_CAP_S", "12"))
 # Ringing this long with no dismiss = nobody's in the kitchen -> tell the
 # orchestrator, which pushes to the household phones. Deliberately well under
 # the full ring (~45-90s); waiting for ring timeout would delay the phones by
@@ -235,6 +244,14 @@ class State:
         self.alarm_queue: list[dict] = []
         self.current_alarm: str | None = None
         self.dismiss = threading.Event()
+        # Cleared while our own announcement is still playing; see
+        # DISMISS_ARM_CAP_S. Local alarms arm immediately.
+        self.dismiss_armed = threading.Event()
+        # Set alongside it: the rolling ASR window is 2.5s wide, so arming
+        # alone is not enough -- the next window still carries our own
+        # announcement and gets decoded as a dismiss word. The main loop
+        # empties the window when it sees this.
+        self.flush_alarm_window = threading.Event()
         self.stats = {"started": time.time(), "triggers": 0, "turns": 0}
 
     def get_mode(self) -> str:
@@ -1032,7 +1049,8 @@ class DismissChecker:
                 continue
             if t.strip():
                 log(f"alarm-listen heard: {t!r}")
-            if STATE.current_alarm is not None and _dismiss_in(t):
+            if (STATE.current_alarm is not None
+                    and STATE.dismiss_armed.is_set() and _dismiss_in(t)):
                 log("dismiss word -> stopping alarm")
                 STATE.dismiss.set()
 
@@ -1115,6 +1133,17 @@ def alarm_playback(req: dict) -> None:
     start_next_alarm()
 
 
+def _arm_dismiss_after(delay: float) -> None:
+    """Backstop for the orchestrator's /alarm/arm call. Waits on the dismiss
+    Event so a finished alarm does not leave a thread ticking."""
+    if delay <= 0 or STATE.dismiss.wait(delay):
+        return
+    if STATE.current_alarm is not None and not STATE.dismiss_armed.is_set():
+        log(f"dismiss listener armed by {delay:.0f}s cap (no arm from orchestrator)")
+        STATE.flush_alarm_window.set()
+        STATE.dismiss_armed.set()
+
+
 def start_next_alarm() -> None:
     with STATE.lock:
         if STATE.current_alarm is not None or not STATE.alarm_queue:
@@ -1122,6 +1151,12 @@ def start_next_alarm() -> None:
         req = STATE.alarm_queue.pop(0)
         STATE.current_alarm = req.get("timer_id") or f"anon-{int(time.time())}"
     STATE.dismiss.clear()
+    if req.get("dismiss_armed") is False:
+        STATE.dismiss_armed.clear()
+        threading.Thread(target=_arm_dismiss_after, args=(DISMISS_ARM_CAP_S,),
+                         daemon=True).start()
+    else:
+        STATE.dismiss_armed.set()
     media_stop()   # a ringing timer outranks slideshow video audio
     duck_music()   # the ringing must beat the music, and 'stop' must be hearable
     threading.Thread(target=alarm_playback, args=(req,), daemon=True).start()
@@ -1345,6 +1380,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
             STATE.enqueue_alarm(body)
             start_next_alarm()
             self._json(200, {"ok": True, "timer_id": body.get("timer_id")})
+        elif self.path == "/alarm/arm":
+            # The orchestrator finished speaking the announcement into the
+            # zone; it is now safe to treat what we hear as a human.
+            if STATE.current_alarm is not None and not STATE.dismiss_armed.is_set():
+                log("dismiss listener armed by orchestrator")
+            STATE.flush_alarm_window.set()
+            STATE.dismiss_armed.set()
+            self._json(200, {"ok": True})
         elif self.path == "/alarm/dismiss":
             STATE.dismiss.set()
             self._json(200, {"ok": True})
@@ -1527,6 +1570,7 @@ def main() -> int:
         if STATE.current_alarm is not None:
             if not in_alarm:
                 in_alarm = True
+                STATE.flush_alarm_window.clear()
                 alarm_window.clear()
                 alarm_frames = 0
                 stop_window = np.zeros(WINDOW_SAMPLES, dtype=np.int16)
@@ -1548,6 +1592,12 @@ def main() -> int:
                 return 1
             if ring_wav is not None:
                 ring_wav.writeframes(b)
+            if STATE.flush_alarm_window.is_set():
+                # Drop everything heard before we were armed, so the first
+                # decode after arming cannot contain our own announcement.
+                STATE.flush_alarm_window.clear()
+                alarm_window.clear()
+                alarm_frames = 0
             alarm_window.append(b)
             alarm_frames += 1
             if alarm_frames >= alarm_hop_frames and len(alarm_window) >= alarm_hop_frames:

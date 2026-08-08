@@ -58,6 +58,12 @@ async def alarm(timer: dict[str, Any], announce_url: str | None) -> None:
         # ASR, unattended watchdog -- but sends the audio nowhere when this is
         # set, because the orchestrator is playing it into the zone instead.
         "playback": "zone" if route.get("alarm") == "zone" else "local",
+        # Zone rings start with the satellite's dismiss listener disarmed: its
+        # mic hears the announcement off the room speakers and Parakeet turns
+        # "Your timer is done" into things like "You're turn it off", which
+        # self-dismissed the very first live bath alarm three seconds in.
+        # zone_alarm arms it the moment the announcement stops playing.
+        "dismiss_armed": route.get("alarm") != "zone",
     }
     try:
         async with httpx.AsyncClient(timeout=4) as client:

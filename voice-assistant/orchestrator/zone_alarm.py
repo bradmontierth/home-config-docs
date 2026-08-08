@@ -34,6 +34,7 @@ stuck behind a corpse.
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import os
 import wave
@@ -51,6 +52,12 @@ _THEMES_DIR = os.path.join(os.path.dirname(__file__), "sounds", "themes")
 GAP_S = float(os.getenv("ZONE_RING_GAP_S", "2.0"))
 CYCLES = int(os.getenv("ZONE_RING_CYCLES", "14"))
 CYCLES_PER_CHUNK = int(os.getenv("ZONE_RING_CYCLES_PER_CHUNK", "3"))
+# MA reports an announcement finished before the sound has actually left the
+# room: snapcast buffers, and the amp path adds its own tail padding. Arming
+# the satellite's dismiss listener at MA's word was ~1.5s too early, and the
+# mic caught the end of "Your timer is done" as "You're turn it off"
+# (2026-08-08). Wait this out before handing the room back to the listener.
+ARM_SETTLE_S = float(os.getenv("ZONE_RING_ARM_SETTLE_S", "1.5"))
 
 # steam_whistle is deliberately absent: it is a recording of a person
 # whistling and is unsettling coming out of the walls in a dark bathroom.
@@ -100,6 +107,48 @@ async def _ma(command: str, args: dict, timeout: float) -> None:
     async with httpx.AsyncClient(timeout=timeout) as client:
         r = await client.post(config.MA_API_URL, json=body)
         r.raise_for_status()
+
+
+async def _snap_volume(client_id: str) -> int | None:
+    """The true resting volume, from the snapserver that actually owns these
+    players.
+
+    MA caches this and the cache goes stale: on 2026-08-08 ma_shower reported
+    0 for hours while the snapclient was really at 20, and MA kept reporting 0
+    even as its own volume_set correctly moved the client from 20 to 35.
+    Restoring MA's number would have left the bathroom permanently silent, so
+    MA is not trusted for this one value."""
+    try:
+        reader, writer = await asyncio.open_connection(
+            config.SNAPSERVER_HOST, config.SNAPSERVER_PORT, limit=1 << 20)
+        try:
+            writer.write(json.dumps({"id": 1, "jsonrpc": "2.0",
+                                     "method": "Server.GetStatus"}).encode() + b"\n")
+            await writer.drain()
+            line = await asyncio.wait_for(reader.readline(), timeout=6)
+        finally:
+            writer.close()
+        for group in json.loads(line)["result"]["server"]["groups"]:
+            for client in group["clients"]:
+                if client["id"] == client_id:
+                    return client["config"]["volume"]["percent"]
+    except Exception as exc:  # noqa: BLE001
+        log.warning("snapserver volume read for %s failed: %s", client_id, exc)
+    return None
+
+
+async def _resting_volume(route: dict) -> int:
+    """What to put the room back to. Snapserver first, then MA, then the
+    configured level — and never zero, whatever any of them claim. A room we
+    hand back at zero is a room that never speaks again, which is a far worse
+    failure than restoring a slightly wrong number."""
+    fallback = route.get("volume") or 20
+    if route.get("snap_client"):
+        level = await _snap_volume(route["snap_client"])
+        if level:
+            return level
+    level = await _player_volume(route.get("ma_player"))
+    return level or fallback
 
 
 async def _player_volume(player: str) -> int | None:
@@ -159,7 +208,7 @@ class ZoneRinger:
             log.warning("zone alarm for %s has no ma_player; not ringing", sat)
             return
         volume = route.get("alarm_volume", route.get("volume"))
-        restore_to = await _player_volume(player)
+        restore_to = await _resting_volume(route)
         chunk = build_chunk(timer.get("sound_theme"))
         base = config.PUBLIC_BASE.rstrip("/")
         chunks = max(1, -(-CYCLES // CYCLES_PER_CHUNK))
@@ -172,7 +221,12 @@ class ZoneRinger:
             await broadcast_mod.amp_wake(route.get("rooms") or [], volume)
 
             if announce_url:
+                # Blocks for the real length of the announcement, which is
+                # exactly what makes the next line precise: we know when our
+                # own voice stopped coming out of the walls.
                 await self._play(player, f"{base}{announce_url}", volume, 60)
+                await asyncio.sleep(ARM_SETTLE_S)
+            await self._arm_dismiss(sat)
             for _ in range(chunks):
                 await self._play(player, f"{base}/audio/{chunk}", volume, 90)
         except asyncio.CancelledError:
@@ -184,8 +238,21 @@ class ZoneRinger:
             # Unconditional: MA does not put the volume back once we have
             # touched it, and a room left at 0 is a room that never speaks
             # again. Shielded so a cancel cannot skip it.
-            if restore_to is not None:
-                await asyncio.shield(self._settle(player, restore_to))
+            await asyncio.shield(self._settle(player, restore_to))
+
+    async def _arm_dismiss(self, sat: str) -> None:
+        """Tell the satellite it may now believe its own ears. Until this, its
+        dismiss listener is disarmed so the announcement cannot kill the ring
+        it just introduced (the satellite also self-arms on a timeout, so a
+        failure here costs a little self-dismiss risk, never a stuck alarm)."""
+        host = zones.host_for(sat)
+        if not host:
+            return
+        try:
+            async with httpx.AsyncClient(timeout=4) as client:
+                await client.post(f"{host}/alarm/arm")
+        except Exception as exc:  # noqa: BLE001
+            log.warning("arming dismiss on %s failed: %s", sat, exc)
 
     async def _play(self, player: str, url: str,
                     volume: int | None, timeout: float) -> None:
@@ -204,6 +271,7 @@ class ZoneRinger:
         The mute has to outlive the announcement, so wait for it, then restore.
         """
         deadline = asyncio.get_running_loop().time() + 90
+        clear = 0
         while asyncio.get_running_loop().time() < deadline:
             try:
                 async with httpx.AsyncClient(timeout=8) as client:
@@ -216,7 +284,13 @@ class ZoneRinger:
             except Exception as exc:  # noqa: BLE001
                 log.warning("settle poll for %s failed: %s", player, exc)
                 break
-            if not busy:
+            # Two clear polls, not one: the gap between chunks reads as quiet,
+            # and restoring there put the room back to full volume while the
+            # next chunk was already on its way (observed 2026-08-08 -- the
+            # restore landed 1.0s after a dismiss instead of 8.2s, and MA then
+            # re-asserted a volume it had captured during our mute).
+            clear = 0 if busy else clear + 1
+            if clear >= 2:
                 break
             await asyncio.sleep(1)
         await self._restore(player, level)

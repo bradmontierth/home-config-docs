@@ -569,9 +569,56 @@ runs the dismiss listener, the biased ASR client, the unattended watchdog and
 the confirmation chirp, and only suppresses the ring audio. The loop becomes
 the timekeeper for a sound playing somewhere else.
 
-**Not yet proven in the master bath** — built and loft-tested only. Needs a
-real timer set from the closet satellite, which means waiting until the house
-is awake.
+#### First live bath test, 2026-08-08 — three bugs, all fixed
+
+**1. The alarm dismissed itself on its own announcement.** The closet mic
+hears the zone announcement and Parakeet mangles it: `"You're tired."`,
+`"Your time."`, `"You're turn it off."` — and that last one contains a bare
+`off`, which is a dismiss word. The ring died three seconds in. `_dismiss_in`
+even documents the assumption that broke: *"the announcement never otherwise
+contains these words."* True when the announcement came from the satellite's
+own speaker at a known level; false once it comes off big speakers across a
+doorway.
+
+Fix: a zone ring starts with the satellite's dismiss listener **disarmed**,
+and `zone_alarm` arms it (`POST /alarm/arm`) the moment the announcement's
+`play_announcement` returns — the orchestrator is playing it, so it knows
+exactly when its own voice stopped. The satellite self-arms after
+`DISMISS_ARM_CAP_S` (12s) if that call never comes, so a broken orchestrator
+costs a little self-dismiss risk, never an unstoppable alarm.
+
+Two follow-ons were needed before it held:
+- **The ASR window is 2.5s and rolling**, so the first decode after arming
+  still contained the announcement. Arming now also flushes it.
+- **MA reports an announcement finished ~1.5s before the sound leaves the
+  room** (snapcast buffering plus the amp path's tail padding), so
+  `ARM_SETTLE_S` waits that out first.
+
+Result: a 36-second ring ran to completion untouched, with the garbled
+transcripts landing pre-arm and correctly ignored.
+
+**2. `_settle` restored the volume during a gap between chunks.** One clear
+poll is not enough — the silence between chunks reads as quiet. It restored
+1.0s after a dismiss instead of 8.2s, the next chunk started, and MA then
+re-asserted a volume it had captured during our mute. Now requires two
+consecutive clear polls.
+
+**3. MA's `volume_level` for these players is unreliable.** `ma_shower`
+reported `0` for hours while the snapclient was really at 20 — and MA kept
+reporting 0 even as its own `volume_set` correctly moved the client from 20 to
+35. Restoring MA's number would have left the bathroom permanently silent.
+
+The whole-home players are snapcast clients on an **external snapserver at
+192.168.10.140:1705** (`snapcast_use_external_server` in MA's provider
+config), and that is the source of truth. `_resting_volume()` reads it first,
+falls back to MA, then to the configured level — and never returns zero,
+because a room handed back at zero is a room that never speaks again.
+
+Verified live: ring, dismiss at 7s, volume back to 20 on the snapserver 5.1s
+later.
+
+**Still unverified: whether 45 is loud enough over a running shower**, and the
+voice `"stop"` path (all dismiss tests so far were via the API).
 
 **Superseded note: the ring was on the wrong speaker.** A master-bath timer now
 rings on the closet Pi's little USB speaker, which is almost certainly

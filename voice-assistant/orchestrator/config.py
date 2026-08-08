@@ -54,6 +54,11 @@ MA_API_URL = os.getenv("MA_API_URL", "http://192.168.10.217:8095/api")
 # How MA reaches back to us for the ring audio: it fetches the URL itself, so
 # this must be an address valid from the MA container, not localhost.
 PUBLIC_BASE = os.getenv("PUBLIC_BASE", "http://192.168.10.217:8785")
+# The whole-home snapserver MA drives (its provider is configured with
+# snapcast_use_external_server). Source of truth for zone volumes: MA's own
+# cached volume_level for these players goes stale (see zone_alarm._snap_volume).
+SNAPSERVER_HOST = os.getenv("SNAPSERVER_HOST", "192.168.10.140")
+SNAPSERVER_PORT = int(os.getenv("SNAPSERVER_PORT", "1705"))
 # Silence a ringing satellite alarm. Derived from the alarm URL so a single
 # env var moves both when the satellite box changes address.
 SATELLITE_ALARM_DISMISS_URL = os.getenv(
