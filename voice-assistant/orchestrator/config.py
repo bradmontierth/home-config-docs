@@ -47,6 +47,10 @@ SATELLITE_ALARM_URL = os.getenv(
 # Which room an un-attributed request belongs to — the kitchen touchscreen's
 # stop button, and timers created before the sat column existed.
 DEFAULT_SAT = os.getenv("DEFAULT_SAT", "kitchen")
+# Which room the kitchen touchscreen is standing in, and therefore whose
+# timers it shows. Not the same question as DEFAULT_SAT even though they
+# answer the same today: move the display and only this one changes.
+DASHBOARD_SAT = os.getenv("DASHBOARD_SAT", DEFAULT_SAT)
 
 # Music Assistant's JSON API, used to ring a timer through a whole-home audio
 # zone (see zone_alarm.py). Same endpoint the Node-RED amp pre-wake uses.

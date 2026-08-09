@@ -323,10 +323,15 @@ def get_bytes(url: str, timeout: float = 30) -> bytes:
 # music false-fires made every dip audible as stutter. The orchestrator
 # refcounts nested pairs and has a watchdog, so these are safe to fire blind.
 def _music_post(path: str) -> None:
-    """Fire-and-forget on its own thread — must never delay /verify or capture."""
+    """Fire-and-forget on its own thread — must never delay /verify or capture.
+
+    Tagged with this satellite's id because ducking is a room-local idea and
+    the music is not: the queue lives in the kitchen, so a wake word or a timer
+    in the master closet was quietly ducking music two floors away, for a
+    sound nobody in the kitchen could hear. The orchestrator decides."""
     def _post():
         try:
-            post_json(path, {}, timeout=3)
+            post_json(sat_path(path), {}, timeout=3)
         except Exception:  # noqa: BLE001 — no music / orch down: nothing to duck
             pass
     threading.Thread(target=_post, daemon=True).start()

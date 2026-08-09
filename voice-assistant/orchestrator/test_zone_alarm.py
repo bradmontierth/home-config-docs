@@ -18,7 +18,7 @@ import unittest
 import wave
 from unittest.mock import AsyncMock, patch
 
-from . import config, zone_alarm, zones
+from . import config, events, zone_alarm, zones
 
 
 def _write_wav(path: str, seconds: float, rate: int = 24000) -> None:
@@ -168,3 +168,52 @@ class RingOrderingTest(unittest.TestCase):
         holds it there; lose and the announcement plays into a sleeping amp
         with the wake tone queued behind it."""
         self.assertGreaterEqual(zone_alarm.WAKE_GATE_S, 0.5)
+
+
+class MusicDuckScopeTest(unittest.TestCase):
+    """Ducking is room-local; the music queue is not. Brad watched the kitchen
+    music duck for bath timers he was testing two floors up."""
+
+    TABLE = {"kitchen": {"music": True}, "master": {"rooms": ["shower"]}}
+
+    def _owns(self, sat, table=None):
+        with patch.object(zones, "_table", return_value=table or self.TABLE):
+            return zones.owns_music(sat)
+
+    def test_the_music_room_ducks(self):
+        self.assertTrue(self._owns("kitchen"))
+
+    def test_another_room_does_not(self):
+        self.assertFalse(self._owns("master"))
+
+    def test_unknown_room_does_not(self):
+        self.assertFalse(self._owns("simon"))
+
+    def test_untagged_request_still_ducks(self):
+        """An older satellite build sends no sat. It must not go silent in the
+        one room where ducking is the entire point."""
+        self.assertTrue(self._owns(None))
+
+    def test_table_with_no_music_flag_falls_back_to_the_default_room(self):
+        plain = {"kitchen": {}, "master": {"rooms": ["shower"]}}
+        self.assertTrue(self._owns(config.DEFAULT_SAT, plain))
+        self.assertFalse(self._owns("master", plain))
+
+    def test_unreadable_table_ducks_rather_than_going_quiet(self):
+        with patch.object(zones, "_table", side_effect=ValueError("bad json")):
+            self.assertTrue(zones.owns_music("master"))
+
+
+class DashboardScopeTest(unittest.TestCase):
+    """The kitchen screen shows one room's timers. A bath timer counting down
+    on it is a sound the person in the kitchen cannot hear."""
+
+    def test_the_display_room_is_shown(self):
+        self.assertTrue(events.on_dashboard(config.DASHBOARD_SAT))
+
+    def test_another_room_is_not(self):
+        self.assertFalse(events.on_dashboard("master"))
+
+    def test_a_timer_with_no_room_is_shown(self):
+        """Pre-`sat` rows are kitchen timers and have always been on the board."""
+        self.assertTrue(events.on_dashboard(None))

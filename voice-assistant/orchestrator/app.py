@@ -188,11 +188,32 @@ _CUR_SAT: contextvars.ContextVar[str | None] = contextvars.ContextVar(
 # --------------------------------------------------------------------------
 # expiry -> alarm
 # --------------------------------------------------------------------------
+async def _timer_event(event_type: str, timer: dict | None = None,
+                       **fields: object) -> None:
+    """Push a timer change to the kitchen display — if it is that room's timer.
+
+    The display is one room's board, not the household's. A master bath timer
+    appearing on it counts down a sound the person standing in the kitchen
+    cannot hear, which reads as an alarm that failed rather than one ringing
+    somewhere else (Brad, 2026-08-08, watching bath tests pop cards).
+
+    House-wide events with no single timer (cancel-all) still go through: the
+    board has to drop whatever it was showing. Only the list is scoped."""
+    if timer is not None and not events.on_dashboard(timer.get("sat")):
+        log.info("timer event %s not for the display (sat=%s)",
+                 event_type, timer.get("sat"))
+        return
+    if timer is not None:
+        fields["timer"] = timer
+    await events.emit(event_type, timers=ENGINE.active(config.DASHBOARD_SAT),
+                      **fields)
+
+
 async def _on_timer_expire(timer: dict) -> None:
     announce_url = None
     if ENGINE.announce_wav_path(timer["id"]):
         announce_url = f"/timers/{timer['id']}/announcement.wav"
-    await events.emit(
+    await _timer_event(
         "timer_done",
         timer=timer,
         text=fmt.timer_name(timer).capitalize() + " is done!",
@@ -564,7 +585,7 @@ async def handle_command(command: str, followup: bool = False,
             result["timer"] = timer
             result["response"] = fmt.confirm_set(timer)
             result["ok"] = True
-            await events.emit("timer_created", timer=timer, timers=ENGINE.active())
+            await _timer_event("timer_created", timer=timer)
 
     elif intent == "timer_query":
         if parsed["label"]:
@@ -582,7 +603,7 @@ async def handle_command(command: str, followup: bool = False,
             result["timer"] = timer
             result["response"] = fmt.confirm_adjust(timer)
             result["ok"] = True
-            await events.emit("timer_updated", timer=timer, timers=ENGINE.active())
+            await _timer_event("timer_updated", timer=timer)
         else:
             result["response"] = "I couldn't find that timer."
             result["ok"] = False
@@ -601,7 +622,7 @@ async def handle_command(command: str, followup: bool = False,
             for t in cancelled:
                 if t["id"] in ringing_ids:
                     await events.alarm_stop(t.get("sat"))
-            await events.emit("timer_cancelled", scope="all", timers=ENGINE.active())
+            await _timer_event("timer_cancelled", scope="all")
         else:
             timer = ENGINE.cancel(parsed["label"], _CUR_SAT.get())
             if timer and timer["id"] in ringing_ids:
@@ -610,9 +631,7 @@ async def handle_command(command: str, followup: bool = False,
                 result["timer"] = timer
                 result["response"] = fmt.confirm_cancel(timer)
                 result["ok"] = True
-                await events.emit(
-                    "timer_cancelled", timer=timer, timers=ENGINE.active()
-                )
+                await _timer_event("timer_cancelled", timer=timer)
             else:
                 result["response"] = "I couldn't find that timer."
                 result["ok"] = False
@@ -1233,9 +1252,15 @@ async def partial(request: Request, seq: int = 0) -> dict:
 
 # -- music ducking (satellite) ----------------------------------------------
 @app.post("/music/duck")
-async def music_duck() -> dict:
+async def music_duck(sat: str | None = None) -> dict:
     """Satellite fires this on a stage-1 wake trigger / alarm start so speech
-    isn't buried under the music. Best-effort — never errors."""
+    isn't buried under the music. Best-effort — never errors.
+
+    Only the room the music is actually playing in gets to duck it. There is
+    one queue and it is the kitchen's, so before this the master closet ducked
+    the kitchen every time it heard its wake word or rang a bath timer."""
+    if not zones.owns_music(sat):
+        return {"ok": True, "skipped": "not the music room"}
     try:
         await music_mod.duck()
     except Exception as exc:  # noqa: BLE001 — includes MusicUnavailable
@@ -1245,7 +1270,12 @@ async def music_duck() -> dict:
 
 
 @app.post("/music/unduck")
-async def music_unduck() -> dict:
+async def music_unduck(sat: str | None = None) -> dict:
+    # Symmetrical with the duck, and it has to be: the duck is refcounted, so
+    # an unduck from a room that never ducked would decrement someone else's
+    # hold and un-duck the kitchen mid-sentence.
+    if not zones.owns_music(sat):
+        return {"ok": True, "skipped": "not the music room"}
     try:
         await music_mod.unduck()
     except Exception as exc:  # noqa: BLE001
@@ -1294,8 +1324,11 @@ async def command(payload: dict = Body(...)) -> dict:
 
 # -- timer REST (dashboard + testing) --------------------------------------
 @app.get("/timers")
-def list_timers() -> dict:
-    return {"timers": ENGINE.active()}
+def list_timers(sat: str | None = None) -> dict:
+    """Active timers, house-wide by default. `sat` scopes to one room — the
+    kitchen display asks that way so a reload does not repopulate its board
+    with the bath timers the live events are careful not to send it."""
+    return {"timers": ENGINE.active(sat)}
 
 
 @app.post("/timers/{timer_id}/dismiss")
@@ -1307,7 +1340,7 @@ async def dismiss_timer(timer_id: str) -> dict:
     # satellite's own end-of-ring POST lands here too, and its next queued
     # alarm must not start until this dismiss has been delivered.
     await events.alarm_stop(timer.get("sat"))
-    await events.emit("timer_dismissed", timer=timer, timers=ENGINE.active())
+    await _timer_event("timer_dismissed", timer=timer)
     return {"ok": True, "timer": timer}
 
 
@@ -1320,7 +1353,7 @@ async def cancel_timer(timer_id: str) -> dict:
         raise HTTPException(404, "no active timer with that id")
     if was_ringing:
         await events.alarm_stop(timer.get("sat"))
-    await events.emit("timer_cancelled", timer=timer, timers=ENGINE.active())
+    await _timer_event("timer_cancelled", timer=timer)
     return {"ok": True, "timer": timer}
 
 
@@ -1337,7 +1370,7 @@ async def alarm_stop_route(payload: dict | None = Body(None)) -> dict:
     timer = ENGINE.dismiss_any_ringing(sat)
     await events.alarm_stop((timer or {}).get("sat") or sat)
     if timer:
-        await events.emit("timer_dismissed", timer=timer, timers=ENGINE.active())
+        await _timer_event("timer_dismissed", timer=timer)
     return {"ok": True, "timer": timer}
 
 
@@ -1360,7 +1393,7 @@ async def unattended_timer(timer_id: str) -> dict:
         f"{room.capitalize()} timer unattended", body,
         event_type="timer_unattended", timer_id=timer_id,
     )
-    await events.emit("timer_unattended", timer=timer, timers=ENGINE.active())
+    await _timer_event("timer_unattended", timer=timer)
     return {"ok": True}
 
 
@@ -1370,7 +1403,7 @@ async def add_time(timer_id: str, seconds: int = 60) -> dict:
     if not row:
         raise HTTPException(404, "unknown timer")
     timer = await ENGINE.adjust(row.get("label"), seconds)
-    await events.emit("timer_updated", timer=timer, timers=ENGINE.active())
+    await _timer_event("timer_updated", timer=timer)
     return {"ok": True, "timer": timer}
 
 

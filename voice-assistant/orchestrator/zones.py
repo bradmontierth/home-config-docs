@@ -127,6 +127,29 @@ def host_for(sat: str | None) -> str | None:
     return None
 
 
+def owns_music(sat: str | None) -> bool:
+    """Whether this satellite is standing in the room the music plays in.
+
+    Ducking is room-local; the music queue is not. Every satellite ducks on a
+    wake trigger and on an alarm so speech beats the music — but there is one
+    queue and it is the kitchen's, so the master closet was ducking the kitchen
+    for a bath timer nobody down there could hear (Brad, 2026-08-08).
+
+    An unknown/absent sat ducks, which is the pre-`sat` behaviour: an older
+    satellite build that does not tag its request must not go quiet in the
+    room where ducking is the whole point.
+    """
+    if not sat:
+        return True
+    try:
+        table = _table()
+    except Exception as exc:  # noqa: BLE001 — bad JSON edited by hand
+        log.warning("satellite table unreadable: %s", exc)
+        return True
+    declared = [key for key, entry in table.items() if entry.get("music")]
+    return sat in declared if declared else sat == config.DEFAULT_SAT
+
+
 def spoken_for(sat: str | None) -> str:
     """How to name a satellite's room to a human — in a phone alert, say.
 

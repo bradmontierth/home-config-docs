@@ -855,3 +855,40 @@ relay), a short *measured* trigger→audio gate rather than an assumed one, and
 the wake tone kept as the fallback when relay state cannot be confirmed. Only
 worth doing if the rear power-mode switch can follow the trigger; switching
 mains instead would trade a 3s gate for a 10s one.
+
+---
+
+## 10. Room isolation (2026-08-08, from Brad watching the tests)
+
+Two things leaked out of the master bath into the kitchen while the §9 tests
+were running.
+
+**Kitchen music ducked for bath timers.** Every satellite POSTs `/music/duck`
+on a stage-1 wake trigger and again at alarm start, so speech beats the music.
+But `music.duck()` acts on `config.MA_QUEUE_ID` — there is one queue and it is
+the kitchen's. So the closet was ducking music two floors away, both for its
+own wake word and for a bath timer nobody in the kitchen could hear. Fixed by
+tagging the request with the satellite id (`sat_path()`, which already existed)
+and having the orchestrator refuse it unless `zones.owns_music(sat)`. The
+kitchen entry carries `"music": true`; an untagged request still ducks, so an
+older satellite build does not go silent in the one room where ducking matters.
+The unduck is scoped identically **and has to be** — the duck is refcounted, so
+an unduck from a room that never ducked would release someone else's hold.
+
+**Bath timers appeared on the kitchen screen.** A timer you can watch count
+down and cannot hear reads as an alarm that failed, not one ringing elsewhere.
+Two paths fed it and both needed scoping: the live events (`timers=` was
+`ENGINE.active()`, house-wide) and the kiosk's restore-on-reload poll, which
+proxies `GET /timers`. Now `app._timer_event()` drops events whose timer
+belongs to another room and scopes the list to `config.DASHBOARD_SAT`, and
+`dashboard_webapp` asks for `?sat=` (`ASSISTANT_SAT`, default kitchen — the two
+must agree). House-wide events with no single timer, i.e. cancel-all, still get
+through; the board has to drop what it was showing.
+
+`ENGINE.active(sat)` also had to start including rows with **no** sat when
+asked for the default room. Those predate the column and were all kitchen
+timers; a kitchen-scoped board would otherwise have silently dropped them.
+
+One display, one room, so `events.on_dashboard()` is a comparison rather than
+routing. A second screen means giving each subscriber its own sat and filtering
+per connection — the shape is there, the plumbing is not.

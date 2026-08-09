@@ -100,11 +100,21 @@ class TimerEngine:
         return d
 
     def active(self, sat: str | None = None) -> list[dict[str, Any]]:
-        """Every running/ringing timer, or just one room's. Defaults to all:
-        the kitchen display is the household's board and shows the lot."""
+        """Every running/ringing timer, or just one room's. Defaults to all.
+
+        The kitchen display asks for its own room now, not the lot: a bath
+        timer on the kitchen board is a timer you can see counting down and
+        cannot hear, which reads as a broken alarm (Brad, 2026-08-08).
+
+        A default-room query also picks up rows with no sat at all. Those
+        predate the column and really were all kitchen timers; leaving them
+        out would drop them off the board they have always been on."""
         if sat:
+            legacy = sat == config.DEFAULT_SAT
             rows = self._db.execute(
-                "SELECT * FROM timers WHERE state IN (?, ?) AND sat=? ORDER BY ends_at",
+                "SELECT * FROM timers WHERE state IN (?, ?) AND "
+                + ("(sat=? OR sat IS NULL)" if legacy else "sat=?")
+                + " ORDER BY ends_at",
                 (RUNNING, RINGING, sat),
             ).fetchall()
         else:

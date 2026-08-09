@@ -17,6 +17,16 @@ from . import config, zone_alarm, zones
 log = logging.getLogger("orchestrator.events")
 
 
+def on_dashboard(sat: str | None) -> bool:
+    """Whether a room's timer belongs on the kitchen display.
+
+    One display today, and it lives in one room, so this is a comparison
+    rather than routing. A second screen means giving each one its own sat and
+    filtering per subscriber instead — the shape of that change is here, the
+    plumbing for it is not."""
+    return (sat or config.DEFAULT_SAT) == config.DASHBOARD_SAT
+
+
 async def emit(event_type: str, **fields: Any) -> None:
     """POST one assistant event to the dashboard, which re-broadcasts it over
     /api/live to the kiosk(s) (jukebox pattern). Never raises."""

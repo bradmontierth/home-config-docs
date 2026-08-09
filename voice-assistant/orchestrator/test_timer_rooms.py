@@ -105,3 +105,33 @@ class TimerRoomScopeTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ActiveScopeTest(TimerRoomScopeTest):
+    """What each room's board is allowed to show."""
+
+    def test_default_scope_is_the_whole_house(self):
+        self._add(None, "kitchen")
+        self._add(None, "master")
+        self.assertEqual(len(self.engine.active()), 2)
+
+    def test_a_room_sees_only_its_own(self):
+        self._add("pasta", "kitchen")
+        self._add("laundry", "master")
+        rooms = self.engine.active("master")
+        self.assertEqual([t["label"] for t in rooms], ["laundry"])
+
+    def test_the_default_room_keeps_timers_that_predate_the_column(self):
+        """Rows with a NULL sat were all kitchen timers. Scoping the board to
+        the kitchen must not drop them off it."""
+        tid = self._add("old", "kitchen")
+        self.engine._db.execute("UPDATE timers SET sat=NULL WHERE id=?", (tid["id"],))
+        self.engine._db.commit()
+        self.assertEqual([t["label"] for t in self.engine.active(config.DEFAULT_SAT)],
+                         ["old"])
+
+    def test_another_room_does_not_inherit_them(self):
+        tid = self._add("old", "kitchen")
+        self.engine._db.execute("UPDATE timers SET sat=NULL WHERE id=?", (tid["id"],))
+        self.engine._db.commit()
+        self.assertEqual(self.engine.active("master"), [])

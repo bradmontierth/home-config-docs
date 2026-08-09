@@ -1,8 +1,9 @@
 {
   "kitchen": {
     "spoken": "kitchen",
+    "music": true,
     "host": "http://192.168.10.251:8781",
-    "note": "The kitchen mini PC: mic, speakers and NFC in one box. No rooms key, so its replies stay on its own speaker."
+    "note": "The kitchen mini PC: mic, speakers and NFC in one box. No rooms key, so its replies stay on its own speaker. music:true means this is the room the one music queue plays in, so this is the only satellite allowed to duck it."
   },
   "master": {
     "spoken": "master bath",
