@@ -1058,10 +1058,19 @@ class DismissChecker:
 DISMISS_CHECKER = DismissChecker()
 
 
-def _unattended_watch(tid: str) -> None:
+def _unattended_watch(tid: str, armed_first: bool = False) -> None:
     """One-shot watchdog: alarm rang UNATTENDED_ALERT_S with no dismiss ->
     POST the orchestrator, which escalates to the household phones. Waits on
-    the same Event the ring loop does, so any dismiss cancels it for free."""
+    the same Event the ring loop does, so any dismiss cancels it for free.
+
+    `armed_first` starts the clock at the arm instead of at the alarm request.
+    A zone ring spends its first few seconds on "Your timer is done" and the
+    settle after it, and the dismiss listener is armed exactly when the beeps
+    begin — count from the request instead and a 15s watchdog fires after
+    about 11s of anything a person in the room would call ringing. If the arm
+    never comes we fall through and count anyway; a late alert beats none."""
+    if armed_first:
+        STATE.dismiss_armed.wait(DISMISS_ARM_CAP_S + 5)
     if STATE.dismiss.wait(UNATTENDED_ALERT_S):
         return
     if STATE.current_alarm != tid:
@@ -1091,7 +1100,7 @@ def alarm_playback(req: dict) -> None:
         f"{' (zone playback)' if zone else ''}")
     if UNATTENDED_ALERT_S > 0 and req.get("timer_id"):
         threading.Thread(
-            target=_unattended_watch, args=(req["timer_id"],), daemon=True
+            target=_unattended_watch, args=(req["timer_id"], zone), daemon=True
         ).start()
     announce_wav = None
     if req.get("announce_url"):

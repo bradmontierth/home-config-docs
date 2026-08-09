@@ -1345,15 +1345,19 @@ async def alarm_stop_route(payload: dict | None = Body(None)) -> dict:
 async def unattended_timer(timer_id: str) -> dict:
     """Satellite watchdog escalation: the alarm has been ringing ~15s with
     nobody dismissing it — push to the household phones so dinner doesn't
-    burn while everyone is upstairs."""
+    burn while everyone is upstairs.
+
+    The room comes from the timer, not from a constant: a master bath timer
+    that pushes "Kitchen timer unattended" sends you to the wrong floor."""
     timer = ENGINE.get(timer_id)
     if not timer or timer["state"] != RINGING:
         return {"ok": False, "reason": "not ringing"}
     name = fmt.timer_name(timer)
     dur = fmt.humanize_seconds(timer.get("duration_seconds") or 0)
-    body = f"The {name} ({dur}) is ringing in the kitchen and nobody has stopped it."
+    room = zones.spoken_for(timer.get("sat"))
+    body = f"The {name} ({dur}) is ringing in the {room} and nobody has stopped it."
     await events.phone_alert(
-        "Kitchen timer unattended", body,
+        f"{room.capitalize()} timer unattended", body,
         event_type="timer_unattended", timer_id=timer_id,
     )
     await events.emit("timer_unattended", timer=timer, timers=ENGINE.active())

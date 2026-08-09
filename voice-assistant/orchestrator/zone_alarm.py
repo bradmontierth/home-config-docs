@@ -59,6 +59,23 @@ CYCLES_PER_CHUNK = int(os.getenv("ZONE_RING_CYCLES_PER_CHUNK", "3"))
 # (2026-08-08). Wait this out before handing the room back to the listener.
 ARM_SETTLE_S = float(os.getenv("ZONE_RING_ARM_SETTLE_S", "1.5"))
 
+# The amp pre-wake goes MQTT -> HA -> Node-RED -> isolate -> MA, while our own
+# announcement goes straight to MA. Measured 2026-08-08 the long way round
+# takes ~11ms, but nothing guarantees that: lose the race and MA plays "Your
+# timer is done" into a sleeping amp and the wake tone *after* it. MA
+# serialises announcements per player, so all this gate has to do is let the
+# wake tone get there first; once it has, MA does the rest. One second of a
+# late alarm buys an alarm that cannot be swallowed.
+WAKE_GATE_S = float(os.getenv("ZONE_RING_WAKE_GATE_S", "1.0"))
+
+# Trailing silence added to the spoken announcement for zone playback.
+# Everything that reaches these speakers through Node-RED is padded by the pad
+# service (measured: 1.61s of speech in a 5.52s file). Ours went out with
+# 0.36s and the ends of words were being clipped in the room. Not applied to
+# the satellite-local path, where the wav is followed by the ring loop's own
+# gap and extra silence would just be dead air.
+ANNOUNCE_PAD_S = float(os.getenv("ZONE_ANNOUNCE_PAD_S", "2.0"))
+
 # steam_whistle is deliberately absent: it is a recording of a person
 # whistling and is unsettling coming out of the walls in a dark bathroom.
 # A timer set with that theme rings in the zone as marimba.
@@ -96,6 +113,51 @@ def build_chunk(theme: str | None) -> str:
             dst.writeframes(beep)
             dst.writeframes(silence)
     log.info("built ring chunk %s", name)
+    return name
+
+
+def padded_announcement(timer_id: str) -> str | None:
+    """A copy of the timer's announcement with real trailing silence, served
+    from the /audio route. Returns None if there is no announcement to pad, so
+    the caller falls back to the unpadded one rather than ringing silently."""
+    src = os.path.join(config.ANNOUNCE_CACHE_DIR, f"{timer_id}.wav")
+    if not os.path.exists(src):
+        return None
+    name = f"{timer_id}-zone.wav"
+    out = os.path.join(config.ANNOUNCE_CACHE_DIR, name)
+    if os.path.exists(out):
+        return name
+    # Written to a temp name and renamed, because os.path.exists() above is the
+    # cache: a half-written file left behind by a failure would be served as a
+    # valid announcement forever after, and the room would ring in silence.
+    tmp = out + ".tmp"
+    try:
+        # The header frame count is NOT trustworthy here. Our TTS streams its
+        # WAV out with nframes = 2147483647, the "length unknown" sentinel;
+        # copying that into the padded file overflows the RIFF size field on
+        # close ("'L' format requires 0 <= number <= 4294967295"). So take only
+        # the format from the source and bound the read by the file size,
+        # which is always an upper bound on the audio in it.
+        cap = os.path.getsize(src)
+        with wave.open(src) as fh:
+            nchannels, sampwidth = fh.getnchannels(), fh.getsampwidth()
+            framerate = fh.getframerate()
+            frames = fh.readframes(cap // max(1, nchannels * sampwidth) + 1)
+        pad = b"\0" * (sampwidth * nchannels * int(ANNOUNCE_PAD_S * framerate))
+        with wave.open(tmp, "wb") as dst:
+            dst.setnchannels(nchannels)
+            dst.setsampwidth(sampwidth)
+            dst.setframerate(framerate)
+            dst.writeframes(frames)
+            dst.writeframes(pad)
+        os.replace(tmp, out)
+    except Exception as exc:  # noqa: BLE001 — a bad pad must not stop the ring
+        log.warning("could not pad announcement for %s: %s", timer_id, exc)
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        return None
     return name
 
 
@@ -141,13 +203,27 @@ async def _resting_volume(route: dict) -> int:
     """What to put the room back to. Snapserver first, then MA, then the
     configured level — and never zero, whatever any of them claim. A room we
     hand back at zero is a room that never speaks again, which is a far worse
-    failure than restoring a slightly wrong number."""
+    failure than restoring a slightly wrong number.
+
+    Nor at alarm volume. A live reading at or above `alarm_volume` is not a
+    resting level anyone chose, it is our own ring leaking back: MA restores
+    its *cached* pre-announcement volume when an announcement ends, that cache
+    holds the 45 we set for the last ring, and so the next announcement puts
+    the room back to 45 behind us. Measured 2026-08-08 — two rings in a row
+    and the bath was left at alarm volume, where every reply after it would
+    have been shouted. Reading it back as "resting" is what makes that a
+    ratchet instead of a blip, so refuse it and use the configured level."""
     fallback = route.get("volume") or 20
+    ceiling = route.get("alarm_volume")
+    level = None
     if route.get("snap_client"):
         level = await _snap_volume(route["snap_client"])
-        if level:
-            return level
-    level = await _player_volume(route.get("ma_player"))
+    if not level:
+        level = await _player_volume(route.get("ma_player"))
+    if level and ceiling and level >= ceiling:
+        log.info("ignoring %s resting volume %s (>= alarm volume %s); using %s",
+                 route.get("ma_player"), level, ceiling, fallback)
+        return fallback
     return level or fallback
 
 
@@ -214,11 +290,17 @@ class ZoneRinger:
         chunks = max(1, -(-CYCLES // CYCLES_PER_CHUNK))
         log.info("zone alarm sat=%s player=%s timer=%s chunks=%d vol=%s",
                  sat, player, timer.get("id"), chunks, volume)
+        padded = padded_announcement(timer.get("id") or "")
+        if padded:
+            announce_url = f"/audio/{padded}"
         try:
-            # The amp sleeps in ~11 minutes; a cold one swallows the opening.
+            # A cold amp swallows the opening whole: measured 2026-08-08, a
+            # reply into one is not clipped, it is *silent*, and the closet mic
+            # heard nothing until seven seconds into the first ring chunk.
             # Same pre-wake the spoken replies use.
             from . import broadcast as broadcast_mod
             await broadcast_mod.amp_wake(route.get("rooms") or [], volume)
+            await asyncio.sleep(WAKE_GATE_S)
 
             if announce_url:
                 # Blocks for the real length of the announcement, which is

@@ -735,3 +735,123 @@ Do not mistake a clean desk run for a finished satellite:
   exact PID.
 - Keep `assistant.py` in lockstep across boxes — the same file runs on `.251`,
   on pw_pi, and here.
+
+---
+
+## 9. The amp, measured (2026-08-08 evening)
+
+Brad's first live timers in the bath: the confirmation was never heard at all,
+then a second one came out as "timer set fo…" and cut. Both rings drew a
+"Kitchen timer unattended" push. Three separate causes.
+
+### 9.1 The amp is asleep and we tell ourselves it isn't
+
+Measured on the shower zone by recording the closet mic (borrowing the TONOR
+with `voice-assistant` briefly stopped) and running the capture through
+Parakeet:
+
+| Condition | Heard in the room |
+| --- | --- |
+| Reply into a cold amp, no wake tone | **nothing** — empty transcript |
+| Same reply 2s later (the first woke the amp) | "Timer set for five seconds" |
+| Wake tone, then a reply at +90s / +150s / +210s | complete, all three |
+| Wake tone, then a reply at +330s | **nothing** |
+| Wake tone to the **loft**, reply to the **shower** | complete |
+
+Four things fall out of that table:
+
+1. A reply into a cold amp is not clipped, it is **silent end to end**.
+2. **One shared amp** — waking any zone wakes it for all of them.
+3. The hold is **~5 min**, not the 15 the MA1240a manual claims, and not
+   stable: 11.5 min failed on 2026-08-07, 5.5 min fails now. §5's 10-minute
+   window was tuned against a number that moves.
+4. A quiet TTS reply does not reliably wake it. The wake tone is loud on
+   purpose.
+
+Brad's failing test: the last amp audio was a **Loft** announcement 7.4 min
+earlier, so the pre-wake said "fresh — no wake" and the Amp Speakers subflow
+independently skipped its wake tone *and* collapsed its 3s gate to 1ms.
+
+**And the belief was self-reinforcing.** `Prepare ungroup + wake + TTS` ran
+`node.send([null, null, ampState])` unconditionally, so a reply that went into
+a sleeping amp — and was never heard — renewed "amp is awake" for another full
+window. Once wrong it stayed wrong as long as you kept talking, which is why
+the second test failed on the back of the first.
+
+### 9.2 What the room actually heard was never truncated
+
+Worth recording because the obvious theory was wrong. The reply file is intact
+(**1.61s of speech in a 5.52s padded file**), and MA **serialises**
+announcements per player — it started the ring at reply-start + 5.82s, i.e.
+the instant the 5.52s file ended. The ring cannot have stepped on the reply.
+Four for four, with the amp awake, the room got the whole sentence. The
+"cut off" did not reproduce; best remaining theory is the amp dropping out
+mid-phrase as its hold expired, which §9.4 makes moot.
+
+The alarm side genuinely was unpadded, though: `announcement.wav` shipped
+**1.46s total with 0.36s of tail** against 3.89s for everything that reaches
+these speakers through Node-RED's pad service.
+
+### 9.3 The unattended alert
+
+Timing was correct — 15.5s and 15.3s, measured. It only felt instant because
+the first ~5s of ring was inaudible. The bugs were the hardcoded "Kitchen" in
+`app.py`, and that a zone ring spends its first ~4.4s on the announcement and
+the settle, so a 15s watchdog fired after ~11s of anything a person would call
+ringing.
+
+### 9.4 Shipped
+
+**Node-RED** (deployed via a nodes-only `POST /flows`; subflows have no
+`/flow/:id` route, so the whole-flows deploy is the only way in — 7196 nodes
+verified intact afterwards):
+
+- `Pre-wake: decide + ungroup` (Voice Broadcast) — `CONFIDENCE_MS` 10 min →
+  **150s**, half the measured hold, with the table above in the comment.
+- `Prepare ungroup + wake + TTS` (Amp Speakers subflow) — the amp-awake belief
+  now **expires** on the same shared `ampPreWakeConfidenceMs` global instead of
+  being a bare boolean, the timestamp is stamped **only when a wake actually
+  fires**, and one `willWake` decision drives both the chime and the gate.
+  Those used to disagree: `forceWake` played a tone but still set the gate to
+  1ms, landing the forced wake under its own announcement.
+
+**Orchestrator** — `WAKE_GATE_S = 1.0` between the amp wake and the first
+announcement (we POST MA directly while the wake goes MQTT → HA → Node-RED →
+isolate → MA; measured 11ms, but lose that race and the announcement plays into
+a sleeping amp with the wake tone queued behind it); `padded_announcement()`
+adds 2.0s of real tail silence for the zone path only; `zones.spoken_for()`
+names the room in the phone alert.
+
+**Satellite** — the unattended watchdog starts at the **arm** for a zone ring,
+which is exactly when the beeps start.
+
+### 9.5 Two traps found while building it
+
+- **Our TTS writes a streaming WAV header**: `nframes = 2147483647`, the
+  "length unknown" sentinel. Copying the source params into the padded file
+  overflows the RIFF size field on close (`'L' format requires 0 <= number <=
+  4294967295`) and the pad silently never happens. Take only the *format* from
+  the source and bound the read by the file size. The first version of this
+  shipped because the tests used tidy handwritten WAVs; `_write_wav` in
+  `test_zone_alarm.py` now emits the ugly shape on purpose.
+- **The alarm volume ratchets.** MA restores its *cached* pre-announcement
+  volume when an announcement ends, and that cache holds the 45 the ring set —
+  so the next announcement puts the room back to 45 behind us, and
+  `_resting_volume()` then reads 45 as the resting level and locks it in. Two
+  rings and the bath was left at alarm volume, where every reply after it is
+  shouted. A reading at or above `alarm_volume` is now refused in favour of the
+  configured level.
+- **`spoken` had to be added to the live `/data` table too.** The repo copy only
+  seeds a table that does not exist yet; the first run showed "Master timer
+  unattended" because the live file predated the key.
+
+### 9.6 Next: the 12V trigger
+
+All of §9.1 is guesswork about a number that moves. Brad owns a relay and a 12V
+supply, and the MA1240a takes a trigger — so the plan is to drive it
+deterministically and delete the guessing. Design constraints agreed: **one**
+keeper service owning on/off and the hold (not each consumer app driving the
+relay), a short *measured* trigger→audio gate rather than an assumed one, and
+the wake tone kept as the fallback when relay state cannot be confirmed. Only
+worth doing if the rear power-mode switch can follow the trigger; switching
+mains instead would trade a 3s gate for a 10s one.

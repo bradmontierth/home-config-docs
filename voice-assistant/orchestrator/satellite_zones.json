@@ -1,9 +1,11 @@
 {
   "kitchen": {
+    "spoken": "kitchen",
     "host": "http://192.168.10.251:8781",
     "note": "The kitchen mini PC: mic, speakers and NFC in one box. No rooms key, so its replies stay on its own speaker."
   },
   "master": {
+    "spoken": "master bath",
     "rooms": [
       "shower"
     ],

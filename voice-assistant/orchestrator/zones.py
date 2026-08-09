@@ -127,6 +127,18 @@ def host_for(sat: str | None) -> str | None:
     return None
 
 
+def spoken_for(sat: str | None) -> str:
+    """How to name a satellite's room to a human — in a phone alert, say.
+
+    Falls back to the satellite id, which reads acceptably for every id we
+    have ("kitchen"), and to "kitchen" for a timer old enough to predate the
+    sat column. That default is the pre-rooms behaviour, not a guess: those
+    rows really were all kitchen timers."""
+    if not sat:
+        return "kitchen"
+    return (_entry(sat) or {}).get("spoken") or sat
+
+
 def route_for(sat: str | None) -> dict | None:
     """Reply route for a satellite id, or None to keep the default
     answer-on-the-satellite behaviour. A malformed table must never take the
