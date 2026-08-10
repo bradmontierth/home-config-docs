@@ -392,3 +392,11 @@ SPEAKER_MODE = os.getenv("SPEAKER_MODE", "shadow")
 SPEAKER_THRESHOLD = float(os.getenv("SPEAKER_THRESHOLD", "0.35"))
 SPEAKER_MARGIN = float(os.getenv("SPEAKER_MARGIN", "0.15"))
 SPEAKER_SHADOW_LOG = os.getenv("SPEAKER_SHADOW_LOG", "/data/speaker_shadow.jsonl")
+
+# The house TTS route: Home Assistant renders, the pad service adds the tail.
+# This is the pipeline every spoken reply already uses, and the only rendering
+# of "Your timer is done." that does not crackle out of the master bath
+# speakers (A/B'd by ear 2026-08-08 — our own 24kHz mono WAV and a 48kHz
+# stereo conversion of it both crackled; this was clean).
+HA_TTS_ENGINE = os.getenv("HA_TTS_ENGINE", "tts.openai")
+TTS_PAD_URL = os.getenv("TTS_PAD_URL", "http://192.168.10.217:8097/pad")

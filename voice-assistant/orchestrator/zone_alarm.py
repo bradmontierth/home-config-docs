@@ -41,7 +41,7 @@ import wave
 
 import httpx
 
-from . import config, zones
+from . import config, timers, zones
 
 log = logging.getLogger("orchestrator.zone_alarm")
 
@@ -116,10 +116,57 @@ def build_chunk(theme: str | None) -> str:
     return name
 
 
+_HOUSE_TTS: dict[tuple[str, str], str] = {}
+
+
+async def house_announcement(text: str, voice: str) -> str | None:
+    """The announcement rendered the way this room's *replies* are rendered.
+
+    Our own TTS produces a 24kHz mono WAV that crackles out of the master bath
+    speakers — consistently, in the same word, however it is packaged. Brad
+    confirmed by ear on 2026-08-08 that the file itself is clean, that our WAV
+    crackles at both 24kHz mono and 48kHz stereo, and that the *same sentence*
+    in the *same voice* through Home Assistant's TTS plus the pad service is
+    perfect. So the fix is not to convert our file better, it is to stop
+    making it: hand the text to the route that already works.
+
+    That route is what Node-RED's Amp Speakers subflow uses for every spoken
+    reply — `tts_get_url` then the pad service, which returns a 48kHz stereo
+    MP3 with 3.5s of tail already on it.
+
+    Cached in memory by (text, voice). The padded files are never pruned (710
+    of them, back to April), so a URL we hold stays valid, and caching keeps
+    us from adding one more file per alarm to a directory nothing cleans.
+    """
+    key = (text, voice)
+    if key in _HOUSE_TTS:
+        return _HOUSE_TTS[key]
+    from .weather import _token          # the same mounted ha_token
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            r = await client.post(
+                f"{config.HA_URL}/api/tts_get_url",
+                headers={"Authorization": f"Bearer {_token()}"},
+                json={"engine_id": config.HA_TTS_ENGINE, "message": text,
+                      "cache": True, "options": {"voice": voice}})
+            r.raise_for_status()
+            padded = await client.post(config.TTS_PAD_URL,
+                                       json={"url": r.json()["url"]})
+            padded.raise_for_status()
+            url = padded.json()["url"]
+    except Exception as exc:  # noqa: BLE001 — fall back to our own wav
+        log.warning("house TTS for %r failed (%s); using local wav", text, exc)
+        return None
+    _HOUSE_TTS[key] = url
+    return url
+
+
 def padded_announcement(timer_id: str) -> str | None:
-    """A copy of the timer's announcement with real trailing silence, served
-    from the /audio route. Returns None if there is no announcement to pad, so
-    the caller falls back to the unpadded one rather than ringing silently."""
+    """Fallback announcement: our own TTS wav with real trailing silence.
+
+    Only used when the house TTS route (see `house_announcement`) is not
+    reachable. Returns None if there is no announcement to pad, so the caller
+    falls back again to the unpadded one rather than ringing silently."""
     src = os.path.join(config.ANNOUNCE_CACHE_DIR, f"{timer_id}.wav")
     if not os.path.exists(src):
         return None
@@ -290,9 +337,23 @@ class ZoneRinger:
         chunks = max(1, -(-CYCLES // CYCLES_PER_CHUNK))
         log.info("zone alarm sat=%s player=%s timer=%s chunks=%d vol=%s",
                  sat, player, timer.get("id"), chunks, volume)
-        padded = padded_announcement(timer.get("id") or "")
-        if padded:
-            announce_url = f"/audio/{padded}"
+        # Prefer the house TTS route: same words, same voice, but rendered the
+        # way the replies are, which is the version that does not crackle in
+        # this room. Its URL is absolute (Home Assistant serves it) and it
+        # arrives with 3.5s of tail already on it.
+        settle = ARM_SETTLE_S
+        speech = await house_announcement(
+            timers.announcement_text(timer.get("label")),
+            route.get("voice") or config.TTS_VOICE)
+        if speech:
+            # The last 3.5s of that file is silence, so by the time MA reports
+            # it finished, our voice left the room seconds ago. The settle is
+            # there to outlast exactly that gap; with the tail baked in it is
+            # pure dead air before the first beep.
+            settle = 0.0
+        elif announce_url:
+            padded = padded_announcement(timer.get("id") or "")
+            speech = f"{base}{'/audio/' + padded if padded else announce_url}"
         try:
             # A cold amp swallows the opening whole: measured 2026-08-08, a
             # reply into one is not clipped, it is *silent*, and the closet mic
@@ -302,12 +363,13 @@ class ZoneRinger:
             await broadcast_mod.amp_wake(route.get("rooms") or [], volume)
             await asyncio.sleep(WAKE_GATE_S)
 
-            if announce_url:
+            if speech:
                 # Blocks for the real length of the announcement, which is
                 # exactly what makes the next line precise: we know when our
                 # own voice stopped coming out of the walls.
-                await self._play(player, f"{base}{announce_url}", volume, 60)
-                await asyncio.sleep(ARM_SETTLE_S)
+                await self._play(player, speech, volume, 60)
+                if settle:
+                    await asyncio.sleep(settle)
             await self._arm_dismiss(sat)
             for _ in range(chunks):
                 await self._play(player, f"{base}/audio/{chunk}", volume, 90)

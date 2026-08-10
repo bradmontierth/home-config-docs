@@ -655,56 +655,35 @@ The same history shows the false-off signature plainly: off at 14:07:42 then
 back on at 14:07:59 (17 s), and again at 01:44:14 → 01:44:32 (18 s),
 01:45:07 → 01:45:23 (16 s).
 
-### The false-off ladder — SHIPPED 2026-08-07
+### The all-sensor two-minute path — SHIPPED 2026-08-09
 
-The EPP loses people in the far corners of the closet, bath and toilet, so
-the lights go out on someone still standing there. The history above shows it:
-off at 14:07:42, motion again at 14:07:59.
+The adaptive false-off ladder shipped on 2026-08-07 treated the symptom but
+left the real defect in place: the EPP direct shortcut checked only the EPP PIR
+and EPP combined mmWave. It bypassed the external bath, closet, and shower PIR
+current-state checks, so one of those PIRs could be active while the shortcut
+turned every light off.
 
-Blocking the off outright trades a fast annoyance for a slow one — lights
-burning for half an hour after you leave. Instead each false off makes the
-*next* one harder, on the EPP direct path only:
+The direct shortcut and `mbladder_*` nodes are now removed. EPP PIR-off and
+mmWave-off events enter the same existing chain as the other motion sensors:
 
-| Rung | All-clear required | Reached by |
-| --- | --- | --- |
-| 0 | 15 s | normal |
-| 1 | 2 min | one off followed by motion within 15 s |
-| 2 | 10 min | two |
+`Master Bath Motion Switch` → HA master-bath occupancy → closet PIR → shower
+PIR → EPP PIR → EPP combined mmWave → two-minute timer → shared hold/off guard.
 
-Motion during the window still cancels the pending off outright (it hits the
-same `STOP` fan-out it always did), so the ladder only governs how long an
-*uninterrupted* quiet spell has to be. 30 minutes without a false off drops
-back to rung 0; a manual switch-off resets it immediately, because the person
-deciding to leave settles what the sensors were getting wrong.
+Both Day/Evening and Early-Morning/Night use two minutes; the former timer is
+configured in minutes (`msg.delay = 2`) and the latter in seconds
+(`msg.delay = 120`). Any active sensor aborts the current-state chain, and any
+new activity hits the shared `STOP` fan-out. The prior accidental 15-minute
+Day/Evening delay and 15-second Early/Night delay are therefore both gone.
 
-`mbladder_watch_v1` hangs off `0b50d71ac38be851`, the node every motion-active
-path already passes through to stop the off timers — so it needs no new taps
-on eight sensors. `mbhold_guard_v1` stamps `masterLastOffAt` as the lights
-actually go out, which is what makes "was that off wrong?" answerable.
-`mbladder_apply_v1` sits in front of `eppmb_direct_timer_v2` and sets
-`msg.delay` (seconds — that node is configured in Seconds, unlike its
-Minute-configured twin, see below).
-
-The ladder numbers live in `mbladder_apply_v1` alone; the watcher only counts
-rungs, so there is no second copy to drift. Tune from real use.
-
-Verified by extracting the four deployed function bodies and running them
-against a stub context: 15 → 120 → 600, capped; no climb when motion arrives
-60 s after an off; decay after 31 min; manual reset; and an off during the
-voice hold returning null.
-
-### Latent bug found while reading the flow — NOT fixed
-
-`eppmb_norm_set_15s_v1` is named "15s EPP off delay" and sets `msg.delay = 15`,
-but it feeds `4de7fac9add48fb7`, whose units are **Minute**. `stoptimer-varidelay`
-reads `msg.delay` in the *node's* configured units, so the Day/Evening bath
-lights linger **15 minutes** after the room empties, not 15 seconds. (The
-Early-Morning/Night twin, `eppmb_quick_set_15s_v1` → `1f1fd245d1819d57`, is on
-a Second node and really is 15 s.) Same reading makes `d2f40e0ebac1ebb5`'s
-`msg.delay = 10` dead code — it is overwritten downstream.
-
-Left alone deliberately: it is outside the ask, and a 15-minute daytime grace
-may well be what Brad wants. It is worth a decision, not a silent change.
+The EPP static trigger range was initially raised from 6.0 to 9.5 m with a
+10.3 m maximum, and combined occupancy timeout was raised from 15 to 120 s.
+This lets the long-range SEN0609 reacquire someone in the closet and gives
+brief radar dropouts two minutes before Node-RED even sees mmWave clear.
+Static trigger/sustain sensitivity was subsequently raised from 5/7 to 6/8
+for the same closet test; the earlier static false-presence problem has not
+recurred since the EPP was moved away from the PWM LED fixture.
+That combination covered the toilet but still cleared in one closet spot, so
+the static maximum/trigger pair was raised once more to 12/11 m.
 
 ---
 
@@ -892,3 +871,53 @@ timers; a kitchen-scoped board would otherwise have silently dropped them.
 One display, one room, so `events.on_dashboard()` is a comparison rather than
 routing. A second screen means giving each subscriber its own sat and filtering
 per connection — the shape is there, the plumbing is not.
+
+## 11. The crackle (2026-08-08 night)
+
+"Your timer is done" broke up in the same place on every ring — three rings,
+three identical crackles — while the beeps that followed it were clean and the
+spoken reply before it was clean. A defect in the same spot every time is a
+file, not a network, so that is where the search started, and it was wrong.
+
+What it was **not**, each ruled out before the next was tried:
+
+- **The file.** Served it over HTTP and Brad played it on his laptop: clean.
+  Ruled out the synthesiser, the cache and our own padding in one step.
+- **A sample-level defect.** A max-sample-delta scan flagged a 1.20 ratio 0.1s
+  in; slowed 4x it is a /t/ plosive. Real speech, not a click. The metric was
+  the bug.
+- **Determinism.** Two renders came back byte-identical, which proved only that
+  the TTS router's Kokoro cache works.
+- **Sample format.** The snapcast stream is `48000:16:2` and ours was 24 kHz
+  mono, so the announcement was the only thing on that path needing both a rate
+  conversion and a mono→stereo map. Converted it, played A and B into the bath:
+  *"hmm, both bad."* The resampler was deleted rather than left in — it fixed
+  nothing and would have read as load-bearing later.
+- **The closet mic as a judge.** HF energy ratio came back 0.0002–0.0003 for
+  every playback; 9–20 kHz barely clears that mic's noise floor. Inconclusive,
+  and reported as inconclusive.
+
+What worked was giving up on rendering it ourselves. Every spoken thing that
+already sounds right in that room — replies, broadcasts, bedtime — goes
+HA `tts_get_url` → pad service → 48 kHz stereo MP3 with a 3.5s tail. Same
+words, same voice through that route: *"those latest 2 you did are perfect."*
+So `zone_alarm.house_announcement()` borrows the reply route, and
+`padded_announcement()` (our own WAV plus 2s of silence) is now only the
+fallback for HA or the pad service being unreachable — a dead pad service
+should cost audio quality, never the alarm.
+
+Two consequences worth knowing:
+
+- **The 1.5s arm-settle is skipped on the house route.** It existed because MA
+  reports an announcement done before the sound has left the room; the file's
+  own 3.5s tail already outlasts the snapcast buffer, so keeping it would be
+  five seconds of dead air before the first beep.
+- **The URL is cached in memory by (text, voice).** `tts_padded/` is never
+  pruned — 710 files, 118 MB, oldest 26 April — so caching keeps the alarm from
+  adding one file per ring to a directory nothing cleans. The growth is
+  pre-existing (Node-RED replies, ~35 MB/month) and still wants a sweep.
+
+The root cause inside MA or snapcast was never identified, only routed around.
+If it resurfaces on a path that cannot borrow the reply route, the untried
+experiment is playing the same WAV as a **queue item** rather than an
+announcement, which splits MA's announcement pipeline from snapcast itself.

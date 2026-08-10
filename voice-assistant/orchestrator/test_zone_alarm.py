@@ -15,6 +15,7 @@ import os
 import struct
 import tempfile
 import unittest
+import unittest.mock
 import wave
 from unittest.mock import AsyncMock, patch
 
@@ -217,3 +218,62 @@ class DashboardScopeTest(unittest.TestCase):
     def test_a_timer_with_no_room_is_shown(self):
         """Pre-`sat` rows are kitchen timers and have always been on the board."""
         self.assertTrue(events.on_dashboard(None))
+
+
+class HouseAnnouncementTest(unittest.TestCase):
+    """Our own TTS crackles out of the master bath speakers whatever format we
+    package it in; the same words in the same voice through Home Assistant plus
+    the pad service do not (Brad, by ear, 2026-08-08). So the alarm borrows the
+    reply route instead of rendering its own."""
+
+    def setUp(self):
+        zone_alarm._HOUSE_TTS.clear()
+        self.addCleanup(zone_alarm._HOUSE_TTS.clear)
+
+    def _run(self, responses):
+        calls = []
+
+        class FakeClient:
+            def __init__(self, **kw): pass
+            async def __aenter__(self): return self
+            async def __aexit__(self, *a): return False
+            async def post(self, url, **kw):
+                calls.append((url, kw.get("json")))
+                nxt = responses.pop(0)
+                if isinstance(nxt, Exception):
+                    raise nxt
+                return nxt
+
+        with patch.object(zone_alarm.httpx, "AsyncClient", FakeClient), \
+             patch("orchestrator.weather._token", return_value="tok"):
+            url = asyncio.run(
+                zone_alarm.house_announcement("Your timer is done.", "fast:doorbell"))
+        return url, calls
+
+    @staticmethod
+    def _ok(payload):
+        r = unittest.mock.Mock()
+        r.json.return_value = payload
+        r.raise_for_status.return_value = None
+        return r
+
+    def test_returns_the_padded_url(self):
+        url, calls = self._run([self._ok({"url": "http://ha/raw.mp3"}),
+                                self._ok({"url": "http://ha/padded.mp3"})])
+        self.assertEqual(url, "http://ha/padded.mp3")
+        self.assertIn("tts_get_url", calls[0][0])
+        self.assertEqual(calls[0][1]["options"], {"voice": "fast:doorbell"})
+        self.assertEqual(calls[1][1], {"url": "http://ha/raw.mp3"})
+
+    def test_second_call_is_served_from_memory(self):
+        self._run([self._ok({"url": "http://ha/raw.mp3"}),
+                   self._ok({"url": "http://ha/padded.mp3"})])
+        url, calls = self._run([])          # no responses left: must not call out
+        self.assertEqual(url, "http://ha/padded.mp3")
+        self.assertEqual(calls, [])
+
+    def test_failure_returns_none_so_the_ring_falls_back(self):
+        """A dead pad service must cost audio quality, never the alarm."""
+        url, _ = self._run([RuntimeError("HA down")])
+        self.assertIsNone(url)
+        self.assertEqual(zone_alarm._HOUSE_TTS, {})
