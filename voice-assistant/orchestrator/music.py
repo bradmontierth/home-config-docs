@@ -6,8 +6,17 @@ break timers/lists/ask. Every public helper raises MusicUnavailable when the
 connection isn't up; callers turn that into a spoken "can't reach the music
 player".
 
-Target is always the kitchen jukebox queue (MA_QUEUE_ID) — the same
-squeezelite player the NFC reader drives, so voice and cards coexist.
+Target is a `music_target` dict from zones.py — which queue to drive, whether
+it comes out of speakers in the room that asked, and how loud it may get. The
+kitchen jukebox (MA_QUEUE_ID, the squeezelite player the NFC reader also
+drives, so voice and cards coexist) is the default and the fallback.
+
+The zone rooms are a different animal from the kitchen and this module has to
+know it. They are snapclients behind the whole-home amp, which means: their
+volume must be read from the snapserver and not from MA (see snapcast.py);
+the amp has to be woken before the first note or it swallows it; and MA's
+snapcast provider offers no PAUSE, so a pause is really a stop that remembers
+where it was.
 
 Ranking (see plan doc, revised 2026-07-08): a playlist wins only on a
 strong/near-exact name match; a bare artist name plays the library artist,
@@ -22,7 +31,8 @@ pass, not stage-1 triggers — music false-fires made the dips audible as
 playback stutter) and on alarm start (music at speech volume defeats command
 capture), /music/unduck when the turn or alarm ends. Nested duck/unduck pairs are refcounted; a
 watchdog restores the volume anyway if the satellite dies mid-turn and the
-unduck never arrives.
+unduck never arrives. Refcounts are per queue — one global counter meant the
+kitchen's unduck restored the bath's saved volume onto the kitchen.
 """
 
 from __future__ import annotations
@@ -35,10 +45,11 @@ import unicodedata
 
 import aiohttp
 from music_assistant_client.client import MusicAssistantClient
-from music_assistant_models.enums import MediaType, PlayerState, QueueOption
+from music_assistant_models.enums import (
+    MediaType, PlayerState, QueueOption, RepeatMode)
 from rapidfuzz import fuzz
 
-from . import config, music_log
+from . import config, music_log, snapcast
 
 log = logging.getLogger("orchestrator.music")
 
@@ -491,13 +502,139 @@ def _artist_of(item) -> str | None:
     return artists[0].name if artists else None
 
 
-async def play(query: str | None, media_type: str | None = None) -> dict:
-    """Start playback on the kitchen queue. No query ("play some music") just
+# --------------------------------------------------------------------------
+# targets — which queue, in which room, how loud
+# --------------------------------------------------------------------------
+def _target(target: dict | None) -> dict:
+    """A caller that names no room gets the kitchen, which is where every
+    music command went before rooms existed."""
+    return target or {"queue": config.MA_QUEUE_ID, "local": True}
+
+
+async def _volume_of(target: dict) -> int | None:
+    """This room's real current volume, or None if nothing could tell us.
+
+    For an amp zone that is the snapserver, because MA's number for those
+    players is stale and has been observed at 0 for hours while the room was
+    audibly playing. Reading MA there does not merely give a slightly wrong
+    answer — it silently disables ducking and inverts "turn it up"."""
+    if target.get("snap_client"):
+        level = await snapcast.volume(target["snap_client"])
+        if level is not None:
+            return level
+    player = _ma().players.get(target["queue"])
+    return player.volume_level if player else None
+
+
+async def _set_volume(target: dict, level: int) -> None:
+    """Write a room's volume by the road MA will actually notice.
+
+    For an amp zone that is the snapserver — see snapcast.set_volume for why
+    going through MA looks like it works and then quietly doesn't. MA remains
+    the fallback, because a room that cannot be set at all is worse than one
+    whose level the next announcement resets."""
+    level = max(0, min(100, level))
+    if target.get("snap_client") and await snapcast.set_volume(
+            target["snap_client"], level):
+        return
+    await _ma().players.player_command_volume_set(target["queue"], level)
+
+
+async def _playing(qid: str) -> bool:
+    queue = _ma().player_queues.get(qid)
+    return bool(queue and queue.state == PlayerState.PLAYING)
+
+
+async def _prepare_room(target: dict) -> None:
+    """Assert the room's starting volume, if it has an opinion about one.
+
+    Only when the room is not already playing: starting a second song should
+    not undo a "turn it up" from two minutes ago, but the first play into a
+    quiet room should be at a level someone chose rather than whatever the
+    last alarm or announcement left behind. Volume is a *player* command, so
+    unlike the play itself it lands whatever else the room is doing.
+
+    Deliberately no amp pre-wake here, even though a cold MA1240a swallows the
+    opening bars. The wake tone is an MA announcement, and MA drops queue
+    commands outright while an announcement is in progress — measured
+    2026-08-09, the 4-second tone ate the play_media that followed it one
+    second later and the bath stayed silent, with nothing but a MA-side
+    warning to say so. The spoken reply lands on the same speaker a moment
+    later and Node-RED already decides whether *that* needs a wake, so the amp
+    still comes up; the cost is a second or two of the first song rather than
+    four seconds of tone before every one.
+    """
+    if target.get("volume") is not None and not await _playing(target["queue"]):
+        await _set_volume(target, target["volume"])
+
+
+async def _queue_hygiene(qid: str, shuffle: bool) -> None:
+    """Queue modes persist per queue across sessions, and other clients set
+    them: the NFC jukebox turns shuffle on for album cards. Repeat or
+    don't-stop-the-music left on by anyone would quietly outlive the request
+    that set it — and don't-stop-the-music in particular would defeat the
+    auto-stop cap by refilling the queue forever."""
+    client = _ma()
+    await client.player_queues.queue_command_shuffle(qid, shuffle)
+    try:
+        await client.player_queues.queue_command_repeat(qid, RepeatMode.OFF)
+        await client.player_queues.dont_stop_the_music(qid, False)
+    except Exception as exc:  # noqa: BLE001 — hygiene must not fail a play
+        log.warning("could not clear queue modes on %s: %s", qid, exc)
+
+
+# --------------------------------------------------------------------------
+# auto-stop — for rooms whose listeners cannot reach a microphone
+# --------------------------------------------------------------------------
+_caps: dict[str, asyncio.Task] = {}
+
+
+def _arm_cap(target: dict) -> None:
+    """Stop this room by itself after cap_minutes of nobody saying otherwise.
+
+    Armed on play and resume, cancelled on pause and stop, so the clock runs
+    from the last thing a person actually asked for. The kitchen has no cap:
+    music there is all day by design, and someone is always in earshot of the
+    mic. The bath is the opposite — the people it is playing for are two rooms
+    from the nearest microphone and cannot ask for it to end.
+    """
+    qid = target["queue"]
+    _cancel_cap(qid)
+    minutes = target.get("cap_minutes")
+    if not minutes:
+        return
+    _caps[qid] = asyncio.create_task(_cap_expire(qid, float(minutes)),
+                                     name=f"music-cap-{qid}")
+
+
+def _cancel_cap(qid: str) -> None:
+    task = _caps.pop(qid, None)
+    if task and not task.done():
+        task.cancel()
+
+
+async def _cap_expire(qid: str, minutes: float) -> None:
+    await asyncio.sleep(minutes * 60)
+    log.info("music cap reached on %s after %s min — stopping", qid, minutes)
+    try:
+        await _ma().player_queues.queue_command_stop(qid)
+    except Exception as exc:  # noqa: BLE001
+        log.warning("cap stop of %s failed: %s", qid, exc)
+    finally:
+        _caps.pop(qid, None)
+
+
+async def play(query: str | None, media_type: str | None = None,
+               target: dict | None = None) -> dict:
+    """Start playback on a room's queue. No query ("play some music") just
     resumes whatever the queue holds. Returns a dict for phrasing/events."""
     client = _ma()
-    qid = config.MA_QUEUE_ID
+    t = _target(target)
+    qid = t["queue"]
     if not query:
+        await _prepare_room(t)
         await client.player_queues.queue_command_resume(qid)
+        _arm_cap(t)
         return {"kind": "resume", "name": None}
     # Library index first (survives ASR misspellings); MA search only when the
     # library has nothing close.
@@ -564,11 +701,12 @@ async def play(query: str | None, media_type: str | None = None) -> dict:
     # as a rejection of that URI, not of the request, and re-rank without it:
     # the runner-up is usually the same song from the library.
     tried: set[str] = set()
+    await _prepare_room(t)
     while True:
         # Artist/playlist get shuffle (fresh mix each time); album/track in order.
         shuffle = sel["kind"] in ("artist", "playlist")
         try:
-            await client.player_queues.queue_command_shuffle(qid, shuffle)
+            await _queue_hygiene(qid, shuffle)
             await client.player_queues.play_media(qid, sel["uri"],
                                                   option=QueueOption.REPLACE)
         except Exception as exc:  # noqa: BLE001
@@ -586,9 +724,14 @@ async def play(query: str | None, media_type: str | None = None) -> dict:
             sel, via = alt, "library-fallback"
             continue
         break
-    asyncio.create_task(_notify_jukebox_takeover())
-    log.info("play_music %r -> %s %r (%s, shuffle=%s, via=%s, score=%s)",
-             query, sel["kind"], sel["name"], sel["uri"], shuffle, via,
+    _arm_cap(t)
+    # The jukebox marker and the kiosk popup belong to the kitchen queue. A
+    # bath play that cleared the NFC card marker would make the next scan of
+    # that card pause-toggle music two floors away instead of playing it.
+    if qid == config.MA_QUEUE_ID:
+        asyncio.create_task(_notify_jukebox_takeover())
+    log.info("play_music %r -> %s %r (%s, queue=%s, shuffle=%s, via=%s, score=%s)",
+             query, sel["kind"], sel["name"], sel["uri"], qid, shuffle, via,
              sel.get("score"))
     music_log.record(query, "play", winner=sel, via=via,
                      candidates=trace.get("candidates"))
@@ -614,14 +757,24 @@ async def _notify_jukebox_takeover() -> None:
 # --------------------------------------------------------------------------
 # transport + now playing
 # --------------------------------------------------------------------------
-async def control(action: str) -> None:
+async def control(action: str, target: dict | None = None) -> None:
     client = _ma()
-    qid = config.MA_QUEUE_ID
+    t = _target(target)
+    qid = t["queue"]
     if action == "pause":
+        # On an amp zone there is no pause: MA's snapcast provider offers no
+        # PAUSE feature, so the queue controller sends stop instead, having
+        # saved resume_pos first. Resume does pick up where it left off, but
+        # the snapcast stream is torn down and rebuilt — which is why resume
+        # goes back through _prepare_room for the amp wake.
+        _cancel_cap(qid)
         await client.player_queues.queue_command_pause(qid)
     elif action == "resume":
+        await _prepare_room(t)
         await client.player_queues.queue_command_resume(qid)
+        _arm_cap(t)
     elif action == "stop":
+        _cancel_cap(qid)
         await client.player_queues.queue_command_stop(qid)
     elif action == "next":
         await client.player_queues.queue_command_next(qid)
@@ -630,23 +783,24 @@ async def control(action: str) -> None:
     elif action in ("volume_up", "volume_down"):
         step = 10 if action == "volume_up" else -10
         async with _duck_lock:
-            if _duck["count"] and _duck["restore"] is not None:
+            state = _duck.get(qid)
+            if state and state["count"] and state["restore"] is not None:
                 # Music is ducked for this very turn — changing the live volume
                 # would be wiped by the unduck. Adjust the restore target instead.
-                _duck["restore"] = max(0, min(100, _duck["restore"] + step))
+                ceiling = t.get("max_volume") or 100
+                state["restore"] = max(0, min(ceiling, state["restore"] + step))
                 return
-        player = client.players.get(qid)
-        cur = (player.volume_level or 0) if player else 0
-        await client.players.player_command_volume_set(
-            qid, max(0, min(100, cur + step)))
+        cur = await _volume_of(t)
+        ceiling = t.get("max_volume") or 100
+        await _set_volume(t, min(ceiling, (cur or 0) + step))
     else:
         raise ValueError(f"unknown music action {action!r}")
 
 
-def now_playing() -> dict | None:
-    """Current kitchen-queue item from client cache, or None when idle."""
+def now_playing(target: dict | None = None) -> dict | None:
+    """Current item on a room's queue from client cache, None when idle."""
     client = _ma()
-    queue = client.player_queues.get(config.MA_QUEUE_ID)
+    queue = client.player_queues.get(_target(target)["queue"])
     if queue is None or queue.state not in (PlayerState.PLAYING, PlayerState.PAUSED):
         return None
     cur = queue.current_item
@@ -665,65 +819,84 @@ def now_playing() -> dict | None:
 # --------------------------------------------------------------------------
 # ducking (wake turns + alarms)
 # --------------------------------------------------------------------------
-_duck: dict = {"count": 0, "restore": None}
+# Per queue, because rooms duck independently: {"count", "restore", "watchdog"}.
+# A single global counter meant the kitchen's unduck restored the bath's saved
+# volume onto the kitchen, and whichever room unducked second undid nothing.
+_duck: dict[str, dict] = {}
 _duck_lock = asyncio.Lock()
-_duck_watchdog: asyncio.Task | None = None
 
 
-async def duck() -> None:
-    """Drop the music volume so verify/capture (and the alarm 'stop' listener)
-    can hear speech. Refcounted — a turn and an alarm may overlap."""
-    global _duck_watchdog
+def _duck_state(qid: str) -> dict:
+    return _duck.setdefault(
+        qid, {"count": 0, "restore": None, "watchdog": None, "target": None})
+
+
+async def duck(target: dict | None = None) -> None:
+    """Drop a room's music volume so verify/capture (and the alarm 'stop'
+    listener) can hear speech. Refcounted per queue — a turn and an alarm may
+    overlap."""
     client = _ma()
-    qid = config.MA_QUEUE_ID
+    t = _target(target)
+    qid = t["queue"]
     async with _duck_lock:
-        _duck["count"] += 1
-        if _duck["count"] > 1:
+        state = _duck_state(qid)
+        # Kept so the watchdog can restore by the same road we ducked by; a
+        # bare queue id would send the restore back through MA, where it does
+        # not stick.
+        state["target"] = t
+        state["count"] += 1
+        if state["count"] > 1:
             return
         queue = client.player_queues.get(qid)
-        player = client.players.get(qid)
-        if not player or not queue or queue.state != PlayerState.PLAYING:
-            _duck["restore"] = None      # nothing audible — duck is a no-op
+        if not queue or queue.state != PlayerState.PLAYING:
+            state["restore"] = None      # nothing audible — duck is a no-op
             return
-        vol = player.volume_level or 0
-        target = max(config.MUSIC_DUCK_MIN, round(vol * config.MUSIC_DUCK_FACTOR))
-        if target >= vol:
-            _duck["restore"] = None
+        # Not player.volume_level: on an amp zone MA's cache reads 0 while the
+        # room plays at 20, and a duck computed from 0 decides there is
+        # nothing to duck and silently does nothing.
+        vol = await _volume_of(t) or 0
+        level = max(config.MUSIC_DUCK_MIN, round(vol * config.MUSIC_DUCK_FACTOR))
+        if level >= vol:
+            state["restore"] = None
             return
-        _duck["restore"] = vol
-        await client.players.player_command_volume_set(qid, target)
+        state["restore"] = vol
+        await _set_volume(t, level)
         # If the satellite dies mid-turn the unduck never arrives — restore
         # anyway after the longest plausible turn+alarm.
-        if _duck_watchdog:
-            _duck_watchdog.cancel()
-        _duck_watchdog = asyncio.create_task(_duck_expire())
-        log.info("music ducked %d -> %d", vol, target)
+        if state["watchdog"]:
+            state["watchdog"].cancel()
+        state["watchdog"] = asyncio.create_task(_duck_expire(qid))
+        log.info("music ducked on %s: %d -> %d", qid, vol, level)
 
 
-async def unduck() -> None:
-    global _duck_watchdog
+async def unduck(target: dict | None = None) -> None:
+    t = _target(target)
+    qid = t["queue"]
     async with _duck_lock:
-        if _duck["count"] == 0:
+        state = _duck_state(qid)
+        if state["count"] == 0:
             return
-        _duck["count"] -= 1
-        if _duck["count"]:
+        state["count"] -= 1
+        if state["count"]:
             return
-        if _duck_watchdog:
-            _duck_watchdog.cancel()
-            _duck_watchdog = None
-        restore, _duck["restore"] = _duck["restore"], None
+        if state["watchdog"]:
+            state["watchdog"].cancel()
+            state["watchdog"] = None
+        restore, state["restore"] = state["restore"], None
     if restore is not None:
-        await _ma().players.player_command_volume_set(config.MA_QUEUE_ID, restore)
-        log.info("music unducked -> %d", restore)
+        await _set_volume(t, restore)
+        log.info("music unducked on %s -> %d", qid, restore)
 
 
-async def _duck_expire() -> None:
-    global _duck_watchdog
+async def _duck_expire(qid: str) -> None:
     await asyncio.sleep(config.MUSIC_DUCK_TTL_S)
-    log.warning("duck watchdog fired — unduck never arrived; restoring volume")
-    # Detach ourselves FIRST: unduck() cancels _duck_watchdog, and that's this
-    # very task — cancelling ourselves mid-unduck would skip the restore.
-    _duck_watchdog = None
+    log.warning("duck watchdog fired on %s — unduck never arrived; restoring", qid)
     async with _duck_lock:
-        _duck["count"] = 1               # force this unduck to restore
-    await unduck()
+        state = _duck_state(qid)
+        # Detach ourselves FIRST: unduck() cancels the stored watchdog, and
+        # that's this very task — cancelling ourselves mid-unduck would skip
+        # the restore.
+        state["watchdog"] = None
+        state["count"] = 1               # force this unduck to restore
+        target = state["target"]
+    await unduck(target or {"queue": qid})

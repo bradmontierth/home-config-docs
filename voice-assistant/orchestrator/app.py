@@ -785,8 +785,10 @@ async def handle_command(command: str, followup: bool = False,
                 result["ok"] = True
 
     elif intent == "play_music":
+        target = zones.music_target(_CUR_SAT.get())
         try:
-            sel = await music_mod.play(parsed.get("query"), parsed.get("media_type"))
+            sel = await music_mod.play(parsed.get("query"), parsed.get("media_type"),
+                                       target)
         except music_mod.MusicUnavailable:
             result["response"] = "Sorry, I can't reach the music player."
             result["ok"] = False
@@ -803,7 +805,10 @@ async def handle_command(command: str, followup: bool = False,
             result["ok"] = True
             # Pop the existing jukebox now-playing modal on the kiosk — it polls
             # live MA queue state, so voice-started music renders there for free.
-            await events.emit("show_music", **sel)
+            # Only for the room the screen is in: it renders whatever the KITCHEN
+            # queue holds, so a bath play would put the wrong now-playing on it.
+            if events.on_dashboard(_CUR_SAT.get()):
+                await events.emit("show_music", **sel)
 
     elif intent == "music_control":
         action = parsed.get("music_action")
@@ -812,7 +817,7 @@ async def handle_command(command: str, followup: bool = False,
             result["ok"] = False
         else:
             try:
-                await music_mod.control(action)
+                await music_mod.control(action, zones.music_target(_CUR_SAT.get()))
             except music_mod.MusicUnavailable:
                 result["response"] = "Sorry, I can't reach the music player."
                 result["ok"] = False
@@ -826,7 +831,7 @@ async def handle_command(command: str, followup: bool = False,
 
     elif intent == "music_query":
         try:
-            np = music_mod.now_playing()
+            np = music_mod.now_playing(zones.music_target(_CUR_SAT.get()))
         except music_mod.MusicUnavailable:
             result["response"] = "Sorry, I can't reach the music player."
             result["ok"] = False
@@ -834,7 +839,7 @@ async def handle_command(command: str, followup: bool = False,
             result["now_playing"] = np
             result["response"] = fmt.now_playing_phrase(np)
             result["ok"] = True
-            if np:
+            if np and events.on_dashboard(_CUR_SAT.get()):
                 await events.emit("show_music", **np)
 
     elif intent == "home_control":
@@ -1256,13 +1261,14 @@ async def music_duck(sat: str | None = None) -> dict:
     """Satellite fires this on a stage-1 wake trigger / alarm start so speech
     isn't buried under the music. Best-effort — never errors.
 
-    Only the room the music is actually playing in gets to duck it. There is
-    one queue and it is the kitchen's, so before this the master closet ducked
-    the kitchen every time it heard its wake word or rang a bath timer."""
-    if not zones.owns_music(sat):
-        return {"ok": True, "skipped": "not the music room"}
+    A room only ducks music that is playing in that room. Before rooms had
+    their own queues this was the kitchen's, and the master closet ducked it
+    every time it heard its wake word or rang a bath timer."""
+    target = zones.music_target(sat)
+    if not target["local"]:
+        return {"ok": True, "skipped": "no music in this room"}
     try:
-        await music_mod.duck()
+        await music_mod.duck(target)
     except Exception as exc:  # noqa: BLE001 — includes MusicUnavailable
         log.debug("duck skipped: %s", exc)
         return {"ok": False}
@@ -1273,11 +1279,12 @@ async def music_duck(sat: str | None = None) -> dict:
 async def music_unduck(sat: str | None = None) -> dict:
     # Symmetrical with the duck, and it has to be: the duck is refcounted, so
     # an unduck from a room that never ducked would decrement someone else's
-    # hold and un-duck the kitchen mid-sentence.
-    if not zones.owns_music(sat):
-        return {"ok": True, "skipped": "not the music room"}
+    # hold and un-duck that room mid-sentence.
+    target = zones.music_target(sat)
+    if not target["local"]:
+        return {"ok": True, "skipped": "no music in this room"}
     try:
-        await music_mod.unduck()
+        await music_mod.unduck(target)
     except Exception as exc:  # noqa: BLE001
         log.debug("unduck skipped: %s", exc)
         return {"ok": False}
@@ -1285,10 +1292,11 @@ async def music_unduck(sat: str | None = None) -> dict:
 
 
 @app.get("/music/state")
-def music_state() -> dict:
-    """Debug/CLI peek at what the kitchen queue is doing."""
+def music_state(sat: str | None = None) -> dict:
+    """Debug/CLI peek at what a room's queue is doing (default: the kitchen)."""
     try:
-        return {"ok": True, "now_playing": music_mod.now_playing()}
+        return {"ok": True, "now_playing": music_mod.now_playing(
+            zones.music_target(sat))}
     except Exception as exc:  # noqa: BLE001
         return {"ok": False, "error": str(exc)}
 

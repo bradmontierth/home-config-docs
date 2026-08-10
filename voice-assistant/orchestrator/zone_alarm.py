@@ -34,14 +34,13 @@ stuck behind a corpse.
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 import os
 import wave
 
 import httpx
 
-from . import config, timers, zones
+from . import config, snapcast, timers, zones
 
 log = logging.getLogger("orchestrator.zone_alarm")
 
@@ -218,34 +217,6 @@ async def _ma(command: str, args: dict, timeout: float) -> None:
         r.raise_for_status()
 
 
-async def _snap_volume(client_id: str) -> int | None:
-    """The true resting volume, from the snapserver that actually owns these
-    players.
-
-    MA caches this and the cache goes stale: on 2026-08-08 ma_shower reported
-    0 for hours while the snapclient was really at 20, and MA kept reporting 0
-    even as its own volume_set correctly moved the client from 20 to 35.
-    Restoring MA's number would have left the bathroom permanently silent, so
-    MA is not trusted for this one value."""
-    try:
-        reader, writer = await asyncio.open_connection(
-            config.SNAPSERVER_HOST, config.SNAPSERVER_PORT, limit=1 << 20)
-        try:
-            writer.write(json.dumps({"id": 1, "jsonrpc": "2.0",
-                                     "method": "Server.GetStatus"}).encode() + b"\n")
-            await writer.drain()
-            line = await asyncio.wait_for(reader.readline(), timeout=6)
-        finally:
-            writer.close()
-        for group in json.loads(line)["result"]["server"]["groups"]:
-            for client in group["clients"]:
-                if client["id"] == client_id:
-                    return client["config"]["volume"]["percent"]
-    except Exception as exc:  # noqa: BLE001
-        log.warning("snapserver volume read for %s failed: %s", client_id, exc)
-    return None
-
-
 async def _resting_volume(route: dict) -> int:
     """What to put the room back to. Snapserver first, then MA, then the
     configured level — and never zero, whatever any of them claim. A room we
@@ -264,7 +235,7 @@ async def _resting_volume(route: dict) -> int:
     ceiling = route.get("alarm_volume")
     level = None
     if route.get("snap_client"):
-        level = await _snap_volume(route["snap_client"])
+        level = await snapcast.volume(route["snap_client"])
     if not level:
         level = await _player_volume(route.get("ma_player"))
     if level and ceiling and level >= ceiling:
@@ -354,12 +325,27 @@ class ZoneRinger:
         elif announce_url:
             padded = padded_announcement(timer.get("id") or "")
             speech = f"{base}{'/audio/' + padded if padded else announce_url}"
+        # Duck this room's own music under the ring. MA's announcements
+        # already take the room away from the music stream while each chunk
+        # plays, so what this buys is the ~2s gaps between chunks: without it
+        # the room alternates full-volume music and beeps for the length of
+        # the alarm. Ducked, not stopped, so the bath is still the room it was
+        # when the timer is dismissed (Brad's call, 2026-08-09).
+        music_target = zones.music_target(sat)
+        ducked = False
         try:
             # A cold amp swallows the opening whole: measured 2026-08-08, a
             # reply into one is not clipped, it is *silent*, and the closet mic
             # heard nothing until seven seconds into the first ring chunk.
             # Same pre-wake the spoken replies use.
             from . import broadcast as broadcast_mod
+            from . import music as music_mod
+            if music_target["local"]:
+                try:
+                    await music_mod.duck(music_target)
+                    ducked = True
+                except Exception as exc:  # noqa: BLE001 — no music, MA down
+                    log.debug("no music to duck for %s: %s", sat, exc)
             await broadcast_mod.amp_wake(route.get("rooms") or [], volume)
             await asyncio.sleep(WAKE_GATE_S)
 
@@ -379,6 +365,15 @@ class ZoneRinger:
         except Exception as exc:  # noqa: BLE001 — a failed ring must not
             log.warning("zone alarm sat=%s failed: %s", sat, exc)
         finally:
+            # Unduck first, then settle. Both end up writing this room's
+            # resting level, and if they ever disagree the alarm path is the
+            # one that must win: it is the one that knows the ring set the
+            # volume to 45 and refuses to read that back as a resting level.
+            if ducked:
+                try:
+                    await asyncio.shield(music_mod.unduck(music_target))
+                except Exception as exc:  # noqa: BLE001
+                    log.warning("unduck after ring on %s failed: %s", sat, exc)
             # Unconditional: MA does not put the volume back once we have
             # touched it, and a room left at 0 is a room that never speaks
             # again. Shielded so a cancel cannot skip it.

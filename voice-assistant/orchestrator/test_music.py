@@ -3,7 +3,9 @@ import os
 import tempfile
 import unittest
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, Mock, patch
+
+from music_assistant_models.enums import PlayerState
 
 from . import config, music, music_log
 
@@ -334,6 +336,223 @@ class PlayFallbackTest(unittest.TestCase):
         self.assertEqual([c.args[1] for c in
                           self.queues.queue_command_shuffle.await_args_list],
                          [False, True])
+
+
+class RoomPlaybackTest(unittest.TestCase):
+    """Music in a room that is not the kitchen (master bath, 2026-08-09).
+
+    Everything here is about the two rooms being genuinely different: the
+    kitchen is a squeezelite box whose volume is somebody else's business, the
+    bath is a snapclient behind an amp that sleeps, and Music Assistant lies
+    about the volume of the second kind.
+    """
+
+    KITCHEN = {"queue": "kitchen-box", "local": True}
+    BATH = {"queue": "ma_shower", "local": True, "snap_client": "shower",
+            "volume": 20, "max_volume": 40, "rooms": ["shower"],
+            "cap_minutes": 60}
+
+    def setUp(self):
+        self.queues = AsyncMock()
+        self.players = AsyncMock()
+        self.client = AsyncMock()
+        self.client.player_queues = self.queues
+        self.client.players = self.players
+        # get() is synchronous on the real client; an AsyncMock child would
+        # hand back a coroutine and every state check would read as truthy.
+        self.idle = SimpleNamespace(state=PlayerState.IDLE)
+        self.queues.get = Mock(return_value=self.idle)
+        self.players.get = Mock(return_value=SimpleNamespace(volume_level=60))
+        patcher = patch.object(music, "_ma", return_value=self.client)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        patcher = patch.object(music, "_ensure_index",
+                               new=AsyncMock(return_value=SKELETONS))
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        patcher = patch.object(music, "_notify_jukebox_takeover", new=AsyncMock())
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.wake = AsyncMock()
+        patcher = patch("orchestrator.broadcast.amp_wake", new=self.wake)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.snap = AsyncMock(return_value=20)
+        patcher = patch.object(music.snapcast, "volume", new=self.snap)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        # Volume writes take one of two roads — the snapserver for an amp
+        # zone, MA for the kitchen — so record both in one ordered list.
+        self.writes: list[tuple[str, int]] = []
+        self.snap_set = AsyncMock(
+            side_effect=lambda cid, level: self.writes.append((cid, level)) or True)
+        patcher = patch.object(music.snapcast, "set_volume", new=self.snap_set)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.players.player_command_volume_set = AsyncMock(
+            side_effect=lambda qid, level: self.writes.append((qid, level)))
+        music._duck.clear()
+        music._caps.clear()
+        self.addCleanup(music._duck.clear)
+        self.addCleanup(music._caps.clear)
+        _isolate_music_log(self)
+
+    def _volumes(self):
+        """Every volume write in order. Amp-zone writes are addressed to the
+        snapclient ("shower"), kitchen writes to the MA player."""
+        return self.writes
+
+    def _playing(self):
+        self.queues.get.return_value = SimpleNamespace(state=PlayerState.PLAYING)
+
+    # -- where it plays ----------------------------------------------------
+    def test_play_targets_the_rooms_own_queue(self):
+        asyncio.run(music.play("spooky scary skeletons", target=self.BATH))
+        self.assertEqual(self.queues.play_media.await_args.args[0], "ma_shower")
+
+    def test_no_target_still_means_the_kitchen(self):
+        """Every caller that predates rooms keeps its behaviour exactly."""
+        asyncio.run(music.play("spooky scary skeletons"))
+        self.assertEqual(self.queues.play_media.await_args.args[0],
+                         config.MA_QUEUE_ID)
+
+    # -- the amp and the volume -------------------------------------------
+    def test_music_never_fires_an_amp_wake_of_its_own(self):
+        """The obvious thing to do here is the wrong one. A wake tone is an MA
+        announcement, and MA drops queue commands while one is in progress —
+        so the tone ate the play_media a second behind it and the bath just
+        stayed quiet ("Ignore queue command: An announcement is in progress",
+        2026-08-09). The reply that follows the turn wakes the amp instead."""
+        asyncio.run(music.play("spooky scary skeletons", target=self.BATH))
+        self.wake.assert_not_awaited()
+
+    def test_a_quiet_room_starts_at_its_configured_volume(self):
+        asyncio.run(music.play("spooky scary skeletons", target=self.BATH))
+        self.assertIn(("shower", 20), self._volumes())
+
+    def test_a_room_already_playing_keeps_the_volume_it_was_turned_to(self):
+        """Starting a second song must not undo a "turn it up" from a minute
+        ago; only the first play into a quiet room asserts a level."""
+        self._playing()
+        asyncio.run(music.play("spooky scary skeletons", target=self.BATH))
+        self.assertEqual(self._volumes(), [])
+
+    def test_the_kitchen_volume_is_never_asserted(self):
+        """Its levels are announcements + jukebox knob + New Mode, and voice
+        music has no business overriding any of them."""
+        asyncio.run(music.play("spooky scary skeletons", target=self.KITCHEN))
+        self.assertEqual(self._volumes(), [])
+
+    # -- side effects that belong to the kitchen ---------------------------
+    def test_a_bath_play_leaves_the_nfc_jukebox_alone(self):
+        """Clearing the card marker for a play two floors up would make the
+        next scan of that card pause-toggle the bath instead of playing."""
+        asyncio.run(music.play("spooky scary skeletons", target=self.BATH))
+        music._notify_jukebox_takeover.assert_not_called()
+
+    def test_a_kitchen_play_still_tells_the_jukebox(self):
+        asyncio.run(music.play("spooky scary skeletons",
+                               target={"queue": config.MA_QUEUE_ID, "local": True}))
+        music._notify_jukebox_takeover.assert_called_once()
+
+    # -- queue hygiene -----------------------------------------------------
+    def test_repeat_and_dont_stop_the_music_are_cleared(self):
+        """Both persist per queue and both would outlive the request. DSTM in
+        particular refills the queue forever, which would defeat the cap."""
+        asyncio.run(music.play("spooky scary skeletons", target=self.BATH))
+        self.queues.queue_command_repeat.assert_awaited()
+        self.queues.dont_stop_the_music.assert_awaited_with("ma_shower", False)
+
+    # -- ducking -----------------------------------------------------------
+    def test_ducking_reads_the_snapserver_not_music_assistant(self):
+        """MA reported ma_shower at 0 while the room played at 20. Ducking
+        from 0 computes a target of 5, sees 5 >= 0, and silently does nothing
+        — the failure that makes this a room-by-room read rather than one."""
+        self._playing()
+        self.players.get.return_value = SimpleNamespace(volume_level=0)
+        asyncio.run(music.duck(self.BATH))
+        self.assertEqual(self._volumes(), [("shower", 5)])
+
+    def test_two_rooms_duck_and_unduck_independently(self):
+        """One global refcount meant the kitchen's unduck restored the bath's
+        saved volume onto the kitchen."""
+        self._playing()
+
+        async def both():
+            await music.duck(self.KITCHEN)      # MA says 60
+            await music.duck(self.BATH)         # snapserver says 20
+            await music.unduck(self.KITCHEN)
+
+        asyncio.run(both())
+        self.assertEqual(self._volumes(),
+                         [("kitchen-box", 15), ("shower", 5),
+                          ("kitchen-box", 60)])
+
+    def test_a_second_duck_in_one_room_does_not_re_read_the_volume(self):
+        """Refcounted: the alarm ducking on top of a turn must not capture the
+        already-ducked level as the thing to restore."""
+        self._playing()
+
+        async def nested():
+            await music.duck(self.BATH)
+            await music.duck(self.BATH)
+            await music.unduck(self.BATH)
+            await music.unduck(self.BATH)
+
+        asyncio.run(nested())
+        self.assertEqual(self._volumes(), [("shower", 5), ("shower", 20)])
+
+    # -- volume commands ---------------------------------------------------
+    def test_turn_it_up_uses_the_real_volume(self):
+        """From MA's stale 0 this would have SET the bath to 10 — a request to
+        turn it up that halves it."""
+        asyncio.run(music.control("volume_up", self.BATH))
+        self.assertEqual(self._volumes(), [("shower", 30)])
+
+    def test_turn_it_up_stops_below_alarm_volume(self):
+        """Nobody should be able to talk a speaker into alarm territory with
+        kids in the room under it."""
+        self.snap.return_value = 35
+        asyncio.run(music.control("volume_up", self.BATH))
+        self.assertEqual(self._volumes(), [("shower", 40)])
+
+    def test_turning_up_while_ducked_moves_the_restore_target(self):
+        self._playing()
+
+        async def ducked_then_up():
+            await music.duck(self.BATH)
+            await music.control("volume_up", self.BATH)
+            await music.unduck(self.BATH)
+
+        asyncio.run(ducked_then_up())
+        self.assertEqual(self._volumes()[-1], ("shower", 30))
+
+    # -- the auto-stop cap -------------------------------------------------
+    def test_a_capped_room_arms_a_stop(self):
+        """The people it is playing for are in the tub and cannot reach a
+        microphone, so something other than them has to end it."""
+        asyncio.run(music.play("spooky scary skeletons", target=self.BATH))
+        self.assertIn("ma_shower", music._caps)
+
+    def test_the_kitchen_is_not_capped(self):
+        asyncio.run(music.play("spooky scary skeletons", target=self.KITCHEN))
+        self.assertEqual(music._caps, {})
+
+    def test_stopping_disarms_the_cap(self):
+        async def play_then_stop():
+            await music.play("spooky scary skeletons", target=self.BATH)
+            await music.control("stop", self.BATH)
+
+        asyncio.run(play_then_stop())
+        self.assertEqual(music._caps, {})
+
+    def test_the_cap_stops_the_room(self):
+        async def expire():
+            with patch.object(music.asyncio, "sleep", new=AsyncMock()):
+                await music._cap_expire("ma_shower", 60)
+
+        asyncio.run(expire())
+        self.queues.queue_command_stop.assert_awaited_with("ma_shower")
 
 
 if __name__ == "__main__":

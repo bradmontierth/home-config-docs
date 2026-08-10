@@ -127,27 +127,48 @@ def host_for(sat: str | None) -> str | None:
     return None
 
 
-def owns_music(sat: str | None) -> bool:
-    """Whether this satellite is standing in the room the music plays in.
+def music_target(sat: str | None) -> dict:
+    """Where music this satellite asks for should play, and how loud.
 
-    Ducking is room-local; the music queue is not. Every satellite ducks on a
-    wake trigger and on an alarm so speech beats the music — but there is one
-    queue and it is the kitchen's, so the master closet was ducking the kitchen
-    for a bath timer nobody down there could hear (Brad, 2026-08-08).
+    Replaces the older `owns_music()`, which asked "is this THE music room" —
+    a question that only had an answer while there was exactly one queue and
+    it was the kitchen's. Every room can have its own now, so the question
+    becomes which queue this one drives.
 
-    An unknown/absent sat ducks, which is the pre-`sat` behaviour: an older
-    satellite build that does not tag its request must not go quiet in the
-    room where ducking is the whole point.
+    Keys:
+      queue        MA queue/player id to play on.
+      local        Whether that queue comes out of speakers in THIS room. Only
+                   a local queue may be ducked for this room's wake word or
+                   alarm — the master closet ducking the kitchen for a bath
+                   timer is the bug this replaced (Brad, 2026-08-08).
+      snap_client  Snapclient id, when the room is a whole-home amp zone.
+                   Its presence means "read volumes from the snapserver, MA
+                   lies about this player" (see snapcast.volume).
+      volume       Level to start music at, when the room wants one. Absent
+                   for the kitchen on purpose: its volume is a domain of its
+                   own (jukebox knob, announcements, New Mode) and voice
+                   music has no business overriding it.
+      max_volume   Ceiling for "turn it up".
+      rooms        Zone rooms to pre-wake the amp for.
+      cap_minutes  Stop by itself after this long. For a room where the
+                   people it is playing for cannot reach a microphone.
+
+    A satellite with no entry, or an entry that names no `music_player`, gets
+    the kitchen queue and is not treated as local — which is exactly what
+    happened before this function existed.
     """
-    if not sat:
-        return True
-    try:
-        table = _table()
-    except Exception as exc:  # noqa: BLE001 — bad JSON edited by hand
-        log.warning("satellite table unreadable: %s", exc)
-        return True
-    declared = [key for key, entry in table.items() if entry.get("music")]
-    return sat in declared if declared else sat == config.DEFAULT_SAT
+    entry = _entry(sat) or {}
+    player = entry.get("music_player")
+    if not player:
+        return {"queue": config.MA_QUEUE_ID,
+                "local": (sat or config.DEFAULT_SAT) == config.DEFAULT_SAT}
+    target = {"queue": player, "local": True}
+    for key, column in (("snap_client", "snap_client"), ("volume", "music_volume"),
+                        ("max_volume", "music_max_volume"), ("rooms", "rooms"),
+                        ("cap_minutes", "music_cap_minutes")):
+        if entry.get(column) is not None:
+            target[key] = entry[column]
+    return target
 
 
 def spoken_for(sat: str | None) -> str:

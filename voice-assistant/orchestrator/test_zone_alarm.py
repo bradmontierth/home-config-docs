@@ -136,7 +136,8 @@ class RestingVolumeTest(unittest.TestCase):
              "volume": 20, "alarm_volume": 45}
 
     def _resting(self, snap=None, ma=None, route=None):
-        with patch.object(zone_alarm, "_snap_volume", new=AsyncMock(return_value=snap)), \
+        with patch.object(zone_alarm.snapcast, "volume",
+                          new=AsyncMock(return_value=snap)), \
              patch.object(zone_alarm, "_player_volume", new=AsyncMock(return_value=ma)):
             return asyncio.run(zone_alarm._resting_volume(route or self.ROUTE))
 
@@ -171,38 +172,60 @@ class RingOrderingTest(unittest.TestCase):
         self.assertGreaterEqual(zone_alarm.WAKE_GATE_S, 0.5)
 
 
-class MusicDuckScopeTest(unittest.TestCase):
-    """Ducking is room-local; the music queue is not. Brad watched the kitchen
-    music duck for bath timers he was testing two floors up."""
+class MusicTargetTest(unittest.TestCase):
+    """Which queue a room drives, and whether that queue is close enough to
+    duck. Brad watched the kitchen music duck for bath timers he was testing
+    two floors up; the fix is that every room now names its own."""
 
-    TABLE = {"kitchen": {"music": True}, "master": {"rooms": ["shower"]}}
+    TABLE = {
+        "kitchen": {"music_player": "kitchen-box"},
+        "master": {"music_player": "ma_shower", "snap_client": "shower",
+                   "rooms": ["shower"], "music_volume": 20,
+                   "music_max_volume": 40, "music_cap_minutes": 60},
+        "simon": {"rooms": ["simon_room"]},
+    }
 
-    def _owns(self, sat, table=None):
+    def _target(self, sat, table=None):
         with patch.object(zones, "_table", return_value=table or self.TABLE):
-            return zones.owns_music(sat)
+            return zones.music_target(sat)
 
-    def test_the_music_room_ducks(self):
-        self.assertTrue(self._owns("kitchen"))
+    def test_a_room_plays_on_its_own_queue(self):
+        t = self._target("master")
+        self.assertEqual(t["queue"], "ma_shower")
+        self.assertTrue(t["local"])
 
-    def test_another_room_does_not(self):
-        self.assertFalse(self._owns("master"))
+    def test_a_room_carries_its_volume_rules(self):
+        t = self._target("master")
+        self.assertEqual((t["volume"], t["max_volume"], t["cap_minutes"]),
+                         (20, 40, 60))
+        self.assertEqual(t["snap_client"], "shower")
 
-    def test_unknown_room_does_not(self):
-        self.assertFalse(self._owns("simon"))
+    def test_the_kitchen_gets_no_volume_of_its_own(self):
+        """Its levels are a domain of their own — announcements, the jukebox
+        knob, New Mode. Voice music must not assert one over them."""
+        t = self._target("kitchen")
+        self.assertNotIn("volume", t)
+        self.assertNotIn("cap_minutes", t)
+
+    def test_a_room_with_no_music_player_plays_in_the_kitchen(self):
+        """Exactly what happened before rooms had queues, so adding the column
+        to one room does not change behaviour anywhere else."""
+        t = self._target("simon")
+        self.assertEqual(t["queue"], config.MA_QUEUE_ID)
+
+    def test_but_it_does_not_duck_the_kitchen(self):
+        """The whole bug: a wake word upstairs dipping music downstairs."""
+        self.assertFalse(self._target("simon")["local"])
 
     def test_untagged_request_still_ducks(self):
         """An older satellite build sends no sat. It must not go silent in the
         one room where ducking is the entire point."""
-        self.assertTrue(self._owns(None))
+        self.assertTrue(self._target(None)["local"])
 
-    def test_table_with_no_music_flag_falls_back_to_the_default_room(self):
-        plain = {"kitchen": {}, "master": {"rooms": ["shower"]}}
-        self.assertTrue(self._owns(config.DEFAULT_SAT, plain))
-        self.assertFalse(self._owns("master", plain))
-
-    def test_unreadable_table_ducks_rather_than_going_quiet(self):
+    def test_unreadable_table_still_names_a_queue(self):
         with patch.object(zones, "_table", side_effect=ValueError("bad json")):
-            self.assertTrue(zones.owns_music("master"))
+            self.assertEqual(zones.music_target("master")["queue"],
+                             config.MA_QUEUE_ID)
 
 
 class DashboardScopeTest(unittest.TestCase):

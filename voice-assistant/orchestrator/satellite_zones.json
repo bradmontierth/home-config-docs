@@ -1,9 +1,9 @@
 {
   "kitchen": {
     "spoken": "kitchen",
-    "music": true,
+    "music_player": "e4:5f:01:67:1e:56",
     "host": "http://192.168.10.251:8781",
-    "note": "The kitchen mini PC: mic, speakers and NFC in one box. No rooms key, so its replies stay on its own speaker. music:true means this is the room the one music queue plays in, so this is the only satellite allowed to duck it."
+    "note": "The kitchen mini PC: mic, speakers and NFC in one box. No rooms key, so its replies stay on its own speaker. music_player is the squeezelite jukebox the NFC reader also drives. Deliberately no music_volume: the kitchen's levels are their own domain (jukebox knob, announcements, New Mode) and voice music must not override them."
   },
   "master": {
     "spoken": "master bath",
@@ -16,7 +16,11 @@
     "alarm": "zone",
     "ma_player": "ma_shower",
     "alarm_volume": 45,
-    "note": "Mic-only Pi in the master closet. The wake ding stays on its little USB speaker; spoken replies and timer alarms go out the master bath speakers. alarm_volume is well above the reply volume of 20 on purpose - a reply is for someone standing there, an alarm has to carry over a running shower.",
+    "music_player": "ma_shower",
+    "music_volume": 20,
+    "music_max_volume": 40,
+    "music_cap_minutes": 60,
+    "note": "Mic-only Pi in the master closet. The wake ding stays on its little USB speaker; spoken replies and timer alarms go out the master bath speakers. alarm_volume is well above the reply volume of 20 on purpose - a reply is for someone standing there, an alarm has to carry over a running shower. Music starts at 20 and cannot be talked above 40 (the alarm is 45, and nobody should be able to walk a speaker into alarm territory with kids under it). music_cap_minutes stops it by itself: the people it plays for are in the tub, two rooms from the nearest microphone.",
     "snap_client": "shower"
   }
 }
