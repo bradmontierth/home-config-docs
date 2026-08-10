@@ -184,10 +184,37 @@ def _arb_claim(sat: str) -> None:
 _CUR_SAT: contextvars.ContextVar[str | None] = contextvars.ContextVar(
     "current_sat", default=None)
 
+# "argument not given", distinct from an explicit sat=None — which is a real
+# value here, meaning the pre-rooms caller that reads as the kitchen.
+_UNSET: object = object()
+
 
 # --------------------------------------------------------------------------
 # expiry -> alarm
 # --------------------------------------------------------------------------
+async def _turn_event(event_type: str, sat: str | None = _UNSET,
+                      **fields: object) -> None:
+    """Push a conversation event to the kitchen display — if it is that room's
+    conversation.
+
+    Captions, "thinking", the reply text, a list or a now-playing card: all of
+    it is one room's turn, and the screen lives in the kitchen. A bath command
+    painting the kitchen display shows a conversation nobody standing there is
+    having (Brad, 2026-08-09, watching "Okay, louder" appear while the music it
+    referred to was two floors up).
+
+    Defaults to the satellite of the turn in flight. Endpoints that fire
+    outside a dispatched turn — the wake badge, partial captions — pass their
+    own; a caller with no room at all reads as the kitchen, which is what every
+    one of these events was before rooms existed.
+    """
+    if sat is _UNSET:
+        sat = _CUR_SAT.get()
+    if not events.on_dashboard(sat):
+        return
+    await events.emit(event_type, **fields)
+
+
 async def _timer_event(event_type: str, timer: dict | None = None,
                        **fields: object) -> None:
     """Push a timer change to the kitchen display — if it is that room's timer.
@@ -267,7 +294,7 @@ async def _broadcast_lists(event_type: str, **extra) -> None:
     except Exception as exc:  # noqa: BLE001
         log.warning("list snapshot for %s failed: %s", event_type, exc)
         return
-    await events.emit(event_type, items=items, **extra)
+    await _turn_event(event_type, items=items, **extra)
 
 
 # List views the kiosk can render, in the order an add prefers them.
@@ -293,7 +320,7 @@ async def _pop_list(list_type: str) -> None:
     except Exception as exc:  # noqa: BLE001
         log.warning("pop list %s failed: %s", list_type, exc)
         return
-    await events.emit("show_list", list_type=list_type, items=items)
+    await _turn_event("show_list", list_type=list_type, items=items)
 
 
 def _summarize_turn(intent: str, result: dict) -> str:
@@ -379,7 +406,7 @@ async def _finalize(result: dict, intent: str) -> dict:
             result["audio_url"] = await _speak_reply(result["response"])
     else:
         result["audio_url"] = await _speak_reply(result["response"])
-    await events.emit(
+    await _turn_event(
         "response", text=result["response"], audio_url=result["audio_url"], intent=intent
     )
     session_note(_summarize_turn(intent, result))
@@ -473,7 +500,7 @@ async def handle_command(command: str, followup: bool = False,
         entry = phone_mod.resolve(command)
         if entry is not None or _affirmation(command) == "no":
             if followup:
-                await events.emit("transcript", text=command)
+                await _turn_event("transcript", text=command)
             if entry is None:
                 return await _finalize(
                     {"intent": "none", "response": "Okay.", "ok": True}, "none")
@@ -509,7 +536,7 @@ async def handle_command(command: str, followup: bool = False,
         if decision is not None:
             session_clear_pending()
             if followup:
-                await events.emit("transcript", text=command)
+                await _turn_event("transcript", text=command)
             if decision == "no":
                 return await _finalize(
                     {"intent": "none", "response": "Okay, I left it.", "ok": True}, "none")
@@ -519,7 +546,7 @@ async def handle_command(command: str, followup: bool = False,
 
     context = session_context() if followup else None
     if not followup:
-        await events.emit("thinking", command=command)
+        await _turn_event("thinking", command=command)
     if clarify:
         parsed = await _parse_clarify_reply(clarify, command)
     else:
@@ -555,8 +582,8 @@ async def handle_command(command: str, followup: bool = False,
     if followup:
         # Actionable follow-up: surface caption + thinking now (deferred past the
         # none gate so background chatter never flashes on the dashboard).
-        await events.emit("transcript", text=command)
-        await events.emit("thinking", command=command)
+        await _turn_event("transcript", text=command)
+        await _turn_event("thinking", command=command)
 
     result: dict = {"intent": intent, "parsed": parsed}
 
@@ -712,7 +739,7 @@ async def handle_command(command: str, followup: bool = False,
             result["ok"] = True
             # `owner` rides along so the kiosk keeps showing the SAME set it
             # just read out — a later list_updated snapshot is household-wide.
-            await events.emit("show_list", list_type=list_type, items=items,
+            await _turn_event("show_list", list_type=list_type, items=items,
                               owner=owner)
 
     elif intent == "complete_item":
@@ -807,8 +834,7 @@ async def handle_command(command: str, followup: bool = False,
             # live MA queue state, so voice-started music renders there for free.
             # Only for the room the screen is in: it renders whatever the KITCHEN
             # queue holds, so a bath play would put the wrong now-playing on it.
-            if events.on_dashboard(_CUR_SAT.get()):
-                await events.emit("show_music", **sel)
+            await _turn_event("show_music", **sel)
 
     elif intent == "music_control":
         action = parsed.get("music_action")
@@ -839,8 +865,8 @@ async def handle_command(command: str, followup: bool = False,
             result["now_playing"] = np
             result["response"] = fmt.now_playing_phrase(np)
             result["ok"] = True
-            if np and events.on_dashboard(_CUR_SAT.get()):
-                await events.emit("show_music", **np)
+            if np:
+                await _turn_event("show_music", **np)
 
     elif intent == "home_control":
         hc_result = None
@@ -901,7 +927,7 @@ async def handle_command(command: str, followup: bool = False,
             ask_mod.remember(command, sports_result["response"], store_as="sports")
         else:
             # Unresolvable team/league or ESPN change -> slow-but-right path.
-            await events.emit("ask_thinking", query=command)
+            await _turn_event("ask_thinking", query=command)
             ask_result = await ask_mod.handle_ask(command)
             result["response"] = ask_result["response"]
             result["full"] = ask_result.get("full", "")
@@ -916,7 +942,7 @@ async def handle_command(command: str, followup: bool = False,
             ask_mod.remember(command, weather_result["response"])
         else:
             # HA down, or a day outside the 6-day met.no window.
-            await events.emit("ask_thinking", query=command)
+            await _turn_event("ask_thinking", query=command)
             ask_result = await ask_mod.handle_ask(command)
             result["response"] = ask_result["response"]
             result["full"] = ask_result.get("full", "")
@@ -930,11 +956,11 @@ async def handle_command(command: str, followup: bool = False,
             log.warning("business-hours lookup failed, falling back to ask: %s", exc)
         if places_result:
             result.update(places_result)
-            await events.emit("show_places", **places_result["places_view"])
+            await _turn_event("show_places", **places_result["places_view"])
             # Preserve the named place for a pronoun follow-up handled by ask.
             ask_mod.remember(command, places_result["response"])
         else:
-            await events.emit("ask_thinking", query=command)
+            await _turn_event("ask_thinking", query=command)
             ask_result = await ask_mod.handle_ask(command)
             result["response"] = ask_result["response"]
             result["full"] = ask_result.get("full", "")
@@ -942,7 +968,7 @@ async def handle_command(command: str, followup: bool = False,
 
     elif intent == "ask":
         query = parsed.get("query") or command
-        await events.emit("ask_thinking", query=query)
+        await _turn_event("ask_thinking", query=query)
         ask_result = await ask_mod.handle_ask(query)
         result["response"] = ask_result["response"]
         result["full"] = ask_result.get("full", "")
@@ -996,11 +1022,11 @@ def health() -> dict:
 
 
 @app.post("/session/listening")
-async def session_listening() -> dict:
+async def session_listening(sat: str | None = None) -> dict:
     """Satellite pings this when it opens a follow-up listen window (no wake
     word). Emits a dashboard cue so the kiosk shows 'Listening…' — the user must
     be able to tell the mic is still open without guessing."""
-    await events.emit("followup_listening")
+    await _turn_event("followup_listening", sat=sat)
     return {"ok": True}
 
 
@@ -1011,16 +1037,16 @@ async def wake(request: Request) -> dict:
     if not wav:
         raise HTTPException(400, "empty audio body")
     t0 = time.time()
-    await events.emit("verifying")
+    await _turn_event("verifying")
     transcript = await clients.transcribe(wav)
     verified, command, score = verify.verify_and_extract(transcript)
     log.info("wake transcript=%r verified=%s score=%s cmd=%r",
              transcript, verified, score, command)
     if not verified:
-        await events.emit("wake_rejected", transcript=transcript, score=score)
+        await _turn_event("wake_rejected", transcript=transcript, score=score)
         return {"verified": False, "transcript": transcript, "score": score}
 
-    await events.emit("transcript", text=command, wake_score=score)
+    await _turn_event("transcript", text=command, wake_score=score)
     result = await _dispatch(command)
     result.update(
         verified=True, transcript=transcript, score=score,
@@ -1077,7 +1103,7 @@ async def verify_wake(request: Request, sat: str = "kitchen") -> dict:
         return {"verified": False, "suppressed": True, "winner": winner}
     # Fire-and-forget: this POST to the dashboard sat serially BEFORE the ASR
     # call, putting a cosmetic badge (with a 4s timeout tail) on the chime path.
-    asyncio.create_task(events.emit("verifying"))
+    asyncio.create_task(_turn_event("verifying", sat=sat))
     transcript = await clients.transcribe(wav)
     verified, command, score = verify.verify_and_extract(transcript)
     decode = "full"
@@ -1109,7 +1135,7 @@ async def verify_wake(request: Request, sat: str = "kitchen") -> dict:
         if route:
             asyncio.create_task(
                 broadcast_mod.amp_wake(route["rooms"], route.get("volume")))
-    await events.emit("wake_confirmed" if verified else "wake_rejected",
+    await _turn_event("wake_confirmed" if verified else "wake_rejected", sat=sat,
                       score=score, transcript=transcript)
     return {
         "verified": verified, "score": score, "transcript": transcript,
@@ -1144,7 +1170,7 @@ async def command_audio(request: Request, followup: bool = False,
     if not transcript:
         # Silence: on a follow-up, stay quiet; on a wake turn, say we missed it.
         if not followup:
-            await events.emit("response", text="I didn't catch that.", intent="none")
+            await _turn_event("response", text="I didn't catch that.", intent="none")
         return {"ok": False, "transcript": "", "response": "",
                 "intent": "none", "silent": followup}
     if followup:
@@ -1167,7 +1193,7 @@ async def command_audio(request: Request, followup: bool = False,
             log.info("followup wake-strip %r -> %r", transcript, stripped)
             transcript = stripped
     if not followup:
-        await events.emit("transcript", text=transcript)
+        await _turn_event("transcript", text=transcript)
     # Speaker ID: in active mode the embed starts now (concurrent with intent
     # parsing) and person-dependent handlers await it lazily; in shadow mode
     # the scoring runs entirely off-turn. Either way every turn is logged to
@@ -1234,7 +1260,7 @@ async def command_shadow(request: Request, sat: str = "unknown") -> dict:
 
 
 @app.post("/partial")
-async def partial(request: Request, seq: int = 0) -> dict:
+async def partial(request: Request, seq: int = 0, sat: str | None = None) -> dict:
     """Live-caption snapshot. During command capture the satellite POSTs the
     ENTIRE buffer-so-far every ~400ms; each one is re-decoded as a normal
     full-context batch (so partials have zero accuracy penalty vs the final)
@@ -1251,7 +1277,7 @@ async def partial(request: Request, seq: int = 0) -> dict:
         log.debug("partial transcribe failed: %s", exc)
         return {"ok": False, "seq": seq}
     if text:
-        await events.emit("partial_transcript", text=text, seq=seq)
+        await _turn_event("partial_transcript", text=text, seq=seq, sat=sat)
     return {"ok": True, "seq": seq, "text": text}
 
 

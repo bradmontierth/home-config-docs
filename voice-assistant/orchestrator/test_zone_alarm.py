@@ -19,7 +19,7 @@ import unittest.mock
 import wave
 from unittest.mock import AsyncMock, patch
 
-from . import config, events, zone_alarm, zones
+from . import app, config, events, zone_alarm, zones
 
 
 def _write_wav(path: str, seconds: float, rate: int = 24000) -> None:
@@ -241,6 +241,47 @@ class DashboardScopeTest(unittest.TestCase):
     def test_a_timer_with_no_room_is_shown(self):
         """Pre-`sat` rows are kitchen timers and have always been on the board."""
         self.assertTrue(events.on_dashboard(None))
+
+
+class TurnEventScopeTest(unittest.TestCase):
+    """A conversation belongs to the room having it. The kitchen screen showed
+    "Okay, louder" for music playing two floors up (Brad, 2026-08-09) — the
+    timer cards were scoped the day before, the captions were not."""
+
+    def _shown(self, sat, **kw):
+        with patch.object(app.events, "emit", new=AsyncMock()) as emit:
+            asyncio.run(app._turn_event("transcript", text="hi", sat=sat, **kw))
+            return emit.await_count == 1
+
+    def test_the_display_room_is_shown(self):
+        self.assertTrue(self._shown(config.DASHBOARD_SAT))
+
+    def test_another_room_is_not(self):
+        self.assertFalse(self._shown("master"))
+
+    def test_a_caller_with_no_room_reads_as_the_kitchen(self):
+        """Every one of these events was unscoped before rooms existed, and
+        /wake still has no sat — it must keep painting the screen."""
+        self.assertTrue(self._shown(None))
+
+    def test_it_follows_the_turn_when_no_room_is_passed(self):
+        token = app._CUR_SAT.set("master")
+        try:
+            with patch.object(app.events, "emit", new=AsyncMock()) as emit:
+                asyncio.run(app._turn_event("thinking", command="x"))
+            self.assertEqual(emit.await_count, 0)
+        finally:
+            app._CUR_SAT.reset(token)
+
+    def test_an_explicit_none_is_not_mistaken_for_an_absent_argument(self):
+        """sat=None is a real value (the pre-rooms caller); the sentinel is
+        what means 'not given'. Collapsing them would make an untagged
+        endpoint inherit whichever room spoke last."""
+        token = app._CUR_SAT.set("master")
+        try:
+            self.assertTrue(self._shown(None))
+        finally:
+            app._CUR_SAT.reset(token)
 
 
 class HouseAnnouncementTest(unittest.TestCase):

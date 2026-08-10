@@ -573,7 +573,7 @@ class PartialStreamer:
                 continue
             seq, pcm = item
             try:
-                post_wav(f"/partial?seq={seq}", wrap_wav(pcm), timeout=4)
+                post_wav(sat_path(f"/partial?seq={seq}"), wrap_wav(pcm), timeout=4)
             except Exception:  # noqa: BLE001 — captions are cosmetic, never log-spam
                 pass
 
@@ -856,7 +856,7 @@ def run_manual_turn(stdout, vad) -> None:
     drain_input(stdout)             # start on live audio, not pre-tap backlog
     play_file(SOUNDS_DIR / "wake.wav")
     try:
-        post_json("/session/listening", {}, timeout=2)
+        post_json(sat_path("/session/listening"), {}, timeout=2)
     except Exception:  # noqa: BLE001
         pass
     cmd_pcm = capture_command(stdout, vad, min_capture_ms=WAKE_MIN_CAPTURE_MS,
@@ -936,7 +936,7 @@ def run_followups(stdout, vad, awaiting: bool = False) -> None:
         # Cue the dashboard "Listening…" badge so it's clear the mic is open for
         # a follow-up (no wake word) — fire-and-forget, never block the capture.
         try:
-            post_json("/session/listening", {}, timeout=2)
+            post_json(sat_path("/session/listening"), {}, timeout=2)
         except Exception:  # noqa: BLE001
             pass
         # NO audible listening cue here. Tried 2026-08-07 (a quiet tap) and
