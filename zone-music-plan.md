@@ -1,183 +1,211 @@
-# Music to a zone — scope
+# Zone music: "play Raffi" from the master closet
 
-**Asked for:** 2026-08-09. Music on the master bath speakers while the kids are
-in the tub, started by voice from the master closet satellite.
-**Status:** scoped, nothing built.
+**Status:** scoped 2026-08-09, nothing built.
+**Ask (Brad):** play music into the master bath while the kids are bathing.
+**Scope as written:** music follows the satellite that heard the command. The
+bath is the first customer; the loft and the kids' rooms come free.
 
-**Done looks like:** "okay computer, play Charlie Hope" said into the closet
-mic starts music on the bath speakers at a bath volume, "stop the music" stops
-it, and nothing about it touches the kitchen — not the queue, not the screen,
-not the NFC jukebox's idea of what card is playing.
+The library resolver does not change at all. What changes is that music.py
+currently believes there is exactly one place music can play, and there isn't.
 
-## The shape of it
+---
 
-`music.py` is not kitchen-specific in any interesting way. Its resolver — the
-ASR-robust library index that survives "rafi" and "deo" — is already pure: it
-turns a spoken phrase into a URI. What is kitchen-specific is a single constant
-threaded through every entry point:
+## 1. What exists today
 
-```python
-qid = config.MA_QUEUE_ID          # "e4:5f:01:67:1e:56", the kitchen squeezelite
-```
+| Piece | Where | State |
+|---|---|---|
+| ASR-robust library resolver | `orchestrator/music.py` `_resolve_library` | room-agnostic already — it returns a URI, it doesn't care who plays it |
+| `play_music` / `music_control` / `music_query` intents | `orchestrator/app.py` | all hardwired to `config.MA_QUEUE_ID` (the kitchen squeezelite box) |
+| Per-satellite routing table | `orchestrator/satellite_zones.json` | has `ma_player`, `snap_client`, `volume`, `alarm_volume` for `master` |
+| Amp pre-wake | `broadcast.amp_wake(rooms, volume)` | used by replies and by the zone ring |
+| Authoritative volume read | `zone_alarm._snap_volume()` | reads the snapserver, because MA's cached value lies |
+| Zone ring | `orchestrator/zone_alarm.py` | shipped 2026-08-08, rings the bath |
 
-`play()`, `control()`, `now_playing()`, `duck()` and `unduck()` each reach for
-it directly. The change is to make the queue an argument resolved from the
-satellite that heard the command, exactly the way the timer alarm resolves its
-room from `satellite_zones.json`. Everything else follows from that.
+So the resolver, the room table, the amp wake and the volume read are all
+already built and proven. This is mostly a plumbing job.
 
-Table entry, alongside the alarm columns that already exist:
+---
 
-```json
-"master": {
-  "ma_player": "ma_shower",  "snap_client": "shower",
-  "music_player": "ma_shower", "music_volume": 30, "music_max_volume": 40
-}
-```
+## 2. How audio actually reaches the bath (measured 2026-08-09)
 
-`kitchen` gets `"music_player": "e4:5f:01:67:1e:56"`, which retires the
-`"music": true` flag and `zones.owns_music()` with it — "is this the music
-room" stops being a question once every room can have its own queue. The new
-question is "which queue does this room duck", and a room with no
-`music_player` ducks nothing.
+Worth writing down, because two of the findings below are only explicable
+from the topology.
 
-## Feasible? Yes, and it is already in use
+- **One snapserver**, external, on `192.168.10.140:1705` (snapserver 0.35.0).
+  All five zone snapclients run *on that Pi* (`::ffff:127.0.0.1`) and feed the
+  MA1240a through the DAC HAT. MA at `.217` drives it over RPC.
+- **One permanent stream, `default`** — and it is a silence generator
+  (`process:///usr/local/bin/snapcast-silence`, `48000:16:2`, flac, 40ms
+  chunks). It exists to keep the clients connected, not to carry audio.
+- **Each zone is its own group**, all parked on `default` when idle.
+- On playback MA **creates a stream per player** (`Music Assistant - Shower`),
+  points that one group at it, and on stop deletes it and puts the group back
+  on `default` (verified in the provider source, `cmd_stop`).
+- An **announcement gets a second stream** (`Music Assistant - Shower
+  (announcement)`), which always takes the group; when it finishes the group
+  goes back to the music stream if the player is still playing, or to `default`
+  if it isn't. The queue is **never paused** for it — the song keeps streaming
+  underneath and you simply don't hear that stretch of it.
+- The kitchen is *not* on this amp — it's a squeezelite player on the mini PC.
+  **Kitchen music and bath music are fully independent.** Nothing to arbitrate.
 
-`ma_shower` is a snapcast player and MA's snapcast provider implements
-`play_media`. Not theory — the neighbouring zones hold real queues right now:
+Zone playback is not theoretical here: `ma_loft` (30 items), `ma_simon_room`
+(29) and `ma_master_bedroom` (51) all hold Charlie Hope tracks from Navidrome.
+The zones have played kids' music before, just never from voice.
 
-```
-ma_loft            30 items   Charlie Hope — Hello Song   (builtin://track/… Navidrome)
-ma_simon_room      29 items
-ma_master_bedroom  51 items
-ma_shower           0 items
-```
+---
 
-Kids' music, to zone players, through MA, today. The bath is the one zone that
-has never been asked.
+## 3. What breaks if you just point `play()` at `ma_shower`
 
-## What the plumbing actually does
+Nine findings, in the order they would bite. The first three are silent
+failures, which is why this is a plan and not a one-line change.
 
-Worth reading before writing code — four of these are counter-intuitive and two
-of them are live bugs waiting for the first bath play.
+(Scoped twice on 2026-08-09 by two sessions working in parallel, which is why
+this doc has one author's structure and both authors' findings. Where they
+disagreed the code was re-read; nothing here is unreconciled.)
 
-**One stream, five groups, and a silence generator.** The external snapserver
-(`192.168.10.140:1705`, v0.35.0) has exactly one stream, `default`, which is
-`process:///usr/local/bin/snapcast-silence?…48000:16:2`. Each zone client sits
-in its own group pointed at it. On play, MA creates `Music Assistant - Shower`,
-points that group at it, and on `cmd_stop` reverts the group to `default` and
-deletes the stream. So zones are genuinely independent — bath music cannot leak
-into the loft — but the group's stream pointer is shared mutable state between
-MA and everything else that touches snapserver.
+**F1 — Ducking silently does nothing on a zone player.** `music.duck()` reads
+`player.volume_level` from MA's cache. Right now MA reports `ma_shower` at
+**0** while the snapserver reports **20** — the divergence recorded in
+`ma-volume-source-of-truth` is live as I write this. duck() computes
+`target = max(5, 0) = 5`, sees `5 >= 0`, and returns having done nothing.
+Every volume read on a snapcast zone has to come from the snapserver.
+`zone_alarm._snap_volume()` already does exactly this; hoist it and share it.
 
-**A snapcast zone cannot pause.** Its `supported_features` are
-`volume_mute, set_members, volume_set, play_announcement` — no `pause`, no
-`enqueue`. `player_queues.pause()` sees that and sends `cmd_stop` instead
-(`controllers/player_queues.py:646`), having first saved `resume_pos`. So
-"pause the music" in the bath is stop-and-remember: resume works and picks up
-the position, but it tears down and rebuilds the snapcast stream, and if the
-pause was long the amp has gone back to sleep in the meantime. Functional, but
-it is not a pause and should not be described as one in the build notes.
+**F2 — "Turn it up" turns it down.** Same stale read: `control("volume_up")`
+does `0 + 10` and writes 10 to a zone that was playing at 20.
 
-**An announcement does not stop the music — it talks over it.** The provider
-switches the group to an announcement stream, plays, and switches back to the
-music stream if the player is not idle. The queue is never paused, so the song
-keeps streaming underneath and you lose exactly that stretch of it. A bath
-timer ring is one spoken line plus N chunk announcements, so a ring over music
-silently eats ~30s of the song and drops you back mid-verse.
+**F3 — Duck state is a single global.** `_duck = {"count", "restore"}` plus one
+watchdog task, process-wide. Two rooms playing means the kitchen's unduck
+restores the bath's saved volume onto the kitchen. Has to become per-queue.
+This also retires `zones.owns_music()` (added yesterday for the ducking bug):
+"the one music room" stops being a true idea. It becomes
+`zones.music_queue_for(sat)` → the queue this room ducks, or None.
 
-**MA restores the announcement volume from its own cache, and its cache is
-wrong.** The provider saves `player.volume_level` before an announcement and
-writes it back afterwards. Right now MA reports `ma_shower` at **0** while
-snapserver reports it at **20**. That divergence is the ratchet already
-documented in `ma-volume-source-of-truth`, and with music playing it gets a new
-way to hurt: a ring at alarm volume 45 over music at 30 can hand the room back
-at 45, or at 0, depending on what MA believed at the time.
+**F4 — There is no pause on a snapcast zone.** The provider advertises only
+`volume_set`, `volume_mute`, `set_members`, `play_announcement`. MA's queue
+controller falls back to `cmd_stop` — but it saves `resume_pos` first, so
+resume picks up where it left off. Functionally fine; two consequences worth
+knowing: a "pause" tears the snapcast stream down, and a *long* pause lets the
+amp fall asleep, so the resume needs the same wake treatment as a fresh start.
 
-**So ducking, as written, is a silent no-op on a zone.** `music.duck()` reads
-`player.volume_level` (0), computes `target = max(MUSIC_DUCK_MIN, 0) = 5`, sees
-`5 >= 0` and returns having done nothing. The same stale read makes
-`control("volume_up")` set the bath to 10 — "turn it up" would make it quieter.
-Volume reads on a snapcast zone have to come from snapserver;
-`zone_alarm._snap_volume()` already does this and wants hoisting into a shared
-helper.
+**F5 — The first seconds get swallowed by a cold amp.** Same failure that ate
+two timer confirmations on 2026-08-08. `amp_wake(rooms, volume)` then a short
+gate before `play_media`, exactly as the ring does now.
 
-**Duck state is one global.** `_duck = {"count": 0, "restore": None}` plus one
-watchdog task, for the whole house. Two rooms playing means the kitchen's
-unduck restores the bath's saved volume onto the kitchen. Per-queue state, or
-the second room breaks the first.
+**F6 — A timer ringing over bath music will strobe.** This is the one I'd want
+measured before promising anything. Snapcast volume is **per client, not per
+stream**, so MA's announcement path saves the client volume, sets it to the
+announcement volume, switches the group to an announcement stream, plays,
+restores the volume, and switches the group *back to the music stream*. Our
+ring is 1 speech announcement + 5 chunk announcements (`CYCLES=14`,
+`CYCLES_PER_CHUNK=3`). So a bath timer over bath music = six of those
+switches, and in the ~2s between chunks the group flips back and you hear
+music at resting volume, then beeps at 45, then music, then beeps. Two things
+sharpen it further. The queue is never paused underneath, so the song is still
+advancing through all of that and comes back roughly half a minute along. And
+the volume the provider restores after each announcement is
+`player.volume_level` **read from MA's own cache** — the number F1 says is
+wrong — so a ring over music can hand the room back at 0 (silent music, no
+error anywhere) or leave it at 45. Options: duck the room's music for the whole
+ring (my recommendation), or stop it outright at ring start, or leave it and
+see. Cheap to test once F1–F3 are in, and whichever wins, the volume that ends
+up on the client afterwards has to be one we wrote, not one MA remembered.
 
-**MA 2.6.3's announcement wait is the wedge bug.** `while stream.status !=
-"idle": await asyncio.sleep(0.25)` — unbounded, no connection check, and a
-snapserver drop mid-announcement pins `announcement_in_progress` true forever.
-See `music-assistant-upgrade-plan.md`; the watchdog is the interim net. Music
-in the bath does not add announcement traffic by itself, but it does add
-another reason for that player to be busy when one arrives.
+**F7 — A wedged stream would break the timer alarm we just shipped.** A clean
+stop reverts the group to `default`. An MA crash mid-play does not — the group
+is left pointing at a stream that no longer exists, and then *announcements to
+that zone go silent too*. `home-audio-adapter` already solved this
+(`_remove_stale_snapcast_stream`: if the stale stream is idle with no
+connected clients, remove it and retry the play once). Borrow it verbatim, and
+verify the group is back on `default` after a stop.
 
-**home-audio-adapter has already paid for two of these lessons.** It plays
-podcast queues to these same zones and had to learn that (a) a stale
-`Music Assistant - <name>` stream blocks the next play and must be removed and
-retried, and (b) `shuffle` / `repeat` / `dont_stop_the_music` persist on a
-queue across sessions and must be cleared explicitly. Our `play()` sets shuffle
-every time; it does not touch the other two. Borrow both, don't rediscover them.
+**F8 — Kitchen-only side effects fire for a bath play.** `events.emit("show_music")`
+pops the jukebox now-playing modal on the kitchen kiosk, and
+`_notify_jukebox_takeover()` clears the NFC card marker. Neither should happen
+for music two floors up. Same bug class as yesterday's timer-display leak, and
+the same fix pattern (`events.on_dashboard` / queue check).
 
-## Phase 1 — the useful half
+**F9 — Every announcement to that zone is a roll of the 2.6.3 dice.** The
+provider ends `play_announcement` with `while stream.status != "idle": await
+asyncio.sleep(0.25)` — unbounded, no connection check — so a snapserver drop
+mid-announcement pins `announcement_in_progress` true and silently swallows
+every later announcement to that player until MA restarts. That is the bug
+`music-assistant-upgrade-plan.md` exists for, and the announce watchdog is the
+interim net. Music does not create announcements, but it does make the shower
+player busy far more often, and a busy player is where this bites.
 
-Result: voice music in the bath, right volume, stops when told, kitchen
-untouched.
+One thing that is *not* a problem: **wake-over-music is easier here than in the
+kitchen.** The mic is in the closet, the speakers are in the bath, and there is
+a door between them. The kitchen's open item 4 (mic beside the big speakers)
+does not transfer. The closet Pi still has no `stop.onnx`, so a ring during
+music is dismissed by the ASR path only.
 
-| File | Work |
-|---|---|
-| `music.py` | Queue id becomes a parameter on `play`/`control`/`now_playing`/`duck`/`unduck`. `_duck` becomes per-queue. Volume reads route through snapserver for snapcast players. Clear `repeat` and `dont_stop_the_music` alongside the existing shuffle set. |
-| `zones.py` | `music_queue_for(sat)` and `music_volume_for(sat)`; delete `owns_music()`. |
-| `app.py` | `play_music` / `music_control` / `music_query` pass the turn's sat. `/music/duck` and `/music/unduck` resolve a queue instead of asking permission. `show_music` gated on `events.on_dashboard()` — same fix the timers just got. `_notify_jukebox_takeover()` only for the kitchen queue. |
-| `zone_alarm.py` | Hoist `_snap_volume()` into the shared helper `music.py` will use. |
-| `satellite_zones.json` | The three music columns. **Both copies** — the repo file only seeds, the live table is `/data/satellite_zones.json` in the container. |
-| new | Amp wake before the first note: `broadcast.amp_wake(rooms, music_volume)` then the same ~1s gate the ring uses, or the opening bars go into a sleeping amp. |
+---
 
-Tests: the duck no-op on a stale zone volume, per-queue duck isolation, the
-kitchen-only side effects, and the room→queue resolution. All unit-level; the
-existing `test_zone_alarm.py` patterns cover the shape.
+## 4. Phase 1 — the room plays music
 
-## Phase 2 — the interactions, measured in the room
+Everything needed for "okay computer, play Raffi" in the closet to play in the
+bath at a sane volume, and "stop the music" to stop it.
 
-- **A bath timer ringing over bath music.** Three candidate behaviours: duck
-  the room's music for the whole ring (recommended — the ring already ducks,
-  it just needs to duck the right queue), stop the music outright, or leave it.
-  Whichever, the volume MA hands back has to be ours, not MA's cached guess.
-- **Stale-stream repair on play failure**, and a verify-after-stop that the
-  group is back on `default`. Without it, an MA crash mid-play can leave the
-  shower group pointed at a deleted stream — which would take the bath *timer
-  announcements* down with it, i.e. break the thing shipped yesterday.
-- **An auto-stop cap.** Kids in the tub cannot reach the closet mic. Something
-  has to end it if nobody says so.
-- **A "bath music off" button** on the existing Voice Buttons Node-RED tab,
-  which is a table edit rather than code.
+1. **Table columns** (`satellite_zones.json`, and the live `/data` copy — the
+   repo file only *seeds*, it does not update an existing table):
+   ```json
+   "master": { "music_player": "ma_shower", "music_volume": 30, "music_max_volume": 40 }
+   "kitchen": { "music_player": "e4:5f:01:67:1e:56" }
+   ```
+   `music_max_volume` is a real requirement, not polish: it stops "turn it up"
+   from walking a speaker toward alarm volume with kids under it.
+2. **`zones.music_queue_for(sat)`** replacing `owns_music()`; NULL/unknown sat
+   still resolves to the kitchen, which is the pre-`sat` behaviour.
+3. **Thread the queue through `music.py`** — `play`, `control`, `now_playing`,
+   `duck`, `unduck`, all defaulting to `MA_QUEUE_ID`. Per-queue duck state.
+4. **Snapserver-authoritative volume** for any queue with a `snap_client`.
+5. **Amp wake + gate** before `play_media` on an amp zone.
+6. **Explicit queue hygiene** — shuffle we already set; also set repeat and
+   `dont_stop_the_music` off. These persist per queue across sessions and the
+   adapter got burned by exactly that.
+7. **Kitchen-scope the kiosk pop and the jukebox notify.**
+8. Tests: the existing `MusicDuckScopeTest` gets rewritten around the new
+   helper; new coverage for the stale-volume read and per-queue duck isolation.
 
-## Decisions I need from you
+Net: a few hundred lines, mostly in `music.py`, plus tests. No new services.
 
-1. **Volume.** Reply is 20, alarm is 45. Music over running water and two kids
-   is probably 28–35, and it wants a hard cap so "turn it up" can't walk it
-   into alarm territory with them in the room. One measurement session settles
-   both, the same way the reply volume got settled.
-2. **Ring over music** — duck, or stop the music? Ducking keeps the bath
-   feeling like one room; stopping is unambiguous.
-3. **How it ends when nobody says so** — is a 60-minute cap right, or does the
-   bath's presence sensor get a vote? (`static_presence` sticks ON for days on
-   that EPP, so I would not make it load-bearing.)
-4. **Phase 3, or not:** "play Charlie Hope in the bath" said from the kitchen.
-   That needs a room slot in the intent schema and a resolver shared with
-   `broadcast_rooms.json` — real work, and only worth it if you'd actually
-   start bath music from downstairs.
+## 5. Phase 2 — living with it
 
-## Not doing
+- **F6 measured**, and whichever of the three behaviours wins, implemented.
+- **F7**: stale-stream repair + post-stop group verification.
+- **An auto-stop cap** (60 min?). The kids can't reach the closet mic, so
+  something has to end it if everyone walks away. A plain timer beats keying
+  off the bath presence sensor — `static_presence` there sticks ON for days.
+- **A physical off switch**: one more MQTT button on the existing Node-RED
+  "Voice Buttons" tab is nearly free and works when nobody wants to talk.
 
-- **Routing through home-audio-adapter.** It models AntennaPod sessions —
-  materialised episode queues with resume positions — not a library player.
-  Its isolate bridge and its two hard-won lessons are worth borrowing; its
-  session model is not.
-- **Grouping the bath with the kitchen.** Different queues in different rooms is
-  the whole point; sync groups are what `isolate` exists to undo.
-- **Anything about wake-over-music.** The kitchen's problem (item 4) is a mic
-  sitting beside the big speakers. Here the mic is in the closet and the music
-  is in the bath, through a doorway — the geometry is favourable, and it should
-  be tested rather than assumed to be a problem.
+## 6. Phase 3 — optional
+
+"Play Raffi **in the bath**" said from the kitchen. Needs a room slot in the
+intent schema and a shared room resolver — `broadcast_rooms.json` already
+holds that mapping, so it's a merge rather than a new concept. Not needed for
+the stated ask.
+
+---
+
+## 7. Decisions I need from you
+
+1. **Volume.** Reply is 20, alarm is 45. Music over running water and kids —
+   I'd start at 30 with a cap of 40, but that wants the same one-off
+   measurement session the reply volume got.
+2. **F6:** duck the music under the ring, or stop it outright?
+3. **Auto-stop:** 60 minutes, or don't?
+4. Is the loft / kids' rooms in scope now, or bath-only? It is one table row
+   each once Phase 1 lands, but each new room is another thing that can be
+   ringing, ducking and talking at the same time.
+
+## 8. What I would not do
+
+- **Don't route this through `home-audio-adapter`.** It plays a materialized
+  queue of episode URLs with resume positions for AntennaPod. It's the wrong
+  shape for a library player, and we'd be maintaining the resolver's output in
+  two places. Borrow its snapcast lessons, not its API.
+- **Don't group the bath with the kitchen.** Different provider, different
+  amp, and the isolate bridge exists precisely to keep zones apart.
