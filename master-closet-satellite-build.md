@@ -921,3 +921,84 @@ The root cause inside MA or snapcast was never identified, only routed around.
 If it resurfaces on a path that cannot borrow the reply route, the untried
 experiment is playing the same WAV as a **queue item** rather than an
 announcement, which splits MA's announcement pipeline from snapcast itself.
+
+## 12. Music in the bath (2026-08-09 night)
+
+"Play Charlie Hope" said into the closet mic now starts music on the bath
+speakers. Scoped in `zone-music-plan.md`, built the same evening: **volume 20,
+ceiling 40, 60-minute auto-stop, and a timer ring ducks it rather than stopping
+it** (all four Brad's calls).
+
+The resolver did not change — it turns a spoken phrase into a URI and never
+cared what plays it. What changed is that `music.py` believed there was exactly
+one queue and it was the kitchen's. Every entry point (`play`, `control`,
+`now_playing`, `duck`, `unduck`) now takes a target resolved from the satellite
+by `zones.music_target()`, and the duck refcount is per queue instead of one for
+the whole house.
+
+Table columns on `master`: `music_player: ma_shower`, `music_volume: 20`,
+`music_max_volume: 40`, `music_cap_minutes: 60`. The kitchen gets
+`music_player` only — **deliberately no `music_volume`**, because its levels are
+their own domain (announcements, the jukebox knob, New Mode) and voice music has
+no business asserting one over them. A room with no `music_player` plays in the
+kitchen exactly as everything did before, but is not treated as local, so it
+cannot duck a queue it can't hear.
+
+### Two things this system does that no amount of reading predicted
+
+**Music Assistant drops queue commands while an announcement is in progress.**
+The obvious first move here — pre-wake the amp the way the replies and the ring
+do — is the wrong one, because a wake tone *is* an announcement. The 4-second
+tone ate the `play_media` one second behind it and the bath simply stayed quiet.
+The only evidence anywhere was one line in MA's own log:
+
+```
+WARNING [music_assistant.player_queues] Ignore queue command: An announcement is in progress
+```
+
+So music fires no wake of its own. The spoken reply lands on the same speaker a
+moment later and Node-RED already decides whether *that* needs a wake, so the
+amp still comes up — at the cost of a second or two of the first song instead of
+four seconds of tone before every one.
+
+**Snapserver does not echo a change notification to the connection that made
+the change.** MA's player model is fed by those notifications, so *MA never
+learns about its own writes*: it wrote 30, the snapserver read 30, and MA still
+reported 20 a minute later and forever after. That is the stale cache in
+`ma-volume-source-of-truth`, and this is its mechanism.
+
+It matters because MA brackets every announcement with a save/restore of that
+model. Anything set through MA is therefore undone by the next thing the room
+says — and in a room where every command is answered out loud, that is *every*
+change. Three "turn it up"s in a row left the bath at exactly 20 while the reply
+said "Okay, louder" each time.
+
+Volumes for an amp zone are written straight to the snapserver now
+(`snapcast.set_volume`, `Client.SetVolume`). MA sees the notification, its model
+is right, and its restore afterwards puts back the level we chose. Measured
+through one turn: our 30 lands, the reply speaks at 20 for five seconds, and MA
+restores **30** when it finishes.
+
+> This is very likely the same root cause as the alarm-volume ratchet in §9, and
+> `zone_alarm` still writes its mute and restore through MA. It works and it is
+> load-bearing, so it was left alone — but if the ratchet ever resurfaces, this
+> is the thing to change.
+
+### Verified in the room
+
+Plays on `ma_shower` at 20 · ducks 20→5→20 with the kitchen untouched ·
+"turn it up" sticks at 30 and stops at the 40 ceiling · survives spoken replies
+(playback did not even pause for a single one) · "stop the music" leaves the
+group back on the `default` silence stream with no orphaned snapcast stream.
+
+### Known limits
+
+- **The cap lives in the orchestrator process.** A restart while music is
+  playing forgets it, and that music then plays until told otherwise.
+- **A ring over music is unit-tested, not room-tested.** It was late and a
+  40-second marimba at volume 45 is not a quiet experiment.
+- **No pause on a snapcast zone.** MA has no PAUSE feature for these players, so
+  "pause" is a stop that remembers its position. Resume works; the stream is
+  torn down and rebuilt.
+- **Phase 3 was not built** — naming a room from another room ("play Charlie
+  Hope in the bath" from the kitchen). Brad deferred it.

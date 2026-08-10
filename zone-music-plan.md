@@ -1,6 +1,12 @@
 # Zone music: "play Raffi" from the master closet
 
-**Status:** scoped 2026-08-09, nothing built.
+**Status:** Phase 1 BUILT and verified in the room the same night (219bcb3).
+Brad's calls: volume 20, ceiling 40, 60-minute cap, a ring ducks rather than
+stops, Phase 3 dropped. For what the code actually does — and the two Music
+Assistant behaviours that reshaped it mid-build — read
+`master-closet-satellite-build.md` §12 rather than the phase plan below.
+Phase 2 items still open: the ring-over-music interaction room-tested, stale
+snapcast-stream repair, and a physical "bath music off" button.
 **Ask (Brad):** play music into the master bath while the kids are bathing.
 **Scope as written:** music follows the satellite that heard the command. The
 bath is the first customer; the loft and the kids' rooms come free.
