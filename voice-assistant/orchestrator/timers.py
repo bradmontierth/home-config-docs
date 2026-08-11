@@ -25,7 +25,7 @@ import uuid
 from collections.abc import Awaitable, Callable
 from typing import Any
 
-from . import clients, config
+from . import clients, config, db, zones
 
 log = logging.getLogger("orchestrator.timers")
 
@@ -63,10 +63,8 @@ def announcement_text(label: str | None) -> str:
 
 class TimerEngine:
     def __init__(self, on_expire: ExpireCb | None = None) -> None:
-        os.makedirs(os.path.dirname(config.DB_PATH), exist_ok=True)
         os.makedirs(config.ANNOUNCE_CACHE_DIR, exist_ok=True)
-        self._db = sqlite3.connect(config.DB_PATH, check_same_thread=False)
-        self._db.row_factory = sqlite3.Row
+        self._db = db.connect(config.DB_PATH)
         self._db.execute(_SCHEMA)
         for statement in _MIGRATIONS:
             try:
@@ -100,22 +98,30 @@ class TimerEngine:
         return d
 
     def active(self, sat: str | None = None) -> list[dict[str, Any]]:
-        """Every running/ringing timer, or just one room's. Defaults to all.
+        """Every running/ringing timer, or one display domain's. Defaults to all.
 
         The kitchen display asks for its own room now, not the lot: a bath
         timer on the kitchen board is a timer you can see counting down and
         cannot hear, which reads as a broken alarm (Brad, 2026-08-08).
 
+        A display domain may have multiple origin microphones. In particular,
+        ``familyroom`` relays into the kitchen and its timers belong on that
+        board alongside timers whose origin satellite is ``kitchen``.
+
         A default-room query also picks up rows with no sat at all. Those
         predate the column and really were all kitchen timers; leaving them
         out would drop them off the board they have always been on."""
         if sat:
-            legacy = sat == config.DEFAULT_SAT
+            members = zones.display_members(sat)
+            placeholders = ",".join("?" for _ in members)
+            legacy = zones.display_for(sat) == zones.display_for(config.DEFAULT_SAT)
+            scope = f"sat IN ({placeholders})"
+            if legacy:
+                scope = f"({scope} OR sat IS NULL)"
             rows = self._db.execute(
-                "SELECT * FROM timers WHERE state IN (?, ?) AND "
-                + ("(sat=? OR sat IS NULL)" if legacy else "sat=?")
-                + " ORDER BY ends_at",
-                (RUNNING, RINGING, sat),
+                f"SELECT * FROM timers WHERE state IN (?, ?) AND {scope} "
+                "ORDER BY ends_at",
+                (RUNNING, RINGING, *members),
             ).fetchall()
         else:
             rows = self._db.execute(

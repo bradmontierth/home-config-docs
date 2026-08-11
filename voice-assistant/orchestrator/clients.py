@@ -13,7 +13,7 @@ import re
 
 import httpx
 
-from . import config
+from . import config, timing
 
 log = logging.getLogger("orchestrator.clients")
 
@@ -25,14 +25,15 @@ async def transcribe(wav_bytes: bytes, client_name: str | None = None) -> str:
     ("" on silence — GX10 returns a Hypothesis(...) repr for silent audio).
     `client_name` overrides the bias profile (e.g. the stop-heavy alarm
     profile for ring-window listening); default is the kitchen profile."""
-    async with httpx.AsyncClient(timeout=30) as client:
-        r = await client.post(
-            config.ASR_URL,
-            params={"chunk_seconds": 300, "context_seconds": 2,
-                    "client": client_name or config.ASR_CLIENT},
-            content=wav_bytes,
-            headers={"Content-Type": "audio/wav"},
-        )
+    with timing.stage("asr"):
+        async with httpx.AsyncClient(timeout=30) as client:
+            r = await client.post(
+                config.ASR_URL,
+                params={"chunk_seconds": 300, "context_seconds": 2,
+                        "client": client_name or config.ASR_CLIENT},
+                content=wav_bytes,
+                headers={"Content-Type": "audio/wav"},
+            )
     r.raise_for_status()
     text = str(r.json().get("transcript_text") or "").strip()
     if text.startswith("Hypothesis("):
@@ -50,8 +51,9 @@ async def parse_intent_raw(messages: list[dict]) -> str:
         "max_tokens": config.LLM_MAX_TOKENS,
         "chat_template_kwargs": {"enable_thinking": False},
     }
-    async with httpx.AsyncClient(timeout=30) as client:
-        r = await client.post(config.LLM_URL, json=body)
+    with timing.stage("classify"):
+        async with httpx.AsyncClient(timeout=30) as client:
+            r = await client.post(config.LLM_URL, json=body)
     r.raise_for_status()
     content = r.json()["choices"][0]["message"]["content"]
     return _THINK_RE.sub("", content).strip()
@@ -64,8 +66,9 @@ async def synthesize(text: str, voice: str | None = None) -> bytes:
         "voice": voice or config.TTS_VOICE,
         "response_format": "wav",
     }
-    async with httpx.AsyncClient(timeout=30) as client:
-        r = await client.post(config.TTS_URL, json=payload)
+    with timing.stage("tts"):
+        async with httpx.AsyncClient(timeout=30) as client:
+            r = await client.post(config.TTS_URL, json=payload)
     r.raise_for_status()
     return r.content
 

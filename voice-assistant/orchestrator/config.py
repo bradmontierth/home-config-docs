@@ -385,6 +385,13 @@ ARB_SUPPRESS_S = float(os.getenv("ARB_SUPPRESS_S", "3"))
 
 # --- timers ----------------------------------------------------------------
 DB_PATH = os.getenv("ORCH_DB_PATH", "/home/pi/voice-orchestrator/data/orchestrator.db")
+
+# --- turn telemetry --------------------------------------------------------
+# Row cap for the `turns` table. Unset = keep everything, which is the intended
+# setting: turn text is ~150 MB/year against 1.3 TB free, and the history is
+# the whole point of the voice-ops dashboard. The knob exists so a future
+# operator has a lever without a migration. See turns._prune.
+TURNS_MAX_ROWS = int(os.getenv("TURNS_MAX_ROWS", "0")) or None
 # Pre-rendered timer announcement WAVs (instant, GX10-independent alarm audio).
 ANNOUNCE_CACHE_DIR = os.getenv(
     "ANNOUNCE_CACHE_DIR", "/home/pi/voice-orchestrator/data/announce"

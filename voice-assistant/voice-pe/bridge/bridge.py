@@ -771,8 +771,15 @@ class Bridge:
             if not command:
                 return
             await self.call_service("bridge_vad_complete")
+            # Continue the turn row /verify opened, so this turn is one row and
+            # not two. No /telemetry back-post from here: the Voice PE plays its
+            # own chime in ESPHome, so this process never sees a trigger→chime
+            # number to report.
+            path = f"/command/audio?stitched=1&sat={SATELLITE_ID}"
+            if verify.get("turn_id"):
+                path += f"&turn_id={verify['turn_id']}"
             response = await self.post_wav(
-                f"/command/audio?stitched=1&sat={SATELLITE_ID}",
+                path,
                 preroll + command,
                 timeout_s=120,
             )

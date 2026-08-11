@@ -301,6 +301,28 @@ def post_wav(path: str, wav_bytes: bytes, timeout: float = 30) -> dict:
         return json.loads(r.read())
 
 
+def post_telemetry(payload: dict) -> None:
+    """Hand the orchestrator the numbers only this box can measure — trigger→
+    chime, the /verify round trip, and the stage-1 detector's own score — so
+    they land on the turn row beside everything the server side already knows.
+
+    Fired on a daemon thread and swallowing everything: this is bookkeeping
+    that happens while the user is waiting for a chime, and it must never add
+    latency to the turn or kill it if the Beelink is down. The same numbers are
+    still written to the local events.jsonl, which stays the fallback record
+    and the backfill source."""
+    if not payload.get("turn_id"):
+        return
+
+    def _send() -> None:
+        try:
+            post_json("/telemetry", payload, timeout=4)
+        except Exception as exc:  # noqa: BLE001
+            log(f"/telemetry failed: {exc}")
+
+    threading.Thread(target=_send, daemon=True).start()
+
+
 def post_json(path: str, obj: dict, timeout: float = 30) -> dict:
     req = urllib.request.Request(
         ORCH_BASE + path, data=json.dumps(obj).encode(),
@@ -739,7 +761,8 @@ def _persist_verify(preroll_pcm: bytes, event: dict) -> None:
     append_event(event)
 
 
-def run_turn(preroll_pcm: bytes, stdout, vad, trigger_t0: float) -> None:
+def run_turn(preroll_pcm: bytes, stdout, vad, trigger_t0: float,
+             peak_score: float | None = None, model: str | None = None) -> None:
     STATE.stats["turns"] += 1
     t_post = time.time()
     try:
@@ -773,17 +796,25 @@ def run_turn(preroll_pcm: bytes, stdout, vad, trigger_t0: float) -> None:
     rtt_ms = round((time.time() - t_post) * 1000)
     verdict = "ok" if v.get("verified") else "rej"
     clip_name = f"verify-{verdict}-{datetime.now().strftime('%Y%m%d-%H%M%S')}.wav"
+    turn_id = v.get("turn_id")
     event = {"type": "verify", "verified": v.get("verified"),
              "score": v.get("score"), "transcript": v.get("transcript"),
              "decode": v.get("decode"), "clip": clip_name,
              "rtt_ms": rtt_ms, "server_ms": v.get("latency_ms")}
+    telemetry = {"turn_id": turn_id, "peak_score": peak_score, "model": model,
+                 "rtt_ms": rtt_ms, "clip": clip_name}
     if not v.get("verified"):
+        # Rejects carry no chime_ms — there was no chime. They are still the
+        # bulk of the funnel data (4.2% of stage-1 triggers survive stage 2 in
+        # the kitchen), so the row gets its detector score either way.
+        post_telemetry(telemetry)
         _persist_verify(preroll_pcm, event)
         log(f"stage-2 REJECT score={v.get('score')} transcript={v.get('transcript')!r}")
         return
 
     chime_ms = round((time.time() - trigger_t0) * 1000)
     event["chime_ms"] = chime_ms
+    post_telemetry({**telemetry, "chime_ms": chime_ms})
     log(f"wake CONFIRMED score={v.get('score')} rtt={rtt_ms}ms "
         f"server={v.get('latency_ms')}ms trigger_to_chime={chime_ms}ms")
     threading.Thread(target=_persist_verify, args=(preroll_pcm, event),
@@ -820,8 +851,12 @@ def run_turn(preroll_pcm: bytes, stdout, vad, trigger_t0: float) -> None:
             # Long timeout on purpose: a searched ask can run ~60s and the reply
             # audio only exists in this response. Wake detection is paused while we
             # wait (single mic reader) — acceptable; alarms still fire (HTTP thread).
-            resp = post_wav(sat_path("/command/audio?stitched=1"),
-                            wrap_wav(preroll_pcm + cmd_pcm),
+            # turn_id continues the row /verify opened, so the wake numbers and
+            # the command's intent/reply/timings end up on one row.
+            path = "/command/audio?stitched=1"
+            if turn_id:
+                path += f"&turn_id={turn_id}"
+            resp = post_wav(sat_path(path), wrap_wav(preroll_pcm + cmd_pcm),
                             timeout=COMMAND_TIMEOUT_S)
         except Exception as exc:  # noqa: BLE001
             log(f"/command/audio failed: {exc}")
@@ -1728,7 +1763,8 @@ def main() -> int:
         take = min(preroll_frames, frames_since_resync)
         preroll = b"".join(list(ring)[-take:]) if take else b""
         media_stop()   # slideshow video audio would talk over the turn
-        run_turn(preroll, arecord.stdout, vad, now)
+        run_turn(preroll, arecord.stdout, vad, now,
+                 peak_score=peak, model=top_key)
         resync()
 
 

@@ -43,7 +43,7 @@ from . import speaker as speaker_mod
 from . import sports as sports_mod
 from . import weather as weather_mod
 from . import clients, config, events, format as fmt, intent as intent_mod, verify
-from . import zones
+from . import timing, turns as turns_mod, zones
 from .timers import RINGING, TimerEngine
 
 logging.basicConfig(
@@ -1190,6 +1190,13 @@ async def _decode_wake(wav: bytes) -> tuple[bool, str, str, float, str]:
     return verified, command, transcript, score, decode
 
 
+def _wake_timings() -> dict[str, int]:
+    """ASR time spent so far on this turn, for the turn row. Covers both decodes
+    when the dual-decode tail rescue runs — the stage timer accumulates."""
+    snap = timing.snapshot()
+    return {"asr_ms": snap["asr"]} if "asr" in snap else {}
+
+
 @app.post("/verify/probe")
 async def verify_wake_probe(request: Request, sat: str = "kitchen") -> dict:
     """Silent stage-2 diagnostic: ASR only, with no claim/events/amp wake."""
@@ -1226,17 +1233,21 @@ async def verify_wake(request: Request, sat: str = "kitchen") -> dict:
     decision = await policy_mod.evaluate(sat)
     if not decision["allowed"]:
         log.info("verify sat=%s silent no-op policy=%s", sat, decision["reason"])
+        turns_mod.start(sat, "wake", verified=False, reject_reason="policy")
         return {"verified": False, "silent": True, "policy": decision}
     wav = await request.body()
     if not wav:
         raise HTTPException(400, "empty audio body")
     t0 = time.time()
+    timing.start()
     winner = _arb_holder(sat)
     if winner:
         # Race already lost — don't burn an ASR decode (it's the same
         # utterance the winner just verified) and don't double the dashboard
         # badge events. The satellite shadow-captures on this response.
         log.info("verify sat=%s suppressed (winner=%s)", sat, winner)
+        turns_mod.start(sat, "wake", verified=False,
+                        reject_reason="suppressed", arb_winner=winner)
         return {"verified": False, "suppressed": True, "winner": winner}
     # Fire-and-forget: this POST to the dashboard sat serially BEFORE the ASR
     # call, putting a cosmetic badge (with a 4s timeout tail) on the chime path.
@@ -1250,6 +1261,10 @@ async def verify_wake(request: Request, sat: str = "kitchen") -> dict:
             # The other mic's verify completed while our ASR ran. Its events
             # already drove the dashboard; go quiet.
             log.info("verify sat=%s suppressed post-ASR (winner=%s)", sat, winner)
+            turns_mod.start(sat, "wake", verified=False, transcript=transcript,
+                            wake_score=score, decode=decode,
+                            reject_reason="suppressed", arb_winner=winner,
+                            **_wake_timings())
             return {"verified": False, "suppressed": True, "winner": winner}
         _arb_claim(sat)
         # Zone-routed satellites answer through the whole-home amp, which needs
@@ -1262,16 +1277,26 @@ async def verify_wake(request: Request, sat: str = "kitchen") -> dict:
                 broadcast_mod.amp_wake(route["rooms"], route.get("volume")))
     await _turn_event("wake_confirmed" if verified else "wake_rejected", sat=sat,
                       score=score, transcript=transcript)
+    # Opens the turn row. The satellite hands this id back on /telemetry (with
+    # the numbers only it can measure) and on /command/audio, so one turn stays
+    # one row instead of scattering across three.
+    turn_id = turns_mod.start(
+        sat, "wake", verified=verified, transcript=transcript,
+        wake_score=score, decode=decode,
+        reject_reason=None if verified else ("empty" if not transcript
+                                             else "low_score"),
+        **_wake_timings())
     return {
         "verified": verified, "score": score, "transcript": transcript,
-        "command": command, "decode": decode,
+        "command": command, "decode": decode, "turn_id": turn_id,
         "latency_ms": round((time.time() - t0) * 1000),
     }
 
 
 @app.post("/command/audio")
 async def command_audio(request: Request, followup: bool = False,
-                        stitched: bool = False, sat: str = "kitchen") -> dict:
+                        stitched: bool = False, sat: str = "kitchen",
+                        turn_id: str | None = None) -> dict:
     """Phase 2: the captured command utterance. Transcribe + act. No wake check —
     /verify already gated this turn. `followup=1` marks a continued-conversation
     turn (no wake word): background speech is dropped silently. `stitched=1`
@@ -1288,6 +1313,13 @@ async def command_audio(request: Request, followup: bool = False,
         raise HTTPException(400, "empty audio body")
     _CUR_SAT.set(sat)           # read by _finalize for per-satellite reply routing
     t0 = time.time()
+    # A wake turn continues the row /verify opened; a follow-up, a text turn or
+    # the dashboard mic button has no wake step and starts its own. An id from
+    # a satellite that predates this feature simply won't exist in the table,
+    # and update() no-ops rather than erroring.
+    timing.start()
+    if not turn_id:
+        turn_id = turns_mod.start(sat, "followup" if followup else "manual")
     transcript = await clients.transcribe(wav)
     log.info("command sat=%s followup=%s transcript=%r", sat, followup, transcript)
     if stitched and transcript:
@@ -1301,6 +1333,8 @@ async def command_audio(request: Request, followup: bool = False,
         # Silence: on a follow-up, stay quiet; on a wake turn, say we missed it.
         if not followup:
             await _turn_event("response", text="I didn't catch that.", intent="none")
+        turns_mod.update(turn_id, intent="none", ok=False,
+                         reject_reason="no_command", **_wake_timings())
         return {"ok": False, "transcript": "", "response": "",
                 "intent": "none", "silent": followup}
     if followup:
@@ -1309,6 +1343,8 @@ async def command_audio(request: Request, followup: bool = False,
         # the conversation -- this is what makes the follow-up window
         # self-timing instead of a guess at the reply's length.
         if zones.is_echo(sat, transcript):
+            turns_mod.update(turn_id, transcript=transcript, intent="none",
+                             ok=False, reject_reason="echo", **_wake_timings())
             return {"ok": False, "echo": True, "transcript": transcript,
                     "response": "", "intent": "none"}
         # Saying the wake word again mid-conversation is natural, and without
@@ -1318,6 +1354,9 @@ async def command_audio(request: Request, followup: bool = False,
         if wake_found:
             if not stripped:
                 log.info("followup sat=%s bare wake word -> relisten", sat)
+                turns_mod.update(turn_id, transcript=transcript, intent="none",
+                                 ok=False, reject_reason="rewake",
+                                 **_wake_timings())
                 return {"ok": False, "rewake": True, "transcript": transcript,
                         "response": "", "intent": "none"}
             log.info("followup wake-strip %r -> %r", transcript, stripped)
@@ -1335,15 +1374,60 @@ async def command_audio(request: Request, followup: bool = False,
                              speaker_task=spk_task)
     result["transcript"] = transcript
     result["latency_ms"] = round((time.time() - t0) * 1000)
+    turns_mod.update(turn_id, command=transcript)
+    turns_mod.finish(turn_id, result, timings=timing.snapshot(),
+                     total_ms=result["latency_ms"])
     if spk_task is not None:
         asyncio.create_task(speaker_mod.log_task(
             spk_task, transcript, intent_name=result.get("intent"), sat=sat,
             followup=followup))
+        # Same identification the handlers consumed, onto the turn row. Awaited
+        # off-turn: the reply has already been rendered by here, and an embed
+        # that is still in flight must not hold the response open.
+        asyncio.create_task(_note_turn_speaker(turn_id, spk_task))
     else:
         asyncio.create_task(speaker_mod.shadow(
             wav, transcript, intent_name=result.get("intent"), sat=sat,
             followup=followup))
     return result
+
+
+async def _note_turn_speaker(turn_id: str, spk_task: asyncio.Task) -> None:
+    """Attach a turn's voice identification once its embed resolves."""
+    try:
+        turns_mod.note_speaker(turn_id, await spk_task)
+    except Exception as exc:  # noqa: BLE001 — telemetry never breaks a turn
+        log.warning("turn speaker note failed: %s", exc)
+
+
+@app.post("/telemetry")
+async def telemetry(payload: dict) -> dict:
+    """Satellite-measured numbers for a turn already opened by /verify.
+
+    Three of these can only be measured on the satellite: `chime_ms` (stage-1
+    trigger → chime start, the 500ms number), `rtt_ms` (the /verify round trip
+    as the satellite sees it — subtract our own latency_ms and what's left is
+    WiFi + HTTP), and the stage-1 detector's own `peak_score`/model, which we
+    never see because the satellite only calls us once it has already fired.
+
+    Fire-and-forget from the satellite's side, so this stays cheap and never
+    errors back at it: an unknown turn_id is a no-op."""
+    turns_mod.update(
+        payload.get("turn_id"),
+        stage1_score=payload.get("peak_score"),
+        wake_model=payload.get("model"),
+        chime_ms=payload.get("chime_ms"),
+        rtt_ms=payload.get("rtt_ms"),
+        clip=payload.get("clip"),
+    )
+    return {"ok": True}
+
+
+@app.get("/turns")
+async def list_turns(limit: int = 50, sat: str | None = None) -> dict:
+    """Read path for the voice-ops dashboard (and for eyeballing the table from
+    a shell). Read-only; the dashboard also reads the SQLite file directly."""
+    return {"turns": turns_mod.recent(limit=max(1, min(limit, 500)), sat=sat)}
 
 
 @app.post("/satellite/play")
@@ -1503,10 +1587,18 @@ async def command(payload: dict = Body(...)) -> dict:
     text = str(payload.get("text", "")).strip()
     if not text:
         raise HTTPException(400, "missing 'text'")
-    _CUR_SAT.set(payload.get("sat") or None)
+    sat = payload.get("sat") or None
+    _CUR_SAT.set(sat)
     t0 = time.time()
+    timing.start()
+    # A text turn is a real turn — it just skips the wake and ASR stages. Kept
+    # on the same table so "what did the house do today" is one query, with
+    # kind='text' to keep it out of the wake-funnel arithmetic.
+    turn_id = turns_mod.start(sat, "text", command=text)
     result = await _dispatch(text, followup=bool(payload.get("followup")))
     result["latency_ms"] = round((time.time() - t0) * 1000)
+    turns_mod.finish(turn_id, result, timings=timing.snapshot(),
+                     total_ms=result["latency_ms"])
     return result
 
 

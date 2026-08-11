@@ -23,12 +23,11 @@ their own views, and they would bury the expensive answers in noise.
 from __future__ import annotations
 
 import logging
-import os
 import sqlite3
 import time
 from typing import Any
 
-from . import config
+from . import config, db
 
 log = logging.getLogger("orchestrator.answers")
 
@@ -57,13 +56,10 @@ _db: sqlite3.Connection | None = None
 
 def _conn() -> sqlite3.Connection:
     """Open (once) the shared orchestrator database. Same file as the timers,
-    same single-event-loop access pattern, so check_same_thread is off for the
-    same reason it is there."""
+    same single-event-loop access pattern — see db.connect."""
     global _db
     if _db is None:
-        os.makedirs(os.path.dirname(config.DB_PATH), exist_ok=True)
-        conn = sqlite3.connect(config.DB_PATH, check_same_thread=False)
-        conn.row_factory = sqlite3.Row
+        conn = db.connect(config.DB_PATH)
         conn.executescript(_SCHEMA)
         conn.commit()
         _db = conn
