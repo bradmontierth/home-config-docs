@@ -59,6 +59,7 @@ CREATE TABLE IF NOT EXISTS turns (
     speaker_margin REAL,
     chime_ms       INTEGER,
     rtt_ms         INTEGER,
+    server_ms      INTEGER,
     asr_ms         INTEGER,
     classify_ms    INTEGER,
     handler_ms     INTEGER,
@@ -78,9 +79,14 @@ _UPDATABLE = frozenset({
     "sat", "kind", "stage1_score", "wake_model", "verified", "wake_score",
     "decode", "reject_reason", "arb_winner", "transcript", "command", "intent",
     "slots", "response", "speaker", "speaker_score", "speaker_margin",
-    "chime_ms", "rtt_ms", "asr_ms", "classify_ms", "handler_ms", "tts_ms",
-    "total_ms", "clip", "ok",
+    "chime_ms", "rtt_ms", "server_ms", "asr_ms", "classify_ms", "handler_ms",
+    "tts_ms", "total_ms", "clip", "ok", "backfilled",
 })
+
+# Applied on open, ignoring "duplicate column" — same pattern as timers.py.
+# server_ms was added 2026-08-11 with the backfill: it is what the SATELLITE
+# measured our side of the turn to be, so rtt_ms minus server_ms is WiFi+HTTP.
+_MIGRATIONS = ("ALTER TABLE turns ADD COLUMN server_ms INTEGER",)
 
 _db: sqlite3.Connection | None = None
 
@@ -92,6 +98,11 @@ def _conn() -> sqlite3.Connection:
     if _db is None:
         conn = db.connect(config.DB_PATH)
         conn.executescript(_SCHEMA)
+        for statement in _MIGRATIONS:
+            try:
+                conn.execute(statement)
+            except sqlite3.OperationalError:
+                pass  # already applied
         conn.commit()
         _db = conn
     return _db

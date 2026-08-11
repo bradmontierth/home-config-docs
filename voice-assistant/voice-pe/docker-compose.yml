@@ -23,7 +23,18 @@ services:
       SATELLITE_ID: simon
       ORCH_BASE: http://127.0.0.1:8785
       HTTP_PORT: "8793"
-      MODE: shadow
+      # Come back ARMED after a rebuild or a host reboot. This was `shadow`,
+      # which meant every container rebuild silently took Simon's room out of
+      # voice service until somebody noticed and POSTed /mode — the worst
+      # failure shape there is, because it stops working quietly and people
+      # just stop using it (Brad, 2026-08-11).
+      #
+      # The safety property is NOT lost: active still requires the
+      # ACTIVE_ARM_FILE (/data/routed-audio-armed) to exist, and the bridge
+      # falls back to shadow on its own if it is gone. The env var says "may
+      # be active"; the file says "is allowed to be". Delete the file to
+      # disarm the room across restarts.
+      MODE: active
       AUDIO_CHANNEL: raw
       HOP_MS: "320"
       OMP_NUM_THREADS: "1"

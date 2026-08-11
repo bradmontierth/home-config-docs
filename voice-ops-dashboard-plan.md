@@ -1,9 +1,10 @@
 # Voice Ops Dashboard Plan
 
-**Status:** **Phase 1 (telemetry spine) DEPLOYED 2026-08-11.** Orchestrator
-rebuilt, both Pi satellites and the Simon Voice PE bridge updated; the `turns`
-table is live and filling. Phases 2 (backfill) and 3 (the dashboard app) not
-started. Live-voice confirmation of `chime_ms` pending — see §12.
+**Status:** **Phases 1 (telemetry spine) and 2 (backfill) DEPLOYED
+2026-08-11.** Orchestrator rebuilt, both Pi satellites and the Simon Voice PE
+bridge updated, `turns` table live and filling, and 4,747 historical turns
+imported — the table now holds 2026-07-19 → today. Phase 3 (the dashboard app)
+not started. Live-voice confirmation of `chime_ms` pending — see §12.
 
 **Where:** three places, deliberately.
 
@@ -266,19 +267,51 @@ it is the fallback when the Beelink is down, and the backfill source.
 
 ---
 
-## 7. Phase 2 — backfill
+## 7. Phase 2 — backfill (DONE 2026-08-11)
 
-**Decided: yes, backfill.** Import the 25 days of `events.jsonl` from each
-satellite so the trend lines exist on day one instead of in three weeks.
+`orchestrator/backfill_events.py`, run as a module:
 
-- One-shot script, re-runnable, idempotent (dedupe on `sat` + event ts).
-- Must tolerate **older event shapes** — `chime_ms` only appears after the
-  2026-07-12 latency work, `model` only after dual-wake landed 2026-07-18.
-  Missing field → NULL, never a crash.
-- Backfilled rows have no `intent` / `response` (those were only ever in docker
-  logs). Mark them so the UI can grey out what is genuinely unknowable rather
-  than showing it as a gap in coverage.
-- `speaker_shadow.jsonl` backfills `speaker` / `intent` for turns it overlaps.
+```bash
+# from the Beelink, with the exported logs mounted at /bf
+docker run --rm \
+  -v /home/pi/home_config/voice-assistant/orchestrator:/src/orchestrator:ro \
+  -v /path/to/exports:/bf:ro -v /home/pi/voice-pipeline/data:/data \
+  -w /src -e ORCH_DB_PATH=/data/orchestrator.db \
+  voice-pipeline-voice-orchestrator \
+  python -m orchestrator.backfill_events kitchen=/bf/kitchen.jsonl master=/bf/master.jsonl
+```
+
+`--dry-run` parses and summarizes without writing. Always dry-run first.
+
+**Turns are reconstructed from event ORDER**, because the historical events
+carry no turn id: a `trigger` opens a turn, the following `verify` and
+`command` join it, the next `trigger` closes it, and `followup` events stand
+alone. Rows are marked `backfilled=1` so a chart can tell reconstruction from
+live telemetry. Ids are a hash of `(sat, first-event timestamp)`, which makes
+a re-run correct rows instead of duplicating them; a guard refuses to
+overwrite any row that is not itself backfilled.
+
+**Correction to the original plan: backfilled rows DO have `intent` and
+`response`.** The plan assumed those lived only in docker logs. They don't —
+the satellite's own `events.jsonl` records a `command` event per turn carrying
+`intent`, `transcript` and `response`, so 243 historical turns came back with
+what the house actually said and did. What genuinely cannot be recovered is
+the per-stage timing split (`asr_ms` / `classify_ms` / `handler_ms` /
+`tts_ms`): that instrumentation did not exist. Those stay NULL, honestly, and
+`server_ms` (added to the schema for this) carries the one server-side number
+the old logs did have.
+
+Old event shapes are tolerated as designed — `chime_ms` predates 2026-07-12 and
+`model` predates dual-wake 2026-07-18; missing fields become NULL, unparseable
+lines are counted and skipped, and one bad line never aborts the import.
+
+**Result:** 4,747 turns imported (kitchen 4,641 covering 2026-07-19 → 08-11;
+master closet 106 covering 08-07 → 08-10). Simon's Voice PE bridge keeps no
+`events.jsonl`, so it has no history to import — its rows start from Phase 1.
+
+`speaker_shadow.jsonl` was **not** used as a backfill source; the wake logs
+already covered the same turns and adding a second reconstruction of the same
+history was not worth the ambiguity.
 
 ---
 
@@ -407,24 +440,76 @@ afterwards so it cannot pollute latency stats.
   chime in ESPHome, so the bridge process never sees a trigger→chime number.
   Simon rows will always have NULL `chime_ms`; that is correct, not a gap. It
   does thread `turn_id`, so its turns are still one row.
-- **The Simon bridge starts in shadow mode by design** (`MODE: shadow` pinned
-  in compose, and the code refuses `active` at startup — a deliberate
-  interlock). Any rebuild of that container needs
-  `POST :8793/mode {"mode":"active"}` afterwards or Simon's room is silently
-  out of service. The Pi satellites do not share this: they carry `MODE=active`
-  in their `.env` and come back armed.
+- **The Simon bridge used to start in shadow after every rebuild — FIXED
+  2026-08-11.** `MODE: shadow` was pinned in its compose, so each container
+  rebuild silently took Simon's room out of voice service until somebody
+  noticed. Brad's call: that is the worst failure shape there is, because it
+  stops working quietly and people just stop using it. Compose now sets
+  `MODE: active`.
+
+  The safety property is intact and unchanged: active still requires
+  `ACTIVE_ARM_FILE` (`/data/routed-audio-armed`) to exist, and the bridge
+  degrades to shadow on its own — now with a warning log — if it is missing.
+  The env var means "this room should be live"; the file means "routed audio
+  is permitted here". **To disarm the room across restarts, delete the file**,
+  do not edit the compose. Verified: rebuilt and came back `mode: active`.
 
 ### Pending
 
 - **Live-voice test**: say "okay computer" at the kitchen and master closet
   mics and confirm `chime_ms` / `stage1_score` / `wake_model` land on the row.
   This is the one link only real audio exercises.
-- The 4 text turns used to smoke-test are still in the table (`kind='text'`).
-  Harmless; they are excluded from wake-funnel arithmetic by kind.
+- A handful of text turns used to smoke-test are still in the table
+  (`kind='text'`). Harmless; they are excluded from wake-funnel arithmetic by
+  kind, and the fabricated telemetry on one of them was cleared.
 
-### First real measurement
+### WAL proved out under the real workload
+
+The backfill wrote 4,747 rows from a *second container* while the orchestrator
+served live turns from the same file. Zero `database is locked`, zero failed
+turn writes, and a `set_timer` round trip completed normally mid-import. That
+is the concurrency the dashboard will rely on, exercised before it exists.
+
+### First real measurements
 
 The classifier number that never existed before: a shopping-list add measured
 **`classify_ms` 5,370** against a 7,273ms turn — the local LLM is ~74% of a
 non-fast-path turn, with `handler_ms` 1,745 and `tts_ms` 158 behind it. Worth
 a look once Phase 3 can chart it across intents.
+
+## 13. What the backfilled history says (2026-08-11)
+
+Queries that were impossible the day before. These are the baseline Phase 3
+should reproduce.
+
+**Stage-2 pass rate is a room property, not a system property.**
+
+| Satellite | Stage-1 triggers | Verified | Pass rate |
+| --- | --- | --- | --- |
+| kitchen | 4,599 | 191 | **4.2%** |
+| master closet | 104 | 30 | **28.8%** |
+
+Nearly 7x. The kitchen mic sits beside the big speakers; the closet is quiet.
+Any future "wake accuracy" target has to be per-room or it is meaningless.
+
+**Two thirds of kitchen stage-1 fires contain no speech at all.**
+
+| Reject reason | kitchen | master |
+| --- | --- | --- |
+| `empty` (ASR returned nothing) | **2,955** | 28 |
+| `low_score` (heard words, wrong ones) | 1,417 | 45 |
+| `suppressed` (lost arbitration) | 28 | — |
+
+`empty` means Parakeet got the audio and found no words — music, dishes, TV.
+That is **~2,955 wasted GX10 ASR round trips at ~364ms each**, and it is the
+strongest argument yet for an RMS/VAD gate on the satellite before `/verify`
+is called at all. Logged as a backlog candidate, not built.
+
+**Chime latency holds the 500ms line, but the closet is closer to it than the
+kitchen** — kitchen avg 269ms (min 171, max 866, p90 400); master avg 271ms
+(min 180, max 703, **p90 493**). The closet answers through the amp zone, and
+p90 sitting on the line is worth watching rather than acting on yet.
+
+**Utilization, all history:** `set_timer` 74, `play_music` 55,
+`home_control` 26, `weather` 18, `ask` 11, `unclear` 11, `add_items` 11,
+`business_hours` 6, `find_phone` 5, `set_reminder` 4.

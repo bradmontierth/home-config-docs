@@ -100,13 +100,16 @@ class TurnWiringTest(unittest.IsolatedAsyncioTestCase):
     async def test_telemetry_merges_onto_the_same_row(self):
         resp = await self._verify("okay computer set a timer")
         await app.telemetry({"turn_id": resp["turn_id"], "chime_ms": 226,
-                             "rtt_ms": 393, "peak_score": 0.834,
+                             "rtt_ms": 393, "server_ms": 364,
+                             "peak_score": 0.834,
                              "model": "okay_google", "clip": "verify-ok.wav"})
         rows = turns.recent()
         self.assertEqual(len(rows), 1, "telemetry must update, not insert")
         self.assertEqual(rows[0]["chime_ms"], 226)
         self.assertEqual(rows[0]["stage1_score"], 0.834)
         self.assertEqual(rows[0]["wake_model"], "okay_google")
+        # rtt - server is the WiFi + HTTP cost; both must survive the merge.
+        self.assertEqual(rows[0]["server_ms"], 364)
 
     async def test_telemetry_for_an_unknown_turn_is_harmless(self):
         """The satellite fires this without waiting; a restarted orchestrator

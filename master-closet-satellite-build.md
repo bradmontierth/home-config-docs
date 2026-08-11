@@ -166,11 +166,15 @@ Rationale for the two tuning values, both inherited rather than invented:
 command-capture miss. `HOP_MS=320` is the family-room "relaxed cycles" value —
 a conservative starting point, not a ceiling.
 
-**On `HOP_MS`, corrected 2026-08-07.** The kitchen runs `HOP_MS=192` today
-(verified in `.251:~/voice-pipeline/.env`), not the 224 recorded earlier. The
-"192 is unsafe, thermal soft-limit 81–82 °C" conclusion was measured on *this
-very board* — and Brad had removed the fan from its case. So the limit was a
-missing 5 mm fan, not a Pi 4 ceiling. Two consequences:
+**On `HOP_MS`, corrected 2026-08-07, settled 2026-08-11.** The kitchen runs
+`HOP_MS=192` today (verified in `.251:~/voice-pipeline/.env`), not the 224
+recorded earlier, and **192 is not a problem there** — the kitchen satellite is
+the `.251` mini PC now, not a Pi. The whole "192 is unsafe, thermal soft-limit
+81–82 °C" finding was a *Pi 4* result, measured on this very board with the fan
+removed from its case. It never applied to the mini PC and does not constrain
+it (Brad, 2026-08-11).
+
+For a Pi-based satellite the airflow caveat still stands:
 
 - Do not treat 81–82 °C as a property of the hardware. It was an airflow defect.
 - The **PoE hat ships with a fan**, so the permanent closet install has cooling
@@ -868,9 +872,17 @@ through; the board has to drop what it was showing.
 asked for the default room. Those predate the column and were all kitchen
 timers; a kitchen-scoped board would otherwise have silently dropped them.
 
-One display, one room, so `events.on_dashboard()` is a comparison rather than
-routing. A second screen means giving each subscriber its own sat and filtering
-per connection — the shape is there, the plumbing is not.
+One display, one **voice domain**, so `events.on_dashboard()` is a comparison
+rather than per-subscriber routing. That distinction mattered immediately:
+the family-room satellite is a second mic for the same open kitchen/family
+space, and its playback and alarms already relay to the kitchen. Treating its
+`familyroom` satellite id as a separate display room hid its captions,
+responses, and timer cards. `satellite_zones.json` now maps it to
+`display_sat: kitchen`; live events compare that display domain and timer
+restore queries include every satellite in it. Master and Simon still compare
+unequal and remain off the kitchen screen. A truly second screen still means
+giving each subscriber its own domain and filtering per connection — the
+shape is there, the plumbing is not.
 
 ## 11. The crackle (2026-08-08 night)
 

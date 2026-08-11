@@ -891,7 +891,7 @@ Work items, in order:
 own reply from the ceiling speaker with no AEC reference, so the server must
 mute that room's detection for the reply duration + ~500 ms (it knows the
 padded WAV length, so this is arithmetic). And stage-1 CPU: an N100 core should
-do ~40–60 ms per 2 s window, which at the kitchen's `HOP_MS=224` is ~1.3 cores
+do ~40–60 ms per 2 s window, which at the kitchen's `HOP_MS=192` is ~1.5 cores
 for five mics — too much on a box already at load ~1.9. Upstairs can run a lazy
 hop (detection latency is free when the amp needs 3 s anyway) plus an RMS gate,
 which should bring it under half a core. Measure before committing; GX10

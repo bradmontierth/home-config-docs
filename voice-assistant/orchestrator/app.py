@@ -1418,6 +1418,11 @@ async def telemetry(payload: dict) -> dict:
         wake_model=payload.get("model"),
         chime_ms=payload.get("chime_ms"),
         rtt_ms=payload.get("rtt_ms"),
+        # Our own latency as the SATELLITE clocked it. Stored rather than
+        # recomputed because rtt_ms minus server_ms is the WiFi + HTTP cost,
+        # and that difference is only meaningful between two numbers taken
+        # from the same pair of clocks.
+        server_ms=payload.get("server_ms"),
         clip=payload.get("clip"),
     )
     return {"ok": True}

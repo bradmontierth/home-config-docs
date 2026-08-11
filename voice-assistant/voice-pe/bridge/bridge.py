@@ -4,8 +4,10 @@
 The device continuously streams its processed microphone channel over the
 native API. This process runs the same two-stage wake path as the existing
 satellites: livekit-wakeword locally, then Parakeet verification through the
-orchestrator. It starts in shadow mode and has a separate file interlock before
-active mode can produce any feedback or routed room audio.
+orchestrator. A separate file interlock (ACTIVE_ARM_FILE) gates active mode:
+without it the bridge can never produce feedback or routed room audio, whatever
+MODE says. With it, MODE=active survives restarts on purpose — a rebuild that
+silently dropped the room to shadow is an outage nobody reports.
 """
 
 from __future__ import annotations
@@ -273,9 +275,17 @@ class Bridge:
             self.stop_key = next(iter(
                 self.stop_model.predict(np.zeros(WINDOW_SAMPLES, dtype=np.int16))
             ))
+        # MODE=active only takes effect if the room is armed on disk. The env
+        # var is the intent ("this room should be live"), ACTIVE_ARM_FILE is
+        # the permission ("routed audio is allowed here") — so a rebuild comes
+        # back live, while deleting the file disarms the room across restarts.
+        # Anything unrecognised, or active-without-the-file, degrades to shadow.
         self.mode = START_MODE if START_MODE in {"shadow", "probe", "off"} else "shadow"
         if START_MODE == "active" and ACTIVE_ARM_FILE.exists():
             self.mode = "active"
+        elif START_MODE == "active":
+            log.warning("MODE=active but %s is missing — starting in shadow",
+                        ACTIVE_ARM_FILE)
         self.client: APIClient | None = None
         self.services: dict[str, object] = {}
         self.audio_queue: asyncio.Queue[bytes] = asyncio.Queue(maxsize=512)

@@ -802,7 +802,8 @@ def run_turn(preroll_pcm: bytes, stdout, vad, trigger_t0: float,
              "decode": v.get("decode"), "clip": clip_name,
              "rtt_ms": rtt_ms, "server_ms": v.get("latency_ms")}
     telemetry = {"turn_id": turn_id, "peak_score": peak_score, "model": model,
-                 "rtt_ms": rtt_ms, "clip": clip_name}
+                 "rtt_ms": rtt_ms, "server_ms": v.get("latency_ms"),
+                 "clip": clip_name}
     if not v.get("verified"):
         # Rejects carry no chime_ms — there was no chime. They are still the
         # bulk of the funnel data (4.2% of stage-1 triggers survive stage 2 in
