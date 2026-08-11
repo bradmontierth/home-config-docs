@@ -816,6 +816,16 @@ Keep-grade freshness with no background polling. And a small "recently
 completed" strike-through section (companion keeps `status=completed` rows)
 preserves the in-store "did I already grab that?" glance that Keep gives.
 
+### D. Per-satellite ASR bias profiles — BACKLOG 2026-08-10
+
+Command, wake-verification, shadow, and partial transcription currently fall
+back to the single `ASR_CLIENT=kitchen` Parakeet bias profile. Add an explicit
+satellite-to-ASR-client mapping (for example `kitchen`, `master`, and `simon`),
+pass it through every transcription call, and keep the separate alarm-heavy
+profile used during ring-window stop detection. This is tuning work rather
+than an urgent correctness issue: room-scoped sessions, prompts, commands,
+timers, music, and output routing do not depend on it.
+
 ## Latency Budget (measured where noted)
 
 | Stage | Time |

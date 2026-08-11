@@ -1,0 +1,14 @@
+# Remove the package attribute that must be replaced rather than merged.
+# ESPHome package lists concatenate by default, so this intermediate package
+# deliberately clears them before simon-voice-pe.yaml supplies the new lists.
+
+binary_sensor:
+  - id: !extend center_button
+    on_multi_click: !remove
+
+# The stock appliance starts its microphone pipeline whenever Home Assistant
+# subscribes. This bridge must be the only component allowed to start a stream;
+# otherwise HA could briefly own live audio during boot/reconnect.
+voice_assistant:
+  - id: !extend va
+    on_client_connected: !remove

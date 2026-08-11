@@ -1,0 +1,19 @@
+services:
+  amp-lease-manager:
+    build:
+      context: .
+    container_name: amp-lease-manager
+    restart: unless-stopped
+    user: "1000:1000"
+    ports:
+      - "${AMP_LEASE_PORT:-8462}:8080"
+    env_file:
+      - /home/pi/cecret_lake/amp-lease-manager/amp-lease-manager.env
+    environment:
+      HA_TOKEN_FILE: /run/secrets/ha_token
+      AMP_LEASE_API_TOKEN_FILE: /run/secrets/api_token
+      STATE_PATH: /data/state.json
+    volumes:
+      - ./data:/data
+      - /home/pi/cecret_lake/dashboard_webapp/ha_token:/run/secrets/ha_token:ro
+      - /home/pi/cecret_lake/amp-lease-manager/api_token:/run/secrets/api_token:ro

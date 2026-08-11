@@ -1,0 +1,60 @@
+services:
+  esphome-voice-pe:
+    image: ghcr.io/esphome/esphome:2026.7.4
+    network_mode: host
+    working_dir: /config
+    volumes:
+      - ./config:/config
+      - ../..:/workspace:ro
+      - /home/pi/esphome/config/secrets.yaml:/config/secrets.yaml:ro
+
+  simon-voice-bridge:
+    build: ./bridge
+    container_name: simon-voice-bridge
+    network_mode: host
+    restart: unless-stopped
+    # The stateless wake-word frontend recomputes a two-second feature window.
+    # Bound it so this experimental satellite cannot monopolize the Beelink.
+    cpus: "1.5"
+    environment:
+      DEVICE_HOST: 192.168.30.62
+      DEVICE_PORT: "6053"
+      DEVICE_NAME: simon-voice-pe
+      SATELLITE_ID: simon
+      ORCH_BASE: http://127.0.0.1:8785
+      HTTP_PORT: "8793"
+      MODE: shadow
+      AUDIO_CHANNEL: raw
+      HOP_MS: "320"
+      OMP_NUM_THREADS: "1"
+      OMP_WAIT_POLICY: PASSIVE
+      OPENBLAS_NUM_THREADS: "1"
+      TRIGGER_THRESHOLD: "0.5"
+      QUIET_START: "20:00"
+      QUIET_END: "07:00"
+      TZ: America/Denver
+      ESPhOME_SECRETS_FILE: /secrets/esphome.yaml
+      API_KEY_NAME: voice_pe_api_key
+      MODEL_PATHS: /models/okay_computer.onnx,/models/okay_google.onnx
+      SILERO_MODEL: /models/silero_vad.onnx
+      STOP_MODEL_PATH: /models/stop.onnx
+      STOP_MODEL_ENABLED: "false"
+      STOP_THRESHOLD: "0.5"
+      STOP_REQUIRED_HITS: "2"
+      # Simon empty-room rings scored as high as 0.925 with three consecutive
+      # false hits. Do not permit model dismissal even if someone temporarily
+      # re-enables scoring for diagnostics.
+      STOP_DISMISS_ENABLED: "false"
+      STOP_LOG_THRESHOLD: "0.2"
+      STOP_HOP_MS: "224"
+      # Same alarm-only rolling Parakeet listener proven on the Pi satellites.
+      # It runs only while Simon's timer is ringing and needs no wake word.
+      ALARM_ASR_CLIENT: kitchen-alarm
+      ALARM_WINDOW_MS: "2500"
+      ALARM_HOP_MS: "1000"
+      DATA_DIR: /data
+      ACTIVE_ARM_FILE: /data/routed-audio-armed
+    volumes:
+      - ./bridge/data:/data
+      - /home/pi/backups/pw_pi-20260728/blobs:/models:ro
+      - /home/pi/esphome/config/secrets.yaml:/secrets/esphome.yaml:ro
