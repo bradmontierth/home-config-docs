@@ -756,7 +756,10 @@ tools/speaker_enroll.py builds centroids + prints threshold calibration →
 voice-pipeline/data/speaker_profiles.json. Orchestrator speaker.py shadow
 wiring after that. Hardware notes: fridge mic move CANCELLED (channel
 stable), family-room satellite down (boot flash corruption, SSD rebuild
-pending) so kitchen-only enrollment for now.
+pending) so kitchen-only enrollment for now. **[Superseded 2026-08-11: the
+family-room satellite was rebuilt 2026-07-28 and has been live since. Its
+ReSpeaker is a different channel, so its clips are still absent from the
+centroids — see speaker-id-plan.md.]**
 
 ---
 

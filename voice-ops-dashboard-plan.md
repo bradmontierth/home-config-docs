@@ -1,10 +1,10 @@
 # Voice Ops Dashboard Plan
 
-**Status:** **Phases 1 (telemetry spine) and 2 (backfill) DEPLOYED
-2026-08-11.** Orchestrator rebuilt, both Pi satellites and the Simon Voice PE
-bridge updated, `turns` table live and filling, and 4,747 historical turns
-imported — the table now holds 2026-07-19 → today. Phase 3 (the dashboard app)
-not started. Live-voice confirmation of `chime_ms` pending — see §12.
+**Status:** **Phases 1 (telemetry spine) and 2 (backfill) COMPLETE and
+verified 2026-08-11.** Orchestrator rebuilt, all three Pi satellites and the
+Simon Voice PE bridge updated, `turns` table live and filling, and 6,446
+historical turns imported — the table holds 2026-07-19 → today. Live-voice
+test PASSED end to end (§12). Phase 3 (the dashboard app) not started.
 
 **Where:** three places, deliberately.
 
@@ -55,8 +55,14 @@ Client `/health` shapes differ and must be normalized:
 - **Simon Voice PE bridge** (`127.0.0.1:8793`): much richer and completely
   different — `audio_rms`, `audio_peak_10s`, `last_trigger{at,model,score}`,
   `stats{triggers,verified,dropped,alarm_asr_*}`, stop-model fields.
-- **familyroom**: shares the kitchen host; **out of commission** since
-  2026-07-27 (corrupted boot flash, SSD bought for rebuild).
+- **familyroom** (`192.168.40.244:8781`, the `pw-poller-pi` box on VLAN 40):
+  **LIVE.** Older notes across several docs said "out of commission since
+  2026-07-27 (corrupted boot flash, SSD bought for rebuild)" — it was rebuilt
+  the next day and has run since 2026-07-28. Corrected 2026-08-11. It is a
+  mic-only satellite: replies relay through the orchestrator's `/satellite`
+  proxy because VLAN 40 cannot reach `.251` directly, and its captions and
+  timers belong to the kitchen display domain. Same `/health` shape as the
+  other Pi satellites. Runs `HOP_MS=320` (1 GB Pi 4).
 - **display-pi** (`192.168.10.92`): already has its own monitoring — see
   `display-pi-monitoring-guide.md`. The dashboard should *link* to that, not
   reimplement it.
@@ -79,8 +85,10 @@ reproduce these numbers on day one. Kitchen satellite, `events.jsonl`,
 | orchestrator-side `server_ms` | p50 364ms, p90 422ms |
 
 Simon Voice PE, since last restart: 79 triggers → 13 verified (16%).
-Master closet, 14h uptime: **0 triggers** — plausibly just a quiet closet, but
-it is exactly the ambiguity the fleet strip exists to kill.
+Master closet showed **0 triggers over 14h uptime** at audit time — resolved:
+that window was overnight and the closet is genuinely quiet (Brad,
+2026-08-11). The backfill later found 104 triggers / 30 verified turns there.
+Superseded by the full per-satellite figures in §13.
 
 **The 500ms wake→chime target is being met at p50 and p90.** The headline
 *problem* metric is the 4.2% stage-1 pass rate: stage 2 is doing enormous work
@@ -305,9 +313,20 @@ Old event shapes are tolerated as designed — `chime_ms` predates 2026-07-12 an
 `model` predates dual-wake 2026-07-18; missing fields become NULL, unparseable
 lines are counted and skipped, and one bad line never aborts the import.
 
-**Result:** 4,747 turns imported (kitchen 4,641 covering 2026-07-19 → 08-11;
-master closet 106 covering 08-07 → 08-10). Simon's Voice PE bridge keeps no
-`events.jsonl`, so it has no history to import — its rows start from Phase 1.
+**Result:** 6,446 turns imported across three satellites —
+
+| Satellite | Turns | Verified | Covering |
+| --- | --- | --- | --- |
+| kitchen | 4,641 | 191 | 2026-07-19 → 08-11 |
+| **familyroom** | **1,699** | **16** | **2026-07-29 → 08-11** |
+| master closet | 106 | 30 | 2026-08-07 → 08-10 |
+
+Simon's Voice PE bridge keeps no `events.jsonl`, so it has no history to
+import — its rows start from Phase 1.
+
+The family-room import came second (2026-08-11, after the live-voice test
+surfaced that the box was up at all — see §14). Its `chime_ms` is the best in
+the house: p50 222, p90 289, well inside the kitchen's 400.
 
 `speaker_shadow.jsonl` was **not** used as a backfill source; the wake logs
 already covered the same turns and adding a second reconstruction of the same
@@ -395,8 +414,6 @@ memory):
 ## 11. Open / deferred
 
 - Alerting (Pushover on a red tile) — deliberately out of scope for v1.
-- familyroom satellite is down; its card should read "decommissioned pending
-  SSD rebuild" rather than red-alarming forever.
 - Master closet's 0 triggers was **overnight and genuinely quiet** (Brad,
   2026-08-11). Not a fault — closed.
 
@@ -454,11 +471,22 @@ afterwards so it cannot pollute latency stats.
   is permitted here". **To disarm the room across restarts, delete the file**,
   do not edit the compose. Verified: rebuilt and came back `mode: active`.
 
-### Pending
+### Live-voice test: PASSED 2026-08-11
 
-- **Live-voice test**: say "okay computer" at the kitchen and master closet
-  mics and confirm `chime_ms` / `stage1_score` / `wake_model` land on the row.
-  This is the one link only real audio exercises.
+Brad said "okay computer" at the kitchen mic. One row, complete chain:
+
+| Field | Value |
+| --- | --- |
+| `stage1_score` / `wake_model` | 0.907 / `okay_computer` |
+| **`chime_ms`** | **232** — inside the 500ms target, on the 226 p50 |
+| `rtt_ms` / `server_ms` | 231 / 173 (so ~58ms of WiFi + HTTP) |
+| stage 2 | verified, score 100.0, `"Okay, computer."` |
+| outcome | `show_shopping` -> "Your shopping list is empty." |
+
+That closes the only link real audio could exercise: the satellite's own
+`/telemetry` back-post. The same utterance also produced a second row from
+`familyroom` with `reject_reason=suppressed, arb_winner=kitchen` — arbitration
+telemetry, live, first try (and see §14).
 - A handful of text turns used to smoke-test are still in the table
   (`kind='text'`). Harmless; they are excluded from wake-funnel arithmetic by
   kind, and the fabricated telemetry on one of them was cleared.
@@ -486,24 +514,31 @@ should reproduce.
 
 | Satellite | Stage-1 triggers | Verified | Pass rate |
 | --- | --- | --- | --- |
-| kitchen | 4,599 | 191 | **4.2%** |
 | master closet | 104 | 30 | **28.8%** |
+| kitchen | 4,600 | 192 | **4.2%** |
+| familyroom | 1,701 | 16 | **0.9%** |
 
-Nearly 7x. The kitchen mic sits beside the big speakers; the closet is quiet.
-Any future "wake accuracy" target has to be per-room or it is meaningless.
+A **32x spread** across four microphones running the same models and the same
+threshold. The closet is quiet; the kitchen mic sits beside the big speakers;
+the family room is worse still — 1,701 stage-1 fires for 16 real turns, a mic
+that is almost entirely listening to television. Any future "wake accuracy"
+target has to be per-room, or it is meaningless.
 
 **Two thirds of kitchen stage-1 fires contain no speech at all.**
 
-| Reject reason | kitchen | master |
-| --- | --- | --- |
-| `empty` (ASR returned nothing) | **2,955** | 28 |
-| `low_score` (heard words, wrong ones) | 1,417 | 45 |
-| `suppressed` (lost arbitration) | 28 | — |
+| Reject reason | kitchen | familyroom | master |
+| --- | --- | --- | --- |
+| `empty` (ASR returned nothing) | **2,955** | **1,253** | 28 |
+| `low_score` (heard words, wrong ones) | 1,417 | 390 | 45 |
+| `suppressed` (lost arbitration) | 28 | 1 | — |
 
 `empty` means Parakeet got the audio and found no words — music, dishes, TV.
-That is **~2,955 wasted GX10 ASR round trips at ~364ms each**, and it is the
-strongest argument yet for an RMS/VAD gate on the satellite before `/verify`
-is called at all. Logged as a backlog candidate, not built.
+House-wide that is **4,244 wasted GX10 ASR round trips at ~364ms each —
+about 26 minutes of pure ASR spent on audio containing no speech**, over three
+weeks and climbing. It is the strongest argument yet for an RMS/VAD gate on
+the satellite before `/verify` is called at all. Logged as a backlog
+candidate, not built: it is a real change to the wake path and belongs to a
+session that can live-test it.
 
 **Chime latency holds the 500ms line, but the closet is closer to it than the
 kitchen** — kitchen avg 269ms (min 171, max 866, p90 400); master avg 271ms
@@ -513,3 +548,38 @@ p90 sitting on the line is worth watching rather than acting on yet.
 **Utilization, all history:** `set_timer` 74, `play_music` 55,
 `home_control` 26, `weather` 18, `ask` 11, `unclear` 11, `add_items` 11,
 `business_hours` 6, `find_phone` 5, `set_reminder` 4.
+
+---
+
+## 14. The family-room satellite was never actually down (2026-08-11)
+
+Worth recording as a process note, not just a correction.
+
+The live-voice test of Phase 1 produced two rows, not one: the kitchen won the
+turn, and **`familyroom` recorded `reject_reason=suppressed, arb_winner=kitchen`**
+— the arbitration path working exactly as designed, from a satellite four
+separate documents described as out of commission since 2026-07-27.
+
+It was rebuilt on 2026-07-28, the day after the boot-flash corruption, and had
+been running ~6 days of uptime with 1,044 triggers at the moment it was found.
+Nobody wrote the rebuild down, so the "SSD pending" note propagated into
+`voice-assistant-backlog.md`, `speaker-id-plan.md`, and this plan's own fleet
+inventory (§2).
+
+Two things follow:
+
+- **The house has four live microphones, not three.** Phase 3's fleet strip
+  must show kitchen, familyroom, master closet and Simon.
+- **This is the argument for the dashboard in one paragraph.** A satellite's
+  true state was knowable only by SSHing to a box nobody thought to check,
+  and the docs confidently said otherwise for two weeks. A fleet strip reading
+  live `/health` would have shown it green the whole time.
+
+Actions taken: 1,699 turns backfilled, Phase 1 code deployed to it (backup
+`assistant.py.bak-20260811-turns`, service restarted, came back `mode: active`),
+and the stale claims corrected in all four documents.
+
+Still genuinely open: its ReSpeaker is a different channel from the kitchen's,
+so **speaker-ID centroids contain no family-room clips**. That was blocked on
+the rebuild; it is now just an unstarted enrollment task
+(`speaker-id-plan.md`).

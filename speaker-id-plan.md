@@ -30,10 +30,12 @@ holds (`/command/audio`).
 - Fridge mic relocation CANCELLED — the XVF3800 stays next to the big
   speakers (future music-AEC project wants the playback reference
   there). So the kitchen channel is stable; enrollments stay valid.
-- Family-room satellite (pw_pi) out of commission — power cycle
-  corrupted its boot flash drive; SSD purchased for the rebuild.
-  Kitchen-only enrollment now; add family-room-mic clips to the
-  centroids after the rebuild (its ReSpeaker is a different channel).
+- Family-room satellite (pw_pi) — was out of commission 2026-07-27 (power
+  cycle corrupted its boot flash drive). **Rebuilt 2026-07-28 and LIVE
+  since; corrected 2026-08-11**, at `192.168.40.244:8781`. Enrollment is
+  still kitchen-only: its ReSpeaker is a different channel, so
+  family-room-mic clips have yet to be added to the centroids. That is now
+  an open enrollment task, not a hardware blocker.
 
 ## Components
 
