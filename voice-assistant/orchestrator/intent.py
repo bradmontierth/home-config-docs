@@ -10,12 +10,12 @@ from __future__ import annotations
 import logging
 import re
 
-from . import clients, config
+from . import clients, config, zones
 
 log = logging.getLogger("orchestrator.intent")
 
 INTENTS = (
-    "set_timer", "timer_query", "timer_adjust", "timer_cancel",
+    "set_timer", "timer_query", "timer_adjust", "timer_rename", "timer_cancel",
     "add_items", "set_reminder", "show_todos", "show_shopping", "show_reminders",
     "complete_item",
     "remove_items", "clear_list", "play_music", "music_control", "music_query",
@@ -29,9 +29,9 @@ WEATHER_WHEN = ("now", "today", "tonight", "tomorrow", "monday", "tuesday",
 HOURS_WHEN = ("open", "close", "now", "today")
 
 MUSIC_ACTIONS = ("pause", "resume", "stop", "next", "previous",
-                 "volume_up", "volume_down")
+                 "volume_up", "volume_down", "volume_set", "volume_normal")
 
-_SYSTEM = f"""You are the intent parser for a kitchen assistant. Convert the \
+_SYSTEM = f"""You are the intent parser for a household voice assistant. Convert the \
 user's command into a single strict JSON object and output ONLY that JSON — no \
 prose, no code fences, no explanation.
 
@@ -39,6 +39,7 @@ Schema:
 {{
   "intent": one of {list(INTENTS)},
   "label": short lowercase name of the timer (e.g. "chicken", "rice", "pasta"), or null if the user gave none,
+  "new_label": for timer_rename, the new short lowercase timer name without the word "timer"; null when the command stops before the new name,
   "duration_seconds": integer total seconds for set_timer / timer_adjust (adjust may be negative to remove time), else null,
   "sound_theme": one of {list(config.SOUND_THEMES)},
   "scope": "one" or "all" — "all" only when the user clearly means every timer (e.g. "cancel all timers"), else "one",
@@ -52,9 +53,11 @@ Schema:
   "missing_content": for add_items / set_reminder, true when the command stops before naming WHAT to add; else false,
   "media_type": for play_music, only when the user NAMES a type — "artist", "album", "track", or "playlist"; else null,
   "music_action": for music_control, one of {list(MUSIC_ACTIONS)}; else null,
+  "music_volume": for music_control with music_action "volume_set", the requested integer from 0 to 100; else null,
   "sports_action": for sports, "last" (score/result of the most recent or current game) or "next" (upcoming game); else null,
   "sports_date": for sports, "today" or "yesterday" only when the user SAYS a day like that ("last night" = "yesterday"); else null,
   "weather_when": for weather, one of {list(WEATHER_WHEN)}; else null,
+  "weather_location": for weather at a NAMED place away from home, the city/place as spoken (include state/country when given); null for local home weather,
   "hours_when": for business_hours, one of {list(HOURS_WHEN)}; else null
 }}
 
@@ -71,6 +74,13 @@ Rules:
   assistant asks for the missing duration itself.
 - timer_query = "how much time is left", "how long on the rice". duration_seconds null.
 - timer_adjust = "add 5 minutes to the rice" -> duration_seconds 300; "take 2 minutes off" -> -120.
+- timer_rename changes only a timer's name: "rename the timer to pasta" -> label null,
+  new_label "pasta"; "rename the chicken timer to pasta" -> label "chicken", new_label
+  "pasta"; "change the timer to be called pasta" and "call the timer pasta" are also
+  timer_rename. A rename command that STOPS BEFORE THE NEW NAME ("rename the timer to",
+  "change the timer to be called", "change the timer to be a") is still timer_rename with
+  new_label null so the assistant can ask what to call it. Do not treat "change the timer to
+  ten minutes" as rename; that concerns duration and is timer_adjust.
 - timer_cancel = "cancel the rice timer" (scope one) or "cancel all timers" (scope all).
 - sports = a score, result, or upcoming-game question about a NAMED team or league: "what was the
   score of the jazz game" (query "jazz", sports_action "last"), "who won the world cup game
@@ -84,8 +94,11 @@ Rules:
   forecast", "will it rain today" ("today"); "how cold does it get tonight" ("tonight"); "what's
   the weather tomorrow" ("tomorrow"); "what's the forecast for saturday" ("saturday"). Current
   conditions and "is it..." questions -> "now"; forecast questions with no day named -> "today".
-  A follow-up like "what about tomorrow" right after a weather answer is weather too. But weather
-  for a NAMED other place ("weather in Chicago") or beyond a week out is "ask", not weather.
+  A follow-up like "what about tomorrow" right after a weather answer is weather too. Weather for
+  a NAMED other place is also weather and MUST keep the place in weather_location: "weather in
+  Chicago" -> weather, now, "Chicago"; "what's the weather in Park City today" -> weather, today,
+  "Park City"; "forecast for Paris tomorrow" -> weather, tomorrow, "Paris". Only forecasts beyond
+  the supported week are "ask".
 - business_hours = opening/closing-hours questions about a NAMED business: "what time does Home
   Depot close" (query "Home Depot", hours_when "close"), "when does Costco open" ("Costco",
   "open"), "is Walmart open" ("Walmart", "now"), "what are Smith's hours today" ("Smith's",
@@ -104,7 +117,7 @@ Rules:
   place_modifier rule for an explicitly named department or service, such as "where is Costco gas"
   -> query "Costco", place_modifier "gas".
 - home_control = a command to CHANGE something in the house — blinds, lights, lighting modes:
-  "close the blinds", "open the left blind", "close the kitchen sink blind", "fix the glare",
+  "close the blinds", "open the left blind", "close the sink blind", "fix the glare",
   "close the sliding door", "brighten the lights", "make it brighter in here", "dinner mode",
   "set the mood for dinner", "back to normal", "reset the lights". Put the command phrase in
   "query", close to as spoken. Use it for house-change commands even if the target sounds
@@ -172,7 +185,9 @@ Rules:
 - music_control = controlling playback that's already going. Map to "music_action": "pause" the
   music -> pause; "keep playing" / "unpause" / "resume" -> resume; "stop the music" / "turn off the
   music" -> stop; "skip" / "next song" / "skip this" -> next; "go back" / "previous song" -> previous;
-  "turn it up" / "louder" -> volume_up; "turn it down" / "quieter" -> volume_down.
+  "turn it up" / "louder" -> volume_up; "turn it down" / "quieter" -> volume_down;
+  "set the volume to 80" / "volume eighty" -> volume_set with music_volume 80;
+  "normal volume" / "back to normal volume" -> volume_normal.
   A bare "pause" or "stop" with no object is music_control too (timers get cancelled, not stopped).
 - music_query = asking about the current song: "what's playing", "what song is this", "who sings this".
 - show_answer = re-show or repeat the assistant's PREVIOUS answer, adding nothing new: "show that
@@ -181,6 +196,19 @@ Rules:
   ("but who's playing in it") is "ask", not show_answer.
 - If the command is not a timer, list, music, home-control, or knowledge command, intent "none".
 Return JSON only."""
+
+
+def _system(sat: str | None = None) -> str:
+    """Global intent grammar plus the one piece of routing context the model
+    may need. Device inventories and other rooms' aliases stay outside the
+    prompt; deterministic room-scoped matching owns those."""
+    room = zones.spoken_for(sat)
+    return (
+        _SYSTEM
+        + f"\n\nORIGIN ROOM: {room}. This identifies where the command was spoken. "
+          "Do not assume devices that are not named, and do not import context "
+          "from any other room."
+    )
 
 # Appended to the system prompt when parsing a FOLLOW-UP turn (the user kept
 # talking after a reply, with no wake word to gate it). Stricter about "none":
@@ -219,7 +247,8 @@ Normally the reply supplies the missing piece: COMBINE the incomplete command \
 with the reply and parse the COMBINED command ("set the timer for" + "eight \
 minutes" -> set_timer, duration_seconds 480; "set a chicken timer for" + "about \
 twenty" -> set_timer, label chicken, 1200, cluck; "remind me to" + "call the \
-dentist at five" -> set_reminder, missing_content false).
+dentist at five" -> set_reminder, missing_content false; "rename the timer to" + \
+"pasta timer" -> timer_rename, new_label pasta).
 But the reply may abandon the request instead. If it is a NEW command or \
 question ("actually what's the weather", "play some music"), ignore the \
 incomplete command and parse the reply ALONE on its own merits. If it drops the \
@@ -227,12 +256,14 @@ request without replacing it ("never mind", "forget it", "hang on"), or it is \
 room noise, a fragment, or someone else's conversation, use intent "none"."""
 
 
-async def parse_clarify(partial: str, reply: str, question: str) -> dict:
+async def parse_clarify(partial: str, reply: str, question: str,
+                        sat: str | None = None) -> dict:
     """Parse the answer to a slot question. `partial` is the incomplete command
     we asked about, `question` what we asked. Returns the same validated dict as
     parse() — a completed command, a different command if they moved on, or
     "none" if they dropped it."""
-    system = _SYSTEM + "\n" + _CLARIFY_NOTE.format(question=question, partial=partial)
+    system = _system(sat) + "\n" + _CLARIFY_NOTE.format(
+        question=question, partial=partial)
     messages = [
         {"role": "system", "content": system},
         {"role": "user", "content": reply},
@@ -323,7 +354,7 @@ def wants_private(command: str) -> bool:
 
 
 _NUM_WORDS = {
-    "one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7,
+    "zero": 0, "one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7,
     "eight": 8, "nine": 9, "ten": 10, "eleven": 11, "twelve": 12,
     "thirteen": 13, "fourteen": 14, "fifteen": 15, "sixteen": 16,
     "seventeen": 17, "eighteen": 18, "nineteen": 19, "twenty": 20,
@@ -396,20 +427,287 @@ def spoken_duration(text: str) -> int | None:
     return total
 
 
-async def parse(command: str, context: str | None = None) -> dict:
+def spoken_music_volume(text: str) -> int | None:
+    """An explicit 0-100 value immediately following the word ``volume``.
+
+    Deliberately narrower than a general number parser: the classifier must
+    already have called the utterance music control before this value is used,
+    and anchoring it to ``volume`` keeps unrelated questions containing a
+    number from becoming player commands. Handles the forms the ASR emits in
+    practice: "volume 80", "volume to eighty", and "volume forty five
+    percent".
+    """
+    words = re.findall(r"[a-z0-9]+", text.lower())
+    try:
+        pos = words.index("volume") + 1
+    except ValueError:
+        return None
+    while pos < len(words) and words[pos] in ("to", "at", "the", "level"):
+        pos += 1
+    if pos >= len(words):
+        return None
+    word = words[pos]
+    if word.isdigit():
+        level = int(word)
+    elif word in _NUM_WORDS:
+        level = _NUM_WORDS[word]
+        # "forty five"; a second standalone number outside the 20/30/... tens
+        # shape is not one volume value and is left to the classifier.
+        if (level >= 20 and level % 10 == 0 and pos + 1 < len(words)
+                and words[pos + 1] in _NUM_WORDS
+                and 0 < _NUM_WORDS[words[pos + 1]] < 10):
+            level += _NUM_WORDS[words[pos + 1]]
+    else:
+        return None
+    return level if 0 <= level <= 100 else None
+
+
+# Deterministic pre-classifier grammar. These phrases have one complete,
+# supported interpretation; anything outside the narrow shapes returns None
+# and pays the normal classifier round trip. Kept on fresh wake turns only by
+# app.handle_command -- follow-ups need their conversation context.
+_FAST_LEAD = re.compile(
+    r"^(?:(?:please|hey|ok|okay|can you|could you|would you|will you)\s+)+")
+_FAST_TAIL = re.compile(r"(?:\s+(?:please|for me|thanks|thank you))+$")
+_FAST_TIMER = re.compile(r"^(?:set|start)\s+(?:(?:a|the)\s+)?timer\s+for\s+(.+)$")
+
+_MUSIC_CONTROL_ALIASES = {
+    "pause the music": "pause", "pause music": "pause",
+    "resume the music": "resume", "resume music": "resume",
+    "keep playing": "resume", "unpause the music": "resume",
+    "stop the music": "stop", "stop music": "stop",
+    "turn off the music": "stop",
+    "skip": "next", "skip this": "next", "skip this song": "next",
+    "next song": "next", "play the next song": "next",
+    "previous song": "previous", "go back a song": "previous",
+    "go to the previous song": "previous",
+    "louder": "volume_up", "turn it up": "volume_up",
+    "turn up the music": "volume_up", "music louder": "volume_up",
+    "quieter": "volume_down", "turn it down": "volume_down",
+    "turn down the music": "volume_down", "music quieter": "volume_down",
+    "normal volume": "volume_normal", "back to normal volume": "volume_normal",
+    "put the volume back": "volume_normal",
+}
+_MUSIC_QUERY_ALIASES = {
+    "what's playing", "what is playing", "what song is this",
+    "what's this song", "what is this song", "who sings this",
+    "who is singing this",
+}
+_WEATHER_NOW = {
+    "what's the weather", "what is the weather", "how's the weather",
+    "how is the weather", "what's it like outside", "what is it like outside",
+    "what's the temperature", "what is the temperature",
+    "what's the temperature outside", "what is the temperature outside",
+    "how hot is it outside", "how cold is it outside", "is it windy",
+}
+_WEATHER_TODAY = {"what's the forecast", "what is the forecast"}
+_WEATHER_DAYS = "|".join(WEATHER_WHEN[1:])
+_WEATHER_DAY_RE = re.compile(
+    rf"^(?:what(?:'s| is)\s+the\s+)?(?:weather|forecast)(?:\s+for)?\s+"
+    rf"(?P<when>{_WEATHER_DAYS})$")
+_WEATHER_PRECIP_RE = re.compile(
+    rf"^will\s+it\s+(?:rain|snow)(?:\s+on)?\s+(?P<when>{_WEATHER_DAYS})$")
+_WEATHER_LOCATION_RE = re.compile(
+    rf"^(?:(?:what(?:'s| is)\s+the)\s+)?(?P<kind>weather|forecast)\s+"
+    rf"(?:in|for)\s+(?P<location>.+?)"
+    rf"(?:\s+(?:(?:for|on)\s+)?(?P<when>{_WEATHER_DAYS}))?$")
+_WEATHER_LOCATION_PRECIP_RE = re.compile(
+    rf"^will\s+it\s+(?:rain|snow)\s+in\s+(?P<location>.+?)"
+    rf"(?:\s+(?:on\s+)?(?P<when>{_WEATHER_DAYS}))?$")
+
+# Renaming an already-running timer is unambiguous enough to stay deterministic
+# even on a continued-conversation turn. Keep these shapes anchored: generic
+# "change the timer to ten minutes" is an adjustment and must still reach the
+# contextual classifier.
+_TIMER_RENAME_PATTERNS = (
+    re.compile(
+        r"^rename\s+(?:(?:the|my|a)\s+)?"
+        r"(?:(?P<label>[a-z0-9][a-z0-9' ]*?)\s+)?timer\s+"
+        r"(?:to|as)(?:\s+(?P<new_label>.*))?$"),
+    re.compile(
+        r"^change\s+(?:(?:the|my|a)\s+)?"
+        r"(?:(?P<label>[a-z0-9][a-z0-9' ]*?)\s+)?timer\s+"
+        r"to\s+be(?:\s+called)?(?:\s+(?P<new_label>.*))?$"),
+    re.compile(
+        r"^call\s+(?:(?:the|my|a)\s+)?"
+        r"(?:(?P<label>[a-z0-9][a-z0-9' ]*?)\s+)?timer"
+        r"(?:\s+(?P<new_label>.*))?$"),
+)
+_NON_LABEL_STARTS = {
+    "actually", "cancel", "forget", "never", "pause", "play", "remove",
+    "resume", "set", "start", "stop", "wait", "weather", "what",
+}
+
+
+def _fast_clean(text: str) -> str:
+    text = re.sub(r"[^a-z0-9' ]+", " ", (text or "").lower())
+    text = " ".join(text.split())
+    text = _FAST_LEAD.sub("", text)
+    return _FAST_TAIL.sub("", text).strip()
+
+
+def _timer_label(text: str | None) -> str | None:
+    """Normalize a short spoken timer name, rejecting likely new commands."""
+    value = _fast_clean(text or "")
+    value = re.sub(r"^(?:a|an|the)(?:\s+|$)", "", value)
+    value = re.sub(r"\s+timer$", "", value).strip()
+    words = value.split()
+    if not words or len(words) > 4 or words[0] in _NON_LABEL_STARTS:
+        return None
+    return value
+
+
+def fast_parse_timer_rename(command: str) -> dict | None:
+    """Parse an anchored timer rename, including one missing its new name.
+
+    This is separate from the fresh-turn fast parser because app.handle_command
+    also permits it on follow-ups after a timer was just created.
+    """
+    text = _fast_clean(command)
+    for pattern in _TIMER_RENAME_PATTERNS:
+        match = pattern.fullmatch(text)
+        if not match:
+            continue
+        return _validate({
+            "intent": "timer_rename",
+            "label": _timer_label(match.groupdict().get("label")),
+            "new_label": _timer_label(match.groupdict().get("new_label")),
+        })
+    return None
+
+
+def fast_parse_weather_location(command: str) -> dict | None:
+    """Parse a narrow named-place forecast without risking home fallback."""
+    text = _fast_clean(command)
+    match = (_WEATHER_LOCATION_RE.fullmatch(text)
+             or _WEATHER_LOCATION_PRECIP_RE.fullmatch(text))
+    if not match:
+        return None
+    location = " ".join(match.group("location").split()).strip()
+    if (not location or len(location.split()) > 8
+            or location in {"here", "home", "outside"}):
+        return None
+    when = match.groupdict().get("when")
+    if when is None:
+        when = "today" if match.groupdict().get("kind") == "forecast" else "now"
+    return _validate({
+        "intent": "weather", "weather_when": when,
+        "weather_location": location,
+    })
+
+
+def _fast_music_volume(text: str) -> int | None:
+    """Strict complete-utterance wrapper around spoken_music_volume()."""
+    words = text.split()
+    if "volume" not in words:
+        return None
+    pos = words.index("volume")
+    prefix = tuple(words[:pos])
+    if prefix not in {
+        (), ("music",), ("set",), ("set", "the"), ("set", "music"),
+        ("set", "the", "music"), ("change",), ("change", "the"),
+        ("make", "the", "music"),
+    }:
+        return None
+    tail = words[pos + 1:]
+    while tail and tail[0] in ("to", "at", "level"):
+        tail = tail[1:]
+    if not tail:
+        return None
+    consumed = 1
+    first = tail[0]
+    if first.isdigit():
+        pass
+    elif first in _NUM_WORDS:
+        n = _NUM_WORDS[first]
+        if (n >= 20 and n % 10 == 0 and len(tail) > 1
+                and tail[1] in _NUM_WORDS and 0 < _NUM_WORDS[tail[1]] < 10):
+            consumed = 2
+    else:
+        return None
+    remainder = tail[consumed:]
+    if remainder not in ([], ["percent"], ["per", "cent"]):
+        return None
+    return spoken_music_volume(text)
+
+
+def fast_parse(command: str) -> dict | None:
+    """A complete validated intent without the classifier, or None.
+
+    Deliberately excludes labelled timers and play-music searches. Both need
+    semantic extraction; a fast path that only *usually* understands them is
+    worse than the latency it saves.
+    """
+    text = _fast_clean(command)
+    if not text:
+        return None
+
+    rename = fast_parse_timer_rename(text)
+    if rename is not None:
+        return rename
+
+    timer = _FAST_TIMER.fullmatch(text)
+    if timer:
+        seconds = spoken_duration(timer.group(1))
+        if seconds is not None:
+            return _validate({
+                "intent": "set_timer", "duration_seconds": seconds,
+                "sound_theme": config.DEFAULT_THEME,
+            })
+
+    volume = _fast_music_volume(text)
+    if volume is not None:
+        return _validate({
+            "intent": "music_control", "music_action": "volume_set",
+            "music_volume": volume,
+        })
+    action = _MUSIC_CONTROL_ALIASES.get(text)
+    if action:
+        return _validate({"intent": "music_control", "music_action": action})
+    if text in _MUSIC_QUERY_ALIASES:
+        return _validate({"intent": "music_query"})
+
+    when = None
+    if text in _WEATHER_NOW:
+        when = "now"
+    elif text in _WEATHER_TODAY:
+        when = "today"
+    else:
+        match = _WEATHER_DAY_RE.fullmatch(text) or _WEATHER_PRECIP_RE.fullmatch(text)
+        if match:
+            when = match.group("when")
+    if when:
+        return _validate({"intent": "weather", "weather_when": when})
+    remote_weather = fast_parse_weather_location(text)
+    if remote_weather is not None:
+        return remote_weather
+    return None
+
+
+async def parse(command: str, context: str | None = None,
+                sat: str | None = None) -> dict:
     """Parse a command string into a validated intent dict. When `context` is
     given (a follow-up turn), append the follow-up note so ambiguous/background
     speech routes to "none"."""
-    system = _SYSTEM
+    system = _system(sat)
     if context:
-        system = _SYSTEM + "\n" + _FOLLOWUP_NOTE.format(context=context)
+        system += "\n" + _FOLLOWUP_NOTE.format(context=context)
     messages = [
         {"role": "system", "content": system},
         {"role": "user", "content": command},
     ]
     raw = await clients.parse_intent_raw(messages)
     data = clients.extract_json(raw)
-    return _validate(data)
+    parsed = _validate(data)
+    # The classifier turned the live phrase "volume eighty" into volume_up,
+    # discarding the number. Once it has identified this as music control, an
+    # explicit number beside the word "volume" is deterministic and must win
+    # over that probabilistic relative/absolute choice.
+    absolute = spoken_music_volume(command)
+    if parsed["intent"] == "music_control" and absolute is not None:
+        parsed["music_action"] = "volume_set"
+        parsed["music_volume"] = absolute
+    return parsed
 
 
 def validate(data: dict) -> dict:
@@ -429,6 +727,14 @@ def _validate(data: dict) -> dict:
         label = label.strip().lower() or None
     else:
         label = None
+
+    new_label = data.get("new_label")
+    if isinstance(new_label, str):
+        new_label = new_label.strip().lower() or None
+    else:
+        new_label = None
+    if intent != "timer_rename":
+        new_label = None
 
     duration = data.get("duration_seconds")
     if not isinstance(duration, (int, float)):
@@ -494,6 +800,18 @@ def _validate(data: dict) -> dict:
     if music_action not in MUSIC_ACTIONS:
         music_action = None
 
+    music_volume = data.get("music_volume")
+    if isinstance(music_volume, (int, float)) and not isinstance(music_volume, bool):
+        music_volume = int(music_volume)
+        if not 0 <= music_volume <= 100:
+            music_volume = None
+    else:
+        music_volume = None
+    if music_action == "volume_set" and music_volume is None:
+        music_action = None
+    if music_action != "volume_set":
+        music_volume = None
+
     sports_action = data.get("sports_action")
     if sports_action not in ("last", "next"):
         sports_action = None
@@ -508,6 +826,14 @@ def _validate(data: dict) -> dict:
     if weather_when not in WEATHER_WHEN:
         weather_when = None
 
+    weather_location = data.get("weather_location")
+    if isinstance(weather_location, str):
+        weather_location = " ".join(weather_location.split()).strip() or None
+    else:
+        weather_location = None
+    if intent != "weather":
+        weather_location = None
+
     hours_when = data.get("hours_when")
     if isinstance(hours_when, str):
         hours_when = hours_when.strip().lower()
@@ -517,6 +843,7 @@ def _validate(data: dict) -> dict:
     return {
         "intent": intent,
         "label": label,
+        "new_label": new_label,
         "duration_seconds": duration,
         "sound_theme": theme,
         "scope": scope,
@@ -530,8 +857,10 @@ def _validate(data: dict) -> dict:
         "missing_content": missing_content,
         "media_type": media_type,
         "music_action": music_action,
+        "music_volume": music_volume,
         "sports_action": sports_action,
         "sports_date": sports_date,
         "weather_when": weather_when,
+        "weather_location": weather_location,
         "hours_when": hours_when,
     }

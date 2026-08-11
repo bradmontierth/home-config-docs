@@ -527,6 +527,44 @@ class RoomPlaybackTest(unittest.TestCase):
         asyncio.run(ducked_then_up())
         self.assertEqual(self._volumes()[-1], ("shower", 30))
 
+    def test_absolute_volume_while_ducked_replaces_the_restore_target(self):
+        self._playing()
+        kitchen = {"queue": config.MA_QUEUE_ID, "local": True}
+
+        async def ducked_then_set():
+            with patch.object(music, "_notify_jukebox_volume_hold",
+                              new=AsyncMock()) as hold:
+                await music.duck(kitchen)
+                effective = await music.control("volume_set", kitchen, 80)
+                await music.unduck(kitchen)
+                return effective, hold.await_args.args[0]
+
+        effective, held = asyncio.run(ducked_then_set())
+        self.assertEqual(effective, 80)
+        self.assertEqual(held, 80)
+        self.assertEqual(self._volumes()[-1], (config.MA_QUEUE_ID, 80))
+
+    def test_absolute_volume_obeys_a_rooms_safety_ceiling(self):
+        effective = asyncio.run(music.control("volume_set", self.BATH, 80))
+        self.assertEqual(effective, 40)
+        self.assertEqual(self._volumes(), [("shower", 40)])
+
+    def test_normal_volume_clears_hold_without_bypassing_duck(self):
+        self._playing()
+        kitchen = {"queue": config.MA_QUEUE_ID, "local": True}
+
+        async def ducked_then_normal():
+            with patch.object(music, "_clear_jukebox_volume_hold",
+                              new=AsyncMock(return_value=55)):
+                await music.duck(kitchen)
+                effective = await music.control("volume_normal", kitchen)
+                await music.unduck(kitchen)
+                return effective
+
+        effective = asyncio.run(ducked_then_normal())
+        self.assertEqual(effective, 55)
+        self.assertEqual(self._volumes()[-1], (config.MA_QUEUE_ID, 55))
+
     # -- the auto-stop cap -------------------------------------------------
     def test_a_capped_room_arms_a_stop(self):
         """The people it is playing for are in the tub and cannot reach a

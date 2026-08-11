@@ -33,6 +33,10 @@ def ask_timer_duration(label: str | None) -> str:
     return f"Sure, how long for the {label}?" if label else "Sure, for how long?"
 
 
+def ask_timer_name() -> str:
+    return "Sure, what should I call it?"
+
+
 def ask_add_content(intent: str) -> str:
     """The slot question for an add/reminder command that stopped before naming
     what. Short for the same reason the timer one is — the user is mid-thought
@@ -55,6 +59,10 @@ def confirm_adjust(timer: dict) -> str:
         f"Updated the {timer_name(timer)}. "
         f"{humanize_seconds(timer['remaining_seconds'])} left."
     )
+
+
+def confirm_rename(timer: dict) -> str:
+    return f"Okay, it's now the {timer_name(timer)}."
 
 
 def report_query(timers: list[dict]) -> str:
@@ -249,10 +257,13 @@ _MUSIC_ACK = {
     "previous": "Going back.",
     "volume_up": "Okay, louder.",
     "volume_down": "Okay, quieter.",
+    "volume_normal": "Okay, back to normal volume.",
 }
 
 
-def confirm_music_control(action: str) -> str:
+def confirm_music_control(action: str, volume: int | None = None) -> str:
+    if action == "volume_set" and volume is not None:
+        return f"Okay, volume {volume}."
     return _MUSIC_ACK.get(action, "Done.")
 
 

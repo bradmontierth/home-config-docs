@@ -59,7 +59,31 @@ def _table() -> dict:
     path = _path()
     mtime = path.stat().st_mtime
     if _cache is None or _cache[0] != mtime:
-        _cache = (mtime, json.loads(path.read_text()))
+        table = json.loads(path.read_text())
+        seed = json.loads(_SEED_FILE.read_text())
+        missing = {key: value for key, value in seed.items() if key not in table}
+        if missing:
+            table.update(missing)
+        # One-time correction from the initial Simon rollout: the HA room key
+        # is "simon", but Snapserver's actual client id is "simon_room".
+        # Leaving the former here makes volume/duck reads miss the client.
+        simon = table.get("simon") or {}
+        if simon.get("snap_client") == "simon":
+            simon["snap_client"] = "simon_room"
+            missing["simon.snap_client"] = "simon_room"
+        # Simon's bridge now implements the same alarm start/arm/dismiss
+        # protocol as the Pi satellites so its dedicated stop model is active
+        # only while this room's timer is ringing.
+        if simon and not simon.get("host"):
+            simon["host"] = "http://127.0.0.1:8793"
+            missing["simon.host"] = simon["host"]
+        if missing:
+            tmp = path.with_name(path.name + ".tmp")
+            tmp.write_text(json.dumps(table, indent=2, ensure_ascii=False) + "\n")
+            tmp.replace(path)
+            mtime = path.stat().st_mtime
+            log.info("seeded new satellite zones: %s", sorted(missing))
+        _cache = (mtime, table)
         log.info("satellite zones loaded: %s", sorted(_cache[1]))
     return _cache[1]
 

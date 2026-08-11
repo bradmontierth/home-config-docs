@@ -1,0 +1,11 @@
+{
+  "simon": {
+    "timezone": "America/Denver",
+    "quiet_start": "20:00",
+    "quiet_end": "07:00",
+    "guard_entity": "input_boolean.simonalarm",
+    "guard_blocking_state": "on",
+    "fail_closed": true,
+    "note": "Silent/no-op while Simon is sleeping. Quiet hours are the local fail-safe; simonalarm lets the bedtime routine extend the guard outside those hours."
+  }
+}

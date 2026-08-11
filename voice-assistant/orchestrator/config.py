@@ -120,6 +120,14 @@ SATELLITE_ZONES_FILE = os.getenv(
     "SATELLITE_ZONES_FILE",
     os.path.join(os.path.dirname(__file__), "satellite_zones.json"))
 
+# Per-satellite quiet hours and optional HA sleep/guard entities. The policy is
+# enforced before wake verification and command ASR, and exposed to bridges so
+# they can no-op before lighting/chiming too.
+SATELLITE_POLICIES_FILE = os.getenv(
+    "SATELLITE_POLICIES_FILE",
+    os.path.join(os.path.dirname(__file__), "satellite_policies.json"))
+SATELLITE_POLICY_CACHE_S = float(os.getenv("SATELLITE_POLICY_CACHE_S", "3"))
+
 # How long a zone-routed satellite should ignore its mic after a reply, so the
 # follow-up listener doesn't transcribe the answer coming back off the room
 # speakers. Answering locally never needed this: play_wav_bytes() blocks until
@@ -206,6 +214,18 @@ OUTDOOR_TEMP_ENTITY = os.getenv(
     "OUTDOOR_TEMP_ENTITY", "sensor.weather_station_outdoor_temperature")
 WIND_SPEED_ENTITY = os.getenv(
     "WIND_SPEED_ENTITY", "sensor.weather_station_wind_speed")
+
+# Named-location weather is intentionally separate from the home sensors above:
+# geocode the spoken city, then fetch that coordinate's One Call forecast.
+OPENWEATHER_KEY_FILE = os.getenv("OPENWEATHER_KEY_FILE", "")
+OPENWEATHER_GEOCODE_URL = os.getenv(
+    "OPENWEATHER_GEOCODE_URL", "https://api.openweathermap.org/geo/1.0/direct")
+OPENWEATHER_ONECALL_URL = os.getenv(
+    "OPENWEATHER_ONECALL_URL", "https://api.openweathermap.org/data/3.0/onecall")
+OPENWEATHER_GEOCODE_TTL_S = float(os.getenv(
+    "OPENWEATHER_GEOCODE_TTL_S", str(30 * 86400)))
+OPENWEATHER_FORECAST_TTL_S = float(os.getenv(
+    "OPENWEATHER_FORECAST_TTL_S", "600"))
 
 # --- knowledge / ask mode (smart model via OpenRouter) --------------------
 # Streaming, short-first (===MORE=== sentinel). Only the `ask` intent hits this.
@@ -312,6 +332,12 @@ MA_QUEUE_ID = os.getenv("MA_QUEUE_ID", "e4:5f:01:67:1e:56")
 # voice-chosen music instead of playing the card. Empty disables.
 JUKEBOX_EXTERNAL_PLAY_URL = os.getenv(
     "JUKEBOX_EXTERNAL_PLAY_URL", "http://192.168.10.217:8769/api/external-play"
+)
+# An explicit kitchen volume command arms the NFC jukebox's temporary session
+# level here. Scans keep that level alive instead of reasserting the normal
+# baseline in the middle of a party. Empty disables the coordination.
+JUKEBOX_VOLUME_HOLD_URL = os.getenv(
+    "JUKEBOX_VOLUME_HOLD_URL", "http://192.168.10.217:8769/api/volume-hold"
 )
 # Ducking: on a wake trigger / alarm, music volume drops to cur*FACTOR (but at
 # least MIN). TTL is the watchdog that restores volume if the satellite dies

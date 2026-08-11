@@ -8,7 +8,9 @@ the classifier entirely). Both exist because of a live failure on 2026-07-26 —
 "Eight minutes." that followed was dropped as background chatter.
 """
 
+import asyncio
 import unittest
+from unittest.mock import AsyncMock, patch
 
 from . import intent
 
@@ -214,6 +216,174 @@ class SpokenDurationTest(unittest.TestCase):
             with self.subTest(text=text):
                 self.assertIsNone(intent.spoken_duration(text))
 
+
+class MusicVolumeTest(unittest.TestCase):
+    """Absolute music volume must survive the classifier's relative guess."""
+
+    def test_reads_spoken_and_digit_levels(self):
+        cases = {
+            "volume eighty": 80,
+            "set the volume to 80": 80,
+            "music volume at forty five percent": 45,
+            "volume zero": 0,
+            "volume 100": 100,
+        }
+        for text, want in cases.items():
+            with self.subTest(text=text):
+                self.assertEqual(intent.spoken_music_volume(text), want)
+
+    def test_rejects_missing_and_out_of_range_levels(self):
+        for text in ("turn up the music", "volume", "volume 101", "eighty"):
+            with self.subTest(text=text):
+                self.assertIsNone(intent.spoken_music_volume(text))
+
+    def test_live_phrase_overrides_volume_up_classifier_result(self):
+        raw = '{"intent":"music_control","music_action":"volume_up"}'
+        with patch.object(intent.clients, "parse_intent_raw",
+                          new=AsyncMock(return_value=raw)):
+            parsed = asyncio.run(intent.parse("volume eighty"))
+        self.assertEqual(parsed["music_action"], "volume_set")
+        self.assertEqual(parsed["music_volume"], 80)
+
+    def test_number_does_not_override_a_non_music_intent(self):
+        raw = '{"intent":"ask","query":"what is volume 80"}'
+        with patch.object(intent.clients, "parse_intent_raw",
+                          new=AsyncMock(return_value=raw)):
+            parsed = asyncio.run(intent.parse("what is volume 80"))
+        self.assertEqual(parsed["intent"], "ask")
+        self.assertIsNone(parsed["music_volume"])
+
+
+class DeterministicIntentTest(unittest.TestCase):
+    """Narrow complete commands that do not need semantic classification."""
+
+    def test_unlabelled_timer_forms(self):
+        cases = {
+            "set a timer for eight minutes": 480,
+            "start the timer for 1 hour 10 minutes": 4200,
+            "please set timer for about twenty minutes": 1200,
+            "could you start a timer for 90 seconds please": 90,
+        }
+        for text, seconds in cases.items():
+            with self.subTest(text=text):
+                parsed = intent.fast_parse(text)
+                self.assertEqual(parsed["intent"], "set_timer")
+                self.assertEqual(parsed["duration_seconds"], seconds)
+                self.assertIsNone(parsed["label"])
+                self.assertEqual(parsed["sound_theme"], "marimba")
+
+    def test_timer_fast_path_fails_closed(self):
+        for text in (
+            "set a pasta timer for eight minutes",
+            "set a timer for eight",
+            "set a timer for",
+            "add eight minutes to the timer",
+            "remind me in eight minutes",
+        ):
+            with self.subTest(text=text):
+                self.assertIsNone(intent.fast_parse(text))
+
+    def test_timer_rename_forms(self):
+        cases = {
+            "rename the timer to Pasta Timer": (None, "pasta"),
+            "rename the chicken timer to pasta": ("chicken", "pasta"),
+            "change the timer to be called pasta timer": (None, "pasta"),
+            "call the timer dinner rolls": (None, "dinner rolls"),
+        }
+        for text, (old_label, new_label) in cases.items():
+            with self.subTest(text=text):
+                parsed = intent.fast_parse_timer_rename(text)
+                self.assertEqual(parsed["intent"], "timer_rename")
+                self.assertEqual(parsed["label"], old_label)
+                self.assertEqual(parsed["new_label"], new_label)
+
+    def test_incomplete_timer_rename_arms_a_name_slot(self):
+        for text in ("rename the timer to",
+                     "change the timer to be called",
+                     "change the timer to be a"):
+            with self.subTest(text=text):
+                parsed = intent.fast_parse_timer_rename(text)
+                self.assertEqual(parsed["intent"], "timer_rename")
+                self.assertIsNone(parsed["new_label"])
+
+    def test_ambiguous_timer_changes_are_not_renames(self):
+        for text in ("change the timer to ten minutes",
+                     "add pasta to the timer", "rename my timer someday"):
+            with self.subTest(text=text):
+                self.assertIsNone(intent.fast_parse_timer_rename(text))
+
+    def test_music_transport_and_query(self):
+        cases = {
+            "pause the music": ("music_control", "pause"),
+            "keep playing": ("music_control", "resume"),
+            "stop music": ("music_control", "stop"),
+            "skip this song": ("music_control", "next"),
+            "go back a song": ("music_control", "previous"),
+            "turn it up": ("music_control", "volume_up"),
+            "music quieter": ("music_control", "volume_down"),
+            "normal volume": ("music_control", "volume_normal"),
+            "what's playing": ("music_query", None),
+            "who sings this": ("music_query", None),
+        }
+        for text, (kind, action) in cases.items():
+            with self.subTest(text=text):
+                parsed = intent.fast_parse(text)
+                self.assertEqual(parsed["intent"], kind)
+                self.assertEqual(parsed["music_action"], action)
+
+    def test_absolute_music_volume_is_complete_and_strict(self):
+        cases = {"volume eighty": 80, "set the volume to 45": 45,
+                 "music volume at 100 percent": 100}
+        for text, level in cases.items():
+            with self.subTest(text=text):
+                parsed = intent.fast_parse(text)
+                self.assertEqual(parsed["music_action"], "volume_set")
+                self.assertEqual(parsed["music_volume"], level)
+        for text in ("volume 80 in the kitchen", "what is volume 80",
+                     "turn the volume toward 80", "volume 101"):
+            with self.subTest(text=text):
+                self.assertIsNone(intent.fast_parse(text))
+
+    def test_music_search_and_ambiguous_bare_stop_still_use_classifier(self):
+        for text in ("play Raffi", "play some music", "stop", "go back", "next"):
+            with self.subTest(text=text):
+                self.assertIsNone(intent.fast_parse(text))
+
+    def test_local_weather_forms(self):
+        cases = {
+            "what's the weather": "now",
+            "how hot is it outside": "now",
+            "what's the forecast": "today",
+            "weather today": "today",
+            "forecast for tomorrow": "tomorrow",
+            "will it rain tonight": "tonight",
+            "what is the weather saturday": "saturday",
+        }
+        for text, when in cases.items():
+            with self.subTest(text=text):
+                parsed = intent.fast_parse(text)
+                self.assertEqual(parsed["intent"], "weather")
+                self.assertEqual(parsed["weather_when"], when)
+
+    def test_named_weather_forms(self):
+        cases = {
+            "weather in Chicago": ("chicago", "now"),
+            "what's the weather in Park City today": ("park city", "today"),
+            "forecast for Paris tomorrow": ("paris", "tomorrow"),
+            "will it snow in Alta on saturday": ("alta", "saturday"),
+        }
+        for text, (location, when) in cases.items():
+            with self.subTest(text=text):
+                parsed = intent.fast_parse(text)
+                self.assertEqual(parsed["intent"], "weather")
+                self.assertEqual(parsed["weather_location"], location)
+                self.assertEqual(parsed["weather_when"], when)
+
+    def test_uncertain_weather_falls_through(self):
+        for text in ("weather next month", "is it going to be nice",
+                     "what about tomorrow", "forecast for here"):
+            with self.subTest(text=text):
+                self.assertIsNone(intent.fast_parse(text))
 
 if __name__ == "__main__":
     unittest.main()

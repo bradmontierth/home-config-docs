@@ -79,6 +79,33 @@ class TimerRoomScopeTest(unittest.TestCase):
         mine = self._add("laundry", "master")
         self.assertEqual(self.engine.cancel("laundry", "master")["id"], mine["id"])
 
+    def test_rename_preserves_timer_and_rerenders_announcement(self):
+        original = self._add(None, "kitchen")
+        with patch.object(timers.clients, "synthesize",
+                          new=AsyncMock(return_value=b"RIFF-new")) as synth:
+            renamed = asyncio.run(self.engine.rename(None, "pasta", "kitchen"))
+        self.assertEqual(renamed["id"], original["id"])
+        self.assertEqual(renamed["label"], "pasta")
+        self.assertEqual(renamed["duration_seconds"], original["duration_seconds"])
+        self.assertEqual(renamed["sound_theme"], original["sound_theme"])
+        self.assertEqual(renamed["state"], timers.RUNNING)
+        self.assertTrue(renamed["has_announcement"])
+        synth.assert_awaited_once_with("Your pasta timer is done.")
+
+    def test_unlabelled_rename_stays_in_its_room(self):
+        kitchen = self._add("pasta", "kitchen")
+        master = self._add("shower", "master")
+        renamed = asyncio.run(self.engine.rename(None, "bath", "master"))
+        self.assertEqual(renamed["id"], master["id"])
+        self.assertEqual(renamed["label"], "bath")
+        self.assertEqual(self.engine.get(kitchen["id"])["label"], "pasta")
+
+    def test_rename_in_a_room_with_no_timer_changes_nothing(self):
+        kitchen = self._add("pasta", "kitchen")
+        renamed = asyncio.run(self.engine.rename(None, "bath", "master"))
+        self.assertIsNone(renamed)
+        self.assertEqual(self.engine.get(kitchen["id"])["label"], "pasta")
+
     def test_cancel_all_is_the_house_wide_escape(self):
         kitchen = self._add("pasta", "kitchen")
         bath = self._add("shower", "master")

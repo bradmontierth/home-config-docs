@@ -22,5 +22,23 @@
     "music_cap_minutes": 60,
     "note": "Mic-only Pi in the master closet. The wake ding stays on its little USB speaker; spoken replies and timer alarms go out the master bath speakers. alarm_volume is well above the reply volume of 20 on purpose - a reply is for someone standing there, an alarm has to carry over a running shower. Music starts at 20 and cannot be talked above 40 (the alarm is 45, and nobody should be able to walk a speaker into alarm territory with kids under it). music_cap_minutes stops it by itself: the people it plays for are in the tub, two rooms from the nearest microphone.",
     "snap_client": "shower"
+  },
+  "simon": {
+    "spoken": "Simon's room",
+    "rooms": [
+      "simon"
+    ],
+    "voice": "fast:doorbell",
+    "volume": 15,
+    "host": "http://127.0.0.1:8793",
+    "alarm": "zone",
+    "ma_player": "ma_simon_room",
+    "alarm_volume": 35,
+    "music_player": "ma_simon_room",
+    "music_volume": 15,
+    "music_max_volume": 30,
+    "music_cap_minutes": 60,
+    "snap_client": "simon_room",
+    "note": "Voice PE in Simon's room. The device owns only mic, LED and chimes; replies, timer alarms and music use the Simon amp-zone speakers. Child-safe ceilings and a one-hour music cap are intentional."
   }
 }

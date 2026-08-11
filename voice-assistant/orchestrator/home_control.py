@@ -95,7 +95,32 @@ def _commands() -> dict:
     path = _path()
     mtime = path.stat().st_mtime
     if _commands_cache is None or _commands_cache[0] != mtime:
-        _commands_cache = (mtime, json.loads(path.read_text()))
+        commands = json.loads(path.read_text())
+        # Image updates may add a command while the live /data table already
+        # exists (and may contain phone-added aliases). Seed only missing keys;
+        # never overwrite a live entry.
+        seed = json.loads(_SEED_FILE.read_text())
+        missing = {key: value for key, value in seed.items() if key not in commands}
+        if missing:
+            commands.update(missing)
+        # One-time Simon rollout correction from live ASR: "fun" is reliably
+        # decoded as "font" on this microphone. Existing /data tables predate
+        # these seed aliases, so add just this migration without generally
+        # resurrecting aliases a user intentionally removed in the editor.
+        fun = commands.get("simon_fun_color") or {}
+        fun_aliases = fun.get("aliases") or []
+        new_fun_aliases = [alias for alias in ("set a fun color", "set a font color")
+                           if alias not in fun_aliases]
+        if new_fun_aliases:
+            fun_aliases.extend(new_fun_aliases)
+            missing["simon_fun_color.aliases"] = new_fun_aliases
+        if missing:
+            tmp = path.with_name(path.name + ".tmp")
+            tmp.write_text(json.dumps(commands, indent=2, ensure_ascii=False) + "\n")
+            tmp.replace(path)
+            mtime = path.stat().st_mtime
+            log.info("seeded new home commands: %s", sorted(missing))
+        _commands_cache = (mtime, commands)
         log.info("home commands loaded: %d", len(_commands_cache[1]))
     return _commands_cache[1]
 
@@ -199,6 +224,24 @@ def _match(query: str, sat: str | None = None) -> tuple[str, dict, float] | None
     return None
 
 
+def has_exact_match(query: str, sat: str | None = None) -> bool:
+    """Whether this phrase is an explicit reachable alias for this room.
+
+    Used as a pre-classifier deterministic fast path. Unlike fuzzy matching,
+    an exact curated alias is safe to promote to home_control immediately: it
+    cannot make an unrelated phrase operate a device.
+    """
+    query = _clean((query or "").strip().lower())
+    if not query:
+        return False
+    commands = _commands()
+    sat = _named_room(query) or sat
+    for entry in _house(commands, sat).values():
+        if query in (alias.lower() for alias in entry["aliases"]):
+            return True
+    return False
+
+
 def evaluate(query: str) -> dict:
     """Score a phrase without pressing anything — the editor's phrase tester.
     Reports the best candidate even when it misses, so a failed phrase can be
@@ -282,6 +325,12 @@ async def handle(parsed: dict, command: str,
     if not matched:
         return None
     key, entry, score = matched
+    if entry.get("disabled"):
+        log.warning("home control %s blocked by safety interlock", key)
+        return {
+            "response": entry.get("disabled_response") or "That control is disabled.",
+            "ok": False,
+        }
     started = time.monotonic()
     await _press(entry["entity"])
     log.info("home control %r -> %s (sat=%s score %.0f, press %.0fms)",

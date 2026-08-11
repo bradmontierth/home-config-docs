@@ -59,6 +59,72 @@ class _SlotTestBase(unittest.TestCase):
         return asyncio.run(app.handle_command(command, followup=followup))
 
 
+class DeterministicDispatchTest(_SlotTestBase):
+    """The pre-parser is wired ahead of the LLM on fresh wake turns only."""
+
+    def test_plain_timer_bypasses_classifier(self):
+        with patch.object(app.intent_mod, "parse", new=AsyncMock()) as parse:
+            result = self._run("set a timer for eight minutes")
+        parse.assert_not_awaited()
+        self.assertEqual(result["intent"], "set_timer")
+        self.assertEqual(result["timer"]["duration_seconds"], 480)
+
+    def test_absolute_volume_bypasses_classifier(self):
+        with patch.object(app.intent_mod, "parse", new=AsyncMock()) as parse, \
+             patch.object(app.music_mod, "control",
+                          new=AsyncMock(return_value=80)) as control:
+            result = self._run("volume eighty")
+        parse.assert_not_awaited()
+        control.assert_awaited_once()
+        self.assertEqual(result["response"], "Okay, volume 80.")
+
+    def test_weather_bypasses_classifier(self):
+        answer = {"response": "It's 72 and sunny.", "ok": True,
+                  "weather_when": "now"}
+        with patch.object(app.intent_mod, "parse", new=AsyncMock()) as parse, \
+             patch.object(app.weather_mod, "handle",
+                          new=AsyncMock(return_value=answer)) as weather:
+            result = self._run("what's the weather")
+        parse.assert_not_awaited()
+        weather.assert_awaited_once()
+        self.assertEqual(result["response"], answer["response"])
+
+    def test_named_weather_bypasses_classifier_with_location(self):
+        answer = {"response": "In Park City, Utah, it'll be 68.", "ok": True,
+                  "weather_when": "today", "weather_location": "Park City, Utah"}
+        command = "what's the weather in Park City today"
+        with patch.object(app.intent_mod, "parse", new=AsyncMock()) as parse, \
+             patch.object(app.weather_mod, "handle",
+                          new=AsyncMock(return_value=answer)) as weather:
+            result = self._run(command)
+        parse.assert_not_awaited()
+        parsed, raw_command = weather.await_args.args
+        self.assertEqual(parsed["weather_location"], "park city")
+        self.assertEqual(parsed["weather_when"], "today")
+        self.assertEqual(raw_command, command)
+        self.assertEqual(result["response"], answer["response"])
+
+    def test_followup_keeps_the_contextual_classifier(self):
+        parsed = _parsed(intent="weather", weather_when="now")
+        with patch.object(app.intent_mod, "parse",
+                          new=AsyncMock(return_value=parsed)) as parse, \
+             patch.object(app.weather_mod, "handle", new=AsyncMock(
+                 return_value={"response": "It's 72.", "ok": True,
+                               "weather_when": "now"})):
+            self._run("what's the weather", followup=True)
+        parse.assert_awaited_once()
+
+    def test_timer_rename_bypasses_classifier_even_on_followup(self):
+        created = self._run("set a timer for five minutes")
+        with patch.object(app.intent_mod, "parse", new=AsyncMock()) as parse:
+            renamed = self._run("Rename the timer to Pasta Timer.", followup=True)
+        parse.assert_not_awaited()
+        self.assertEqual(renamed["intent"], "timer_rename")
+        self.assertEqual(renamed["timer"]["id"], created["timer"]["id"])
+        self.assertEqual(renamed["timer"]["label"], "pasta")
+        self.assertEqual(renamed["response"], "Okay, it's now the pasta timer.")
+
+
 class ClarifyFlowTest(_SlotTestBase):
 
     # -- the live failure, end to end ------------------------------------
@@ -101,6 +167,28 @@ class ClarifyFlowTest(_SlotTestBase):
         self.assertEqual(second["timer"]["label"], "chicken")
         self.assertEqual(second["timer"]["sound_theme"], "cluck")
 
+    def test_truncated_rename_asks_then_uses_bare_name(self):
+        created = self._run("set a timer for five minutes")
+        first = self._run("rename the timer to")
+        self.assertEqual(first["intent"], "timer_rename")
+        self.assertEqual(first["response"], "Sure, what should I call it?")
+        self.assertTrue(first["awaiting_slot"])
+        self.assertEqual(app.session_pending()["kind"], "timer_rename")
+
+        with patch.object(app.intent_mod, "parse", AsyncMock()) as plain, \
+             patch.object(app.intent_mod, "parse_clarify", AsyncMock()) as slow:
+            second = self._run("Pasta Timer.", followup=True)
+        plain.assert_not_called()
+        slow.assert_not_called()
+        self.assertEqual(second["timer"]["id"], created["timer"]["id"])
+        self.assertEqual(second["timer"]["label"], "pasta")
+        self.assertIsNone(app.session_pending())
+
+    def test_rename_with_no_timer_fails_cleanly(self):
+        result = self._run("call the timer pasta")
+        self.assertFalse(result["ok"])
+        self.assertEqual(result["response"], "I couldn't find that timer.")
+
     def test_unrecognised_answer_goes_to_the_stitching_parser(self):
         # "until the pasta is done" isn't a duration the fast path can read, so
         # it goes to the LLM with the partial command stitched back on.
@@ -113,10 +201,11 @@ class ClarifyFlowTest(_SlotTestBase):
                                      duration_seconds=600))) as slow:
             result = self._run("however long the pasta takes", followup=True)
         slow.assert_awaited_once()
-        partial, reply, question = slow.await_args.args
+        partial, reply, question, sat = slow.await_args.args
         self.assertEqual(partial, "set a timer for")
         self.assertEqual(reply, "however long the pasta takes")
         self.assertEqual(question, "Sure, for how long?")
+        self.assertIsNone(sat)
         self.assertEqual(result["timer"]["duration_seconds"], 600)
 
     def test_answer_can_abandon_the_timer(self):
@@ -153,7 +242,7 @@ class ClarifyFlowTest(_SlotTestBase):
     def test_wake_word_starts_over_instead_of_stitching(self):
         # She gave up on the question and re-asked with the wake word. Stitching
         # her new command onto the abandoned partial would produce nonsense, so
-        # a non-follow-up turn drops the slot and parses normally.
+        # a non-follow-up turn drops the slot and routes as a fresh command.
         with patch.object(app.intent_mod, "parse", AsyncMock(
                 return_value=_parsed(intent="set_timer"))):
             self._run("set a timer for")
@@ -164,7 +253,9 @@ class ClarifyFlowTest(_SlotTestBase):
              patch.object(app.weather_mod, "handle", AsyncMock(
                  return_value={"response": "It's 72 degrees.", "ok": True})):
             result = self._run("what's the weather")
-        plain.assert_awaited_once()
+        # Local weather is deterministic, so the fresh command bypasses both
+        # the ordinary classifier and the clarification classifier.
+        plain.assert_not_awaited()
         slow.assert_not_called()
         self.assertEqual(result["intent"], "weather")
         self.assertIsNone(app.session_pending())

@@ -204,6 +204,38 @@ class TimerEngine:
         self._wake.set()
         return self.get(row["id"])
 
+    async def rename(self, label: str | None, new_label: str,
+                     sat: str | None = None) -> dict[str, Any] | None:
+        """Rename one active timer without changing its clock or alarm sound.
+
+        Clear the cached announcement in the same transaction as the label so
+        an expiry racing the TTS render can never speak the old name. The new
+        announcement is best-effort, matching timer creation behavior.
+        """
+        async with self._lock:
+            row = self._resolve(label, sat)
+            if not row:
+                return None
+            timer_id = row["id"]
+            self._db.execute(
+                "UPDATE timers SET label=?, announce_wav=NULL WHERE id=?",
+                (new_label, timer_id),
+            )
+            self._db.commit()
+
+        wav_path = await self._prerender(timer_id, new_label)
+        if wav_path:
+            # Do not resurrect a cancelled/dismissed timer; just attach the
+            # cache if this timer still has the label we rendered.
+            self._db.execute(
+                "UPDATE timers SET announce_wav=? WHERE id=? AND label=?",
+                (wav_path, timer_id, new_label),
+            )
+            self._db.commit()
+        log.info("timer renamed id=%s old_label=%s new_label=%s sat=%s",
+                 timer_id, row["label"], new_label, row["sat"])
+        return self.get(timer_id)
+
     def cancel(self, label: str | None,
                sat: str | None = None) -> dict[str, Any] | None:
         row = self._resolve(label, sat)

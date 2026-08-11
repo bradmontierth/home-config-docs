@@ -38,6 +38,7 @@ from . import music as music_mod
 from . import broadcast as broadcast_mod
 from . import find_phone as phone_mod
 from . import places as places_mod
+from . import policy as policy_mod
 from . import speaker as speaker_mod
 from . import sports as sports_mod
 from . import weather as weather_mod
@@ -50,24 +51,40 @@ logging.basicConfig(
 )
 log = logging.getLogger("orchestrator.app")
 
-app = FastAPI(title="Kitchen Voice Orchestrator")
+app = FastAPI(title="Household Voice Orchestrator")
 ENGINE: TimerEngine
 
 
 # --------------------------------------------------------------------------
 # conversation session (for follow-up turns — "also add milk", "make it 15")
 # --------------------------------------------------------------------------
-# Single satellite for now, so one module-level session is enough. Holds a
-# short summary of the last turn; a follow-up parse gets it as context so the
-# LLM can resolve references and, crucially, reject unrelated room chatter.
+# Each satellite owns an independent session. A short summary of that room's
+# last turn lets a follow-up resolve references without importing another
+# room's conversation, confirmation, clarify slot, or "undo my last" state.
 SESSION_TTL_S = 90.0
-_SESSION: dict = {"ts": 0.0, "summary": "", "last_added": [], "pending": None}
+
+
+def _new_session() -> dict:
+    return {"ts": 0.0, "summary": "", "last_added": [], "pending": None}
+
+
+_SESSION: dict = _new_session()  # kitchen/default compatibility for old callers/tests
+_SESSIONS: dict[str, dict] = {config.DEFAULT_SAT: _SESSION}
+
+
+def _session() -> dict:
+    """State for the in-flight satellite, defaulting legacy callers to the
+    kitchen. `_CUR_SAT` is declared below and resolved when this runs, after
+    module initialization has completed."""
+    sat = _CUR_SAT.get() or config.DEFAULT_SAT
+    return _SESSIONS.setdefault(sat, _new_session())
 
 
 def session_set_pending(op: str, items: list[dict], list_type: str | None = None) -> None:
     """Stash a destructive bulk op awaiting a spoken yes/no."""
-    _SESSION["pending"] = {"op": op, "items": items, "list_type": list_type}
-    _SESSION["ts"] = time.time()
+    session = _session()
+    session["pending"] = {"op": op, "items": items, "list_type": list_type}
+    session["ts"] = time.time()
 
 
 def session_set_clarify(partial: str, question: str, kind: str = "timer",
@@ -85,20 +102,22 @@ def session_set_clarify(partial: str, question: str, kind: str = "timer",
     speaker identified on THIS turn: the full utterance is longer and cleaner
     audio than the one-phrase reply, and a list add has to land on the list of
     whoever started the sentence."""
-    _SESSION["pending"] = {"op": "clarify", "partial": partial, "question": question,
-                           "kind": kind, "label": label, "sound_theme": theme,
-                           "owner": owner}
-    _SESSION["ts"] = time.time()
+    session = _session()
+    session["pending"] = {"op": "clarify", "partial": partial, "question": question,
+                          "kind": kind, "label": label, "sound_theme": theme,
+                          "owner": owner}
+    session["ts"] = time.time()
 
 
 def session_pending() -> dict | None:
-    if _SESSION.get("pending") and time.time() - _SESSION["ts"] <= SESSION_TTL_S:
-        return _SESSION["pending"]
+    session = _session()
+    if session.get("pending") and time.time() - session["ts"] <= SESSION_TTL_S:
+        return session["pending"]
     return None
 
 
 def session_clear_pending() -> None:
-    _SESSION["pending"] = None
+    _session()["pending"] = None
 
 
 _YES_WORDS = {"yes", "yeah", "yep", "yup", "yea", "sure", "confirm", "confirmed",
@@ -127,28 +146,32 @@ def _affirmation(text: str) -> str | None:
 
 def session_note(summary: str) -> None:
     """Record a one-line summary of what the last actionable turn did."""
-    _SESSION["summary"] = summary
-    _SESSION["ts"] = time.time()
+    session = _session()
+    session["summary"] = summary
+    session["ts"] = time.time()
 
 
 def session_set_added(items: list[dict]) -> None:
     """Remember the items the last add produced so a follow-up 'undo' / 'scratch
     my last' can remove exactly them."""
-    _SESSION["last_added"] = items or []
-    _SESSION["ts"] = time.time()
+    session = _session()
+    session["last_added"] = items or []
+    session["ts"] = time.time()
 
 
 def session_last_added() -> list[dict]:
-    if time.time() - _SESSION["ts"] > SESSION_TTL_S:
+    session = _session()
+    if time.time() - session["ts"] > SESSION_TTL_S:
         return []
-    return _SESSION["last_added"]
+    return session["last_added"]
 
 
 def session_context() -> str | None:
     """The recent-turn summary if still fresh, else None (session expired)."""
-    if not _SESSION["summary"] or time.time() - _SESSION["ts"] > SESSION_TTL_S:
+    session = _session()
+    if not session["summary"] or time.time() - session["ts"] > SESSION_TTL_S:
         return None
-    return _SESSION["summary"]
+    return session["summary"]
 
 
 # --------------------------------------------------------------------------
@@ -340,6 +363,8 @@ def _summarize_turn(intent: str, result: dict) -> str:
             (i.get("text") or "").strip() for i in result["removed"])
     if intent == "timer_adjust" and result.get("timer"):
         return f"you adjusted the {fmt.timer_name(result['timer'])}"
+    if intent == "timer_rename" and result.get("timer"):
+        return f"you renamed it to the {fmt.timer_name(result['timer'])}"
     if intent == "timer_cancel":
         return "you cancelled a timer"
     if intent in ("show_todos", "show_shopping", "show_reminders"):
@@ -458,8 +483,16 @@ async def _parse_clarify_reply(clarify: dict, reply: str) -> dict:
                 "label": clarify.get("label"),
                 "sound_theme": clarify.get("sound_theme"),
             })
+    if clarify.get("kind") == "timer_rename":
+        parsed = intent_mod.fast_parse_timer_rename(
+            f"{clarify['partial']} {reply}".strip())
+        if parsed is not None and parsed.get("new_label"):
+            parsed["label"] = clarify.get("label")
+            log.info("rename clarify fast path: %r -> %r",
+                     reply, parsed["new_label"])
+            return parsed
     return await intent_mod.parse_clarify(
-        clarify["partial"], reply, clarify["question"])
+        clarify["partial"], reply, clarify["question"], _CUR_SAT.get())
 
 
 async def _speaker_name(speaker_task: asyncio.Task | None) -> str | None:
@@ -547,10 +580,39 @@ async def handle_command(command: str, followup: bool = False,
     context = session_context() if followup else None
     if not followup:
         await _turn_event("thinking", command=command)
-    if clarify:
+    # Deterministic room-scoped fast path, analogous to HA's local intent
+    # matching. An exact curated alias needs neither classifier latency nor a
+    # probabilistic label; fuzzy aliases still go through the classifier and
+    # can never override another intent.
+    if home_mod.has_exact_match(command, _CUR_SAT.get()):
+        log.info("exact home command bypassed classifier: %r", command)
+        parsed = intent_mod.validate({
+            "intent": "home_control",
+            "query": command,
+        })
+    elif clarify:
         parsed = await _parse_clarify_reply(clarify, command)
+    elif followup and (
+            rename := intent_mod.fast_parse_timer_rename(command)) is not None:
+        parsed = rename
+        log.info("deterministic timer_rename bypassed follow-up classifier: %r",
+                 command)
+    elif not followup and (fast := intent_mod.fast_parse(command)) is not None:
+        parsed = fast
+        log.info("deterministic %s bypassed classifier: %r",
+                 parsed["intent"], command)
     else:
-        parsed = await intent_mod.parse(command, context=context)
+        parsed = await intent_mod.parse(
+            command, context=context, sat=_CUR_SAT.get())
+    if parsed["intent"] == "weather" and not parsed.get("weather_location"):
+        named_weather = intent_mod.fast_parse_weather_location(command)
+        if named_weather is not None:
+            parsed = {
+                **parsed,
+                "weather_location": named_weather["weather_location"],
+                "weather_when": named_weather["weather_when"],
+            }
+            log.info("restored deterministic named weather slots: %r", command)
     intent = parsed["intent"]
     log.info("intent=%s followup=%s clarify=%s parsed=%s",
              intent, followup, bool(clarify), parsed)
@@ -572,7 +634,6 @@ async def handle_command(command: str, followup: bool = False,
                      add_intent, intent, command)
             parsed = {**parsed, "intent": add_intent, "missing_content": True}
             intent = add_intent
-
     if followup and intent == "none":
         # Background chatter / not addressed to us. Drop silently: no events, no
         # audio, no dashboard flash — a dropped follow-up must be invisible. The
@@ -634,6 +695,30 @@ async def handle_command(command: str, followup: bool = False,
         else:
             result["response"] = "I couldn't find that timer."
             result["ok"] = False
+
+    elif intent == "timer_rename":
+        if not parsed.get("new_label"):
+            if clarify:
+                result["response"] = "Okay, never mind."
+                result["ok"] = False
+            else:
+                question = fmt.ask_timer_name()
+                result["response"] = question
+                result["ok"] = False
+                result["awaiting_slot"] = True
+                session_set_clarify(command, question, kind="timer_rename",
+                                    label=parsed.get("label"))
+        else:
+            timer = await ENGINE.rename(
+                parsed.get("label"), parsed["new_label"], _CUR_SAT.get())
+            if timer:
+                result["timer"] = timer
+                result["response"] = fmt.confirm_rename(timer)
+                result["ok"] = True
+                await _timer_event("timer_updated", timer=timer)
+            else:
+                result["response"] = "I couldn't find that timer."
+                result["ok"] = False
 
     elif intent == "timer_cancel":
         # Snapshot ringing state BEFORE cancel mutates it: cancelling a
@@ -843,7 +928,9 @@ async def handle_command(command: str, followup: bool = False,
             result["ok"] = False
         else:
             try:
-                await music_mod.control(action, zones.music_target(_CUR_SAT.get()))
+                effective_volume = await music_mod.control(
+                    action, zones.music_target(_CUR_SAT.get()),
+                    parsed.get("music_volume"))
             except music_mod.MusicUnavailable:
                 result["response"] = "Sorry, I can't reach the music player."
                 result["ok"] = False
@@ -852,7 +939,10 @@ async def handle_command(command: str, followup: bool = False,
                 result["response"] = "Sorry, that didn't work."
                 result["ok"] = False
             else:
-                result["response"] = fmt.confirm_music_control(action)
+                result["response"] = fmt.confirm_music_control(
+                    action, effective_volume)
+                if effective_volume is not None:
+                    result["music_volume"] = effective_volume
                 result["ok"] = True
 
     elif intent == "music_query":
@@ -924,26 +1014,29 @@ async def handle_command(command: str, followup: bool = False,
             # store_as: a score is a real question with a real answer someone
             # may want back later, so it joins the browsable answers (weather
             # and places stay out — transient, and each has its own view).
-            ask_mod.remember(command, sports_result["response"], store_as="sports")
+            ask_mod.remember(command, sports_result["response"],
+                             sat=_CUR_SAT.get(), store_as="sports")
         else:
             # Unresolvable team/league or ESPN change -> slow-but-right path.
             await _turn_event("ask_thinking", query=command)
-            ask_result = await ask_mod.handle_ask(command)
+            ask_result = await ask_mod.handle_ask(command, _CUR_SAT.get())
             result["response"] = ask_result["response"]
             result["full"] = ask_result.get("full", "")
             result["ok"] = ask_result["ok"]
 
     elif intent == "weather":
-        weather_result = await weather_mod.handle(parsed)   # None -> fall back
+        weather_result = await weather_mod.handle(
+            parsed, command)   # None -> fall back
         if weather_result:
             result.update(weather_result)
             # Seed ask history so "what about the weekend?" routed to the smart
             # model knows what we just said (sports does the same).
-            ask_mod.remember(command, weather_result["response"])
+            ask_mod.remember(command, weather_result["response"],
+                             sat=_CUR_SAT.get())
         else:
             # HA down, or a day outside the 6-day met.no window.
             await _turn_event("ask_thinking", query=command)
-            ask_result = await ask_mod.handle_ask(command)
+            ask_result = await ask_mod.handle_ask(command, _CUR_SAT.get())
             result["response"] = ask_result["response"]
             result["full"] = ask_result.get("full", "")
             result["ok"] = ask_result["ok"]
@@ -958,10 +1051,11 @@ async def handle_command(command: str, followup: bool = False,
             result.update(places_result)
             await _turn_event("show_places", **places_result["places_view"])
             # Preserve the named place for a pronoun follow-up handled by ask.
-            ask_mod.remember(command, places_result["response"])
+            ask_mod.remember(command, places_result["response"],
+                             sat=_CUR_SAT.get())
         else:
             await _turn_event("ask_thinking", query=command)
-            ask_result = await ask_mod.handle_ask(command)
+            ask_result = await ask_mod.handle_ask(command, _CUR_SAT.get())
             result["response"] = ask_result["response"]
             result["full"] = ask_result.get("full", "")
             result["ok"] = ask_result["ok"]
@@ -969,7 +1063,7 @@ async def handle_command(command: str, followup: bool = False,
     elif intent == "ask":
         query = parsed.get("query") or command
         await _turn_event("ask_thinking", query=query)
-        ask_result = await ask_mod.handle_ask(query)
+        ask_result = await ask_mod.handle_ask(query, _CUR_SAT.get())
         result["response"] = ask_result["response"]
         result["full"] = ask_result.get("full", "")
         result["ok"] = ask_result["ok"]
@@ -977,7 +1071,7 @@ async def handle_command(command: str, followup: bool = False,
     elif intent == "show_answer":
         # Recall the last answer: the handler re-emits ask_thinking/ask_full to
         # rebuild the fullscreen answer; the spoken part is re-spoken here.
-        show_result = await ask_mod.handle_show_answer()
+        show_result = await ask_mod.handle_show_answer(_CUR_SAT.get())
         result["response"] = show_result["response"]
         result["ok"] = show_result["ok"]
 
@@ -1078,6 +1172,45 @@ def _wav_tail(wav: bytes, seconds: float) -> bytes | None:
         return None
 
 
+async def _decode_wake(wav: bytes) -> tuple[bool, str, str, float, str]:
+    """Run the normal full/tail stage-2 decode without turn side effects."""
+    transcript = await clients.transcribe(wav)
+    verified, command, score = verify.verify_and_extract(transcript)
+    decode = "full"
+    if not verified and config.VERIFY_TAIL_S > 0:
+        tail = _wav_tail(wav, config.VERIFY_TAIL_S)
+        if tail is not None:
+            tail_transcript = await clients.transcribe(tail)
+            t_verified, t_command, t_score = verify.verify_and_extract(tail_transcript)
+            log.info("verify tail transcript=%r verified=%s score=%s",
+                     tail_transcript, t_verified, t_score)
+            if t_verified:
+                verified, command, score = t_verified, t_command, t_score
+                transcript, decode = tail_transcript, "tail"
+    return verified, command, transcript, score, decode
+
+
+@app.post("/verify/probe")
+async def verify_wake_probe(request: Request, sat: str = "kitchen") -> dict:
+    """Silent stage-2 diagnostic: ASR only, with no claim/events/amp wake."""
+    decision = await policy_mod.evaluate(sat)
+    if not decision["allowed"]:
+        return {"verified": False, "silent": True, "policy": decision,
+                "probe": True}
+    wav = await request.body()
+    if not wav:
+        raise HTTPException(400, "empty audio body")
+    t0 = time.time()
+    verified, command, transcript, score, decode = await _decode_wake(wav)
+    log.info("verify probe sat=%s transcript=%r verified=%s score=%s decode=%s",
+             sat, transcript, verified, score, decode)
+    return {
+        "verified": verified, "score": score, "transcript": transcript,
+        "command": command, "decode": decode, "probe": True, "silent": True,
+        "latency_ms": round((time.time() - t0) * 1000),
+    }
+
+
 @app.post("/verify")
 async def verify_wake(request: Request, sat: str = "kitchen") -> dict:
     """Phase 1: stage-2 verification on the pre-roll (wake phrase audio only).
@@ -1090,6 +1223,10 @@ async def verify_wake(request: Request, sat: str = "kitchen") -> dict:
     spoken OVER another voice — Parakeet is single-speaker and latches onto the
     stream with more context, so the competing voice's lead-in must be cut, not
     out-fuzzed. Runs only on rejects; the passing path costs nothing extra."""
+    decision = await policy_mod.evaluate(sat)
+    if not decision["allowed"]:
+        log.info("verify sat=%s silent no-op policy=%s", sat, decision["reason"])
+        return {"verified": False, "silent": True, "policy": decision}
     wav = await request.body()
     if not wav:
         raise HTTPException(400, "empty audio body")
@@ -1104,19 +1241,7 @@ async def verify_wake(request: Request, sat: str = "kitchen") -> dict:
     # Fire-and-forget: this POST to the dashboard sat serially BEFORE the ASR
     # call, putting a cosmetic badge (with a 4s timeout tail) on the chime path.
     asyncio.create_task(_turn_event("verifying", sat=sat))
-    transcript = await clients.transcribe(wav)
-    verified, command, score = verify.verify_and_extract(transcript)
-    decode = "full"
-    if not verified and config.VERIFY_TAIL_S > 0:
-        tail = _wav_tail(wav, config.VERIFY_TAIL_S)
-        if tail is not None:
-            tail_transcript = await clients.transcribe(tail)
-            t_verified, t_command, t_score = verify.verify_and_extract(tail_transcript)
-            log.info("verify tail transcript=%r verified=%s score=%s",
-                     tail_transcript, t_verified, t_score)
-            if t_verified:
-                verified, command, score = t_verified, t_command, t_score
-                transcript, decode = tail_transcript, "tail"
+    verified, command, transcript, score, decode = await _decode_wake(wav)
     log.info("verify sat=%s transcript=%r verified=%s score=%s decode=%s",
              sat, transcript, verified, score, decode)
     if verified:
@@ -1153,6 +1278,11 @@ async def command_audio(request: Request, followup: bool = False,
     marks wake-turn audio with the 2.5s pre-roll prepended (the satellite's fix
     for run-together commands losing their first words in the stage-1 detect
     gap): strip everything through the wake phrase before acting."""
+    decision = await policy_mod.evaluate(sat)
+    if not decision["allowed"]:
+        log.info("command sat=%s silent no-op policy=%s", sat, decision["reason"])
+        return {"ok": False, "transcript": "", "response": "",
+                "intent": "none", "silent": True, "policy": decision}
     wav = await request.body()
     if not wav:
         raise HTTPException(400, "empty audio body")
@@ -1282,6 +1412,30 @@ async def partial(request: Request, seq: int = 0, sat: str | None = None) -> dic
 
 
 # -- music ducking (satellite) ----------------------------------------------
+@app.get("/satellite/policy")
+async def satellite_policy(sat: str = "kitchen") -> dict:
+    """Pre-feedback guard for remote bridges; the ASR routes enforce it too."""
+    return await policy_mod.evaluate(sat)
+
+
+@app.post("/music/button-stop")
+async def music_button_stop(sat: str = "kitchen") -> dict:
+    """Physical satellite button: idempotently stop this room's alarm/music."""
+    timer = ENGINE.dismiss_any_ringing(sat)
+    if timer:
+        await events.alarm_stop(sat)
+        await _timer_event("timer_dismissed", timer=timer)
+    target = zones.music_target(sat)
+    if not target["local"]:
+        return {"ok": True, "skipped": "no music in this room"}
+    try:
+        await music_mod.control("stop", target)
+    except Exception as exc:  # noqa: BLE001 — a stop while idle stays harmless
+        log.warning("button stop failed sat=%s: %s", sat, exc)
+        return {"ok": False, "error": type(exc).__name__}
+    return {"ok": True, "timer": timer}
+
+
 @app.post("/music/duck")
 async def music_duck(sat: str | None = None) -> dict:
     """Satellite fires this on a stage-1 wake trigger / alarm start so speech

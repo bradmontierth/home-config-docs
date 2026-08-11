@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from unittest.mock import AsyncMock, patch
 
-from . import config, home_control
+from . import app, config, home_control
 
 
 def _handle(query: str, sat: str | None = None):
@@ -138,6 +138,36 @@ class HomeControlMatchTest(unittest.TestCase):
                 self.assertEqual(self._pressed(),
                                  "button.voice_master_lights_hold")
 
+    def test_simon_room_commands_are_local_and_unambiguous(self):
+        cases = {
+            "open the blind": "button.voice_simon_blind_open",
+            "close the blinds": "button.voice_simon_blind_close",
+            "turn on the lights": "button.voice_simon_lights_on",
+            "lights off": "button.voice_simon_lights_off",
+        }
+        for phrase, entity in cases.items():
+            with self.subTest(phrase=phrase):
+                self.press.reset_mock()
+                result = _handle(phrase, "simon")
+                self.assertIsNotNone(result)
+                self.assertEqual(self._pressed(), entity)
+
+        self.press.reset_mock()
+        self.assertIsNone(_handle("give me a fun color", "kitchen"))
+        self.press.assert_not_awaited()
+
+    def test_exact_simon_alias_can_rescue_an_intent_model_miss(self):
+        self.assertTrue(home_control.has_exact_match("set a font color", "simon"))
+        self.assertFalse(home_control.has_exact_match("set a font color", "kitchen"))
+        self.assertFalse(home_control.has_exact_match("tell me about color", "simon"))
+
+    def test_fun_color_presses_the_room_local_button(self):
+        self.press.reset_mock()
+        result = _handle("set a fun color", "simon")
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["response"], "Picking a cool effect.")
+        self.assertEqual(self._pressed(), "button.voice_simon_fun_color")
+
     def test_naming_a_room_overrides_the_room_you_are_standing_in(self):
         self.press.reset_mock()
         _handle("close the bathroom blind", "kitchen")
@@ -145,6 +175,34 @@ class HomeControlMatchTest(unittest.TestCase):
         self.press.reset_mock()
         _handle("close the kitchen blinds", "master")
         self.assertEqual(self._pressed(), "button.voice_blinds_all_close")
+
+
+class HomeControlFastPathTest(unittest.TestCase):
+    def _assert_fast_path(self, phrase: str):
+        press = AsyncMock()
+        parse = AsyncMock()
+        token = app._CUR_SAT.set("simon")
+        self.addCleanup(app._CUR_SAT.reset, token)
+        with (
+            patch.object(app.intent_mod, "parse", new=parse),
+            patch.object(app.home_mod, "_press", new=press),
+            patch.object(app, "_speak_reply", new=AsyncMock()),
+            patch.object(app.broadcast_mod, "send", new=AsyncMock()),
+            patch.object(app.events, "emit", new=AsyncMock()),
+        ):
+            result = asyncio.run(app.handle_command(phrase))
+
+        parse.assert_not_awaited()
+        self.assertEqual(result["intent"], "home_control")
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["response"], "Picking a cool effect.")
+        press.assert_awaited_once_with("button.voice_simon_fun_color")
+
+    def test_font_homophone_bypasses_classifier(self):
+        self._assert_fast_path("set a font color")
+
+    def test_cool_color_bypasses_classifier(self):
+        self._assert_fast_path("give me a cool color")
 
 
 class HomeCommandsEditTest(unittest.TestCase):

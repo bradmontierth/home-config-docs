@@ -21,7 +21,7 @@ from zoneinfo import ZoneInfo
 import httpx
 
 from . import answers as answers_mod
-from . import clients, config, events, openrouter
+from . import clients, config, events, openrouter, zones
 
 log = logging.getLogger("orchestrator.ask")
 
@@ -77,27 +77,46 @@ async def _play_filler() -> None:
         log.info("satellite filler dispatch failed: %s", exc)
 
 
-# --- conversation history so follow-up asks have context -------------------
-_history: list[dict] = []  # {"q": str, "a": str, "t": monotonic}
+def _should_play_legacy_filler(sat: str | None) -> bool:
+    """The legacy filler speaker is kitchen-only.
 
-# Last answer, kept for recall ("show that answer again") after the popup
-# auto-hides — an answered ask costs real money and must be recoverable.
-_last_answer: dict | None = None  # {"q", "spoken", "full", "t": monotonic}
+    Room-routed satellites deliver their eventual response through Voice
+    Broadcast, but this filler still uses the old kitchen `/speak` endpoint.
+    Suppress it for every routed satellite so an ask cannot leak across rooms.
+    """
+    return zones.route_for(sat) is None
 
 
-def _set_last(query: str, spoken: str, full: str) -> dict:
-    global _last_answer
-    _last_answer = {
+# --- per-satellite conversation history ------------------------------------
+# Follow-up context and answer recall belong to the room that heard the
+# answer. A process-global list let a Simon question replay kitchen/master Q+A
+# to the model and made "repeat that" recall another room's answer.
+_histories: dict[str, list[dict]] = {}
+_last_answers: dict[str, dict] = {}
+
+
+def _sat_key(sat: str | None) -> str:
+    return sat or config.DEFAULT_SAT
+
+
+def _history_for(sat: str | None) -> list[dict]:
+    return _histories.setdefault(_sat_key(sat), [])
+
+
+def _set_last(query: str, spoken: str, full: str,
+              sat: str | None = None) -> dict:
+    last = {
         "q": query, "spoken": spoken, "full": full, "t": time.monotonic(),
     }
-    return _last_answer
+    _last_answers[_sat_key(sat)] = last
+    return last
 
 
-async def handle_show_answer() -> dict:
+async def handle_show_answer(sat: str | None = None) -> dict:
     """Recall the most recent answer: re-emit the ask_thinking/ask_full pair so
     the dashboard rebuilds the fullscreen answer, and return the spoken part
     for re-speaking. Returns {"response", "ok"} like the other handlers."""
-    last = _last_answer
+    last = _last_answers.get(_sat_key(sat))
     if not last or time.monotonic() - last["t"] > config.ASK_RECALL_TTL_S:
         return {
             "response": "I don't have a recent answer to bring back.",
@@ -109,16 +128,18 @@ async def handle_show_answer() -> dict:
     return {"response": _strip_links(last["spoken"]), "ok": True}
 
 
-def _remember(query: str, answer: str) -> dict:
+def _remember(query: str, answer: str, sat: str | None = None) -> dict:
     """Record a Q+A pair NOW (a follow-up can arrive while the full answer is
     still streaming) and return the entry so the streamer can extend it."""
     entry = {"q": query, "a": answer.strip(), "t": time.monotonic()}
-    _history.append(entry)
-    del _history[:-config.ASK_HISTORY_TURNS]
+    history = _history_for(sat)
+    history.append(entry)
+    del history[:-config.ASK_HISTORY_TURNS]
     return entry
 
 
-def remember(query: str, answer: str, *, store_as: str | None = None) -> None:
+def remember(query: str, answer: str, *, sat: str | None = None,
+             store_as: str | None = None) -> None:
     """Public hook: other intents (sports, weather, places) record their Q+A
     here so pronoun follow-ups that route to ask ("who do they play next?")
     have context. Also makes the answer recallable via "show that answer
@@ -127,28 +148,31 @@ def remember(query: str, answer: str, *, store_as: str | None = None) -> None:
     `store_as` additionally files it in the durable answers table. Off by
     default: weather and places answers are transient and would bury the paid
     ask turns the browser exists to surface."""
-    _remember(query, answer)
-    _set_last(query, answer, answer)
+    _remember(query, answer, sat)
+    _set_last(query, answer, answer, sat)
     if store_as:
         answers_mod.record(query, answer, answer, source=store_as)
 
 
-def _history_messages() -> list[dict]:
+def _history_messages(sat: str | None = None) -> list[dict]:
     """Recent Q+A pairs as chat messages, oldest first. Stale pairs age out so
     a fresh question hours later isn't polluted by old context."""
     cutoff = time.monotonic() - config.ASK_HISTORY_TTL_S
     out: list[dict] = []
-    for h in _history:
+    for h in _history_for(sat):
         if h["t"] >= cutoff and h["a"]:
             out.append({"role": "user", "content": h["q"]})
             out.append({"role": "assistant", "content": h["a"]})
     return out
 
-def _system() -> str:
+def _system(sat: str | None = None) -> str:
     now = datetime.now(ZoneInfo(config.ASK_TIMEZONE))
+    room = zones.spoken_for(sat)
     return (
-        "You are the knowledge engine for a household kitchen voice assistant. "
+        "You are the knowledge engine for a household voice assistant. "
         "The user asked a spoken question. Answer it directly and factually.\n\n"
+        f"The request originated in {room}. This is routing context only; do "
+        "not assume facts about that room or import context from any other room.\n\n"
         f"Right now it is {now:%A, %B %d, %Y, %I:%M %p} in the user's home "
         "timezone. Resolve every relative time word in the question — 'today', "
         "'yesterday', 'last night', 'this morning' — against THIS local "
@@ -249,7 +273,7 @@ async def _stream_full(query: str, entry: dict, last: dict, initial: str, agen,
     await events.emit("ask_full", query=query, text=_strip_links(acc), done=True)
 
 
-async def handle_ask(query: str) -> dict:
+async def handle_ask(query: str, sat: str | None = None) -> dict:
     """Stream the answer up to the sentinel and return the short spoken part.
     Spawns a background task to finish streaming the full part to the dashboard.
 
@@ -259,13 +283,15 @@ async def handle_ask(query: str) -> dict:
     if not query:
         return {"response": "I didn't catch the question.", "full": "", "ok": False}
 
-    # Speak the filler in parallel — the satellite is blocked on our HTTP
-    # response, so the "let me look that up" must be pushed, not returned.
-    asyncio.create_task(_play_filler())
+    # The legacy filler endpoint is the kitchen satellite. Never use it for a
+    # zone-routed room: that would make a Simon question speak in the kitchen
+    # before its actual answer correctly arrives in Simon's room.
+    if _should_play_legacy_filler(sat):
+        asyncio.create_task(_play_filler())
 
     messages = [
-        {"role": "system", "content": _system()},
-        *_history_messages(),
+        {"role": "system", "content": _system(sat)},
+        *_history_messages(sat),
         {"role": "user", "content": query},
     ]
     stats: dict = {}
@@ -301,8 +327,8 @@ async def handle_ask(query: str) -> dict:
         # push the full text to the dashboard now (nothing left to stream).
         full = _strip_links(acc)
         spoken = _spoken_fallback(full)
-        _remember(query, full)
-        _set_last(query, spoken, full)
+        _remember(query, full, sat)
+        _set_last(query, spoken, full, sat)
         answers_mod.record(query, spoken, full, stats=stats)
         await events.emit("ask_full", query=query, text=full, done=True)
         return {"response": spoken, "full": full, "ok": bool(full)}
@@ -311,8 +337,8 @@ async def handle_ask(query: str) -> dict:
         # Finish the full part in the background so the spoken reply returns
         # now; remember the spoken part immediately so an instant follow-up
         # ("but who's playing in it?") already has context.
-        entry = _remember(query, spoken)
-        last = _set_last(query, spoken, remainder)
+        entry = _remember(query, spoken, sat)
+        last = _set_last(query, spoken, remainder, sat)
         # Filed with what we have NOW: if the background stream dies, the
         # kitchen still keeps the answer it already paid for and heard.
         row_id = answers_mod.record(query, spoken, _strip_links(remainder))
@@ -320,8 +346,8 @@ async def handle_ask(query: str) -> dict:
             _stream_full(query, entry, last, remainder, agen, row_id, stats)
         )
     else:
-        _remember(query, f"{spoken}\n{remainder}".strip())
-        _set_last(query, spoken, remainder)
+        _remember(query, f"{spoken}\n{remainder}".strip(), sat)
+        _set_last(query, spoken, remainder, sat)
         answers_mod.record(query, spoken, _strip_links(remainder), stats=stats)
         await events.emit("ask_full", query=query, text=_strip_links(remainder), done=True)
 

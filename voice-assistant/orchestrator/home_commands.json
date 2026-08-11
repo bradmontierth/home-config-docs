@@ -96,5 +96,35 @@
     "entity": "button.voice_master_lights_hold",
     "confirm": "Okay, holding the lights on for thirty minutes.",
     "sats": ["master"]
+  },
+  "simon_blind_close": {
+    "aliases": ["close the blind", "close the blinds", "close the shade", "shut the blind"],
+    "entity": "button.voice_simon_blind_close",
+    "confirm": "Closing the blind.",
+    "sats": ["simon"]
+  },
+  "simon_blind_open": {
+    "aliases": ["open the blind", "open the blinds", "open the shade"],
+    "entity": "button.voice_simon_blind_open",
+    "confirm": "Opening the blind.",
+    "sats": ["simon"]
+  },
+  "simon_lights_on": {
+    "aliases": ["turn on the lights", "lights on", "turn the lights on", "turn on my lights"],
+    "entity": "button.voice_simon_lights_on",
+    "confirm": "Turning on the lights.",
+    "sats": ["simon"]
+  },
+  "simon_lights_off": {
+    "aliases": ["turn off the lights", "lights off", "turn the lights off", "turn off my lights"],
+    "entity": "button.voice_simon_lights_off",
+    "confirm": "Turning off the lights.",
+    "sats": ["simon"]
+  },
+  "simon_fun_color": {
+    "aliases": ["give me a fun color", "set a fun color", "set a font color", "pick a fun color", "fun color", "make it a fun color", "give me a cool color", "surprise me with a color"],
+    "entity": "button.voice_simon_fun_color",
+    "confirm": "Picking a cool effect.",
+    "sats": ["simon"]
   }
 }

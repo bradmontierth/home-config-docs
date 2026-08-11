@@ -754,10 +754,54 @@ async def _notify_jukebox_takeover() -> None:
         log.warning("jukebox external-play notify failed: %s", exc)
 
 
+async def _notify_jukebox_volume_hold(level: int) -> None:
+    """Make an explicit kitchen volume survive later NFC play/resume scans.
+
+    Best-effort like the queue-takeover notification: failure must not undo a
+    volume command that already reached Music Assistant.
+    """
+    if not config.JUKEBOX_VOLUME_HOLD_URL:
+        return
+    try:
+        async with aiohttp.ClientSession() as session:
+            response = await session.post(
+                config.JUKEBOX_VOLUME_HOLD_URL,
+                json={"volume": level, "apply": False},
+                timeout=aiohttp.ClientTimeout(total=4))
+            response.raise_for_status()
+    except Exception as exc:  # noqa: BLE001
+        log.warning("jukebox volume-hold notify failed: %s", exc)
+
+
+async def _clear_jukebox_volume_hold() -> int | None:
+    """Clear party/session mode and return the jukebox's normal baseline.
+
+    ``apply=false`` matters during a voice turn: the music is ducked, so the
+    jukebox must not write the loud baseline live. The caller updates the
+    duck restore target instead and unduck applies it after the reply.
+    """
+    if not config.JUKEBOX_VOLUME_HOLD_URL:
+        return None
+    try:
+        async with aiohttp.ClientSession() as session:
+            response = await session.post(
+                config.JUKEBOX_VOLUME_HOLD_URL.rstrip("/") + "/clear",
+                params={"apply": "false"},
+                timeout=aiohttp.ClientTimeout(total=4))
+            response.raise_for_status()
+            data = await response.json()
+            level = data.get("volume")
+            return int(level) if level is not None else None
+    except Exception as exc:  # noqa: BLE001
+        log.warning("jukebox volume-hold clear failed: %s", exc)
+        return None
+
+
 # --------------------------------------------------------------------------
 # transport + now playing
 # --------------------------------------------------------------------------
-async def control(action: str, target: dict | None = None) -> None:
+async def control(action: str, target: dict | None = None,
+                  volume: int | None = None) -> int | None:
     client = _ma()
     t = _target(target)
     qid = t["queue"]
@@ -780,21 +824,47 @@ async def control(action: str, target: dict | None = None) -> None:
         await client.player_queues.queue_command_next(qid)
     elif action == "previous":
         await client.player_queues.queue_command_previous(qid)
-    elif action in ("volume_up", "volume_down"):
-        step = 10 if action == "volume_up" else -10
+    elif action in ("volume_up", "volume_down", "volume_set", "volume_normal"):
+        if action == "volume_normal":
+            if qid == config.MA_QUEUE_ID:
+                requested = await _clear_jukebox_volume_hold()
+            else:
+                requested = t.get("volume")
+            if requested is None:
+                raise MusicUnavailable("normal music volume is unavailable")
+            step = None
+        elif action == "volume_set":
+            if volume is None:
+                raise ValueError("volume_set requires a volume")
+            requested = volume
+            step = None
+        else:
+            requested = None
+            step = 10 if action == "volume_up" else -10
+        ceiling = t.get("max_volume") or 100
+        effective: int
+        write_live = True
         async with _duck_lock:
             state = _duck.get(qid)
             if state and state["count"] and state["restore"] is not None:
                 # Music is ducked for this very turn — changing the live volume
                 # would be wiped by the unduck. Adjust the restore target instead.
-                ceiling = t.get("max_volume") or 100
-                state["restore"] = max(0, min(ceiling, state["restore"] + step))
-                return
-        cur = await _volume_of(t)
-        ceiling = t.get("max_volume") or 100
-        await _set_volume(t, min(ceiling, (cur or 0) + step))
+                base = state["restore"] if requested is None else requested
+                effective = max(0, min(ceiling, base + (step or 0)))
+                state["restore"] = effective
+                write_live = False
+        if write_live:
+            if requested is None:
+                cur = await _volume_of(t)
+                requested = (cur or 0) + (step or 0)
+            effective = max(0, min(ceiling, requested))
+            await _set_volume(t, effective)
+        if qid == config.MA_QUEUE_ID and action != "volume_normal":
+            await _notify_jukebox_volume_hold(effective)
+        return effective
     else:
         raise ValueError(f"unknown music action {action!r}")
+    return None
 
 
 def now_playing(target: dict | None = None) -> dict | None:
