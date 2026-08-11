@@ -1,10 +1,10 @@
 # Voice Ops Dashboard Plan
 
-**Status:** **Phases 1 (telemetry spine) and 2 (backfill) COMPLETE and
-verified 2026-08-11.** Orchestrator rebuilt, all three Pi satellites and the
-Simon Voice PE bridge updated, `turns` table live and filling, and 6,446
-historical turns imported — the table holds 2026-07-19 → today. Live-voice
-test PASSED end to end (§12). Phase 3 (the dashboard app) not started.
+**Status:** **ALL THREE PHASES SHIPPED 2026-08-11.** Telemetry spine live,
+6,446 historical turns imported, and the dashboard is up at
+**http://192.168.10.217:8787** (repo `/home/pi/voice-ops`, pushed to
+`bradmontierth/voice-ops`, tile on the homelab homepage). Live-voice test
+passed end to end (§12). Build record for phase 3 in §15.
 
 **Where:** three places, deliberately.
 
@@ -583,3 +583,78 @@ Still genuinely open: its ReSpeaker is a different channel from the kitchen's,
 so **speaker-ID centroids contain no family-room clips**. That was blocked on
 the rebuild; it is now just an unstarted enrollment task
 (`speaker-id-plan.md`).
+
+---
+
+## 15. Phase 3 build record — the dashboard (2026-08-11)
+
+**Shipped.** New repo `/home/pi/voice-ops` (private, pushed to
+`github-illuminate:bradmontierth/voice-ops`), own compose project, port 8787,
+container `voice-ops`, tile added to `/home/pi/homepage/config/services.yaml`.
+48 tests, none of which need a database or a satellite.
+
+| Module | Job |
+| --- | --- |
+| `store.py` | read-only SQL + percentiles |
+| `fleet.py` | `/health` polling, shape normalization, anomaly rules |
+| `charts.py` | server-rendered inline SVG |
+| `theme.py` | the validated palette, light + dark |
+| `render.py` | pure data → HTML |
+| `main.py` | FastAPI routes |
+
+Panels, in page order: filters (window + room) → **Needs attention** →
+**Fleet** → KPI row → wake→chime daily median → wake funnel by room →
+stage-1 triggers per day → intents → turns by voice → per-stage latency by
+intent → turn browser with an expandable drawer per turn.
+
+### Decisions worth keeping
+
+- **Stage-2 pass rate is never shown as one house-wide number.** The KPI shows
+  the *range* across rooms ("0.0–28.8%, across 4 rooms — never one number").
+  With a 32x spread the blend is meaningless, and putting it on a dashboard
+  invites someone to target it.
+- **No chart library, no CDN.** Charts are inline SVG generated server-side, so
+  the page works on a LAN with no internet. A dashboard that fails to render
+  because a CDN is unreachable is worse than a table.
+- **Colour is assigned per room, not per rank**, so filtering a room out never
+  repaints the survivors. Every chart carries direct labels *and* a table view
+  — required relief, because two of the light-mode categorical hues sit under
+  3:1 contrast on the surface.
+- **The funnel normalizes each room against its own stage-1 total.** Volumes
+  differ by more than 40x; one shared scale renders the quiet rooms as a single
+  pixel. Absolute counts are printed beside every bar so the normalization
+  cannot mislead.
+- **`/health` polling is cached (10s) and short-timeout (4s).** The satellites
+  are single-threaded audio loops; a monitoring page that stalls a mic to draw
+  a green dot has made things worse than no monitoring.
+- **Anomalies are deliberately few.** A sidebar that cries wolf gets ignored,
+  and nothing pages anyone, so every entry has to be worth walking into a room
+  for: unreachable, wrong mode / unarmed, p90 over budget, and no confirmed
+  wake in 7 days.
+
+### Three bugs the visual pass caught
+
+Rendering and *looking* at the page found what the tests did not:
+
+1. **The funnel was arithmetically impossible** — the kitchen read
+   "192 verified → 208 acted". `acted` counted follow-up and text turns, which
+   never had a stage 1, so the third stage was not a subset of the second.
+   Fixed with a wake-scoped `wake_acted`; the table under the bars had the same
+   bug and disagreed with them on screen.
+2. **Direct labels collided.** Every room chimes in ~230ms, so the end-of-line
+   labels landed on top of each other — worse than no label at all. Now nudged
+   apart with leader lines back to their points.
+3. **The funnel's "acted" segment was filled with the text token**, which is
+   ink used as a data colour: passable in light mode, bright white and totally
+   dominant in dark. Recast as one hue in two shades.
+
+All three now have regression tests.
+
+### Pending
+
+- Brad's eyes-on pass.
+- The page follows the OS light/dark setting; there is no in-page toggle. The
+  `[data-theme]` block exists (per the palette contract) but nothing sets it
+  yet.
+- Speaker attribution is thin on the charts: only live rows carry a speaker,
+  because backfilled turns predate speaker ID.
