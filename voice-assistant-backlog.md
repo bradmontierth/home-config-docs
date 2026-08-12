@@ -1683,3 +1683,143 @@ truncated, and let the full title live on the screen), and **choose candidates
 by gap, not by count** (up to 3 within ~10 points of the best, so a second real
 option never gets a manufactured third companion). Must work voice-only —
 not every satellite has a screen.
+
+## Kid cameras on the kitchen display ("show me Simon") — BUILT 2026-08-12 (not yet deployed)
+
+Ask: say "show me Simon" / "show me Claire" in the kitchen and get that child's
+camera fullscreen on the touchscreen with its audio on the big speakers.
+
+**Nothing downstream needed building.** The display Pi has run a VLC helper
+since the 2026-07-04 go2rtc cutover (`/home/pi/dashboard_webapp/display_helper`,
+`http://192.168.10.92:8778`), and it already owns the whole job:
+
+    POST /open/{simon|claire|doorbell}   fullscreen VLC on rtsp://192.168.10.197:8554/{stream}_kitchen_display
+    POST /audio/play/{stream}            camera audio -> media_player.squeezeplay_e4_5f_01_67_1e_56
+    POST /close                          stops the audio, then kills VLC
+    GET  /status                         {"running": bool, "stream": str|null}
+
+The dashboard's touch buttons and Node-RED's doorbell pop already drive it. All
+that was missing was a voice caller, so the build is orchestrator-only and a
+spoken "show me Claire" lands in exactly the same state as a finger on the
+dashboard button — including the on-screen Back button closing it.
+
+**This is the first time the orchestrator talks to display-pi directly.** Every
+other view is a dashboard card pushed over `/api/assistant/event` and fanned out
+to the kiosk on `/api/live`. A camera can't ride that: it is a fullscreen VLC
+window sitting *over* the kiosk, not a card inside it. Hence a dedicated
+`CAMERA_HELPER_URL` rather than an event type.
+
+Built:
+
+* `orchestrator/camera.py` — alias table, `/open` + `/audio/play` + `/close`,
+  and the two handlers.
+* `intent.py` — `show_camera` / `close_camera` intents, a `camera_target` slot
+  normalised through `camera.resolve`, prompt descriptions, and a deterministic
+  fast path.
+* `app.py` — dispatch branches behind the display-room gate, the state-gated
+  "go back" bypass, and follow-up turn summaries.
+* `test_camera.py` — 15 tests / 43 subtests. Full suite 381 passed.
+
+### Three decisions worth keeping
+
+**Deterministic, not classified.** "show me Simon" sits directly beside
+`place_search`, whose own prompt examples include "show me Home Depot". The only
+thing separating them is knowing who lives here. A regex in `fast_parse` keeps
+the kid cameras off that coin flip and off an LLM round trip. The classifier
+description still exists as the fallback for phrasings the regex misses.
+
+The regex is a latency shortcut, not the feature: delete it and everything still
+works, just with an LLM round trip per turn. Both intents are first-class, and
+the classifier path is not optional — `fast_parse` is gated on `not followup`
+(app.py), so **every follow-up turn goes to the classifier** regardless.
+
+**The place_search collision was real, and it bit — check for it if you touch
+this prompt.** Adding the `show_camera` description regressed exactly two
+phrases, both the retail chain *Claire's*: "how far is Claire's"
+place_search → unclear, and "is Claire's open" business_hours → ask. Generic
+place queries were untouched (30/30 held), so this was specifically the
+name collision: the model saw a child's name and stopped treating it as a
+business. Both kids' names are real chains — Simon Property Group runs the
+malls, Claire's is the accessory store.
+
+Fixed by ruling it out explicitly in the show_camera description: a question
+about DISTANCE, HOURS, or LOCATION is never show_camera even when the name
+matches a child. Re-A/B'd after: 9/9 place and hours phrases identical
+before-and-after, 6/6 camera phrases still show_camera.
+
+Method worth reusing: reconstruct the pre-change `_SYSTEM` in memory (strip the
+new bullets, the new schema line, and the new names from the INTENTS list) and
+run both prompts against the live classifier in one process. A prompt edit for
+intent N is a silent regression risk for intents 1..N-1, and the diff is the
+only thing that shows it — the new intent's own tests all passed throughout.
+
+Both halves tested. Regex: 29 phrasings in `test_camera.py`. Classifier (real
+qwen3-next on the GX10, 2026-08-12): 11/11, covering four phrasings the regex
+deliberately misses — "put Claire up on the screen for a second", "let's have a
+look at Simon", "can I see how Claire is doing", "throw Simon on the display" —
+and the neighbours it must not steal: "show me Home Depot" → place_search,
+"tell Simon dinner is ready" → broadcast, "turn on the lights in Claire's room"
+→ home_control, "show me that answer again" → show_answer, "where is Simon right
+now" → ask. "Take the camera off the screen" and "I'm done looking at the
+camera" both → close_camera.
+
+**"the baby" resolves to nobody.** It is ambiguous in this house in a way that
+looks deliberate until you check: Simon's camera is the one named `BabyCAMR`
+upstream, while Claire is the one with the nap-monitor pipeline. That word
+points at both children, so only real first names resolve. `clare` maps to
+Claire because the ASR returns it often enough to matter — a missed phrase is
+cheaper than the wrong kid on screen.
+
+**Audio starts 2.5s late, on purpose** (`CAMERA_AUDIO_DELAY_S`). The spoken
+confirmation and the camera audio come out of the same big speakers, so the
+reply gets them first. It is a cancellable scheduled task, not an await: closing
+or switching cameras inside the window cancels it, otherwise audio arrives for a
+camera that is no longer on screen. `/open` starts video only — the touch flow
+leaves audio to a second tap on the overlay and the helper kept that split, so
+the voice path makes the second call itself.
+
+### Scope
+
+Per Brad, 2026-08-12: **voice close only, no auto-close timeout** (a nap feed
+may be left up indefinitely); **kitchen only** (other rooms are told so rather
+than silently lighting up a screen nobody is standing at — gated on
+`events.on_dashboard`, so the family-room relay counts as kitchen); **speak,
+then audio**.
+
+"go back" / "close it" / "back" are deliberately NOT in the fast parser: they
+mean *close the camera* only while one is up and mean something else the rest of
+the time. `handle_command` checks `GET /status` before honouring them, gated
+behind the phrase match so a normal turn never pays for the round trip. The
+display is the authority because the on-screen Back button closes a view
+without telling the orchestrator — a local flag would go stale.
+
+Doorbell is intentionally not voice-reachable. The helper serves it and Node-RED
+already pops it on a detection; "show me the doorbell" wants the event, not a
+live view, which is a different feature.
+
+### Pending
+
+* Deploy (`cd /home/pi/voice-pipeline && docker compose up -d --build
+  voice-orchestrator`) — restarts the live assistant.
+* Live voice test in the kitchen, both kids, plus close-by-voice and the
+  on-screen Back button.
+* Check whether the satellite's wake/duck logic behaves with camera audio on
+  the squeezelite player (it should — same player the touch flow uses).
+
+### Two unrelated things found while mapping this
+
+* **HA's Frigate integration points at a dead host.** Config entry
+  `01KCQSN2CKG7ZY4BQ6X5DTTRNC` has `url: http://192.168.10.250:5000` — the mini
+  PC decommissioned 2026-07-19. `.250` does not answer; the Jetson at `.197`
+  does, with matching camera names. So `camera.simon_cam` /
+  `camera.claire_cam_master` and the Lovelace cards built on them are backed by
+  nothing. Repointing the entry to `http://192.168.10.197:5000` should restore
+  them. The voice path is unaffected — it goes to go2rtc directly.
+* **go2rtc leaks the camera password.**
+  `http://192.168.10.197:5000/api/go2rtc/api/streams` returns producer URLs with
+  the plaintext RTSP password, unauthenticated, to anything on the LAN — even
+  though the config file itself uses `{FRIGATE_CAMERA_PASSWORD}` from
+  `/home/pi/frigate/.env`. Worth restricting port 5000.
+* `home_config/camera-audio-cards.yaml` is stale: it still targets
+  `media_player.gmediarender_on_kitchen_big_speakers`, a DLNA path the kitchen
+  guide says was deprecated in favour of the squeezelite player.

@@ -59,6 +59,29 @@ dashboard /api/vlc/open/{simon|claire|doorbell}
   -> Python Tk overlay over VLC
 ```
 
+Voice reaches the same helper as of 2026-08-12. "Show me Simon" / "show me
+Claire" in the kitchen is the `show_camera` intent; "close the camera" (or a
+bare "go back" while one is up) is `close_camera`:
+
+```text
+orchestrator camera.py
+  -> display-pi helper /open/{simon|claire}
+  -> then /audio/play/{stream} 2.5s later (CAMERA_AUDIO_DELAY_S)
+  -> /close on dismissal
+```
+
+Three things to know before touching either side. The orchestrator talks to
+display-pi **directly** here and nowhere else — every other view is a dashboard
+card pushed over `/api/assistant/event`, but a camera is a fullscreen VLC window
+*over* the kiosk, not a card inside it. The audio call is separate and delayed
+because the spoken confirmation and the camera audio share the big speakers; it
+is a cancellable task, so closing inside the window kills it. And the voice path
+deliberately reads `GET /status` rather than remembering what it opened, because
+the on-screen Back button closes a view without telling the orchestrator.
+
+Build record: `home_config/voice-assistant-backlog.md`, "Kid cameras on the
+kitchen display".
+
 Doorbell object detections also use this helper. The active Docker Node-RED
 `Doorbell` tab consumes confirmed Jetson Frigate doorbell person events from
 `frigate_jetson/events/#`, posts to:

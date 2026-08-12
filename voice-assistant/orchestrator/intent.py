@@ -10,7 +10,7 @@ from __future__ import annotations
 import logging
 import re
 
-from . import clients, config, zones
+from . import camera, clients, config, zones
 
 log = logging.getLogger("orchestrator.intent")
 
@@ -20,8 +20,11 @@ INTENTS = (
     "complete_item",
     "remove_items", "clear_list", "play_music", "music_control", "music_query",
     "sports", "weather", "business_hours", "place_search", "home_control",
-    "broadcast", "find_phone", "ask", "show_answer", "unclear", "none",
+    "broadcast", "find_phone", "show_camera", "close_camera",
+    "ask", "show_answer", "unclear", "none",
 )
+
+CAMERA_TARGETS = ("simon", "claire")
 
 WEATHER_WHEN = ("now", "today", "tonight", "tomorrow", "monday", "tuesday",
                 "wednesday", "thursday", "friday", "saturday", "sunday")
@@ -58,7 +61,8 @@ Schema:
   "sports_date": for sports, "today" or "yesterday" only when the user SAYS a day like that ("last night" = "yesterday"); else null,
   "weather_when": for weather, one of {list(WEATHER_WHEN)}; else null,
   "weather_location": for weather at a NAMED place away from home, the city/place as spoken (include state/country when given); null for local home weather,
-  "hours_when": for business_hours, one of {list(HOURS_WHEN)}; else null
+  "hours_when": for business_hours, one of {list(HOURS_WHEN)}; else null,
+  "camera_target": for "show_camera", which child's camera — one of {list(CAMERA_TARGETS)}; else null
 }}
 
 Rules:
@@ -190,6 +194,20 @@ Rules:
   "normal volume" / "back to normal volume" -> volume_normal.
   A bare "pause" or "stop" with no object is music_control too (timers get cancelled, not stopped).
 - music_query = asking about the current song: "what's playing", "what song is this", "who sings this".
+- show_camera = put a CHILD's camera on the kitchen display: "show me Simon", "show me Claire",
+  "pull up Simon's camera", "let me see Claire", "put Simon's room on the screen", "check on
+  Claire", "I want to see Simon". Set camera_target to "simon" or "claire". Only these two
+  people have cameras. Note "show me <person>" is show_camera, while "show me <business>"
+  ("show me Home Depot") stays place_search — a person is not a place. Sending a child a
+  spoken message is still broadcast ("tell Simon to come eat"), and changing something in
+  their room is still home_control ("turn on Simon's lights").
+  show_camera means ONLY "put a live camera on the screen". A question about DISTANCE,
+  HOURS, or LOCATION is never show_camera even when the name matches a child — some real
+  store names collide with them: "how far is Claire's" -> place_search, "is Claire's open"
+  -> business_hours, "show me Simon Mall" -> place_search.
+- close_camera = dismiss that camera view and give the display back: "close the camera",
+  "stop the camera", "turn off the camera", "close the video", "hide the camera",
+  "I'm done with the camera", "close Simon", "go back". No other fields.
 - show_answer = re-show or repeat the assistant's PREVIOUS answer, adding nothing new: "show that
   answer again", "bring that answer back", "put that back up", "show me that again", "what did you
   just say", "repeat that", "say that again". No other fields. A NEW question about the same topic
@@ -471,6 +489,37 @@ _FAST_LEAD = re.compile(
 _FAST_TAIL = re.compile(r"(?:\s+(?:please|for me|thanks|thank you))+$")
 _FAST_TIMER = re.compile(r"^(?:set|start)\s+(?:(?:a|the)\s+)?timer\s+for\s+(.+)$")
 
+# "show me Simon" is said the same way every time, and it sits directly beside
+# place_search ("show me Home Depot") in the classifier's view — one is a
+# person, the other a business, and the only thing separating them is knowing
+# who lives here. Matching the kid cameras deterministically keeps them off
+# that coin flip, and off an LLM round trip.
+_FAST_CAMERA = re.compile(
+    r"^(?:show|pull up|bring up|put up|put|let me see|i want to see|i wanna see|"
+    r"check on|look in on|look at)\s+"
+    r"(?:me\s+)?(?:on\s+)?(?:the\s+)?(?:camera\s+(?:for|in|on)\s+)?(?:the\s+)?"
+    r"(?P<who>simon'?s?|claire'?s?|clare'?s?)"
+    r"(?:\s+(?:room|cam|camera|feed|video|monitor))?"
+    r"(?:\s+on\s+the\s+(?:screen|display|tv))?$"
+)
+
+_FAST_CAMERA_CLOSE = frozenset({
+    "close the camera", "close camera", "close the cameras",
+    "stop the camera", "stop camera", "close the video", "stop the video",
+    "turn off the camera", "turn the camera off", "shut off the camera",
+    "hide the camera", "close the feed", "close the monitor",
+    "exit the camera", "get rid of the camera",
+    "done with the camera", "i'm done with the camera", "im done with the camera",
+    "close simon", "close claire",
+})
+
+# Deliberately NOT in the fast parser: these mean "close the camera" only while
+# a camera is actually on screen, and mean nothing (or something else) the rest
+# of the time. app.handle_command checks the display before honouring them.
+CAMERA_BACK_PHRASES = frozenset({
+    "go back", "back", "close it", "take it down", "get me out of this",
+})
+
 _MUSIC_CONTROL_ALIASES = {
     "pause the music": "pause", "pause music": "pause",
     "resume the music": "resume", "resume music": "resume",
@@ -646,6 +695,14 @@ def fast_parse(command: str) -> dict | None:
     if rename is not None:
         return rename
 
+    cam = _FAST_CAMERA.fullmatch(text)
+    if cam:
+        target = camera.resolve(cam.group("who"))
+        if target:
+            return _validate({"intent": "show_camera", "camera_target": target})
+    if text in _FAST_CAMERA_CLOSE:
+        return _validate({"intent": "close_camera"})
+
     timer = _FAST_TIMER.fullmatch(text)
     if timer:
         seconds = spoken_duration(timer.group(1))
@@ -682,6 +739,12 @@ def fast_parse(command: str) -> dict | None:
     if remote_weather is not None:
         return remote_weather
     return None
+
+
+def is_camera_back(command: str) -> bool:
+    """A bare "go back"-style dismissal, which means close the camera only when
+    one is up. The caller checks the display; this is just the phrase match."""
+    return _fast_clean(command) in CAMERA_BACK_PHRASES
 
 
 async def parse(command: str, context: str | None = None,
@@ -840,6 +903,13 @@ def _validate(data: dict) -> dict:
     if hours_when not in HOURS_WHEN:
         hours_when = None
 
+    # Resolved through the camera module's own alias table rather than trusted
+    # as spoken, so "simon's room" and a bare "Simon" arrive identical and an
+    # unknown name arrives as null for the handler to answer.
+    camera_target = camera.resolve(data.get("camera_target"))
+    if intent != "show_camera":
+        camera_target = None
+
     return {
         "intent": intent,
         "label": label,
@@ -863,4 +933,5 @@ def _validate(data: dict) -> dict:
         "weather_when": weather_when,
         "weather_location": weather_location,
         "hours_when": hours_when,
+        "camera_target": camera_target,
     }

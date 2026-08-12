@@ -35,6 +35,17 @@ DASHBOARD_EVENT_URL = os.getenv(
 )
 DASHBOARD_EVENT_TOKEN = os.getenv("DASHBOARD_EVENT_TOKEN", "")
 
+# The kitchen display's VLC helper (display-pi), which owns the camera views.
+# This is the one place the orchestrator talks to the display Pi directly:
+# camera video is a fullscreen VLC window over the kiosk, not a dashboard card,
+# so it cannot ride the /api/assistant/event fan-out like every other view.
+CAMERA_HELPER_URL = os.getenv("CAMERA_HELPER_URL", "http://192.168.10.92:8778")
+CAMERA_HTTP_TIMEOUT = float(os.getenv("CAMERA_HTTP_TIMEOUT", "6"))
+# Camera audio and our spoken confirmation share the kitchen big speakers, so
+# the audio start is held back until the reply has been said. Tuned to the
+# reply, not the stream: "Showing Simon" is about a second.
+CAMERA_AUDIO_DELAY_S = float(os.getenv("CAMERA_AUDIO_DELAY_S", "2.5"))
+
 # Satellite alarm playback (kitchen-speaker). Not built yet in this slice; the
 # orchestrator POSTs best-effort and logs on failure. Contract documented in
 # README. Empty string disables the call.

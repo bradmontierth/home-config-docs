@@ -36,6 +36,7 @@ from . import home_control as home_mod
 from . import lists as lists_mod
 from . import music as music_mod
 from . import broadcast as broadcast_mod
+from . import camera as camera_mod
 from . import find_phone as phone_mod
 from . import places as places_mod
 from . import policy as policy_mod
@@ -394,6 +395,13 @@ def _summarize_turn(intent: str, result: dict) -> str:
     if intent == "broadcast" and result.get("broadcast"):
         b = result["broadcast"]
         return f"you broadcast {parsed.get('query')!r} to {b['spoken']}"
+    if intent == "show_camera" and result.get("camera"):
+        # Worth a real summary rather than the generic tail: it is what lets a
+        # follow-up "close it" resolve to the camera and not the music.
+        return (f"you put {camera_mod.SPOKEN[result['camera']]}'s camera "
+                f"on the kitchen display")
+    if intent == "close_camera":
+        return "you closed the camera on the kitchen display"
     if intent == "find_phone":
         if "stopped" in result:
             return "you stopped the find-my-phone ringing"
@@ -584,7 +592,17 @@ async def handle_command(command: str, followup: bool = False,
     # matching. An exact curated alias needs neither classifier latency nor a
     # probabilistic label; fuzzy aliases still go through the classifier and
     # can never override another intent.
-    if home_mod.has_exact_match(command, _CUR_SAT.get()):
+    if (intent_mod.is_camera_back(command)
+            and events.on_dashboard(_CUR_SAT.get())
+            and await camera_mod.is_open()):
+        # "go back" is a camera command only while a camera is actually up, and
+        # the display is the only thing that knows — the on-screen Back button
+        # closes a view without telling us. The state check costs a LAN round
+        # trip, so it is gated behind the phrase match and never runs on a
+        # normal turn.
+        parsed = intent_mod.validate({"intent": "close_camera"})
+        log.info("camera dismissal bypassed classifier: %r", command)
+    elif home_mod.has_exact_match(command, _CUR_SAT.get()):
         log.info("exact home command bypassed classifier: %r", command)
         parsed = intent_mod.validate({
             "intent": "home_control",
@@ -1000,6 +1018,25 @@ async def handle_command(command: str, followup: bool = False,
         result.update(fp_result)
         if fp_result.get("needs_owner"):
             session_set_pending("find_phone", [])
+
+    elif intent == "show_camera":
+        # There is one display and it is in the kitchen, so this is gated the
+        # same way the dashboard cards are: rooms that paint the kitchen screen
+        # may drive it, everywhere else says so rather than silently lighting
+        # up a screen nobody asked about. No ask fallback — "show me Simon"
+        # must never become a web search about a person.
+        if not events.on_dashboard(_CUR_SAT.get()):
+            result["response"] = "I can only show that on the kitchen display."
+            result["ok"] = False
+        else:
+            result.update(await camera_mod.handle(parsed))
+
+    elif intent == "close_camera":
+        if not events.on_dashboard(_CUR_SAT.get()):
+            result["response"] = "I can only do that on the kitchen display."
+            result["ok"] = False
+        else:
+            result.update(await camera_mod.handle_close())
 
     elif intent == "sports":
         sports_result = None
