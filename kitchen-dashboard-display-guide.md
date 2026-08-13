@@ -326,7 +326,53 @@ stops the Squeezelite/Music Assistant camera audio before closing VLC. There is
 no automatic Music Assistant resume step: resuming can restart an old queue or
 playlist if MA has prior context, which is not desirable for camera audio.
 
-### The flip bug: root cause and fix (2026-07-04)
+### Panel orientation: 180-degree rotation REMOVED (2026-08-12)
+
+The display used to run rotated 180 degrees in software because the original
+3D-printed case had misaligned VESA holes and had to be hung upside down. A
+corrected case was printed and the panel is now mounted right side up, so both
+software counter-rotations were removed:
+
+- `/boot/firmware/cmdline.txt`: `video=HDMI-A-1:1920x1080@60,rotate=180` is now
+  `video=HDMI-A-1:1920x1080@60`. Takes effect on reboot.
+  Backup: `/boot/firmware/cmdline.txt.bak-20260812`.
+- `/etc/udev/rules.d/99-touchscreen-rotation.rules` (which set
+  `LIBINPUT_CALIBRATION_MATRIX="-1 0 1 0 -1 1"` on the ILITEK panel) is
+  deleted; libinput now uses the identity matrix.
+  Backup: `display-pi:/home/pi/99-touchscreen-rotation.rules.bak-20260812`.
+
+Both layers must move together — reverting only one gives you a picture and a
+touch surface that disagree. To go back to an upside-down mount, restore both
+backups and reboot.
+
+Verify both layers after any orientation change (a `grim` screenshot can NOT
+confirm this — screencopy composites in logical space, so it always looks
+upright no matter how the panel is hung):
+
+```bash
+# picture: no rotate= in the live cmdline, and one plane at rotation=1 (none)
+ssh display-pi 'grep -o "video=[^ ]*" /proc/cmdline; sudo bash /tmp/plane-mon.sh'
+
+# touch: identity matrix, and an injected tap reports where you aimed
+ssh display-pi 'sudo libinput list-devices | grep -A16 "ILITEK ILITEK-TP" | grep Calibration'
+ssh display-pi 'sudo nohup timeout 30 libinput debug-events \
+  --device /dev/input/by-id/usb-ILITEK_ILITEK-TP-event-if00 >/tmp/li.log 2>&1 &'
+ssh display-pi 'sudo bash /tmp/touch-tap.sh 7680 356'   # raw -> top-center
+ssh display-pi 'grep TOUCH_DOWN /tmp/li.log'            # expect ~46.9/3.7 (%)
+```
+
+Right side up, raw (7680, 356) reports `46.87/ 3.71`; upside down the same tap
+reported `53.13/96.29`. That percentage pair is the fastest unambiguous check.
+
+`WLR_SCENE_DISABLE_DIRECT_SCANOUT=1` in `/etc/environment` is deliberately
+left in place (see the flip bug below); with rotation gone its precondition no
+longer exists, but the variable is harmless and removing it would re-arm a
+subtle bug for no gain.
+
+### The flip bug: root cause and fix (2026-07-04, now moot)
+
+This bug required the 180-degree rotation removed above, so it can no longer
+occur. Kept because the mechanism explains why the env var is set.
 
 The overlay flipping to the bottom-right upside down was never a Tk redraw
 problem. Root cause: Raspberry Pi OS ships a patched wlroots
@@ -350,7 +396,8 @@ does NOT work for this — vars set there did not propagate on this build; use
 camera use case: with the overlay on screen the primary plane was already
 composited.
 
-Verify the fix state (should show exactly one plane, `rotation=4`):
+Verify the fix state (exactly one plane; `rotation=1` / none since 2026-08-12,
+`rotation=4` back when the panel was flipped):
 
 ```bash
 ssh display-pi 'sudo bash /tmp/plane-mon.sh'   # from diagnostics/touchscreen/
@@ -375,8 +422,16 @@ unless it is intentionally revived.
 ## Touchscreen And Multi-Touch
 
 The Waveshare 13.3" panel's ILITEK ILITEK-TP USB controller is a true
-10-point multi-touch device (`/dev/input/event0`, ABS_MT slots 0-9, raw
-coordinate space 16384x9600).
+10-point multi-touch device (ABS_MT slots 0-9, raw coordinate space
+16384x9600).
+
+Its `/dev/input/eventN` number is NOT stable across reboots — it was `event0`
+for a long time and came up as `event4` after the 2026-08-12 reboot, with
+`event0` now the `vc4-hdmi-0` audio device. Always address the panel by its
+stable symlink `/dev/input/by-id/usb-ILITEK_ILITEK-TP-event-if00` (that is now
+the default in the `diagnostics/touchscreen/` scripts), or resolve the current
+node with `sudo libinput list-devices | grep -A2 "ILITEK ILITEK-TP"`. Injecting
+into the wrong node fails silently — the events go nowhere and nothing moves.
 
 Fixed 2026-07-04: drag-to-scroll and pinch-to-zoom now work in the kiosk
 Chromium. The dashboard previously behaved like a mouse pointer (tap = click,
@@ -390,10 +445,11 @@ config (snapshot in `display-pi-monitoring/labwc-rc.xml`):
 
 How the layers divide responsibility:
 
-- 180-degree rotation is handled at the libinput level by
-  `/etc/udev/rules.d/99-touchscreen-rotation.rules`
-  (`LIBINPUT_CALIBRATION_MATRIX="-1 0 1 0 -1 1"`), so it applies equally to
-  native touch and does not depend on mouse emulation.
+- Touch coordinates need no rotation as of 2026-08-12: the panel is mounted
+  right side up and `99-touchscreen-rotation.rules` is gone, so libinput uses
+  the identity matrix. (Historically that rule applied
+  `LIBINPUT_CALIBRATION_MATRIX="-1 0 1 0 -1 1"` at the libinput level, so it
+  covered native touch and did not depend on mouse emulation.)
 - labwc forwards native Wayland touch to Chromium (launched with
   `--ozone-platform=wayland`), which does its own gesture recognition
   (scroll, pinch, `navigator.maxTouchPoints` = 10).
@@ -419,7 +475,9 @@ path. To observe what the page receives, relaunch Chromium with
 `--remote-debugging-port=9222 --user-data-dir=/tmp/chromium-cdp-test`
 (Chromium 136+ refuses the debug port on the default profile) and use
 `diagnostics/touchscreen/cdp.py '<js>'` on display-pi to evaluate JS.
-Raw-to-screen coordinate mapping is inverted by the rotation matrix:
+Raw-to-screen coordinate mapping is direct since the rotation was removed
+(2026-08-12): `screen_x = raw_x/16384 * 1920`, `screen_y = raw_y/9600 * 1080`.
+While the panel was flipped it was inverted:
 `screen_x = (1 - raw_x/16384) * 1920`, `screen_y = (1 - raw_y/9600) * 1080`.
 
 Possible follow-up: with native touch, tapping a text input may summon
