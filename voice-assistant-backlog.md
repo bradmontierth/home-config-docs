@@ -1823,3 +1823,73 @@ live view, which is a different feature.
 * `home_config/camera-audio-cards.yaml` is stale: it still targets
   `media_player.gmediarender_on_kitchen_big_speakers`, a DLNA path the kitchen
   guide says was deprecated in favour of the squeezelite player.
+
+## "What time is it" / "what day is it" from the clock — BUILT + DEPLOYED 2026-08-13
+
+Ask: answer the time and the date without a model round trip. `what time is it`
+routed to `ask` — the household's most-asked trivial question was costing a
+remote call to GPT-5.4 (measured **10.1s** on the live box, occasionally with a
+web search attached) to read back a clock the orchestrator was already holding.
+It now answers in **35-50ms**, dispatch to response.
+
+Day and date are deliberately the same question. Brad's framing, and it matches
+how people talk: "what day is it" nearly always wants *Thursday, August 13,
+2026*, not the bare weekday. Only an explicit "day **of the week**" gets
+"It's Thursday." back.
+
+Built:
+
+* `orchestrator/clock.py` — five kinds (`time`, `date`, `weekday`, `month`,
+  `year`) x three days (`today`, `tomorrow`, `yesterday`), and the rendering.
+  No I/O, no async, no failure branch: unlike weather/sports/places there is no
+  service that can be down, so `app.py` has no ask fallback on this path.
+* `intent.py` — `time_query` intent, `time_kind` / `time_day` slots, the
+  classifier description, and a fast-path phrase table.
+* `app.py` — dispatch branch (+ `ask.remember`, so "what about tomorrow" after
+  a date answer has something to refer back to) and the follow-up summary line.
+* `test_clock.py` — 16 tests / 60 subtests. Full suite 397 passed.
+
+### Decisions worth keeping
+
+**A phrase table, not a pattern.** Clock questions are asked in a small fixed
+set of ways, and the near-misses are the whole risk: "what time does Costco
+close" (business_hours), "what time is it in Tokyo" (ask), "what time does the
+game start" (sports), "how much time is left" (timer_query). A table of ~60
+whole normalized utterances cannot half-match its way into answering any of
+them; a regex over "what time" could. Apostrophes are stripped before lookup
+rather than listed twice — ASR punctuates "what's"/"whats" inconsistently.
+
+Two normalization traps, both live-tested: **"today" must not be treated as
+trailing filler** (it is the subject of "what day is today", and stripping it
+leaves a fragment matching nothing), and the lead-strip has to run *after*
+`_fast_clean`'s own "can you / please / hey" strip, so "can you remind me what
+day it is" arrives as "what day it is".
+
+**The table is a latency shortcut, not the feature.** `time_query` is a
+first-class classifier intent; deleting the table costs a round trip, not the
+capability. Same shape as the kid cameras — and same reason: `fast_parse` is
+gated on `not followup`, so every follow-up turn goes to the classifier anyway.
+
+**Named days other than tomorrow/yesterday are ask, on purpose.** The first
+prompt draft answered "what's the date on friday" with *today's* date —
+confidently wrong. Supporting weekdays would need this-vs-next-Friday
+disambiguation for a question nobody asks aloud; ruling it out in the
+description hands it to `ask`, which works the date out correctly.
+
+### Prompt A/B (the camera build's method, reused)
+
+Reconstructed the pre-change `_SYSTEM` in memory and ran both prompts against
+the live classifier in one process, 28 phrases: **6 changed, all of them the
+intended ones**, 22/22 neighbours identical — business_hours, sports,
+timer_query, weather, place_search, home_control, play_music, lists, and the
+"what time"/"what year" questions that must stay ask ("what time is it in
+london", "what year did the beatles break up", "what day is the party").
+
+Worth keeping the habit: a prompt edit for intent N is a silent regression risk
+for intents 1..N-1, and its own tests all pass either way.
+
+### Pending
+
+* Live voice test (text `/command` verified end to end; TTS reading of
+  "It's 3:42 PM" and "January 13, 2026" not yet heard aloud). The time format
+  matches what sports.py already speaks for game times, so it should be fine.

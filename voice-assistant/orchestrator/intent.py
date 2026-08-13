@@ -10,7 +10,7 @@ from __future__ import annotations
 import logging
 import re
 
-from . import camera, clients, config, zones
+from . import camera, clients, clock, config, zones
 
 log = logging.getLogger("orchestrator.intent")
 
@@ -19,7 +19,8 @@ INTENTS = (
     "add_items", "set_reminder", "show_todos", "show_shopping", "show_reminders",
     "complete_item",
     "remove_items", "clear_list", "play_music", "music_control", "music_query",
-    "sports", "weather", "business_hours", "place_search", "home_control",
+    "sports", "weather", "time_query", "business_hours", "place_search",
+    "home_control",
     "broadcast", "find_phone", "show_camera", "close_camera",
     "ask", "show_answer", "unclear", "none",
 )
@@ -61,6 +62,8 @@ Schema:
   "sports_date": for sports, "today" or "yesterday" only when the user SAYS a day like that ("last night" = "yesterday"); else null,
   "weather_when": for weather, one of {list(WEATHER_WHEN)}; else null,
   "weather_location": for weather at a NAMED place away from home, the city/place as spoken (include state/country when given); null for local home weather,
+  "time_kind": for time_query, what they asked for — one of {list(clock.KINDS)}; else null,
+  "time_day": for time_query, one of {list(clock.DAYS)} — "today" unless they name another day; else null,
   "hours_when": for business_hours, one of {list(HOURS_WHEN)}; else null,
   "camera_target": for "show_camera", which child's camera — one of {list(CAMERA_TARGETS)}; else null
 }}
@@ -103,6 +106,18 @@ Rules:
   Chicago" -> weather, now, "Chicago"; "what's the weather in Park City today" -> weather, today,
   "Park City"; "forecast for Paris tomorrow" -> weather, tomorrow, "Paris". Only forecasts beyond
   the supported week are "ask".
+- time_query = what time, day, or date it is RIGHT HERE, read off the clock: "what time is it",
+  "what's the time" (time_kind "time"); "what's the date", "what's today's date", "what day is
+  it", "what's today" (time_kind "date" — people say "day" when they want the whole date, so both
+  get "date"); "what month is it" ("month"); "what year is it" ("year"). Use "weekday" ONLY when
+  they say "of the week" ("what day of the week is it") — every other "what day" is "date".
+  Set time_day only when they name tomorrow or yesterday: "what's tomorrow's date" ->
+  date/"tomorrow", "what day was yesterday" -> date/"yesterday"; otherwise "today". Any OTHER day
+  they name ("what's the date on friday", "what day is the 4th", "what's the day after tomorrow")
+  is NOT time_query — it is ask, which can work the date out. The time in
+  ANOTHER place ("what time is it in London") is ask, and a time that belongs to an event or a
+  business stays with its own intent: "what time does the game start" is sports, "what time does
+  Costco close" is business_hours, "how much time is left" is timer_query.
 - business_hours = opening/closing-hours questions about a NAMED business: "what time does Home
   Depot close" (query "Home Depot", hours_when "close"), "when does Costco open" ("Costco",
   "open"), "is Walmart open" ("Walmart", "now"), "what are Smith's hours today" ("Smith's",
@@ -564,6 +579,67 @@ _WEATHER_LOCATION_PRECIP_RE = re.compile(
     rf"^will\s+it\s+(?:rain|snow)\s+in\s+(?P<location>.+?)"
     rf"(?:\s+(?:on\s+)?(?P<when>{_WEATHER_DAYS}))?$")
 
+# Clock questions are asked in a small, fixed set of ways, so they match on
+# whole normalized utterances rather than a pattern. That anchoring is the
+# point: "what time does Costco close", "what time is it in Tokyo" and "what
+# day are we leaving" must all MISS and reach the classifier, and a phrase
+# table can't half-match its way into answering them.
+_CLOCK_LEAD = re.compile(
+    r"^(?:(?:do you know|do you have|tell me|remind me)\s+)+")
+# "today" is deliberately NOT stripped here — it is the subject of "what day is
+# today", not filler, and trimming it would leave a fragment that matches
+# nothing. The today-suffixed phrasings are spelled out in the table instead.
+_CLOCK_TAIL = re.compile(r"(?:\s+(?:right now|now|again))+$")
+_CLOCK_GROUPS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
+    ("time", "today", (
+        "what time is it", "what time it is", "whats the time",
+        "what is the time", "the time", "what time do you have",
+        "whats the current time", "what is the current time",
+    )),
+    # "what day is it" lands here, not on "weekday": asked cold, it wants the
+    # date. Only the explicit "of the week" phrasings want a bare day name.
+    ("date", "today", (
+        "whats the date", "what is the date", "whats todays date",
+        "what is todays date", "whats the date today",
+        "what is the date today", "what date is it", "what date it is",
+        "what date is it today", "what date is today",
+        "whats the day", "what is the day", "whats the day today",
+        "what day is it", "what day it is", "what day is it today",
+        "what day is today", "whats today", "what is today",
+    )),
+    ("weekday", "today", (
+        "what day of the week is it", "what day of the week it is",
+        "what day of the week is today", "whats the day of the week",
+        "what is the day of the week",
+    )),
+    ("date", "tomorrow", (
+        "whats tomorrows date", "what is tomorrows date",
+        "whats the date tomorrow", "what is the date tomorrow",
+        "what date is tomorrow", "what day is tomorrow",
+        "whats tomorrow", "what is tomorrow",
+    )),
+    ("weekday", "tomorrow", ("what day of the week is tomorrow",)),
+    ("date", "yesterday", (
+        "whats yesterdays date", "what is yesterdays date",
+        "what was yesterdays date", "what was the date yesterday",
+        "what date was yesterday", "what day was yesterday",
+        "what was yesterday",
+    )),
+    ("weekday", "yesterday", ("what day of the week was yesterday",)),
+    ("month", "today", (
+        "what month is it", "what month is this", "what month are we in",
+        "whats the month", "what is the month",
+    )),
+    ("year", "today", (
+        "what year is it", "what year is this", "what year are we in",
+        "whats the year", "what is the year",
+    )),
+)
+_CLOCK_PHRASES = {
+    phrase: (kind, day)
+    for kind, day, phrases in _CLOCK_GROUPS for phrase in phrases
+}
+
 # Renaming an already-running timer is unambiguous enough to stay deterministic
 # even on a continued-conversation turn. Keep these shapes anchored: generic
 # "change the timer to ten minutes" is an adjustment and must still reach the
@@ -645,6 +721,23 @@ def fast_parse_weather_location(command: str) -> dict | None:
     })
 
 
+def fast_parse_clock(command: str) -> dict | None:
+    """Parse a whole-utterance clock/calendar question, or None.
+
+    Apostrophes are dropped rather than matched: ASR punctuates inconsistently
+    ("what's" / "whats", "today's" / "todays"), and every one of these phrases
+    would otherwise need to be listed twice.
+    """
+    text = _fast_clean(command).replace("'", "")
+    text = _CLOCK_TAIL.sub("", _CLOCK_LEAD.sub("", text)).strip()
+    hit = _CLOCK_PHRASES.get(text)
+    if hit is None:
+        return None
+    return _validate({
+        "intent": "time_query", "time_kind": hit[0], "time_day": hit[1],
+    })
+
+
 def _fast_music_volume(text: str) -> int | None:
     """Strict complete-utterance wrapper around spoken_music_volume()."""
     words = text.split()
@@ -723,6 +816,10 @@ def fast_parse(command: str) -> dict | None:
         return _validate({"intent": "music_control", "music_action": action})
     if text in _MUSIC_QUERY_ALIASES:
         return _validate({"intent": "music_query"})
+
+    clock_hit = fast_parse_clock(text)
+    if clock_hit is not None:
+        return clock_hit
 
     when = None
     if text in _WEATHER_NOW:
@@ -897,6 +994,18 @@ def _validate(data: dict) -> dict:
     if intent != "weather":
         weather_location = None
 
+    # Both default rather than null: a clock question with an unreadable slot
+    # is still answerable ("what time is it, today"), and clock.answer() would
+    # have to invent the same defaults anyway.
+    time_kind = data.get("time_kind")
+    if time_kind not in clock.KINDS:
+        time_kind = "time"
+    time_day = data.get("time_day")
+    if time_day not in clock.DAYS:
+        time_day = "today"
+    if intent != "time_query":
+        time_kind = time_day = None
+
     hours_when = data.get("hours_when")
     if isinstance(hours_when, str):
         hours_when = hours_when.strip().lower()
@@ -932,6 +1041,8 @@ def _validate(data: dict) -> dict:
         "sports_date": sports_date,
         "weather_when": weather_when,
         "weather_location": weather_location,
+        "time_kind": time_kind,
+        "time_day": time_day,
         "hours_when": hours_when,
         "camera_target": camera_target,
     }

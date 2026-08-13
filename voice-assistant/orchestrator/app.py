@@ -37,6 +37,7 @@ from . import lists as lists_mod
 from . import music as music_mod
 from . import broadcast as broadcast_mod
 from . import camera as camera_mod
+from . import clock as clock_mod
 from . import find_phone as phone_mod
 from . import places as places_mod
 from . import policy as policy_mod
@@ -379,6 +380,9 @@ def _summarize_turn(intent: str, result: dict) -> str:
                f"{(result.get('response') or '')[:100]}"
     if intent == "weather":
         return f"you asked about the weather ({result.get('weather_when') or 'now'}) " \
+               f"and heard: {(result.get('response') or '')[:100]}"
+    if intent == "time_query":
+        return f"you asked what {parsed.get('time_kind') or 'time'} it is " \
                f"and heard: {(result.get('response') or '')[:100]}"
     if intent in ("business_hours", "place_search"):
         return f"you asked about {parsed.get('query') or 'a nearby place'} and heard: " \
@@ -1077,6 +1081,14 @@ async def handle_command(command: str, followup: bool = False,
             result["response"] = ask_result["response"]
             result["full"] = ask_result.get("full", "")
             result["ok"] = ask_result["ok"]
+
+    elif intent == "time_query":
+        # No fallback branch, unlike weather/sports/places: there is no service
+        # to be down, so the clock either answers or the process is gone.
+        result.update(clock_mod.handle(parsed))
+        # Seed ask history so "what about tomorrow" after a date answer has
+        # something to refer back to (weather and sports do the same).
+        ask_mod.remember(command, result["response"], sat=_CUR_SAT.get())
 
     elif intent in ("business_hours", "place_search"):
         places_result = None
