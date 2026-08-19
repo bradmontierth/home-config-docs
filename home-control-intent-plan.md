@@ -173,3 +173,35 @@ Smaller than the Places intent (~40-line handler, one code path).
 - State queries ("are the blinds closed?") — different intent (read-path), only if wanted later.
 - State verification after service call.
 - Non-kitchen blinds (family room, bedrooms) — add rows to the alias table + discovery list only if actually asked for by voice in practice.
+
+## Addendum 2026-08-18 — blind percentages (`cover_set`)
+
+Reverses one line in Non-goals above ("brightness numbers by voice … deliberately
+never" stays dead; **blind positions do not**). Brad asked for it directly: the
+afternoon sun glares off the west kitchen windows, and `blind_glare` — the combo
+that replaced the killed azimuth flow — closes left + sink *fully*, which makes
+the kitchen very dark. The right answer is a partial position, and all four
+kitchen shades have reported `supported_features: 15` (open|close|**set_position**
+|stop) since day one. Nothing was wired to ask.
+
+- **Not a button and not a classifier intent.** A value can't ride a payload-less
+  button press, and a button per percentage is not a table anyone maintains. The
+  grammar *is* the intent (`intent.fast_parse_cover_level`), so it costs no LLM
+  round trip: **187–245 ms** measured live vs. the 3–5 s a classifier turn takes.
+- **Direction is the verb.** `open … to 80` → position 80; `close … to 80` →
+  position 20; bare `set … to 80` → 80 (openness, as HA and the dashboard show
+  it). The spoken reply always ends "…percent **open**", because confirming
+  "close it 80 percent" with "setting it to 20 percent" sounds like a mishear.
+- **An explicit level is required**, so the curated open/close buttons are
+  untouched — the grammar cannot fire on "close the blinds".
+- **Exact target match, not fuzzy.** `home_control` can afford `fuzz.ratio`
+  because a miss presses nothing; here a near-miss would move a different window.
+  Table lives in `covers.py` (code, not the phone-editable JSON — the alias editor
+  at :8785/home-commands/ui does **not** see these targets).
+- Direct `cover.set_cover_position` call, bypassing Node-RED. Narrow exception to
+  "all behavior lives in Node-RED": closed entity list, one clamped number, no
+  logic to drift out of sync with a flow.
+- Room-scoped like `home_commands.json`: "the blind" is the tub window from the
+  master closet, Simon's own from his room, all four from the kitchen.
+- **Open:** `blind_glare` still closes fully. Brad is finding the position he
+  likes by voice first; bake that number into the glare button afterward.
