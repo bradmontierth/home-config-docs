@@ -10,7 +10,7 @@ from __future__ import annotations
 import logging
 import re
 
-from . import camera, clients, clock, config, zones
+from . import camera, clients, clock, config, covers, zones
 
 log = logging.getLogger("orchestrator.intent")
 
@@ -20,7 +20,7 @@ INTENTS = (
     "complete_item",
     "remove_items", "clear_list", "play_music", "music_control", "music_query",
     "sports", "weather", "time_query", "business_hours", "place_search",
-    "home_control",
+    "home_control", "cover_set",
     "broadcast", "find_phone", "show_camera", "close_camera",
     "ask", "show_answer", "unclear", "none",
 )
@@ -822,6 +822,74 @@ def fast_parse_labelled_timer(text: str) -> dict | None:
 # person, the other a business, and the only thing separating them is knowing
 # who lives here. Matching the kid cameras deterministically keeps them off
 # that coin flip, and off an LLM round trip.
+# "set the sink blind to 30 percent" -- the one home command carrying a number.
+# The verb decides direction (see covers.py); the amount is anchored after
+# "to"/"at" so a bare number can never be read off some other part of the
+# phrase. A "halfway" form is separate because it has no number to anchor.
+_COVER_VERBS_OPEN = ("open", "raise", "lift", "pull up", "put up")
+_COVER_VERBS_CLOSE = ("close", "shut", "lower", "drop", "pull down", "put down")
+_COVER_VERBS_NEUTRAL = ("set", "put", "move", "adjust", "leave")
+_COVER_VERBS = "|".join(
+    sorted(_COVER_VERBS_OPEN + _COVER_VERBS_CLOSE + _COVER_VERBS_NEUTRAL,
+           key=len, reverse=True))
+_COVER_LEVEL_RE = re.compile(
+    rf"^(?P<verb>{_COVER_VERBS})\s+(?P<target>.+?)\s+"
+    r"(?:to|at)\s+(?:about\s+|around\s+|like\s+)?"
+    r"(?P<amount>[a-z0-9 ]+?)(?:\s*(?:percent|per cent))?"
+    r"(?:\s+(?:open|closed|down|up))?$"
+)
+_COVER_HALF_RE = re.compile(
+    rf"^(?P<verb>{_COVER_VERBS})\s+(?P<target>.+?)\s+"
+    r"(?:half\s?way|half\s+down|half\s+up|to\s+half)"
+    r"(?:\s+(?:open|closed|down|up))?$"
+)
+
+
+def _cover_amount(text: str) -> int | None:
+    """0-100 from "30", "thirty", "eighty five" -- or None."""
+    words = text.split()
+    if not words or len(words) > 2:
+        return None
+    if len(words) == 1:
+        word = words[0]
+        value = int(word) if word.isdigit() else _NUM_WORDS.get(word)
+    else:
+        first, second = (_NUM_WORDS.get(w) for w in words)
+        if (first is None or second is None
+                or first < 20 or first % 10 or not 0 < second < 10):
+            return None
+        value = first + second
+    return value if value is not None and 0 <= value <= 100 else None
+
+
+def fast_parse_cover_level(command: str, sat: str | None = None) -> dict | None:
+    """A complete "blind to N percent" command without the classifier, or None.
+
+    Requires an explicit amount, so the plain "close the blinds" buttons in
+    home_control are untouched -- this grammar only fires on a phrase naming a
+    level, which nothing else in the house handles. Takes the satellite because
+    the target is resolved here: "the blind" is a different window in each room.
+    """
+    text = _fast_clean(command)
+    for pattern in (_COVER_LEVEL_RE, _COVER_HALF_RE):
+        match = pattern.fullmatch(text)
+        if not match:
+            continue
+        amount = (50 if pattern is _COVER_HALF_RE
+                  else _cover_amount(match.group("amount")))
+        if amount is None:
+            return None
+        target = covers.resolve(match.group("target"), sat)
+        if target is None:
+            return None
+        verb = match.group("verb")
+        # Openness is what HA stores, so a "close" verb is the complement.
+        position = 100 - amount if verb in _COVER_VERBS_CLOSE else amount
+        return _validate({"intent": "cover_set", "cover_target": target,
+                          "cover_position": position})
+    return None
+
+
 def fast_parse_weather_location(command: str) -> dict | None:
     """Parse a narrow named-place forecast without risking home fallback."""
     text = _fast_clean(command)
@@ -1146,6 +1214,22 @@ def _validate(data: dict) -> dict:
     if intent != "show_camera":
         camera_target = None
 
+    # Already resolved against covers._TARGETS by the parser; an unknown key
+    # here means no blind to move, and the handler refuses rather than guesses.
+    cover_target = data.get("cover_target")
+    if not isinstance(cover_target, str) or not covers.entities(cover_target):
+        cover_target = None
+    cover_position = data.get("cover_position")
+    if (isinstance(cover_position, (int, float))
+            and not isinstance(cover_position, bool)):
+        cover_position = int(cover_position)
+        if not 0 <= cover_position <= 100:
+            cover_position = None
+    else:
+        cover_position = None
+    if intent != "cover_set":
+        cover_target = cover_position = None
+
     return {
         "intent": intent,
         "label": label,
@@ -1172,4 +1256,6 @@ def _validate(data: dict) -> dict:
         "time_day": time_day,
         "hours_when": hours_when,
         "camera_target": camera_target,
+        "cover_target": cover_target,
+        "cover_position": cover_position,
     }

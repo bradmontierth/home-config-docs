@@ -32,6 +32,7 @@ from fastapi.responses import FileResponse
 
 from . import answers as answers_mod
 from . import ask as ask_mod
+from . import covers as covers_mod
 from . import home_control as home_mod
 from . import lists as lists_mod
 from . import music as music_mod
@@ -394,7 +395,7 @@ def _summarize_turn(intent: str, result: dict) -> str:
         return f"you told the music player: {parsed.get('music_action')}"
     if intent == "music_query":
         return "you asked what music is playing"
-    if intent == "home_control":
+    if intent in ("home_control", "cover_set"):
         return f"you gave a home command and heard: {(result.get('response') or '')[:100]}"
     if intent == "broadcast" and result.get("broadcast"):
         b = result["broadcast"]
@@ -612,6 +613,13 @@ async def handle_command(command: str, followup: bool = False,
             "intent": "home_control",
             "query": command,
         })
+    elif (cover := intent_mod.fast_parse_cover_level(
+            command, _CUR_SAT.get())) is not None:
+        # A named blind plus a named level is unambiguous, and the classifier
+        # has no cover_set rule to read it with anyway -- the grammar IS the
+        # intent here, not a shortcut around one.
+        parsed = cover
+        log.info("deterministic cover_set bypassed classifier: %r", command)
     elif clarify:
         parsed = await _parse_clarify_reply(clarify, command)
     elif followup and (
@@ -992,6 +1000,20 @@ async def handle_command(command: str, followup: bool = False,
             # Deliberately NOT the ask fallback (contrast with sports/weather):
             # a control phrase must never turn into a web search or a guess.
             result["response"] = "I don't control that."
+            result["ok"] = False
+
+    elif intent == "cover_set":
+        # home_control's refusal rules apply unchanged: no ask fallback, and a
+        # failure says so rather than pretending the blind moved.
+        cover_result = None
+        try:
+            cover_result = await covers_mod.handle(parsed)
+        except Exception as exc:  # noqa: BLE001 — HA down/slow; refuse below
+            log.warning("cover set failed: %s", exc)
+        if cover_result:
+            result.update(cover_result)
+        else:
+            result["response"] = "Sorry, I couldn't move that blind."
             result["ok"] = False
 
     elif intent == "broadcast":
