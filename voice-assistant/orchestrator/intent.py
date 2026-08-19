@@ -35,6 +35,38 @@ HOURS_WHEN = ("open", "close", "now", "today")
 MUSIC_ACTIONS = ("pause", "resume", "stop", "next", "previous",
                  "volume_up", "volume_down", "volume_set", "volume_normal")
 
+# Interpolated into the rule list below. Kept a named constant only because an
+# f-string can't carry the comment, and this one needs it.
+#
+# The mic captures a room, not a person. A small child talking over the command
+# lands in the same transcript, and because the interruption delays the VAD
+# endpoint, two utterances get stitched into one (live 2026-08-17: "how much
+# time s on my timer what time it s a clear timer" -> "unclear" -> "Sorry, I
+# didn't catch that").
+#
+# The model was never confused by the extra words — it already shrugs off
+# trailing junk ("I was distracted. Set a coffee timer for twelve minutes." has
+# always parsed). What it had no rule for was which command to answer when the
+# transcript holds SEVERAL. Left to itself it sometimes picks the last one, and
+# the last fragment of an interrupted turn is disproportionately destructive:
+# "what time is it clear the timer" classified as timer_cancel 3 times out of 3
+# before this rule, i.e. a question about a timer silently cancelling it.
+#
+# So the rule is first-complete-command plus an explicit floor on destructive
+# intents. Do NOT weaken that floor into "never pick destructive when anything
+# else parses" — a bare "clear timer" and "actually never mind cancel all the
+# timers" must still cancel, and both were checked against this wording.
+_MULTI_SPEAKER = """- MULTIPLE SPEAKERS: this transcript is one open-microphone capture of a whole \
+room, so it may contain more than the command. Another person — often a small \
+child — may talk over or right after the speaker, and their words land in the \
+same transcript. Parse the command addressed to YOU and ignore the rest. If the \
+transcript contains SEVERAL commands, answer the FIRST complete one: the person \
+who woke you spoke first, and the remainder is usually someone else. Never pick a \
+DESTRUCTIVE intent (timer_cancel, clear_list, remove_items, or music_control \
+stop) out of a trailing fragment when an earlier, non-destructive reading of the \
+transcript exists — prefer that earlier reading. A command that is genuinely \
+spoken on its own stays whatever it is, destructive or not."""
+
 _SYSTEM = f"""You are the intent parser for a household voice assistant. Convert the \
 user's command into a single strict JSON object and output ONLY that JSON — no \
 prose, no code fences, no explanation.
@@ -227,6 +259,7 @@ Rules:
   answer again", "bring that answer back", "put that back up", "show me that again", "what did you
   just say", "repeat that", "say that again". No other fields. A NEW question about the same topic
   ("but who's playing in it") is "ask", not show_answer.
+{_MULTI_SPEAKER}
 - If the command is not a timer, list, music, home-control, or knowledge command, intent "none".
 Return JSON only."""
 
