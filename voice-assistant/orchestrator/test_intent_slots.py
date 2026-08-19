@@ -272,9 +272,48 @@ class DeterministicIntentTest(unittest.TestCase):
                 self.assertIsNone(parsed["label"])
                 self.assertEqual(parsed["sound_theme"], "marimba")
 
+    def test_labelled_timer_forms(self):
+        cases = {
+            "set a pasta timer for eight minutes": ("pasta", 480, "steam_whistle"),
+            "set a chicken timer for 12 minutes": ("chicken", 720, "cluck"),
+            "start the roasting timer for twenty minutes": (
+                "roasting", 1200, "oven_ding"),
+            "set a timer called tofu for ten minutes": ("tofu", 600, "marimba"),
+            "set our coffee timer for 90 seconds": ("coffee", 90, "steam_whistle"),
+            # Not food, no table entry: still fast, just rings the default.
+            "set a dad work timer for 30 minutes": ("dad work", 1800, "marimba"),
+            "please set a claire timer for five minutes": (
+                "claire", 300, "marimba"),
+        }
+        for text, (label, seconds, theme) in cases.items():
+            with self.subTest(text=text):
+                parsed = intent.fast_parse(text)
+                self.assertEqual(parsed["intent"], "set_timer")
+                self.assertEqual(parsed["label"], label)
+                self.assertEqual(parsed["duration_seconds"], seconds)
+                self.assertEqual(parsed["sound_theme"], theme)
+
+    def test_labelled_timer_fast_path_fails_closed(self):
+        """Every one of these must still reach the classifier."""
+        for text in (
+            # A duration is not a name.
+            "set a 10 minute timer for the pasta",
+            "set a five minute timer for pasta",
+            # Label too long, or opening with a command verb.
+            "set a really long complicated dinner party timer for ten minutes",
+            "set a stop timer for ten minutes",
+            # Duration unreadable -> the LLM gets the whole utterance.
+            "set a pasta timer for a while",
+            "set a pasta timer for eight",
+            # Adjustments and other timer verbs are untouched.
+            "add eight minutes to the pasta timer",
+            "change the pasta timer to ten minutes",
+        ):
+            with self.subTest(text=text):
+                self.assertIsNone(intent.fast_parse(text))
+
     def test_timer_fast_path_fails_closed(self):
         for text in (
-            "set a pasta timer for eight minutes",
             "set a timer for eight",
             "set a timer for",
             "add eight minutes to the timer",

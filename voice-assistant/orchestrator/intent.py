@@ -537,6 +537,51 @@ _FAST_LEAD = re.compile(
 _FAST_TAIL = re.compile(r"(?:\s+(?:please|for me|thanks|thank you))+$")
 _FAST_TIMER = re.compile(r"^(?:set|start)\s+(?:(?:a|the)\s+)?timer\s+for\s+(.+)$")
 
+# The same command carrying a name: "set a chicken timer for 12 minutes", or
+# the other phrasing the family uses, "set a timer called tofu for 10 minutes".
+# The label group is non-greedy and the duration is anchored after "for", so
+# the two slots cannot eat each other.
+_FAST_TIMER_LABELLED = (
+    re.compile(r"^(?:set|start)\s+(?:(?:a|an|the|my|our)\s+)?"
+               r"(?P<label>[a-z0-9][a-z0-9' ]*?)\s+timer\s+for\s+(?P<dur>.+)$"),
+    re.compile(r"^(?:set|start)\s+(?:(?:a|an|the|my|our)\s+)?timer\s+"
+               r"(?:called|named)\s+(?P<label>[a-z0-9][a-z0-9' ]*?)\s+"
+               r"for\s+(?P<dur>.+)$"),
+)
+
+# What the classifier was really being paid for on a labelled timer: reading a
+# sound out of the food. It costs 3.5-5.3s of classify time to do it, and it
+# does it inconsistently -- across the live history "coffee" got marimba three
+# times and steam_whistle once, "falafel" got sizzle, cluck AND marimba. A
+# fixed table is both instant and more consistent; anything not listed rings
+# the default, which is what the classifier gave these anyway ("claire", "dad
+# work", "train print" were all marimba).
+# Single words only -- the lookup is word-by-word, so a phrase here would be
+# dead weight.
+_LABEL_THEMES = {
+    "cluck": ("chicken", "chickens", "turkey", "poultry", "wings", "nuggets",
+              "eggs", "egg"),
+    "moo": ("beef", "steak", "burger", "burgers", "milk"),
+    "sizzle": ("bacon", "falafel", "fry", "frying", "saute", "sear",
+               "searing", "hashbrowns"),
+    "steam_whistle": ("pasta", "noodles", "spaghetti", "rice", "coffee",
+                      "tea", "kettle", "boil", "boiling", "broccoli",
+                      "potatoes", "corn", "quinoa"),
+    "bubbling": ("sauce", "gravy", "soup", "stew", "chili", "simmer",
+                 "simmering", "beans"),
+    "oven_ding": ("oven", "bake", "baking", "bread", "cake", "cookies",
+                  "cookie", "roasting", "roast", "pizza", "muffins",
+                  "brownies", "waffle", "waffles", "casserole"),
+}
+_THEME_BY_LABEL = {word: theme
+                   for theme, words in _LABEL_THEMES.items()
+                   for word in words}
+
+# A label may not contain duration vocabulary. Without this "set a 10 minute
+# timer for the pasta" would parse as a timer named "10 minute", and the label
+# is the half of the utterance nobody re-reads before it rings.
+_DURATION_WORDS = frozenset(_NUM_WORDS) | frozenset(_UNIT_SECONDS)
+
 # "show me Simon" is said the same way every time, and it sits directly beside
 # place_search ("show me Home Depot") in the classifier's view — one is a
 # person, the other a business, and the only thing separating them is knowing
@@ -734,6 +779,49 @@ def fast_parse_timer_rename(command: str) -> dict | None:
     return None
 
 
+def _fast_timer_theme(label: str) -> str:
+    """Sound for a spoken timer name: first word that names a food, else the
+    default. Checks every word so "chicken thighs" and "the roasting pan" both
+    land, and a multi-word name like "dad work" simply doesn't match."""
+    for word in label.split():
+        theme = _THEME_BY_LABEL.get(word)
+        if theme:
+            return theme
+    return config.DEFAULT_THEME
+
+
+def fast_parse_labelled_timer(text: str) -> dict | None:
+    """A complete named timer without the classifier, or None.
+
+    Fails closed on every uncertainty: an unparseable duration, a label that
+    reads like a duration, a label longer than four words or opening with a
+    command verb. Each of those falls through to the classifier exactly as
+    before, so a miss costs latency and never correctness.
+    """
+    for pattern in _FAST_TIMER_LABELLED:
+        match = pattern.fullmatch(text)
+        if not match:
+            continue
+        label = _timer_label(match.group("label"))
+        if not label:
+            return None
+        words = label.split()
+        if _DURATION_WORDS & set(words) or any(w.isdigit() for w in words):
+            return None
+        seconds = spoken_duration(match.group("dur"))
+        if seconds is None:
+            return None
+        return _validate({
+            "intent": "set_timer", "duration_seconds": seconds,
+            "label": label, "sound_theme": _fast_timer_theme(label),
+        })
+    return None
+
+# "show me Simon" is said the same way every time, and it sits directly beside
+# place_search ("show me Home Depot") in the classifier's view — one is a
+# person, the other a business, and the only thing separating them is knowing
+# who lives here. Matching the kid cameras deterministically keeps them off
+# that coin flip, and off an LLM round trip.
 def fast_parse_weather_location(command: str) -> dict | None:
     """Parse a narrow named-place forecast without risking home fallback."""
     text = _fast_clean(command)
@@ -809,9 +897,12 @@ def _fast_music_volume(text: str) -> int | None:
 def fast_parse(command: str) -> dict | None:
     """A complete validated intent without the classifier, or None.
 
-    Deliberately excludes labelled timers and play-music searches. Both need
-    semantic extraction; a fast path that only *usually* understands them is
-    worse than the latency it saves.
+    Deliberately excludes play-music searches, which need semantic extraction;
+    a fast path that only *usually* understands them is worse than the latency
+    it saves. Labelled timers used to be excluded on the same grounds and are
+    not any more (2026-08-18): the only semantic part was the ringing sound,
+    the classifier chose it inconsistently anyway, and a third of this house's
+    timers are named -- they were each paying 3.5-5.3s for it.
     """
     text = _fast_clean(command)
     if not text:
@@ -837,6 +928,9 @@ def fast_parse(command: str) -> dict | None:
                 "intent": "set_timer", "duration_seconds": seconds,
                 "sound_theme": config.DEFAULT_THEME,
             })
+    labelled = fast_parse_labelled_timer(text)
+    if labelled is not None:
+        return labelled
 
     volume = _fast_music_volume(text)
     if volume is not None:
