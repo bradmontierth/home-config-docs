@@ -480,7 +480,19 @@ Validated live via /command: now/today/tomorrow/saturday all correct + timer
 and music regressions pass. Later polish: dashboard forecast card event;
 "inside temperature" queries (currently routed to none/ask).
 
-## 4. Wake word impossible while music playing — P2 (instrument, then bypass)
+## 4. Wake word impossible while music playing — P2 → AEC BUILT 2026-08-19, one cable move pending
+
+**2026-08-19 build:** real AEC instead of instrument-then-bypass — the
+kitchen mic is a reSpeaker XVF3800 with on-chip AEC that just never had a
+reference. Full story + cutover steps in `kitchen-aec-guide.md`: firmware
+flashed to 48 kHz (v2.1.0_48k2ch), loopback-mirror reference topology built
+and LIVE as interim (found the XMOS filter can't survive cross-clock drift
+— deep cancel for ~6 s, then collapse), endgame = amp plugs into the
+array's own line-out (AIC3104, 48 kHz) so speaker + reference share one
+clock. Brad: move the 3.5mm plug, run `~/aec-cutover.sh` on
+big-speaker-mini-pc, then live-test wake over music. Step 2 below
+(music-mode text wake) stays in the quiver if post-AEC recall over loud
+music still disappoints.
 
 **What we know:** ducking fires only *post*-trigger, so stage-1 sees raw
 music+voice. ~0/24 recall per Brad. But today's log shows 4 confirmed wakes
