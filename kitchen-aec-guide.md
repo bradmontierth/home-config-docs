@@ -1,5 +1,28 @@
 # Kitchen AEC — "okay computer" over music (build record + cutover guide)
 
+**CUTOVER DONE 2026-08-19 night.** Brad moved the amp aux to the array's
+3.5mm (accidentally power-cycling the mini PC via its lookalike barrel plug
+— everything came back clean on its own, which also proved the boot
+ordering). Post-cutover verification: ~30 dB cancellation, **flat for 45+ s
+— the 6-second collapse is gone** (same-clock topology, filter even retains
+convergence across sessions). Two gotchas found and fixed during cutover:
+
+- **The array's USB-audio mixer volume** (`amixer -c Array`, 'PCM') is
+  initialized by ALSA at −20 dB after flash/re-enumeration → the line-out
+  was near-silent and looked exactly like a dead jack (known XMOS "low
+  playback volume on Linux" issue). Set to 0 dB + `sudo alsactl store Array`
+  (persisted). If the array is ever re-flashed or replugged and goes quiet,
+  check this FIRST.
+- ES8336 `Speaker` switch forced off post-cutover (the mini PC's internal
+  lo-fi speaker; the power cycle resets its GPIO to amp-on — nothing routes
+  audio to the ES8336 anymore, but keep it muted anyway).
+
+AIC3104 HP/line-out levels left at Seeed's tuned default 8 (they reset to 8
+on power cycle anyway; only `SAVE_CONFIGURATION` persists on-chip changes).
+Overall chain gain differs from the ES8336 days — announcement/jukebox
+volume calibration (65) may want an ear-retune. Pending: Brad's live
+"okay computer over music" test + a day of voice-ops stage-1/2 rates.
+
 **Built 2026-08-19 (config side complete; one physical step pending).**
 Goal: backlog item 4 — wake word while music plays on the kitchen big
 speakers. Approach: give the XVF3800's on-chip AEC the far-end reference it

@@ -480,7 +480,7 @@ Validated live via /command: now/today/tomorrow/saturday all correct + timer
 and music regressions pass. Later polish: dashboard forecast card event;
 "inside temperature" queries (currently routed to none/ask).
 
-## 4. Wake word impossible while music playing — P2 → AEC BUILT 2026-08-19, one cable move pending
+## 4. Wake word impossible while music playing — P2 → AEC LIVE 2026-08-19 (cutover done, live wake test pending)
 
 **2026-08-19 build:** real AEC instead of instrument-then-bypass — the
 kitchen mic is a reSpeaker XVF3800 with on-chip AEC that just never had a
