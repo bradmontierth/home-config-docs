@@ -72,6 +72,16 @@ _PIN_WORDS = {
     "bathroom": "blind_bath",
 }
 
+# Words that name one appliance family and rule out its room-mate: "turn on
+# the fan" and "turn on the lights" differ by one noun and sit right at the
+# threshold, and the wrong one is a real action in a kid's bedroom. When a
+# phrase says "fan", the lights commands are out, and the other way round.
+_EXCLUDE_WORDS = {
+    "fan": ("simon_lights",),
+    "light": ("simon_fan",),
+    "lights": ("simon_fan",),
+}
+
 _commands_cache: tuple[float, dict] | None = None  # (mtime, parsed json)
 
 # The copy baked into the image alongside this module — the versioned seed.
@@ -188,6 +198,10 @@ def _best(query: str, commands: dict) -> tuple[str, dict, float] | None:
         pin = next(iter(pins))
         commands = {k: v for k, v in commands.items()
                     if not k.startswith("blind") or k.startswith(pin)}
+    excluded = tuple(p for w in words for p in _EXCLUDE_WORDS.get(w, ()))
+    if excluded:
+        commands = {k: v for k, v in commands.items()
+                    if not k.startswith(excluded)}
 
     best: tuple[str, dict, float] | None = None
     for key, entry in commands.items():

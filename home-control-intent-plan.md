@@ -205,3 +205,10 @@ kitchen shades have reported `supported_features: 15` (open|close|**set_position
   master closet, Simon's own from his room, all four from the kitchen.
 - **Open:** `blind_glare` still closes fully. Brad is finding the position he
   likes by voice first; bake that number into the glare button afterward.
+
+## Simon's room — fan + fun-color brightness (2026-08-22)
+
+- **Blind percentage** ("close the blind to 70", "open the blinds halfway") already worked in Simon's room — `covers.py` has had `blind_simon` (`cover.boys_room_baby_blind`, sats `simon`) since the 2026-08-18 percentage build. Nothing changed.
+- **Ceiling fan** (`fan.boys_room_ceiling_fan`, `percentage_step` 25): five new buttons in the Voice Buttons tab — `voice_simon_fan_on/off` (`fan.turn_on/off`) and `voice_simon_fan_low/medium/high` (`fan.set_percentage` 25/50/100), handled in the existing `Simon room command` function. Aliases in `home_commands.json` (seed + live `/data` table), `sats: ["simon"]`. Live-pressed: 100 → low 25 → high 100.
+- **Matcher guard:** "turn on the fan" vs "turn on the lights" differ by one noun and sit near the 80 threshold, so `home_control._EXCLUDE_WORDS` drops `simon_lights_*` when the phrase says "fan" and `simon_fan_*` when it says "light(s)" — same idea as the blind pin words. Tests in `test_home_control.py`.
+- **Fun color brightness:** effects inherit the color strip's last brightness, and after the 22:00 bedtime flow that is the 3% night red — so a daytime "give me a cool color" ran the animation at 3%. The button now sends `brightness_pct` computed exactly as the crown white CT builders do (`BriCurveStair ?? BriCurve`, clamped 1–100) alongside `effect`. Effect allow-list also synced with the four 2026-08-22 effects (Ocean Waves, Pac-Man, Thunderstorm, Campfire). Not live-pressed (built at 23:30 with Simon asleep) — daytime voice test pending.

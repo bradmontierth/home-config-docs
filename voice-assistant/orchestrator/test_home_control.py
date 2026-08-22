@@ -156,6 +156,33 @@ class HomeControlMatchTest(unittest.TestCase):
         self.assertIsNone(_handle("give me a fun color", "kitchen"))
         self.press.assert_not_awaited()
 
+    def test_simon_fan_never_crosses_with_the_lights(self):
+        cases = {
+            "turn on the fan": "button.voice_simon_fan_on",
+            "turn the fan on": "button.voice_simon_fan_on",
+            "fan off": "button.voice_simon_fan_off",
+            "turn off the fan": "button.voice_simon_fan_off",
+            "set the fan to low": "button.voice_simon_fan_low",
+            "turn the fan down": "button.voice_simon_fan_low",
+            "fan on medium": "button.voice_simon_fan_medium",
+            "turn the fan on high": "button.voice_simon_fan_high",
+            "turn the fan up": "button.voice_simon_fan_high",
+            # The one-noun neighbours must still land on the lights.
+            "turn on the lights": "button.voice_simon_lights_on",
+            "turn the lights off": "button.voice_simon_lights_off",
+        }
+        for phrase, entity in cases.items():
+            with self.subTest(phrase=phrase):
+                self.press.reset_mock()
+                result = _handle(phrase, "simon")
+                self.assertIsNotNone(result, phrase)
+                self.assertEqual(self._pressed(), entity)
+
+        # Fan commands are Simon's room only.
+        self.press.reset_mock()
+        self.assertIsNone(_handle("turn on the fan", "kitchen"))
+        self.press.assert_not_awaited()
+
     def test_exact_simon_alias_can_rescue_an_intent_model_miss(self):
         self.assertTrue(home_control.has_exact_match("set a font color", "simon"))
         self.assertFalse(home_control.has_exact_match("set a font color", "kitchen"))

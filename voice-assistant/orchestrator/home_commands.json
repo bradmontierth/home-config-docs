@@ -126,5 +126,35 @@
     "entity": "button.voice_simon_fun_color",
     "confirm": "Picking a cool effect.",
     "sats": ["simon"]
+  },
+  "simon_fan_on": {
+    "aliases": ["turn on the fan", "fan on", "turn the fan on", "turn on my fan", "turn on the ceiling fan", "start the fan"],
+    "entity": "button.voice_simon_fan_on",
+    "confirm": "Turning on the fan.",
+    "sats": ["simon"]
+  },
+  "simon_fan_off": {
+    "aliases": ["turn off the fan", "fan off", "turn the fan off", "turn off my fan", "turn off the ceiling fan", "stop the fan"],
+    "entity": "button.voice_simon_fan_off",
+    "confirm": "Turning off the fan.",
+    "sats": ["simon"]
+  },
+  "simon_fan_low": {
+    "aliases": ["set the fan to low", "fan on low", "fan low", "turn the fan on low", "put the fan on low", "turn the fan down", "fan to low"],
+    "entity": "button.voice_simon_fan_low",
+    "confirm": "Setting the fan to low.",
+    "sats": ["simon"]
+  },
+  "simon_fan_medium": {
+    "aliases": ["set the fan to medium", "fan on medium", "fan medium", "turn the fan on medium", "put the fan on medium", "fan to medium"],
+    "entity": "button.voice_simon_fan_medium",
+    "confirm": "Setting the fan to medium.",
+    "sats": ["simon"]
+  },
+  "simon_fan_high": {
+    "aliases": ["set the fan to high", "fan on high", "fan high", "turn the fan on high", "put the fan on high", "turn the fan up", "fan to high", "fan on full"],
+    "entity": "button.voice_simon_fan_high",
+    "confirm": "Setting the fan to high.",
+    "sats": ["simon"]
   }
 }
