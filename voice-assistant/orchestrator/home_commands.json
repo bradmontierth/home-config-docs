@@ -156,5 +156,95 @@
     "entity": "button.voice_simon_fan_high",
     "confirm": "Setting the fan to high.",
     "sats": ["simon"]
+  },
+  "simon_fx_rainbow": {
+    "aliases": ["rainbow", "rainbow flow", "make it rainbow", "set it to rainbow", "rainbow lights", "give me rainbow"],
+    "entity": "button.voice_simon_fx_rainbow",
+    "confirm": "Setting the lights to rainbow.",
+    "sats": ["simon"]
+  },
+  "simon_fx_rainbow_slow": {
+    "aliases": ["slow rainbow", "rainbow flow slow", "slow rainbow flow", "make it slow rainbow"],
+    "entity": "button.voice_simon_fx_rainbow_slow",
+    "confirm": "Setting the lights to slow rainbow.",
+    "sats": ["simon"]
+  },
+  "simon_fx_fine_rainbow": {
+    "aliases": ["fine rainbow", "static rainbow", "still rainbow", "static fine rainbow"],
+    "entity": "button.voice_simon_fx_fine_rainbow",
+    "confirm": "Setting the lights to fine rainbow.",
+    "sats": ["simon"]
+  },
+  "simon_fx_race_cars": {
+    "aliases": ["race cars", "race car", "racecars", "make it race cars", "set it to race cars", "give me race cars"],
+    "entity": "button.voice_simon_fx_race_cars",
+    "confirm": "Setting the lights to race cars.",
+    "sats": ["simon"]
+  },
+  "simon_fx_fireflies": {
+    "aliases": ["fireflies", "fire flies", "make it fireflies", "set it to fireflies", "give me fireflies"],
+    "entity": "button.voice_simon_fx_fireflies",
+    "confirm": "Setting the lights to fireflies.",
+    "sats": ["simon"]
+  },
+  "simon_fx_lava_lamp": {
+    "aliases": ["lava lamp", "lava", "make it lava lamp", "set it to lava lamp", "give me lava lamp"],
+    "entity": "button.voice_simon_fx_lava_lamp",
+    "confirm": "Setting the lights to lava lamp.",
+    "sats": ["simon"]
+  },
+  "simon_fx_candy_parade": {
+    "aliases": ["candy parade", "candy", "make it candy parade", "set it to candy parade", "give me candy"],
+    "entity": "button.voice_simon_fx_candy_parade",
+    "confirm": "Setting the lights to candy parade.",
+    "sats": ["simon"]
+  },
+  "simon_fx_starry_night": {
+    "aliases": ["starry night", "stars", "starry", "make it starry night", "set it to stars", "give me stars"],
+    "entity": "button.voice_simon_fx_starry_night",
+    "confirm": "Setting the lights to starry night.",
+    "sats": ["simon"]
+  },
+  "simon_fx_dino_stomp": {
+    "aliases": ["dino stomp", "dinosaur stomp", "dinosaurs", "dino", "make it dino stomp", "set it to dino stomp", "give me dino stomp"],
+    "entity": "button.voice_simon_fx_dino_stomp",
+    "confirm": "Setting the lights to dino stomp.",
+    "sats": ["simon"]
+  },
+  "simon_fx_zoom_comet": {
+    "aliases": ["zoom comet", "comet", "make it comet", "set it to comet", "give me the comet"],
+    "entity": "button.voice_simon_fx_zoom_comet",
+    "confirm": "Setting the lights to zoom comet.",
+    "sats": ["simon"]
+  },
+  "simon_fx_red_blue": {
+    "aliases": ["red and blue", "red blue", "dual zoom", "make it red and blue", "set it to red and blue", "give me red and blue"],
+    "entity": "button.voice_simon_fx_red_blue",
+    "confirm": "Setting the lights to red and blue.",
+    "sats": ["simon"]
+  },
+  "simon_fx_ocean_waves": {
+    "aliases": ["waves", "ocean waves", "ocean", "make it waves", "set it to waves", "give me waves", "give me ocean waves"],
+    "entity": "button.voice_simon_fx_ocean_waves",
+    "confirm": "Setting the lights to ocean waves.",
+    "sats": ["simon"]
+  },
+  "simon_fx_pac_man": {
+    "aliases": ["pac man", "pacman", "pack man", "make it pac man", "set it to pac man", "give me pac man", "pac man lights"],
+    "entity": "button.voice_simon_fx_pac_man",
+    "confirm": "Setting the lights to pac man.",
+    "sats": ["simon"]
+  },
+  "simon_fx_thunderstorm": {
+    "aliases": ["thunderstorm", "thunder storm", "thunder", "lightning", "storm", "make it a thunderstorm", "set it to thunderstorm", "give me a thunderstorm"],
+    "entity": "button.voice_simon_fx_thunderstorm",
+    "confirm": "Setting the lights to thunderstorm.",
+    "sats": ["simon"]
+  },
+  "simon_fx_campfire": {
+    "aliases": ["campfire", "camp fire", "fire", "make it a campfire", "set it to campfire", "give me a campfire"],
+    "entity": "button.voice_simon_fx_campfire",
+    "confirm": "Setting the lights to campfire.",
+    "sats": ["simon"]
   }
 }

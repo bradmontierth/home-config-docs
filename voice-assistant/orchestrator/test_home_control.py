@@ -178,6 +178,29 @@ class HomeControlMatchTest(unittest.TestCase):
                 self.assertIsNotNone(result, phrase)
                 self.assertEqual(self._pressed(), entity)
 
+    def test_simon_named_effects(self):
+        cases = {
+            "pac man": "button.voice_simon_fx_pac_man",
+            "pack man": "button.voice_simon_fx_pac_man",
+            "set it to pac man": "button.voice_simon_fx_pac_man",
+            "waves": "button.voice_simon_fx_ocean_waves",
+            "dino stomp": "button.voice_simon_fx_dino_stomp",
+            "dinosaurs": "button.voice_simon_fx_dino_stomp",
+            "slow rainbow": "button.voice_simon_fx_rainbow_slow",
+            "rainbow": "button.voice_simon_fx_rainbow",
+            "give me a cool color": "button.voice_simon_fun_color",
+        }
+        for phrase, entity in cases.items():
+            with self.subTest(phrase=phrase):
+                self.press.reset_mock()
+                result = _handle(phrase, "simon")
+                self.assertIsNotNone(result, phrase)
+                self.assertEqual(self._pressed(), entity)
+        self.press.reset_mock()
+        self.assertIsNone(_handle("pac man", "kitchen"))
+        self.press.assert_not_awaited()
+
+    def test_simon_fan_is_room_local(self):
         # Fan commands are Simon's room only.
         self.press.reset_mock()
         self.assertIsNone(_handle("turn on the fan", "kitchen"))
