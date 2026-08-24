@@ -135,3 +135,27 @@ private IP, so it only works from inside the network.
   editable for nicer names/descriptions in the client, but app labels from the
   APKs are what mostly show, so it's optional.
 - Windows Transcribe is an `.exe` — stays a plain homepage download link.
+
+## Android 17: Local Network Protection breaks F-Droid Basic (2026-08-24)
+
+Android 17 enforces the `ACCESS_LOCAL_NETWORK` runtime permission for apps
+targeting SDK 37+. **F-Droid Basic (2.0-alpha11 and 2.0-rc1) targets 37 but
+does not declare the permission**, so the OS silently drops its LAN sockets:
+repo refresh fails with "Connect timeout" while every other app reaches the
+LAN fine. There is no Settings toggle — an app that doesn't declare the
+permission gets no UI, and `adb appops set` returns success without effect
+(only PermissionController can change the uid mode).
+
+Diagnosis fingerprint: Caddy access log shows no request from the phone;
+`adb shell appops get org.fdroid.basic ACCESS_LOCAL_NETWORK` shows
+`Uid mode: ... ignore` with a fresh `rejectTime`; a raw `nc` from adb shell
+(shell uid) to :443 connects instantly.
+
+**Workaround in use on Brad's Pixel 8 Pro: classic F-Droid 1.23.2**
+(org.fdroid.fdroid, targetSdk 30 → implicit local-network grant), installed
+alongside Basic with the repo re-added (fdroidrepos:// link + fingerprint).
+Watch for: F-Droid Basic still holds update *ownership* of the 7 apps
+(ENFORCE_UPDATE_OWNERSHIP), so the first update installed via classic may
+prompt about the update owner. Adrienne's Pixel 9 Pro will hit the same wall
+when it takes the Android 17 OTA — same fix. Revisit when F-Droid adds
+ACCESS_LOCAL_NETWORK upstream, then Basic works again.
