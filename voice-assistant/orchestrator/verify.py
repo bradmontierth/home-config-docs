@@ -19,7 +19,11 @@ _NORM_RE = re.compile(r"[^a-z0-9 ]+")
 
 
 def _normalize(text: str) -> str:
-    return _NORM_RE.sub(" ", text.lower()).strip()
+    # Apostrophes vanish rather than becoming a space: Parakeet writes "It's
+    # story time", and "it s story time" matched nothing downstream (live in
+    # Claire's room 2026-08-25). Curly quotes count too.
+    text = text.lower().replace("\u2019", "'").replace("'", "")
+    return _NORM_RE.sub(" ", text).strip()
 
 
 def verify_and_extract(transcript: str) -> tuple[bool, str, float]:

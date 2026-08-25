@@ -51,9 +51,16 @@ _LEAD_FILLER = re.compile(
 _TAIL_FILLER = re.compile(r"(?:\s+(?:please|for me|now|thanks|thank you))+$")
 
 
+def _fold(text: str) -> str:
+    """Apostrophe-blind lowercase: "it's", "its" and the ASR artefact "it s"
+    all fold to the same thing, so an alias written either way matches."""
+    text = text.lower().replace("\u2019", "'").replace("'", "")
+    return re.sub(r"\b(it|that|what|there|let|he|she|who) s\b", r"\1s", text)
+
+
 def _clean(query: str) -> str:
-    q = _LEAD_FILLER.sub("", query)
-    return _TAIL_FILLER.sub("", q).strip()
+    q = _LEAD_FILLER.sub("", _fold(query))
+    return " ".join(_TAIL_FILLER.sub("", q).split())
 
 # Words that pin the phrase to one specific blind. When exactly one pin is
 # present, only that blind's commands (plus the non-blind commands) are
@@ -229,7 +236,7 @@ def _best(query: str, commands: dict) -> tuple[str, dict, float] | None:
 
     best: tuple[str, dict, float] | None = None
     for key, entry in commands.items():
-        score = max(fuzz.ratio(query, a.lower()) for a in entry["aliases"])
+        score = max(fuzz.ratio(query, _fold(a)) for a in entry["aliases"])
         if best is None or score > best[2]:
             best = (key, entry, score)
     return best
@@ -278,9 +285,19 @@ def has_exact_match(query: str, sat: str | None = None) -> bool:
     commands = _commands()
     sat = _named_room(query) or sat
     for entry in _house(commands, sat).values():
-        if query in (alias.lower() for alias in entry["aliases"]):
+        if query in (_fold(alias) for alias in entry["aliases"]):
             return True
     return False
+
+
+def fuzzy_match(query: str, sat: str | None = None) -> str | None:
+    """Key of the room-scoped command this phrase would press, or None.
+
+    The classifier's "none" rescue: a curated alias that clears the same
+    threshold the home_control path uses is safe to promote, because a press
+    is bounded by the button list and a miss presses nothing."""
+    best = _match(query, sat)
+    return best[0] if best else None
 
 
 def evaluate(query: str) -> dict:

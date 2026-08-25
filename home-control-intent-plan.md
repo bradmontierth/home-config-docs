@@ -277,3 +277,17 @@ at any hour, and a second ask should blast them.
   own from anywhere else (tested).
 - Live-pressed 2026-08-25: Simon 194→255→off→194 (crown white on, colour
   off); Claire off→255→255→off (her BriCurve was 100 at the time).
+
+## Apostrophes + classifier-miss rescue (2026-08-25, live from Claire's room)
+
+"Okay computer, it's story time" failed twice: the wake-strip normaliser turned
+`it's` into `it s`, the exact-alias fast path missed, and the LLM classifier
+returned `none` (its prompt has no idea "story time" is a home command).
+Fixes: `verify._normalize` now drops apostrophes instead of spacing them
+(`its story time`); `home_control._fold` makes alias matching apostrophe-blind
+and repairs the `it s` artefact; and `app.py` rescues a non-follow-up `none`
+through `home_control.fuzzy_match` (room-scoped, same 80 threshold) before
+apologising. Text `/command "It's story time."` as `sat=claire` →
+`claire_story_time`. Lesson: every curated phrase that is not obviously a
+device command needs either an exact alias or this rescue — the classifier
+prompt is not the alias table.

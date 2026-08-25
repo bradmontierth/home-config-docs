@@ -251,6 +251,17 @@ class HomeControlMatchTest(unittest.TestCase):
         _handle("turn on the lights", "simon")
         self.assertEqual(self._pressed(), "button.voice_simon_lights_on")
 
+    def test_apostrophes_and_the_asr_split_artefact_still_match(self):
+        for phrase in ("it's story time", "its story time", "it s story time",
+                       "It\u2019s story time"):
+            self.press.reset_mock()
+            _handle(phrase, "claire")
+            self.assertEqual(self._pressed(), "button.voice_claire_story_time", phrase)
+        self.assertTrue(home_control.has_exact_match("it s story time", "claire"))
+        self.assertEqual(home_control.fuzzy_match("story time please", "claire"),
+                         "claire_story_time")
+        self.assertIsNone(home_control.fuzzy_match("what time is it", "claire"))
+
     def test_claire_hot_and_cold_never_cross(self):
         # One word apart; a miss would run the mini split the wrong way.
         self.press.reset_mock()
