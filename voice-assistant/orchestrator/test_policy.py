@@ -5,9 +5,23 @@ from unittest.mock import AsyncMock, patch
 from . import policy
 
 
+# A guarded rule of the shape the kid rooms used until 2026-08-25. The live
+# seed now has quiet hours and guards disabled, so the tests carry their own.
+_GUARDED = {"simon": {"timezone": "America/Denver", "quiet_start": "20:00",
+                      "quiet_end": "07:00", "guard_entity": "input_boolean.simonalarm",
+                      "guard_blocking_state": "on", "fail_closed": True}}
+
+
 class SatellitePolicyTest(unittest.TestCase):
     def setUp(self):
         policy._state_cache.clear()
+        patcher = patch.object(policy, "_table", return_value=_GUARDED)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def test_disabled_window_never_matches(self):
+        rule = {"quiet_start": "00:00", "quiet_end": "00:00"}
+        self.assertFalse(policy._in_quiet_hours(rule))
 
     def test_unlisted_satellites_are_unchanged(self):
         result = asyncio.run(policy.evaluate("kitchen"))

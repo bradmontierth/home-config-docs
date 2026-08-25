@@ -237,6 +237,20 @@ class HomeControlMatchTest(unittest.TestCase):
                 self.assertIsNone(_handle(phrase, sat), (phrase, sat))
                 self.press.assert_not_awaited()
 
+    def test_brighter_is_room_local_and_the_kitchen_keeps_its_own(self):
+        for sat in ("simon", "claire"):
+            for phrase in ("make it brighter", "brighter", "turn up the lights", "more light"):
+                self.press.reset_mock()
+                _handle(phrase, sat)
+                self.assertEqual(self._pressed(), f"button.voice_{sat}_brighter", (sat, phrase))
+        self.press.reset_mock()
+        _handle("make it brighter", "kitchen")
+        self.assertEqual(self._pressed(), "button.voice_kitchen_brighten")
+        # "turn on the lights" while they are on is the stage-2 press; still lights_on.
+        self.press.reset_mock()
+        _handle("turn on the lights", "simon")
+        self.assertEqual(self._pressed(), "button.voice_simon_lights_on")
+
     def test_claire_hot_and_cold_never_cross(self):
         # One word apart; a miss would run the mini split the wrong way.
         self.press.reset_mock()

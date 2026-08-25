@@ -1905,3 +1905,27 @@ for intents 1..N-1, and its own tests all pass either way.
 * Live voice test (text `/command` verified end to end; TTS reading of
   "It's 3:42 PM" and "January 13, 2026" not yet heard aloud). The time format
   matches what sports.py already speaks for game times, so it should be fine.
+
+## Quiet hours — DISABLED 2026-08-25, with two things to build when they come back
+
+Both kid-room satellites (Simon, Claire) had 20:00–07:00 quiet hours (bridge
+`QUIET_START/END` + orchestrator `satellite_policies.json`) and Simon had the
+`input_boolean.simonalarm` guard on top. Brad turned all of it off: the
+kid-proofing guards against something neither kid can do yet (Simon, 3.5,
+can't land "okay computer"), while the 2 a.m. hands-full case — sick kid,
+lights — is real and was blocked. Re-enable = a real window in
+`satellite_policies.json` + the compose env; the code paths are intact.
+
+When the hours return, build these first:
+
+1. **Adult pass-through.** Speaker ID (item 9, `titanet_large`, `SPEAKER_MODE=active`)
+   already labels the turn; a quiet-hours refusal should be skipped when the
+   voice is an enrolled adult. Gate in `policy.evaluate` (needs the embedding
+   result before the policy check — today the bridge asks `/satellite/policy`
+   before ASR, so the order has to change: verify → speaker → policy).
+2. **"Heard you, but it's quiet time" feedback.** Today a refusal is silent and
+   looks identical to a dead unit. Add a third compiled sound
+   (`bridge_quiet_sound`, soft descending two-note) + `bridge_quiet_refused`
+   ESPHome action: low-volume sound + a one-second dim amber ring. Fire it for
+   both the bridge's local quiet check and an orchestrator policy refusal.
+   One firmware rebuild for both units, ~10 lines in `bridge.py`.

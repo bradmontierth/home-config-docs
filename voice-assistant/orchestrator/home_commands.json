@@ -342,5 +342,17 @@
     "entity": "button.voice_claire_hvac_off",
     "confirm": "Turning off the mini split.",
     "sats": ["claire"]
+  },
+  "simon_brighter": {
+    "aliases": ["make it brighter", "brighter", "more light", "turn up the lights", "make the lights brighter", "lights to full", "full brightness", "all the way up", "brighten the lights", "it's too dark", "i can't see"],
+    "entity": "button.voice_simon_brighter",
+    "confirm": "Brightening the lights.",
+    "sats": ["simon"]
+  },
+  "claire_brighter": {
+    "aliases": ["make it brighter", "brighter", "more light", "turn up the lights", "make the lights brighter", "lights to full", "full brightness", "all the way up", "brighten the lights", "it's too dark", "i can't see"],
+    "entity": "button.voice_claire_brighter",
+    "confirm": "Brightening the lights.",
+    "sats": ["claire"]
   }
 }

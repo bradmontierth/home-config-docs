@@ -1,17 +1,14 @@
 {
   "simon": {
     "timezone": "America/Denver",
-    "quiet_start": "20:00",
-    "quiet_end": "07:00",
-    "guard_entity": "input_boolean.simonalarm",
-    "guard_blocking_state": "on",
-    "fail_closed": true,
-    "note": "Silent/no-op while Simon is sleeping. Quiet hours are the local fail-safe; simonalarm lets the bedtime routine extend the guard outside those hours."
+    "quiet_start": "00:00",
+    "quiet_end": "00:00",
+    "note": "Quiet hours + guard DISABLED 2026-08-25 (Brad): start == end never matches, so the room answers at any hour. Re-enable by setting a real window (and a guard) once the kids can wake it themselves; pair with speaker-ID gating for adults — see voice-assistant-backlog.md."
   },
   "claire": {
     "timezone": "America/Denver",
-    "quiet_start": "20:00",
-    "quiet_end": "07:00",
-    "note": "Quiet hours only (Brad 2026-08-25): no guard entity — nap_mode was a wrong pick (it is not a Claire flag), and there is no need for one yet."
+    "quiet_start": "00:00",
+    "quiet_end": "00:00",
+    "note": "Quiet hours + guard DISABLED 2026-08-25 (Brad): start == end never matches, so the room answers at any hour. Re-enable by setting a real window (and a guard) once the kids can wake it themselves; pair with speaker-ID gating for adults — see voice-assistant-backlog.md."
   }
 }

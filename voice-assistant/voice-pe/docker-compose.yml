@@ -41,8 +41,11 @@ services:
       OMP_WAIT_POLICY: PASSIVE
       OPENBLAS_NUM_THREADS: "1"
       TRIGGER_THRESHOLD: "0.5"
-      QUIET_START: "20:00"
-      QUIET_END: "07:00"
+      # Quiet hours DISABLED 2026-08-25 (Brad): start == end never matches.
+      # The 2 a.m. hands-full case matters more than a kid-proofing that
+      # neither kid can trigger yet; bring back speaker-ID-gated, see backlog.
+      QUIET_START: "00:00"
+      QUIET_END: "00:00"
       TZ: America/Denver
       ESPhOME_SECRETS_FILE: /secrets/esphome.yaml
       API_KEY_NAME: voice_pe_api_key
@@ -94,8 +97,11 @@ services:
       OMP_WAIT_POLICY: PASSIVE
       OPENBLAS_NUM_THREADS: "1"
       TRIGGER_THRESHOLD: "0.5"
-      QUIET_START: "20:00"
-      QUIET_END: "07:00"
+      # Quiet hours DISABLED 2026-08-25 (Brad): start == end never matches.
+      # The 2 a.m. hands-full case matters more than a kid-proofing that
+      # neither kid can trigger yet; bring back speaker-ID-gated, see backlog.
+      QUIET_START: "00:00"
+      QUIET_END: "00:00"
       TZ: America/Denver
       ESPhOME_SECRETS_FILE: /secrets/esphome.yaml
       API_KEY_NAME: voice_pe_api_key

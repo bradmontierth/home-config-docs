@@ -249,3 +249,31 @@ text `/command` "turn off the fan" as `sat=claire` → `claire_fan_off`, reply
 broadcast to room `claire` at 15. Gotchas: the lamp reports ~13 s late and the
 fan bounces back on if told off within a few seconds of `set_percentage` — do
 not chain presses in tests faster than the devices settle. Live-voice pending.
+
+## Kid rooms — staged "turn on the lights" / "brighter" + quiet hours off (2026-08-25)
+
+The 2 a.m. hands-full case (Brad): lights must work by voice in both kid rooms
+at any hour, and a second ask should blast them.
+
+- **Quiet hours + guards disabled** in both bridges (`QUIET_START == QUIET_END`)
+  and `satellite_policies.json` (same trick, guard entities removed). Code
+  paths intact; re-enable notes + two follow-ups (speaker-ID pass-through,
+  "quiet time" sound) in `voice-assistant-backlog.md`.
+- **Staging** lives in one function, `kid room lights stage`, fed by an
+  `api-current-state` per room (`Simon lights now` = `light.simon_fan_lights`,
+  `Claire lamp now` = `light.claire_lamp`): reference light off → the room's
+  globals (Simon `BriCurveStair`, Claire `BriCurve`, both `CTWide`); reference
+  light already on, or the `*_brighter` button → 100 %. No timer/return: the
+  next 5-minute circadian tick takes them back, same as a Pico press.
+- **Simon's "lights"** = `light.simon_fan_lights` (group of the two fan bulbs,
+  one of them mis-named `light.master_bed_lamp_ct`) + `light.simon_lamp_ct` +
+  crown: colour channel off, then CT channel on. `simon_lights_off` now turns
+  off all of those (crown colour included, so a running effect stops).
+- **Claire's "lights"** = lamp + `light.claire_fan_1` + `light.claire_fan_2_2`
+  (the two bulbs in the fan). Off adds the closet light.
+- New buttons `simon_brighter` / `claire_brighter`; aliases deliberately
+  overlap `kitchen_brighten` ("brighter", "turn up the lights", "it's too
+  dark") — the room-local pool wins in the kid rooms, the kitchen keeps its
+  own from anywhere else (tested).
+- Live-pressed 2026-08-25: Simon 194→255→off→194 (crown white on, colour
+  off); Claire off→255→255→off (her BriCurve was 100 at the time).
