@@ -77,9 +77,9 @@ _PIN_WORDS = {
 # threshold, and the wrong one is a real action in a kid's bedroom. When a
 # phrase says "fan", the lights commands are out, and the other way round.
 _EXCLUDE_WORDS = {
-    "fan": ("simon_lights",),
-    "light": ("simon_fan",),
-    "lights": ("simon_fan",),
+    "fan": ("simon_lights", "claire_lights"),
+    "light": ("simon_fan", "claire_fan"),
+    "lights": ("simon_fan", "claire_fan"),
 }
 
 _commands_cache: tuple[float, dict] | None = None  # (mtime, parsed json)
@@ -159,7 +159,31 @@ _ROOM_WORDS = {
     "bathroom": "master",
     "shower": "master",
     "closet": "master",
+    # The kids' rooms, so "close Claire's blind" works from the kitchen and
+    # a bare "close the blind" in her room still means hers.
+    "simon": "simon",
+    "simon's": "simon",
+    "simons": "simon",
+    "claire": "claire",
+    "claire's": "claire",
+    "claires": "claire",
 }
+
+
+# Rooms named by a person's name. Unlike "kitchen", whose aliases literally
+# contain the word, these are stripped from the phrase once the room is
+# known: "close Claire's blind" from the kitchen scores as "close blind"
+# against her room's own "close the blind".
+_KID_ROOMS = {"simon", "claire"}
+
+
+def _strip_kid_room(query: str, room: str) -> str:
+    words = [w for w in re.findall(r"[a-z']+", query) if _ROOM_WORDS.get(w) != room]
+    while len(words) >= 2 and words[-1] == "room" and words[-2] in ("in", "the"):
+        words = words[:-2]
+    if words and words[-1] == "room":
+        words = words[:-1]
+    return " ".join(words)
 
 
 def _named_room(query: str) -> str | None:
@@ -224,7 +248,10 @@ def _match(query: str, sat: str | None = None) -> tuple[str, dict, float] | None
     if not query:
         return None
     commands = _commands()
-    sat = _named_room(query) or sat
+    named = _named_room(query)
+    if named in _KID_ROOMS:
+        query = _strip_kid_room(query, named)
+    sat = named or sat
     for pool in (_local(commands, sat), _house(commands, sat)):
         if not pool:
             continue

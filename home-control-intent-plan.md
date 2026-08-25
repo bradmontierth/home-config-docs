@@ -213,3 +213,39 @@ kitchen shades have reported `supported_features: 15` (open|close|**set_position
 - **Matcher guard:** "turn on the fan" vs "turn on the lights" differ by one noun and sit near the 80 threshold, so `home_control._EXCLUDE_WORDS` drops `simon_lights_*` when the phrase says "fan" and `simon_fan_*` when it says "light(s)" — same idea as the blind pin words. Tests in `test_home_control.py`.
 - **Fun color brightness:** effects inherit the color strip's last brightness, and after the 22:00 bedtime flow that is the 3% night red — so a daytime "give me a cool color" ran the animation at 3%. The button now sends `brightness_pct` computed exactly as the crown white CT builders do (`BriCurveStair ?? BriCurve`, clamped 1–100) alongside `effect`. Effect allow-list also synced with the four 2026-08-22 effects (Ocean Waves, Pac-Man, Thunderstorm, Campfire). Live-pressed 2026-08-22 ~17:40: Ocean Waves at brightness 181 (≈71%, the CT level) instead of the inherited value.
 - **Named effects:** 15 buttons `voice_simon_fx_<slug>` (one per crown effect, `None` excluded), resolved by a `namedEffects` map in the same function with the same `crownBrightness()`; aliases are kid-speak ("pac man"/"pacman"/"pack man", "waves", "dino stomp"/"dinosaurs", "stars", "storm", "fire"...), Simon-room only. Live-pressed Pac-Man + Dino Stomp at bri 178. Note `GET /home-commands/match` is unscoped (ignores room) — use `home_control._match(q, sat)` to dry-run room scoping.
+
+## Claire's room — second Voice PE (2026-08-25)
+
+Twin of Simon's room on the same firmware/bridge (`voice-assistant/voice-pe/`,
+device `claire-voice-pe` 192.168.30.60, `claire-voice-bridge` on :8795, zone
+`claire` → `ma_claire_room` / snap client `claire_room`, policy = quiet hours
+20:00–07:00 + `input_boolean.nap_mode` guard). Entities are from Dashy's
+Claire's Room section — the `adrienne_office_*` ids are stale names for her
+room, not another room.
+
+Sixteen buttons `button.voice_claire_*`, all handled by the `Claire room
+command` function on the Voice Buttons tab (router rule 6, `claire_`):
+
+| Command | Does |
+|---|---|
+| `story_time` | `light.claire_lamp` 25% @ 2000 K, fan lights + closet off, blind closed, `claireLightOverride=true` held by a 1 h stoptimer on the tab (released by `story time override release`) |
+| `bedtime` | lamp + fan lights + closet off, blind closed, override cleared / timer stopped |
+| `blind_close` / `blind_open` | `cover.adrienne_office_bali_shades_windowshade` (close is idempotent — "if it is open" needs no check) |
+| `lights_on` / `lights_off` | lamp + `light.claire_fan_1` + `light.claire_fan_2_2` at `BriCurve`/`CTWide` (on also releases the override); off adds the closet light |
+| `fan_on/off/low/medium/high` | `fan.claire_fan_js` (`percentage_step` 33 → 33/66/100) |
+| `too_hot` / `too_cold` | `climate.clairehvac2_my_heat_pump` via `Claire mini split now` → `Claire mini split decide`: if cool/heat/auto, setpoint ∓2 °F (clamped 61–79); if off/dry/fan_only, `set_temperature` with `hvac_mode` cool/heat at current temp ∓2 |
+| `hvac_cool` / `hvac_heat` / `hvac_off` | "turn on the AC" / "turn on the heat" / "turn off the AC" |
+
+Orchestrator: `home_commands.json` `claire_*` (sats `["claire"]`),
+`covers.py` `blind_claire`, `_EXCLUDE_WORDS` extended to `claire_lights`/`claire_fan`,
+and both `_ROOM_WORDS` maps learned `simon`/`claire` (+ possessives) — the
+kid-name words are stripped before scoring, so "close Claire's blind" from
+the kitchen matches her room's "close the blind".
+
+Smoke test by API press 2026-08-25: fan low 33 → off; too hot 71.5→70 (device
+rounds to whole degrees) → too cold → 71.5; story time (lamp on 64/255,
+override true) → bedtime (all off, override false); blind open 100 → close 0;
+text `/command` "turn off the fan" as `sat=claire` → `claire_fan_off`, reply
+broadcast to room `claire` at 15. Gotchas: the lamp reports ~13 s late and the
+fan bounces back on if told off within a few seconds of `set_percentage` — do
+not chain presses in tests faster than the devices settle. Live-voice pending.

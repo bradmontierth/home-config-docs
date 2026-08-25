@@ -69,3 +69,53 @@ services:
       - ./bridge/data:/data
       - /home/pi/backups/pw_pi-20260728/blobs:/models:ro
       - /home/pi/esphome/config/secrets.yaml:/secrets/esphome.yaml:ro
+
+  claire-voice-bridge:
+    build: ./bridge
+    container_name: claire-voice-bridge
+    network_mode: host
+    restart: unless-stopped
+    cpus: "1.5"
+    # Twin of simon-voice-bridge for the second Voice PE (Claire's room,
+    # 2026-08-25). Same image, same models, same safety shape: MODE=active
+    # only takes effect while /data/routed-audio-armed exists in its OWN data
+    # dir (bridge/data-claire), so the two rooms arm and disarm independently.
+    environment:
+      DEVICE_HOST: 192.168.30.60
+      DEVICE_PORT: "6053"
+      DEVICE_NAME: claire-voice-pe
+      SATELLITE_ID: claire
+      ORCH_BASE: http://127.0.0.1:8785
+      HTTP_PORT: "8795"
+      MODE: active
+      AUDIO_CHANNEL: raw
+      HOP_MS: "320"
+      OMP_NUM_THREADS: "1"
+      OMP_WAIT_POLICY: PASSIVE
+      OPENBLAS_NUM_THREADS: "1"
+      TRIGGER_THRESHOLD: "0.5"
+      QUIET_START: "20:00"
+      QUIET_END: "07:00"
+      TZ: America/Denver
+      ESPhOME_SECRETS_FILE: /secrets/esphome.yaml
+      API_KEY_NAME: voice_pe_api_key
+      MODEL_PATHS: /models/okay_computer.onnx,/models/okay_google.onnx
+      SILERO_MODEL: /models/silero_vad.onnx
+      STOP_MODEL_PATH: /models/stop.onnx
+      # Same verdict as Simon's room: the marimba ring false-fires the stop
+      # head, so timer dismissal is the alarm-only Parakeet listener.
+      STOP_MODEL_ENABLED: "false"
+      STOP_THRESHOLD: "0.5"
+      STOP_REQUIRED_HITS: "2"
+      STOP_DISMISS_ENABLED: "false"
+      STOP_LOG_THRESHOLD: "0.2"
+      STOP_HOP_MS: "224"
+      ALARM_ASR_CLIENT: kitchen-alarm
+      ALARM_WINDOW_MS: "2500"
+      ALARM_HOP_MS: "1000"
+      DATA_DIR: /data
+      ACTIVE_ARM_FILE: /data/routed-audio-armed
+    volumes:
+      - ./bridge/data-claire:/data
+      - /home/pi/backups/pw_pi-20260728/blobs:/models:ro
+      - /home/pi/esphome/config/secrets.yaml:/secrets/esphome.yaml:ro

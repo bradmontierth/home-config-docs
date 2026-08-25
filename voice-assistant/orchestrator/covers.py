@@ -92,6 +92,12 @@ _TARGETS: dict[str, dict] = {
         "spoken": "blind",
         "sats": ["simon"],
     },
+    "blind_claire": {
+        "entities": ["cover.adrienne_office_bali_shades_windowshade"],
+        "aliases": ["blind", "blinds", "shade", "my blind", "my shade"],
+        "spoken": "blind",
+        "sats": ["claire"],
+    },
 }
 
 # Rooms named out loud, so the kitchen blinds stay reachable from anywhere and
@@ -99,7 +105,24 @@ _TARGETS: dict[str, dict] = {
 _ROOM_WORDS = {
     "kitchen": "kitchen", "bath": "master", "bathroom": "master",
     "shower": "master", "closet": "master",
+    "simon": "simon", "simon's": "simon", "simons": "simon",
+    "claire": "claire", "claire's": "claire", "claires": "claire",
 }
+
+
+_KID_ROOMS = {"simon", "claire"}
+
+
+def _strip_kid_room(phrase: str, room: str) -> str:
+    """Drop the words that name a kid's room ("in Claire's room", "Simon's")
+    so what is left is the blind's own name."""
+    words = [w for w in phrase.split() if _ROOM_WORDS.get(w) != room]
+    # "the blind in [Claire's] room" -> "the blind"
+    while len(words) >= 2 and words[-1] == "room" and words[-2] in ("in", "the"):
+        words = words[:-2]
+    if words and words[-1] == "room":
+        words = words[:-1]
+    return " ".join(words)
 
 
 def _visible(entry: dict, sat: str | None) -> bool:
@@ -136,6 +159,10 @@ def resolve(phrase: str, sat: str | None = None) -> str | None:
     if room == "kitchen":
         phrase = " ".join(w for w in phrase.split() if _ROOM_WORDS.get(w) != "kitchen")
         sat = None
+    # Likewise a kid's name: "Claire's blind" and, in her room, "the blind"
+    # are the same window.
+    if room in _KID_ROOMS:
+        phrase = _strip_kid_room(phrase, room)
     local = {k: v for k, v in _TARGETS.items() if v.get("sats") and _visible(v, sat)}
     house = {k: v for k, v in _TARGETS.items() if not v.get("sats")}
     for pool in (local, house):

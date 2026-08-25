@@ -100,6 +100,14 @@ class CoverTargetTest(unittest.TestCase):
                          ["cover_target"], "blind_simon")
         self.assertEqual(_parse("close the blinds halfway", "kitchen")
                          ["cover_target"], "blinds_all")
+        self.assertEqual(_parse("close the blind halfway", "claire")
+                         ["cover_target"], "blind_claire")
+
+    def test_naming_a_kids_room_reaches_it_from_anywhere(self):
+        self.assertEqual(_parse("close claire's blind halfway", "kitchen")
+                         ["cover_target"], "blind_claire")
+        self.assertEqual(_parse("open simon's blind to 80", "claire")
+                         ["cover_target"], "blind_simon")
 
     def test_naming_the_kitchen_reaches_it_from_anywhere(self):
         parsed = _parse("set the kitchen blinds to 40 percent", "master")

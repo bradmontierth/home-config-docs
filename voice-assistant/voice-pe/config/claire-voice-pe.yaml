@@ -1,0 +1,276 @@
+substitutions:
+  hidden_ssid: "false"
+  # The PE's tiny local speaker is used only for wake/VAD feedback here.
+  # Seventy-five percent is clearly audible while retaining DAC headroom.
+  bridge_feedback_volume: "75%"
+  # Pin every bundled upstream sound to the same release as the firmware base.
+  jack_connected_sound_file: https://github.com/esphome/home-assistant-voice-pe/raw/26.6.0/sounds/jack_connected.flac
+  jack_disconnected_sound_file: https://github.com/esphome/home-assistant-voice-pe/raw/26.6.0/sounds/jack_disconnected.flac
+  mute_switch_on_sound_file: https://github.com/esphome/home-assistant-voice-pe/raw/26.6.0/sounds/mute_switch_on.flac
+  mute_switch_off_sound_file: https://github.com/esphome/home-assistant-voice-pe/raw/26.6.0/sounds/mute_switch_off.flac
+  timer_finished_sound_file: https://github.com/esphome/home-assistant-voice-pe/raw/26.6.0/sounds/timer_finished.flac
+  wake_word_triggered_sound_file: https://github.com/esphome/home-assistant-voice-pe/raw/26.6.0/sounds/wake_word_triggered.flac
+  center_button_press_sound_file: https://github.com/esphome/home-assistant-voice-pe/raw/26.6.0/sounds/center_button_press.flac
+  center_button_double_press_sound_file: https://github.com/esphome/home-assistant-voice-pe/raw/26.6.0/sounds/center_button_double_press.flac
+  center_button_triple_press_sound_file: https://github.com/esphome/home-assistant-voice-pe/raw/26.6.0/sounds/center_button_triple_press.flac
+  center_button_long_press_sound_file: https://github.com/esphome/home-assistant-voice-pe/raw/26.6.0/sounds/center_button_long_press.flac
+  factory_reset_initiated_sound_file: https://github.com/esphome/home-assistant-voice-pe/raw/26.6.0/sounds/factory_reset_initiated.mp3
+  factory_reset_cancelled_sound_file: https://github.com/esphome/home-assistant-voice-pe/raw/26.6.0/sounds/factory_reset_cancelled.mp3
+  factory_reset_confirmed_sound_file: https://github.com/esphome/home-assistant-voice-pe/raw/26.6.0/sounds/factory_reset_confirmed.mp3
+  easter_egg_tick_sound_file: https://github.com/esphome/home-assistant-voice-pe/raw/26.6.0/sounds/easter_egg_tick.mp3
+  easter_egg_tada_sound_file: https://github.com/esphome/home-assistant-voice-pe/raw/26.6.0/sounds/easter_egg_tada.mp3
+  error_cloud_expired_sound_file: https://github.com/esphome/home-assistant-voice-pe/raw/26.6.0/sounds/error_cloud_expired.mp3
+
+packages:
+  upstream_voice_pe:
+    url: https://github.com/esphome/home-assistant-voice-pe
+    ref: 26.6.0
+    files:
+      - home-assistant-voice.yaml
+    refresh: 0s
+  scrub_upstream: !include base-scrub.yaml
+
+esphome:
+  name: claire-voice-pe
+  friendly_name: Claire Voice PE
+  name_add_mac_suffix: false
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+
+api:
+  encryption:
+    key: !secret voice_pe_api_key
+  actions:
+    - action: bridge_start_stream
+      then:
+        - lambda: id(init_in_progress) = false;
+        - media_player.volume_set:
+            id: external_media_player
+            volume: ${bridge_feedback_volume}
+        - micro_wake_word.stop:
+        - voice_assistant.start_continuous:
+        - lambda: id(voice_assistant_phase) = ${voice_assist_idle_phase_id};
+        - script.execute: control_leds
+    # The bridge invokes these only after server-side stage-2 verification.
+    # No action is invoked during quiet hours or while running in shadow mode.
+    - action: bridge_wake_confirmed
+      then:
+        - lambda: id(voice_assistant_phase) = ${voice_assist_waiting_for_command_phase_id};
+        - script.execute: control_leds
+        - script.execute:
+            id: play_sound
+            priority: true
+            sound_file: bridge_wake_sound
+    - action: bridge_vad_complete
+      then:
+        - lambda: id(voice_assistant_phase) = ${voice_assist_thinking_phase_id};
+        - script.execute: control_leds
+        - script.execute:
+            id: play_sound
+            priority: true
+            sound_file: bridge_vad_sound
+    - action: bridge_alarm_dismissed
+      then:
+        - script.execute:
+            id: play_sound
+            priority: true
+            sound_file: bridge_dismiss_sound
+    - action: bridge_idle
+      then:
+        - lambda: id(voice_assistant_phase) = ${voice_assist_idle_phase_id};
+        - script.execute: control_leds
+    - action: bridge_error
+      then:
+        - lambda: id(voice_assistant_phase) = ${voice_assist_error_phase_id};
+        - script.execute: control_leds
+
+ota:
+  - platform: esphome
+    id: !extend ota_esphome
+    password: !secret esphome_ota_pass
+
+# Keep the Voice PE hardware driver on the exact same release as the base.
+external_components:
+  - source:
+      type: git
+      url: https://github.com/esphome/home-assistant-voice-pe
+      ref: 26.6.0
+    components:
+      - voice_kit
+    refresh: 0s
+
+# These are the same house chimes used by the Pi satellites. They are compiled
+# into the appliance, so feedback remains local and has no Snapclient path.
+audio_file:
+  - id: bridge_wake_sound
+    file: /workspace/voice-assistant/satellite/sounds/wake.wav
+  - id: bridge_vad_sound
+    file: /workspace/voice-assistant/satellite/sounds/vad.wav
+  - id: bridge_dismiss_sound
+    file: /workspace/voice-assistant/satellite/sounds/dismiss.wav
+
+event:
+  - id: !extend button_press_event
+    event_types:
+      - press
+
+binary_sensor:
+  - id: !extend center_button
+    on_multi_click:
+      # A short press is deliberately only an event. The server maps it to an
+      # idempotent stop of Claire's room queue; it never starts native Assist.
+      - timing:
+          - ON for at most 1s
+          - OFF for at least 0.25s
+        then:
+          - if:
+              condition:
+                lambda: return !id(init_in_progress) && !id(color_changed) && !id(group_volume_changed);
+              then:
+                - event.trigger:
+                    id: button_press_event
+                    event_type: press
+      # Preserve the stock exposed multi-press events.
+      - timing:
+          - ON for at most 1s
+          - OFF for at most 0.25s
+          - ON for at most 1s
+          - OFF for at least 0.25s
+        then:
+          - if:
+              condition:
+                lambda: return !id(init_in_progress) && !id(color_changed) && !id(group_volume_changed);
+              then:
+                - script.execute:
+                    id: play_sound
+                    priority: false
+                    sound_file: center_button_double_press_sound
+                - event.trigger:
+                    id: button_press_event
+                    event_type: double_press
+      - timing:
+          - ON for at most 1s
+          - OFF for at most 0.25s
+          - ON for at most 1s
+          - OFF for at most 0.25s
+          - ON for at most 1s
+          - OFF for at least 0.25s
+        then:
+          - if:
+              condition:
+                lambda: return !id(init_in_progress) && !id(color_changed) && !id(group_volume_changed);
+              then:
+                - script.execute:
+                    id: play_sound
+                    priority: false
+                    sound_file: center_button_triple_press_sound
+                - event.trigger:
+                    id: button_press_event
+                    event_type: triple_press
+      - timing:
+          - ON for at least 1s
+        then:
+          - if:
+              condition:
+                lambda: return !id(init_in_progress) && !id(color_changed) && !id(group_volume_changed);
+              then:
+                - script.execute:
+                    id: play_sound
+                    priority: false
+                    sound_file: center_button_long_press_sound
+                - light.turn_off: voice_assistant_leds
+                - event.trigger:
+                    id: button_press_event
+                    event_type: long_press
+      # Preserve the stock hidden easter egg.
+      - timing:
+          - ON for at most 0.2s
+          - OFF for 0s to 2s
+          - ON for at most 0.2s
+          - OFF for 0s to 2s
+          - ON for at most 0.2s
+          - OFF for 0s to 2s
+          - ON for at most 0.2s
+          - OFF for 0.5s to 2s
+          - ON for at most 0.2s
+          - OFF for 0s to 2s
+          - ON for 0.2s to 2s
+        then:
+          - if:
+              condition:
+                lambda: return !id(init_in_progress);
+              then:
+                - light.turn_on:
+                    brightness: 100%
+                    id: voice_assistant_leds
+                    effect: Tick
+                - script.execute:
+                    id: play_sound
+                    priority: true
+                    sound_file: easter_egg_tick_sound
+                - delay: 4s
+                - light.turn_off: voice_assistant_leds
+                - script.execute:
+                    id: play_sound
+                    priority: true
+                    sound_file: easter_egg_tada_sound
+                - light.turn_on:
+                    brightness: 100%
+                    id: voice_assistant_leds
+                    effect: Rainbow
+                - event.trigger:
+                    id: button_press_event
+                    event_type: easter_egg_press
+      # Preserve the two-stage, release-to-confirm factory reset gesture.
+      - timing:
+          - ON for at least 10s
+        then:
+          - if:
+              condition:
+                lambda: return !id(dial_touched);
+              then:
+                - light.turn_on:
+                    brightness: 100%
+                    id: voice_assistant_leds
+                    effect: Factory Reset Coming Up
+                - script.execute:
+                    id: play_sound
+                    priority: true
+                    sound_file: factory_reset_initiated_sound
+                - wait_until:
+                    binary_sensor.is_off: center_button
+                - if:
+                    condition:
+                      lambda: return !id(factory_reset_requested);
+                    then:
+                      - light.turn_off: voice_assistant_leds
+                      - script.execute:
+                          id: play_sound
+                          priority: true
+                          sound_file: factory_reset_cancelled_sound
+      - timing:
+          - ON for at least 22s
+        then:
+          - if:
+              condition:
+                lambda: return !id(dial_touched);
+              then:
+                - script.execute:
+                    id: play_sound
+                    priority: true
+                    sound_file: factory_reset_confirmed_sound
+                - light.turn_on:
+                    brightness: 100%
+                    red: 100%
+                    green: 0%
+                    blue: 0%
+                    id: voice_assistant_leds
+                    effect: none
+                - lambda: id(factory_reset_requested) = true;
+
+voice_assistant:
+  id: va
+  use_wake_word: false
+  on_client_connected: !remove

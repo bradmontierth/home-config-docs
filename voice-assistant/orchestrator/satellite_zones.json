@@ -42,3 +42,21 @@
     "note": "Voice PE in Simon's room. The device owns only mic, LED and chimes; replies, timer alarms and music use the Simon amp-zone speakers. Child-safe ceilings and a one-hour music cap are intentional."
   }
 }
+  },
+  "claire": {
+    "spoken": "Claire's room",
+    "rooms": [
+      "claire"
+    ],
+    "voice": "fast:doorbell",
+    "volume": 15,
+    "host": "http://127.0.0.1:8795",
+    "alarm": "zone",
+    "ma_player": "ma_claire_room",
+    "alarm_volume": 35,
+    "music_player": "ma_claire_room",
+    "music_volume": 15,
+    "music_max_volume": 30,
+    "music_cap_minutes": 60,
+    "snap_client": "claire_room",
+    "note": "Voice PE in Claire's room, a twin of Simon's: the device owns only mic, LED and chimes; replies, timer alarms and music use the Claire amp-zone speakers. Same child-safe ceilings and one-hour music cap."

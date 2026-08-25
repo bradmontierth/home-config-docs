@@ -1,3 +1,5 @@
+> **2026-08-25:** a second Voice PE went into Claire's room, set up as a twin of Simon's (`voice-assistant/voice-pe/`, bridge :8795, device 192.168.30.60). Room commands in `home-control-intent-plan.md` §Claire's room. The shelf-satellite plan below is superseded for that room.
+
 # Upstairs Voice Satellites — Two Bookshelf Rooms Now, Ceiling Later
 
 Status: **plan only, nothing built.** Drafted 2026-07-30 as a PoE/ceiling

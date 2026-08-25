@@ -1,2 +1,6 @@
 246d1387b5a2daa5925ec9f22c40b9fc40f1de2620eaf42aaafda58aea22db05  firmware.factory.bin
 ffbdf5f30d9a6470d679554c65401ed3f1289c467099a960726b8ef91b8678cf  firmware.ota.bin
+
+# claire-voice-pe (built 2026-08-25, ESPHome 2026.7.4 / Voice PE 26.6.0; copies in /home/pi/backups/voice-pe/claire-voice-pe-20260825)
+b23cb252a18b21f1126cdaa056d020c42819c1dd12abd6906cc60ec9989ce257  claire-voice-pe/firmware.factory.bin
+36d5ac77dc18288ac09f15b3e62624311298afabae8af5adbefcf4fe99a002d2  claire-voice-pe/firmware.ota.bin

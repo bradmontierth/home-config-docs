@@ -206,6 +206,57 @@ class HomeControlMatchTest(unittest.TestCase):
         self.assertIsNone(_handle("turn on the fan", "kitchen"))
         self.press.assert_not_awaited()
 
+    def test_claire_room_commands_are_local_and_unambiguous(self):
+        cases = {
+            "story time": "button.voice_claire_story_time",
+            "let's read a book": "button.voice_claire_story_time",
+            "bedtime": "button.voice_claire_bedtime",
+            "night night": "button.voice_claire_bedtime",
+            "close the blind": "button.voice_claire_blind_close",
+            "turn on the lights": "button.voice_claire_lights_on",
+            "lights off": "button.voice_claire_lights_off",
+            "turn on the fan": "button.voice_claire_fan_on",
+            "fan on high": "button.voice_claire_fan_high",
+            "it's hot in here": "button.voice_claire_too_hot",
+            "it's cold in here": "button.voice_claire_too_cold",
+            "turn on the ac": "button.voice_claire_hvac_cool",
+            "turn on the heat": "button.voice_claire_hvac_heat",
+            "turn off the ac": "button.voice_claire_hvac_off",
+        }
+        for phrase, entity in cases.items():
+            with self.subTest(phrase=phrase):
+                self.press.reset_mock()
+                result = _handle(phrase, "claire")
+                self.assertIsNotNone(result)
+                self.assertEqual(self._pressed(), entity)
+
+        # Nothing of Claire's is reachable from the kitchen or Simon's room.
+        for phrase in ("story time", "bedtime", "it's hot in here"):
+            for sat in ("kitchen", "simon"):
+                self.press.reset_mock()
+                self.assertIsNone(_handle(phrase, sat), (phrase, sat))
+                self.press.assert_not_awaited()
+
+    def test_claire_hot_and_cold_never_cross(self):
+        # One word apart; a miss would run the mini split the wrong way.
+        self.press.reset_mock()
+        _handle("it's too hot", "claire")
+        self.assertEqual(self._pressed(), "button.voice_claire_too_hot")
+        self.press.reset_mock()
+        _handle("it's too cold", "claire")
+        self.assertEqual(self._pressed(), "button.voice_claire_too_cold")
+        self.press.reset_mock()
+        _handle("turn off the heat", "claire")
+        self.assertEqual(self._pressed(), "button.voice_claire_hvac_off")
+
+    def test_naming_a_kids_room_reaches_it_from_the_kitchen(self):
+        self.press.reset_mock()
+        _handle("close claire's blind", "kitchen")
+        self.assertEqual(self._pressed(), "button.voice_claire_blind_close")
+        self.press.reset_mock()
+        _handle("close simon's blind", "kitchen")
+        self.assertEqual(self._pressed(), "button.voice_simon_blind_close")
+
     def test_exact_simon_alias_can_rescue_an_intent_model_miss(self):
         self.assertTrue(home_control.has_exact_match("set a font color", "simon"))
         self.assertFalse(home_control.has_exact_match("set a font color", "kitchen"))

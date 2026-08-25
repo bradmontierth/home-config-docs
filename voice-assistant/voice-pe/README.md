@@ -1,7 +1,12 @@
-# Simon Voice PE firmware
+# Voice PE firmware (Simon's and Claire's rooms)
 
-This is an isolated build environment for the Home Assistant Voice Preview
-Edition in Simon's room. It never uses the production or legacy ESPHome
+This is an isolated build environment for the two Home Assistant Voice Preview
+Editions: `simon-voice-pe.yaml` (Simon's room, 192.168.30.62, bridge port 8793)
+and `claire-voice-pe.yaml` (Claire's room, 192.168.30.60, bridge port 8795,
+added 2026-08-25). The two YAMLs differ only in `name`/`friendly_name`; keep
+them that way. Everything below applies to both — substitute the YAML, the
+device IP and the bridge service name (`claire-voice-bridge`, data dir
+`bridge/data-claire`, its own `routed-audio-armed` marker). It never uses the production or legacy ESPHome
 containers and never mounts either dashboard's build cache.
 
 The image and upstream firmware are pinned:
@@ -42,8 +47,14 @@ The custom image installs the normal shared ESPHome OTA password for later
 uploads. Never send a `firmware.factory.bin` through OTA.
 
 The first wireless upload was proven on 2026-08-10 from this disposable
-container; it took 17 seconds. Current recovery artifacts and hashes are in
-`FIRMWARE-SHA256SUMS`.
+container; it took 17 seconds. Claire's unit was flashed the same way on
+2026-08-25 (13 s) while it still sat on the main VLAN at 192.168.10.61 — the
+house firmware uses the IoT SSID, so a fresh unit hops to VLAN30 with a new
+DHCP address on its first custom boot. Find it again by scanning VLAN30 for
+port 6053 hosts that demand encryption and reading the name out of the noise
+handshake (`InvalidEncryptionKeyAPIError.received_name`). Current recovery
+artifacts and hashes are in `FIRMWARE-SHA256SUMS`; image copies live under
+`/home/pi/backups/voice-pe/`.
 
 ## Bridge and safety hold
 
@@ -54,7 +65,8 @@ starts in `shadow`, exposes health on Beelink port 8793, and cannot enter
 
 ```bash
 docker compose up -d --build simon-voice-bridge
-curl -s http://127.0.0.1:8793/health | jq
+curl -s http://127.0.0.1:8793/health | jq   # Simon
+curl -s http://127.0.0.1:8795/health | jq   # Claire (8794 belongs to llm-benchmarks' report server)
 ```
 
 Before routed-audio testing:

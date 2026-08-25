@@ -246,5 +246,101 @@
     "entity": "button.voice_simon_fx_campfire",
     "confirm": "Setting the lights to campfire.",
     "sats": ["simon"]
+  },
+  "claire_story_time": {
+    "aliases": ["story time", "it's story time", "story time please", "book time", "time for a story", "let's read a book", "reading time", "time for books"],
+    "entity": "button.voice_claire_story_time",
+    "confirm": "Story time.",
+    "sats": ["claire"]
+  },
+  "claire_bedtime": {
+    "aliases": ["bedtime", "it's bedtime", "bed time", "time for bed", "night night", "good night", "nap time", "it's nap time", "time for a nap"],
+    "entity": "button.voice_claire_bedtime",
+    "confirm": "Good night, Claire.",
+    "sats": ["claire"]
+  },
+  "claire_blind_close": {
+    "aliases": ["close the blind", "close the blinds", "close the shade", "shut the blind"],
+    "entity": "button.voice_claire_blind_close",
+    "confirm": "Closing the blind.",
+    "sats": ["claire"]
+  },
+  "claire_blind_open": {
+    "aliases": ["open the blind", "open the blinds", "open the shade"],
+    "entity": "button.voice_claire_blind_open",
+    "confirm": "Opening the blind.",
+    "sats": ["claire"]
+  },
+  "claire_lights_on": {
+    "aliases": ["turn on the lights", "lights on", "turn the lights on", "turn on my lights"],
+    "entity": "button.voice_claire_lights_on",
+    "confirm": "Turning on the lights.",
+    "sats": ["claire"]
+  },
+  "claire_lights_off": {
+    "aliases": ["turn off the lights", "lights off", "turn the lights off", "turn off my lights"],
+    "entity": "button.voice_claire_lights_off",
+    "confirm": "Turning off the lights.",
+    "sats": ["claire"]
+  },
+  "claire_fan_on": {
+    "aliases": ["turn on the fan", "fan on", "turn the fan on", "turn on my fan", "turn on the ceiling fan", "start the fan"],
+    "entity": "button.voice_claire_fan_on",
+    "confirm": "Turning on the fan.",
+    "sats": ["claire"]
+  },
+  "claire_fan_off": {
+    "aliases": ["turn off the fan", "fan off", "turn the fan off", "turn off my fan", "turn off the ceiling fan", "stop the fan"],
+    "entity": "button.voice_claire_fan_off",
+    "confirm": "Turning off the fan.",
+    "sats": ["claire"]
+  },
+  "claire_fan_low": {
+    "aliases": ["set the fan to low", "fan on low", "fan low", "turn the fan on low", "put the fan on low", "turn the fan down", "fan to low"],
+    "entity": "button.voice_claire_fan_low",
+    "confirm": "Setting the fan to low.",
+    "sats": ["claire"]
+  },
+  "claire_fan_medium": {
+    "aliases": ["set the fan to medium", "fan on medium", "fan medium", "turn the fan on medium", "put the fan on medium", "fan to medium"],
+    "entity": "button.voice_claire_fan_medium",
+    "confirm": "Setting the fan to medium.",
+    "sats": ["claire"]
+  },
+  "claire_fan_high": {
+    "aliases": ["set the fan to high", "fan on high", "fan high", "turn the fan on high", "put the fan on high", "turn the fan up", "fan to high", "fan on full"],
+    "entity": "button.voice_claire_fan_high",
+    "confirm": "Setting the fan to high.",
+    "sats": ["claire"]
+  },
+  "claire_too_hot": {
+    "aliases": ["it's hot in here", "it is hot in here", "it's too hot in here", "it's too hot", "it's hot", "too hot", "i'm hot", "make it cooler", "make it colder", "cool it down", "turn it down", "it's warm in here", "it's too warm"],
+    "entity": "button.voice_claire_too_hot",
+    "confirm": "Cooling it down a bit.",
+    "sats": ["claire"]
+  },
+  "claire_too_cold": {
+    "aliases": ["it's cold in here", "it is cold in here", "it's too cold in here", "it's too cold", "it's cold", "too cold", "i'm cold", "make it warmer", "warm it up", "turn it up", "it's chilly in here", "it's freezing in here"],
+    "entity": "button.voice_claire_too_cold",
+    "confirm": "Warming it up a bit.",
+    "sats": ["claire"]
+  },
+  "claire_hvac_cool": {
+    "aliases": ["turn on the ac", "turn on the air conditioning", "turn on the air", "ac on", "turn on the cooling", "start the ac"],
+    "entity": "button.voice_claire_hvac_cool",
+    "confirm": "Turning on the AC.",
+    "sats": ["claire"]
+  },
+  "claire_hvac_heat": {
+    "aliases": ["turn on the heat", "turn on the heater", "heat on", "turn on the heating", "start the heat"],
+    "entity": "button.voice_claire_hvac_heat",
+    "confirm": "Turning on the heat.",
+    "sats": ["claire"]
+  },
+  "claire_hvac_off": {
+    "aliases": ["turn off the ac", "turn off the air conditioning", "turn off the heat", "turn off the heater", "turn off the mini split", "ac off", "heat off", "turn off the air"],
+    "entity": "button.voice_claire_hvac_off",
+    "confirm": "Turning off the mini split.",
+    "sats": ["claire"]
   }
 }
