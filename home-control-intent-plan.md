@@ -219,7 +219,7 @@ kitchen shades have reported `supported_features: 15` (open|close|**set_position
 Twin of Simon's room on the same firmware/bridge (`voice-assistant/voice-pe/`,
 device `claire-voice-pe` 192.168.30.60, `claire-voice-bridge` on :8795, zone
 `claire` → `ma_claire_room` / snap client `claire_room`, policy = quiet hours
-20:00–07:00 + `input_boolean.nap_mode` guard). Entities are from Dashy's
+20:00–07:00, no guard entity). Entities are from Dashy's
 Claire's Room section — the `adrienne_office_*` ids are stale names for her
 room, not another room.
 
@@ -228,7 +228,7 @@ command` function on the Voice Buttons tab (router rule 6, `claire_`):
 
 | Command | Does |
 |---|---|
-| `story_time` | `light.claire_lamp` 25% @ 2000 K, fan lights + closet off, blind closed, `claireLightOverride=true` held by a 1 h stoptimer on the tab (released by `story time override release`) |
+| `story_time` | `light.claire_lamp` 10% @ 2000 K, fan lights + closet off, blind closed, `claireLightOverride=true` held by a 1 h stoptimer on the tab (released by `story time override release`) |
 | `bedtime` | lamp + fan lights + closet off, blind closed, override cleared / timer stopped |
 | `blind_close` / `blind_open` | `cover.adrienne_office_bali_shades_windowshade` (close is idempotent — "if it is open" needs no check) |
 | `lights_on` / `lights_off` | lamp + `light.claire_fan_1` + `light.claire_fan_2_2` at `BriCurve`/`CTWide` (on also releases the override); off adds the closet light |
@@ -243,7 +243,7 @@ kid-name words are stripped before scoring, so "close Claire's blind" from
 the kitchen matches her room's "close the blind".
 
 Smoke test by API press 2026-08-25: fan low 33 → off; too hot 71.5→70 (device
-rounds to whole degrees) → too cold → 71.5; story time (lamp on 64/255,
+rounds to whole degrees) → too cold → 71.5; story time (lamp on, then re-set to 10 % per Brad,
 override true) → bedtime (all off, override false); blind open 100 → close 0;
 text `/command` "turn off the fan" as `sat=claire` → `claire_fan_off`, reply
 broadcast to room `claire` at 15. Gotchas: the lamp reports ~13 s late and the

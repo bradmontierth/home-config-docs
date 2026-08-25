@@ -49,7 +49,7 @@ uploads. Never send a `firmware.factory.bin` through OTA.
 The first wireless upload was proven on 2026-08-10 from this disposable
 container; it took 17 seconds. Claire's unit was flashed the same way on
 2026-08-25 (13 s) while it still sat on the main VLAN at 192.168.10.61 — the
-house firmware uses the IoT SSID, so a fresh unit hops to VLAN30 with a new
+house firmware uses the NoT SSID (VLAN30, no outbound internet — VLAN40 is the IoT one), so a fresh unit hops to VLAN30 with a new
 DHCP address on its first custom boot. Find it again by scanning VLAN30 for
 port 6053 hosts that demand encryption and reading the name out of the noise
 handshake (`InvalidEncryptionKeyAPIError.received_name`). Current recovery

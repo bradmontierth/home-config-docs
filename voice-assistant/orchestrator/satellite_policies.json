@@ -12,9 +12,6 @@
     "timezone": "America/Denver",
     "quiet_start": "20:00",
     "quiet_end": "07:00",
-    "guard_entity": "input_boolean.nap_mode",
-    "guard_blocking_state": "on",
-    "fail_closed": true,
-    "note": "Silent/no-op while Claire is sleeping. Quiet hours are the local fail-safe; nap_mode (the house's existing Claire-nap flag) extends the guard to daytime naps."
+    "note": "Quiet hours only (Brad 2026-08-25): no guard entity — nap_mode was a wrong pick (it is not a Claire flag), and there is no need for one yet."
   }
 }
