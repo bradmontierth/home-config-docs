@@ -67,7 +67,12 @@ CREATE TABLE IF NOT EXISTS turns (
     total_ms       INTEGER,
     clip           TEXT,
     ok             INTEGER,
-    backfilled     INTEGER DEFAULT 0
+    backfilled     INTEGER DEFAULT 0,
+    wake_rms_db    REAL,
+    arb_turn_id    TEXT,
+    other_sat      TEXT,
+    other_stage1   REAL,
+    other_rms_db   REAL
 );
 CREATE INDEX IF NOT EXISTS turns_at  ON turns(at DESC);
 CREATE INDEX IF NOT EXISTS turns_sat ON turns(sat, at DESC);
@@ -81,12 +86,25 @@ _UPDATABLE = frozenset({
     "slots", "response", "speaker", "speaker_score", "speaker_margin",
     "chime_ms", "rtt_ms", "server_ms", "asr_ms", "classify_ms", "handler_ms",
     "tts_ms", "total_ms", "clip", "ok", "backfilled",
+    "wake_rms_db", "arb_turn_id", "other_sat", "other_stage1", "other_rms_db",
 })
 
 # Applied on open, ignoring "duplicate column" — same pattern as timers.py.
 # server_ms was added 2026-08-11 with the backfill: it is what the SATELLITE
 # measured our side of the turn to be, so rtt_ms minus server_ms is WiFi+HTTP.
-_MIGRATIONS = ("ALTER TABLE turns ADD COLUMN server_ms INTEGER",)
+# The five 2026-08-25 columns are the paired-microphone evidence for room
+# attribution in the kitchen/family-room domain: wake_rms_db is this mic's
+# pre-roll loudness (loudness.py); on the arbitration LOSER's row arb_turn_id
+# is the winner's turn, and the winner's row gets the loser's sat, stage-1
+# peak and loudness as other_* so one row holds the whole pair.
+_MIGRATIONS = (
+    "ALTER TABLE turns ADD COLUMN server_ms INTEGER",
+    "ALTER TABLE turns ADD COLUMN wake_rms_db REAL",
+    "ALTER TABLE turns ADD COLUMN arb_turn_id TEXT",
+    "ALTER TABLE turns ADD COLUMN other_sat TEXT",
+    "ALTER TABLE turns ADD COLUMN other_stage1 REAL",
+    "ALTER TABLE turns ADD COLUMN other_rms_db REAL",
+)
 
 _db: sqlite3.Connection | None = None
 

@@ -46,7 +46,7 @@ from . import speaker as speaker_mod
 from . import sports as sports_mod
 from . import weather as weather_mod
 from . import clients, config, events, format as fmt, intent as intent_mod, verify
-from . import timing, turns as turns_mod, zones
+from . import loudness, timing, turns as turns_mod, zones
 from .timers import RINGING, TimerEngine
 
 logging.basicConfig(
@@ -187,7 +187,11 @@ def session_context() -> str | None:
 # twice per /verify — at entry (cheap, skips ASR when the race is already
 # lost) and again after our own ASR verifies (the other mic may have finished
 # verifying while ours was decoding).
-_ARB = {"sat": None, "until": 0.0}
+# turn_id / rms_db / stage1 describe the winner's wake so the loser's /verify
+# can be paired onto the winner's row (turns.other_*) — the evidence for
+# attributing a room by which mic heard the speaker louder, see loudness.py.
+_ARB = {"sat": None, "until": 0.0, "turn_id": None, "rms_db": None,
+        "stage1": None}
 
 
 def _arb_holder(sat: str) -> str | None:
@@ -197,9 +201,32 @@ def _arb_holder(sat: str) -> str | None:
     return None
 
 
-def _arb_claim(sat: str) -> None:
-    _ARB["sat"] = sat
-    _ARB["until"] = time.time() + config.ARB_SUPPRESS_S
+def _arb_claim(sat: str, stage1: float | None = None) -> None:
+    _ARB.update(sat=sat, until=time.time() + config.ARB_SUPPRESS_S,
+                turn_id=None, rms_db=None, stage1=stage1)
+
+
+async def _note_wake_loudness(turn_id: str, wav: bytes, sat: str,
+                              winner: str | None = None,
+                              stage1: float | None = None) -> None:
+    """Measure this wake's loudness off the chime path and file it.
+
+    Runs as a task after the /verify response is on the wire: a few ms of
+    pure-Python RMS that must not sit between the wake and the chime. For an
+    arbitration loser, also pairs the reading onto the winner's row, so one
+    row carries both mics' loudness and stage-1 scores for the same wake.
+    """
+    rms = loudness.peak_window_dbfs(wav)
+    turns_mod.update(turn_id, wake_rms_db=rms)
+    if winner is None:
+        if _ARB["sat"] == sat:
+            _ARB["rms_db"] = rms
+        return
+    if _ARB["sat"] == winner and _ARB["turn_id"]:
+        turns_mod.update(_ARB["turn_id"], other_sat=sat, other_stage1=stage1,
+                         other_rms_db=rms)
+    log.info("arb evidence winner=%s rms=%s stage1=%s | loser=%s rms=%s stage1=%s",
+             winner, _ARB["rms_db"], _ARB["stage1"], sat, rms, stage1)
 
 
 # Which satellite the in-flight turn belongs to, so _finalize can route the
@@ -1300,7 +1327,8 @@ async def verify_wake_probe(request: Request, sat: str = "kitchen") -> dict:
 
 
 @app.post("/verify")
-async def verify_wake(request: Request, sat: str = "kitchen") -> dict:
+async def verify_wake(request: Request, sat: str = "kitchen",
+                      peak: float | None = None) -> dict:
     """Phase 1: stage-2 verification on the pre-roll (wake phrase audio only).
     Fast path so the satellite can chime the instant the wake word is confirmed,
     then start capturing the command. `command` is any speech already trailing
@@ -1310,7 +1338,11 @@ async def verify_wake(request: Request, sat: str = "kitchen") -> dict:
     (VERIFY_TAIL_S); either passing verifies the turn. This rescues wake words
     spoken OVER another voice — Parakeet is single-speaker and latches onto the
     stream with more context, so the competing voice's lead-in must be cut, not
-    out-fuzzed. Runs only on rejects; the passing path costs nothing extra."""
+    out-fuzzed. Runs only on rejects; the passing path costs nothing extra.
+
+    `peak` is the satellite's stage-1 detector score for this trigger. It also
+    arrives later on /telemetry, but an arbitration loser never gets that far,
+    and the loser's score is half of the paired-mic evidence (loudness.py)."""
     decision = await policy_mod.evaluate(sat)
     if not decision["allowed"]:
         log.info("verify sat=%s silent no-op policy=%s", sat, decision["reason"])
@@ -1327,8 +1359,10 @@ async def verify_wake(request: Request, sat: str = "kitchen") -> dict:
         # utterance the winner just verified) and don't double the dashboard
         # badge events. The satellite shadow-captures on this response.
         log.info("verify sat=%s suppressed (winner=%s)", sat, winner)
-        turns_mod.start(sat, "wake", verified=False,
-                        reject_reason="suppressed", arb_winner=winner)
+        turn_id = turns_mod.start(sat, "wake", verified=False, stage1_score=peak,
+                                  reject_reason="suppressed", arb_winner=winner,
+                                  arb_turn_id=_ARB["turn_id"])
+        asyncio.create_task(_note_wake_loudness(turn_id, wav, sat, winner, peak))
         return {"verified": False, "suppressed": True, "winner": winner}
     # Fire-and-forget: this POST to the dashboard sat serially BEFORE the ASR
     # call, putting a cosmetic badge (with a 4s timeout tail) on the chime path.
@@ -1342,12 +1376,15 @@ async def verify_wake(request: Request, sat: str = "kitchen") -> dict:
             # The other mic's verify completed while our ASR ran. Its events
             # already drove the dashboard; go quiet.
             log.info("verify sat=%s suppressed post-ASR (winner=%s)", sat, winner)
-            turns_mod.start(sat, "wake", verified=False, transcript=transcript,
-                            wake_score=score, decode=decode,
-                            reject_reason="suppressed", arb_winner=winner,
-                            **_wake_timings())
+            turn_id = turns_mod.start(sat, "wake", verified=False,
+                                      transcript=transcript, stage1_score=peak,
+                                      wake_score=score, decode=decode,
+                                      reject_reason="suppressed", arb_winner=winner,
+                                      arb_turn_id=_ARB["turn_id"],
+                                      **_wake_timings())
+            asyncio.create_task(_note_wake_loudness(turn_id, wav, sat, winner, peak))
             return {"verified": False, "suppressed": True, "winner": winner}
-        _arb_claim(sat)
+        _arb_claim(sat, peak)
         # Zone-routed satellites answer through the whole-home amp, which needs
         # ~3s to come out of standby. Start that now so it finishes under the
         # ASR + intent + TTS that follows, instead of eating the reply's first
@@ -1363,10 +1400,13 @@ async def verify_wake(request: Request, sat: str = "kitchen") -> dict:
     # one row instead of scattering across three.
     turn_id = turns_mod.start(
         sat, "wake", verified=verified, transcript=transcript,
-        wake_score=score, decode=decode,
+        wake_score=score, decode=decode, stage1_score=peak,
         reject_reason=None if verified else ("empty" if not transcript
                                              else "low_score"),
         **_wake_timings())
+    if verified:
+        _ARB["turn_id"] = turn_id
+    asyncio.create_task(_note_wake_loudness(turn_id, wav, sat))
     return {
         "verified": verified, "score": score, "transcript": transcript,
         "command": command, "decode": decode, "turn_id": turn_id,

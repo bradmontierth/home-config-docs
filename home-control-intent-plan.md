@@ -291,3 +291,58 @@ apologising. Text `/command "It's story time."` as `sat=claire` →
 `claire_story_time`. Lesson: every curated phrase that is not obviously a
 device command needs either an exact alias or this rescue — the classifier
 prompt is not the alias table.
+
+## Family room commands + paired-mic room evidence (built 2026-08-25)
+
+**Shipped:** `fr_fan_on/off/low/medium/high` (`fan.family_room_ceiling_fan`, 25/75/100 —
+Brad: 75 is "medium", 50 has no name; bare "on" restores last speed),
+`fr_cans_on/off` (`light.family_room_can_group`, the four BR30s — "the cans" means
+the family room even though the kitchen has `light.kitchen_can_dimmer`), and the
+blinds split: `blinds_kitchen_*` (`sats:["kitchen"]`, the four), `blinds_family_*`
+(`sats:["familyroom"]`, `cover.family_room_family_room_serena` = Lutron-direct, NOT
+the Hubitat mirror `cover.family_room_serena_windowshade`, + `cover.family_room_small_shade`
+FYRTUR), `blinds_all_*` (`sats:["kitchen","familyroom"]`, all six — entity kept,
+Node-RED target list grew). All fan/cans/six-blind commands are scoped to the two
+open-space mics; kids' rooms keep their own fans, the master has none.
+
+**Matcher changes** (`home_control.py`): `"family"` in `_ROOM_WORDS` (named room beats
+the mic); fan↔cans in `_EXCLUDE_WORDS` (`fuzz.ratio("turn on the fan","turn on the cans")`
+= 90); `_ALL_WORDS` = {all, every, everywhere} skips the local-first pass — otherwise
+"close ALL the blinds" (89 vs the room's own "close the blinds") never reached the
+six-blind command; `sat=None` now reads as `DEFAULT_SAT` like the rest of the app. Live
+`/data` table migrates itself (pre-split `blinds_all_*` are replaced by the seed's).
+`covers.py` gained `blinds_family` for the percent grammar ("open the family room
+blinds to 30", or bare "the blinds" from the family-room mic).
+
+**Node-RED** "Voice Buttons" tab: 13 new discovery buttons, `blind cmd -> covers`
+targets `blinds_kitchen/blinds_family/blinds_all`, router rule 7 `fr_` → new
+`Family room command` function (id `cafe000000000020`). Backup of the pre-change tab
+in the session scratchpad; the deployed tab is the source of truth.
+
+**Why "whichever mic responded" is not a room signal (30 days to 2026-08-25):** 104 of
+169 verified open-space wakes were heard by both mics; the kitchen won 85 (82%). It runs
+`HOP_MS=192` on the faster box vs the family-room Pi's 320, so it reaches `/verify`
+first by construction. Expect bare "close the blinds" from the couch to close the
+kitchen four most of the time; "family room blinds" is the reliable phrase until v2.
+
+**Paired-mic evidence (logging only, v2 not built):** loudness IS a distance signal,
+so `/verify` now measures each pre-roll (`orchestrator/loudness.py`: RMS of the loudest
+500 ms window, dBFS, computed in a background task after the response — nothing on the
+chime path) and the satellite passes its stage-1 peak on `/verify?peak=` (the loser
+never posts `/telemetry`). New `turns` columns: `wake_rms_db` on every wake row;
+loser rows get `arb_turn_id` (the winner's turn); the winner's row gets
+`other_sat/other_stage1/other_rms_db`. Parakeet's "score" (`wake_score`) is text
+similarity to the wake phrase and saturates at 100 on both mics — useless for this;
+stage-1 peak is acoustic but also saturates near the mic; RMS is the primary signal.
+Query once a couple of weeks have accumulated:
+
+```sql
+select datetime(at,'unixepoch','localtime') t, sat, wake_rms_db, stage1_score,
+       other_sat, other_rms_db, other_stage1, command
+from turns where other_sat is not null order by at desc;
+```
+
+The v2 chooser (attribute the room for `blinds_kitchen/blinds_family` by the louder
+mic, at command time, with a per-array gain offset — XVF3800 vs Pi4 ReSpeaker) is a
+`home_control.handle` change once the pairs show a usable margin. Log line to grep:
+`arb evidence winner=… rms=… | loser=… rms=…`.

@@ -765,8 +765,14 @@ def run_turn(preroll_pcm: bytes, stdout, vad, trigger_t0: float,
              peak_score: float | None = None, model: str | None = None) -> None:
     STATE.stats["turns"] += 1
     t_post = time.time()
+    # The stage-1 peak rides along on /verify (it also goes on /telemetry,
+    # but an arbitration loser never posts that, and the loser's score is half
+    # of the orchestrator's paired-mic room evidence).
+    verify_path = sat_path("/verify")
+    if peak_score is not None:
+        verify_path += f"&peak={peak_score:.3f}"
     try:
-        v = post_wav(sat_path("/verify"), wrap_wav(preroll_pcm))
+        v = post_wav(verify_path, wrap_wav(preroll_pcm))
     except Exception as exc:  # noqa: BLE001
         log(f"/verify failed: {exc}")
         return

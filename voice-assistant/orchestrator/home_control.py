@@ -22,6 +22,16 @@ blinds" has to mean the one blind in that room — not the four in the kitchen,
 whose aliases differ from it by a single letter. Scoping is what lets the same
 natural phrase mean the local thing in each room instead of forcing one of
 them into an awkward paraphrase.
+
+The kitchen and family room are one open space with two microphones, and
+"close the blinds" is scoped per microphone there too: the kitchen mic means
+the four kitchen blinds, the family-room mic the two family-room ones, and
+"close ALL the blinds" (either mic) means all six. Fair warning from the
+arbitration record (30 days to 2026-08-25): when both mics hear a wake the
+kitchen wins 82% of the time — it runs the smaller stage-1 hop — so which mic
+"responded" is a latency race, not a proximity signal. Naming the room is the
+reliable form until /verify's loudness columns (turns.wake_rms_db) have enough
+paired data to attribute the room by which mic heard you louder.
 """
 
 from __future__ import annotations
@@ -83,11 +93,28 @@ _PIN_WORDS = {
 # the fan" and "turn on the lights" differ by one noun and sit right at the
 # threshold, and the wrong one is a real action in a kid's bedroom. When a
 # phrase says "fan", the lights commands are out, and the other way round.
+#
+# The family room adds "the cans" (four BR30 recessed lights) next to its
+# ceiling fan: fuzz.ratio("turn on the fan", "turn on the cans") is 90, so an
+# ASR slip on either noun would swap a light for a fan. Same cure.
 _EXCLUDE_WORDS = {
-    "fan": ("simon_lights", "claire_lights"),
-    "light": ("simon_fan", "claire_fan"),
-    "lights": ("simon_fan", "claire_fan"),
+    "fan": ("simon_lights", "claire_lights", "fr_cans"),
+    "fans": ("fr_cans",),
+    "light": ("simon_fan", "claire_fan", "fr_fan"),
+    "lights": ("simon_fan", "claire_fan", "fr_fan"),
+    "can": ("fr_fan",),
+    "cans": ("fr_fan",),
 }
+
+# "All" pins a phrase to the house-wide form of a room-split command. Without
+# it, "close ALL the blinds" from the kitchen scores 89 against the kitchen's
+# own "close the blinds" — and the room-local pool is asked first and wins
+# outright, so the six-blind command could never be reached from the two rooms
+# it exists for. With one of these words present the local-first pass is
+# skipped and the whole reachable table is scored at once, where an exact
+# alias (100) beats the near-miss (89). A room's own commands are still in
+# that pool, so "turn off all the lights" in Simon's room stays his.
+_ALL_WORDS = {"all", "every", "everywhere"}
 
 _commands_cache: tuple[float, dict] | None = None  # (mtime, parsed json)
 
@@ -131,6 +158,19 @@ def _commands() -> dict:
         if new_fun_aliases:
             fun_aliases.extend(new_fun_aliases)
             missing["simon_fun_color.aliases"] = new_fun_aliases
+        # One-time 2026-08-25 split of the kitchen blinds: blinds_all_* used
+        # to be the unscoped "close the blinds" for the four kitchen blinds.
+        # It is now the six-blind (kitchen + family room) command, and the
+        # per-room phrases moved to blinds_kitchen_* / blinds_family_*. A live
+        # table still carrying the old shape (unscoped, with the bare phrase)
+        # would keep answering "close all the blinds" with the kitchen four,
+        # so replace those two entries with the seed's — nothing was ever
+        # phone-added to them (checked before the split).
+        for key in ("blinds_all_close", "blinds_all_open"):
+            entry = commands.get(key) or {}
+            if key in seed and not entry.get("sats"):
+                commands[key] = seed[key]
+                missing[key] = "resplit"
         if missing:
             tmp = path.with_name(path.name + ".tmp")
             tmp.write_text(json.dumps(commands, indent=2, ensure_ascii=False) + "\n")
@@ -162,6 +202,10 @@ def snapshot() -> dict:
 # room wins and the kitchen blinds are also reachable by name from anywhere.
 _ROOM_WORDS = {
     "kitchen": "kitchen",
+    # The family room shares the kitchen's open space and display, but it is
+    # its own satellite and its own pair of blinds: "close the family room
+    # blinds" from the kitchen mic must reach them by name.
+    "family": "familyroom",
     "bath": "master",
     "bathroom": "master",
     "shower": "master",
@@ -258,8 +302,13 @@ def _match(query: str, sat: str | None = None) -> tuple[str, dict, float] | None
     named = _named_room(query)
     if named in _KID_ROOMS:
         query = _strip_kid_room(query, named)
-    sat = named or sat
-    for pool in (_local(commands, sat), _house(commands, sat)):
+    # A caller with no room at all reads as the kitchen, as everywhere else
+    # in the app (the pre-rooms behaviour, and the phone tester's room).
+    sat = named or sat or config.DEFAULT_SAT
+    words = set(re.findall(r"[a-z']+", query))
+    pools = ((_house(commands, sat),) if words & _ALL_WORDS
+             else (_local(commands, sat), _house(commands, sat)))
+    for pool in pools:
         if not pool:
             continue
         best = _best(query, pool)
@@ -283,7 +332,7 @@ def has_exact_match(query: str, sat: str | None = None) -> bool:
     if not query:
         return False
     commands = _commands()
-    sat = _named_room(query) or sat
+    sat = _named_room(query) or sat or config.DEFAULT_SAT
     for entry in _house(commands, sat).values():
         if query in (_fold(alias) for alias in entry["aliases"]):
             return True

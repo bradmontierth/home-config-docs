@@ -79,6 +79,17 @@ _TARGETS: dict[str, dict] = {
                     "all of the blinds", "kitchen shades", "windows"],
         "spoken": "kitchen blinds",
     },
+    "blinds_family": {
+        # The Lutron-direct Serena (not the Hubitat mirror of the same shade)
+        # and the IKEA FYRTUR by the window.
+        "entities": ["cover.family_room_family_room_serena",
+                     "cover.family_room_small_shade"],
+        "aliases": ["blinds", "blind", "shades", "family room blinds",
+                    "family room shades", "family room blind",
+                    "both family room blinds", "windows"],
+        "spoken": "family room blinds",
+        "sats": ["familyroom"],
+    },
     "blind_bath": {
         "entities": ["cover.upstairs_bath_blind"],
         "aliases": ["blind", "blinds", "shade", "bath blind", "bathroom blind",
@@ -103,7 +114,8 @@ _TARGETS: dict[str, dict] = {
 # Rooms named out loud, so the kitchen blinds stay reachable from anywhere and
 # a named room beats the room you are standing in. Mirrors home_control.
 _ROOM_WORDS = {
-    "kitchen": "kitchen", "bath": "master", "bathroom": "master",
+    "kitchen": "kitchen", "family": "familyroom",
+    "bath": "master", "bathroom": "master",
     "shower": "master", "closet": "master",
     "simon": "simon", "simon's": "simon", "simons": "simon",
     "claire": "claire", "claire's": "claire", "claires": "claire",
@@ -159,6 +171,10 @@ def resolve(phrase: str, sat: str | None = None) -> str | None:
     if room == "kitchen":
         phrase = " ".join(w for w in phrase.split() if _ROOM_WORDS.get(w) != "kitchen")
         sat = None
+    # "the family room blinds" is the room-local pair by name, from any mic;
+    # the family-room mic's bare "the blinds" is the same pair.
+    if room == "familyroom":
+        phrase = " ".join(w for w in phrase.split() if w not in ("family", "room"))
     # Likewise a kid's name: "Claire's blind" and, in her room, "the blind"
     # are the same window.
     if room in _KID_ROOMS:

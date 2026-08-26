@@ -1,358 +1,1067 @@
 {
   "blind_left_close": {
-    "aliases": ["close the left blind", "close the left kitchen blind", "close the kitchen left blind", "shut the left blind"],
+    "aliases": [
+      "close the left blind",
+      "close the left kitchen blind",
+      "close the kitchen left blind",
+      "shut the left blind"
+    ],
     "entity": "button.voice_blind_left_close",
     "confirm": "Closing the left blind."
   },
   "blind_left_open": {
-    "aliases": ["open the left blind", "open the left kitchen blind", "open the kitchen left blind"],
+    "aliases": [
+      "open the left blind",
+      "open the left kitchen blind",
+      "open the kitchen left blind"
+    ],
     "entity": "button.voice_blind_left_open",
     "confirm": "Opening the left blind."
   },
   "blind_right_close": {
-    "aliases": ["close the right blind", "close the right kitchen blind", "shut the right blind"],
+    "aliases": [
+      "close the right blind",
+      "close the right kitchen blind",
+      "shut the right blind"
+    ],
     "entity": "button.voice_blind_right_close",
     "confirm": "Closing the right blind."
   },
   "blind_right_open": {
-    "aliases": ["open the right blind", "open the right kitchen blind"],
+    "aliases": [
+      "open the right blind",
+      "open the right kitchen blind"
+    ],
     "entity": "button.voice_blind_right_open",
     "confirm": "Opening the right blind."
   },
   "blind_sink_close": {
-    "aliases": ["close the sink", "close the kitchen sink", "close the sink blind", "close the blind above the sink", "shut the sink blind"],
+    "aliases": [
+      "close the sink",
+      "close the kitchen sink",
+      "close the sink blind",
+      "close the blind above the sink",
+      "shut the sink blind"
+    ],
     "entity": "button.voice_blind_sink_close",
     "confirm": "Closing the sink blind."
   },
   "blind_sink_open": {
-    "aliases": ["open the sink", "open the kitchen sink", "open the sink blind", "open the blind above the sink"],
+    "aliases": [
+      "open the sink",
+      "open the kitchen sink",
+      "open the sink blind",
+      "open the blind above the sink"
+    ],
     "entity": "button.voice_blind_sink_open",
     "confirm": "Opening the sink blind."
   },
   "blind_slider_close": {
-    "aliases": ["close the sliding door", "close the sliding door blind", "close the big one", "close the big blind", "close the slider"],
+    "aliases": [
+      "close the sliding door",
+      "close the sliding door blind",
+      "close the big one",
+      "close the big blind",
+      "close the slider"
+    ],
     "entity": "button.voice_blind_slider_close",
     "confirm": "Closing the sliding door blind."
   },
   "blind_slider_open": {
-    "aliases": ["open the sliding door", "open the sliding door blind", "open the big one", "open the big blind", "open the slider"],
+    "aliases": [
+      "open the sliding door",
+      "open the sliding door blind",
+      "open the big one",
+      "open the big blind",
+      "open the slider"
+    ],
     "entity": "button.voice_blind_slider_open",
     "confirm": "Opening the sliding door blind."
   },
   "blind_small_close": {
-    "aliases": ["close the small blinds", "close the little blinds", "close the left and right blinds", "close the two small blinds"],
+    "aliases": [
+      "close the small blinds",
+      "close the little blinds",
+      "close the left and right blinds",
+      "close the two small blinds"
+    ],
     "entity": "button.voice_blind_small_close",
     "confirm": "Closing the small blinds."
   },
   "blind_small_open": {
-    "aliases": ["open the small blinds", "open the little blinds", "open the left and right blinds"],
+    "aliases": [
+      "open the small blinds",
+      "open the little blinds",
+      "open the left and right blinds"
+    ],
     "entity": "button.voice_blind_small_open",
     "confirm": "Opening the small blinds."
   },
   "blind_glare_close": {
-    "aliases": ["fix the glare", "the sun is in the kids' eyes", "the sun is in my eyes", "there's glare on the table", "block the sun"],
+    "aliases": [
+      "fix the glare",
+      "the sun is in the kids' eyes",
+      "the sun is in my eyes",
+      "there's glare on the table",
+      "block the sun"
+    ],
     "entity": "button.voice_blind_glare_close",
     "confirm": "Closing the blinds to fix the glare."
   },
+  "blinds_kitchen_close": {
+    "aliases": [
+      "close the blinds",
+      "close the kitchen blinds",
+      "close all the kitchen blinds",
+      "shut the blinds",
+      "close the shades",
+      "close the windows"
+    ],
+    "entity": "button.voice_blinds_kitchen_close",
+    "confirm": "Closing the kitchen blinds.",
+    "sats": [
+      "kitchen"
+    ]
+  },
+  "blinds_kitchen_open": {
+    "aliases": [
+      "open the blinds",
+      "open the kitchen blinds",
+      "open all the kitchen blinds",
+      "open the shades",
+      "open the windows"
+    ],
+    "entity": "button.voice_blinds_kitchen_open",
+    "confirm": "Opening the kitchen blinds.",
+    "sats": [
+      "kitchen"
+    ]
+  },
+  "blinds_family_close": {
+    "aliases": [
+      "close the blinds",
+      "close the family room blinds",
+      "close both family room blinds",
+      "shut the blinds",
+      "close the shades",
+      "close the family room shades"
+    ],
+    "entity": "button.voice_blinds_family_close",
+    "confirm": "Closing the family room blinds.",
+    "sats": [
+      "familyroom"
+    ]
+  },
+  "blinds_family_open": {
+    "aliases": [
+      "open the blinds",
+      "open the family room blinds",
+      "open both family room blinds",
+      "open the shades",
+      "open the family room shades"
+    ],
+    "entity": "button.voice_blinds_family_open",
+    "confirm": "Opening the family room blinds.",
+    "sats": [
+      "familyroom"
+    ]
+  },
   "blinds_all_close": {
-    "aliases": ["close the blinds", "close the kitchen blinds", "close all the blinds", "close all the kitchen blinds", "shut the blinds"],
+    "aliases": [
+      "close all the blinds",
+      "close all of the blinds",
+      "close every blind",
+      "close the blinds everywhere",
+      "close all six blinds",
+      "close all the blinds downstairs",
+      "close all the blinds in the kitchen and family room"
+    ],
     "entity": "button.voice_blinds_all_close",
-    "confirm": "Closing all the kitchen blinds."
+    "confirm": "Closing all six blinds.",
+    "sats": [
+      "kitchen",
+      "familyroom"
+    ]
   },
   "blinds_all_open": {
-    "aliases": ["open the blinds", "open the kitchen blinds", "open all the blinds", "open all the kitchen blinds"],
+    "aliases": [
+      "open all the blinds",
+      "open all of the blinds",
+      "open every blind",
+      "open the blinds everywhere",
+      "open all six blinds",
+      "open all the blinds downstairs",
+      "open all the blinds in the kitchen and family room"
+    ],
     "entity": "button.voice_blinds_all_open",
-    "confirm": "Opening all the kitchen blinds."
+    "confirm": "Opening all six blinds.",
+    "sats": [
+      "kitchen",
+      "familyroom"
+    ]
+  },
+  "fr_fan_on": {
+    "aliases": [
+      "turn on the fan",
+      "fan on",
+      "turn the fan on",
+      "turn on the ceiling fan",
+      "turn on the family room fan",
+      "start the fan"
+    ],
+    "entity": "button.voice_fr_fan_on",
+    "confirm": "Turning on the fan.",
+    "sats": [
+      "kitchen",
+      "familyroom"
+    ]
+  },
+  "fr_fan_off": {
+    "aliases": [
+      "turn off the fan",
+      "fan off",
+      "turn the fan off",
+      "turn off the ceiling fan",
+      "turn off the family room fan",
+      "stop the fan"
+    ],
+    "entity": "button.voice_fr_fan_off",
+    "confirm": "Turning off the fan.",
+    "sats": [
+      "kitchen",
+      "familyroom"
+    ]
+  },
+  "fr_fan_low": {
+    "aliases": [
+      "set the fan to low",
+      "fan on low",
+      "fan low",
+      "turn the fan on low",
+      "put the fan on low",
+      "turn the fan down",
+      "fan to low",
+      "set the family room fan to low"
+    ],
+    "entity": "button.voice_fr_fan_low",
+    "confirm": "Setting the fan to low.",
+    "sats": [
+      "kitchen",
+      "familyroom"
+    ]
+  },
+  "fr_fan_medium": {
+    "aliases": [
+      "set the fan to medium",
+      "fan on medium",
+      "fan medium",
+      "turn the fan on medium",
+      "put the fan on medium",
+      "fan to medium",
+      "set the family room fan to medium"
+    ],
+    "entity": "button.voice_fr_fan_medium",
+    "confirm": "Setting the fan to medium.",
+    "sats": [
+      "kitchen",
+      "familyroom"
+    ]
+  },
+  "fr_fan_high": {
+    "aliases": [
+      "set the fan to high",
+      "fan on high",
+      "fan high",
+      "turn the fan on high",
+      "put the fan on high",
+      "turn the fan up",
+      "fan to high",
+      "set the family room fan to high"
+    ],
+    "entity": "button.voice_fr_fan_high",
+    "confirm": "Setting the fan to high.",
+    "sats": [
+      "kitchen",
+      "familyroom"
+    ]
+  },
+  "fr_cans_off": {
+    "aliases": [
+      "turn off the cans",
+      "cans off",
+      "turn the cans off",
+      "turn off the can lights",
+      "kill the cans",
+      "turn off the recessed lights",
+      "turn off the family room cans",
+      "turn off the family room can lights"
+    ],
+    "entity": "button.voice_fr_cans_off",
+    "confirm": "Turning off the cans.",
+    "sats": [
+      "kitchen",
+      "familyroom"
+    ]
+  },
+  "fr_cans_on": {
+    "aliases": [
+      "turn on the cans",
+      "cans on",
+      "turn the cans on",
+      "turn on the can lights",
+      "turn on the recessed lights",
+      "turn on the family room cans",
+      "turn on the family room can lights"
+    ],
+    "entity": "button.voice_fr_cans_on",
+    "confirm": "Turning on the cans.",
+    "sats": [
+      "kitchen",
+      "familyroom"
+    ]
   },
   "kitchen_brighten": {
-    "aliases": ["brighten the lights", "brighten the kitchen", "brighter", "make it brighter", "make it brighter in here", "bump up the lights", "turn up the lights", "it's too dark"],
+    "aliases": [
+      "brighten the lights",
+      "brighten the kitchen",
+      "brighter",
+      "make it brighter",
+      "make it brighter in here",
+      "bump up the lights",
+      "turn up the lights",
+      "it's too dark"
+    ],
     "entity": "button.voice_kitchen_brighten",
     "confirm": "Brightening the kitchen."
   },
   "dinner_mood": {
-    "aliases": ["set the mood for dinner", "dinner mode", "dinner mood", "dinner lights", "set the dinner mood", "time for dinner lights"],
+    "aliases": [
+      "set the mood for dinner",
+      "dinner mode",
+      "dinner mood",
+      "dinner lights",
+      "set the dinner mood",
+      "time for dinner lights"
+    ],
     "entity": "button.voice_dinner_mood",
     "confirm": "Setting the dinner mood."
   },
   "lights_normal": {
-    "aliases": ["back to normal", "normal lights", "reset the lights", "lights back to normal", "put the lights back", "regular lights"],
+    "aliases": [
+      "back to normal",
+      "normal lights",
+      "reset the lights",
+      "lights back to normal",
+      "put the lights back",
+      "regular lights"
+    ],
     "entity": "button.voice_lights_normal",
     "confirm": "Back to normal."
   },
   "blind_bath_close": {
-    "aliases": ["close the blind", "close the blinds", "close the bath blind", "close the bathroom blind", "close the shade", "shut the blind"],
+    "aliases": [
+      "close the blind",
+      "close the blinds",
+      "close the bath blind",
+      "close the bathroom blind",
+      "close the shade",
+      "shut the blind"
+    ],
     "entity": "button.voice_blind_bath_close",
     "confirm": "Closing the bathroom blind.",
-    "sats": ["master"]
+    "sats": [
+      "master"
+    ]
   },
   "blind_bath_open": {
-    "aliases": ["open the blind", "open the blinds", "open the bath blind", "open the bathroom blind", "open the shade"],
+    "aliases": [
+      "open the blind",
+      "open the blinds",
+      "open the bath blind",
+      "open the bathroom blind",
+      "open the shade"
+    ],
     "entity": "button.voice_blind_bath_open",
     "confirm": "Opening the bathroom blind.",
-    "sats": ["master"]
+    "sats": [
+      "master"
+    ]
   },
   "master_lights_hold": {
-    "aliases": ["keep the lights on", "keep the lights on in here", "keep these lights on", "leave the lights on", "don't turn the lights off", "stop turning the lights off", "quit turning the lights off"],
+    "aliases": [
+      "keep the lights on",
+      "keep the lights on in here",
+      "keep these lights on",
+      "leave the lights on",
+      "don't turn the lights off",
+      "stop turning the lights off",
+      "quit turning the lights off"
+    ],
     "entity": "button.voice_master_lights_hold",
     "confirm": "Okay, holding the lights on for thirty minutes.",
-    "sats": ["master"]
+    "sats": [
+      "master"
+    ]
   },
   "simon_blind_close": {
-    "aliases": ["close the blind", "close the blinds", "close the shade", "shut the blind"],
+    "aliases": [
+      "close the blind",
+      "close the blinds",
+      "close the shade",
+      "shut the blind"
+    ],
     "entity": "button.voice_simon_blind_close",
     "confirm": "Closing the blind.",
-    "sats": ["simon"]
+    "sats": [
+      "simon"
+    ]
   },
   "simon_blind_open": {
-    "aliases": ["open the blind", "open the blinds", "open the shade"],
+    "aliases": [
+      "open the blind",
+      "open the blinds",
+      "open the shade"
+    ],
     "entity": "button.voice_simon_blind_open",
     "confirm": "Opening the blind.",
-    "sats": ["simon"]
+    "sats": [
+      "simon"
+    ]
   },
   "simon_lights_on": {
-    "aliases": ["turn on the lights", "lights on", "turn the lights on", "turn on my lights"],
+    "aliases": [
+      "turn on the lights",
+      "lights on",
+      "turn the lights on",
+      "turn on my lights"
+    ],
     "entity": "button.voice_simon_lights_on",
     "confirm": "Turning on the lights.",
-    "sats": ["simon"]
+    "sats": [
+      "simon"
+    ]
   },
   "simon_lights_off": {
-    "aliases": ["turn off the lights", "lights off", "turn the lights off", "turn off my lights"],
+    "aliases": [
+      "turn off the lights",
+      "lights off",
+      "turn the lights off",
+      "turn off my lights"
+    ],
     "entity": "button.voice_simon_lights_off",
     "confirm": "Turning off the lights.",
-    "sats": ["simon"]
+    "sats": [
+      "simon"
+    ]
   },
   "simon_fun_color": {
-    "aliases": ["give me a fun color", "set a fun color", "set a font color", "pick a fun color", "fun color", "make it a fun color", "give me a cool color", "surprise me with a color"],
+    "aliases": [
+      "give me a fun color",
+      "set a fun color",
+      "set a font color",
+      "pick a fun color",
+      "fun color",
+      "make it a fun color",
+      "give me a cool color",
+      "surprise me with a color"
+    ],
     "entity": "button.voice_simon_fun_color",
     "confirm": "Picking a cool effect.",
-    "sats": ["simon"]
+    "sats": [
+      "simon"
+    ]
   },
   "simon_fan_on": {
-    "aliases": ["turn on the fan", "fan on", "turn the fan on", "turn on my fan", "turn on the ceiling fan", "start the fan"],
+    "aliases": [
+      "turn on the fan",
+      "fan on",
+      "turn the fan on",
+      "turn on my fan",
+      "turn on the ceiling fan",
+      "start the fan"
+    ],
     "entity": "button.voice_simon_fan_on",
     "confirm": "Turning on the fan.",
-    "sats": ["simon"]
+    "sats": [
+      "simon"
+    ]
   },
   "simon_fan_off": {
-    "aliases": ["turn off the fan", "fan off", "turn the fan off", "turn off my fan", "turn off the ceiling fan", "stop the fan"],
+    "aliases": [
+      "turn off the fan",
+      "fan off",
+      "turn the fan off",
+      "turn off my fan",
+      "turn off the ceiling fan",
+      "stop the fan"
+    ],
     "entity": "button.voice_simon_fan_off",
     "confirm": "Turning off the fan.",
-    "sats": ["simon"]
+    "sats": [
+      "simon"
+    ]
   },
   "simon_fan_low": {
-    "aliases": ["set the fan to low", "fan on low", "fan low", "turn the fan on low", "put the fan on low", "turn the fan down", "fan to low"],
+    "aliases": [
+      "set the fan to low",
+      "fan on low",
+      "fan low",
+      "turn the fan on low",
+      "put the fan on low",
+      "turn the fan down",
+      "fan to low"
+    ],
     "entity": "button.voice_simon_fan_low",
     "confirm": "Setting the fan to low.",
-    "sats": ["simon"]
+    "sats": [
+      "simon"
+    ]
   },
   "simon_fan_medium": {
-    "aliases": ["set the fan to medium", "fan on medium", "fan medium", "turn the fan on medium", "put the fan on medium", "fan to medium"],
+    "aliases": [
+      "set the fan to medium",
+      "fan on medium",
+      "fan medium",
+      "turn the fan on medium",
+      "put the fan on medium",
+      "fan to medium"
+    ],
     "entity": "button.voice_simon_fan_medium",
     "confirm": "Setting the fan to medium.",
-    "sats": ["simon"]
+    "sats": [
+      "simon"
+    ]
   },
   "simon_fan_high": {
-    "aliases": ["set the fan to high", "fan on high", "fan high", "turn the fan on high", "put the fan on high", "turn the fan up", "fan to high", "fan on full"],
+    "aliases": [
+      "set the fan to high",
+      "fan on high",
+      "fan high",
+      "turn the fan on high",
+      "put the fan on high",
+      "turn the fan up",
+      "fan to high",
+      "fan on full"
+    ],
     "entity": "button.voice_simon_fan_high",
     "confirm": "Setting the fan to high.",
-    "sats": ["simon"]
+    "sats": [
+      "simon"
+    ]
   },
   "simon_fx_rainbow": {
-    "aliases": ["rainbow", "rainbow flow", "make it rainbow", "set it to rainbow", "rainbow lights", "give me rainbow"],
+    "aliases": [
+      "rainbow",
+      "rainbow flow",
+      "make it rainbow",
+      "set it to rainbow",
+      "rainbow lights",
+      "give me rainbow"
+    ],
     "entity": "button.voice_simon_fx_rainbow",
     "confirm": "Setting the lights to rainbow.",
-    "sats": ["simon"]
+    "sats": [
+      "simon"
+    ]
   },
   "simon_fx_rainbow_slow": {
-    "aliases": ["slow rainbow", "rainbow flow slow", "slow rainbow flow", "make it slow rainbow"],
+    "aliases": [
+      "slow rainbow",
+      "rainbow flow slow",
+      "slow rainbow flow",
+      "make it slow rainbow"
+    ],
     "entity": "button.voice_simon_fx_rainbow_slow",
     "confirm": "Setting the lights to slow rainbow.",
-    "sats": ["simon"]
+    "sats": [
+      "simon"
+    ]
   },
   "simon_fx_fine_rainbow": {
-    "aliases": ["fine rainbow", "static rainbow", "still rainbow", "static fine rainbow"],
+    "aliases": [
+      "fine rainbow",
+      "static rainbow",
+      "still rainbow",
+      "static fine rainbow"
+    ],
     "entity": "button.voice_simon_fx_fine_rainbow",
     "confirm": "Setting the lights to fine rainbow.",
-    "sats": ["simon"]
+    "sats": [
+      "simon"
+    ]
   },
   "simon_fx_race_cars": {
-    "aliases": ["race cars", "race car", "racecars", "make it race cars", "set it to race cars", "give me race cars"],
+    "aliases": [
+      "race cars",
+      "race car",
+      "racecars",
+      "make it race cars",
+      "set it to race cars",
+      "give me race cars"
+    ],
     "entity": "button.voice_simon_fx_race_cars",
     "confirm": "Setting the lights to race cars.",
-    "sats": ["simon"]
+    "sats": [
+      "simon"
+    ]
   },
   "simon_fx_fireflies": {
-    "aliases": ["fireflies", "fire flies", "make it fireflies", "set it to fireflies", "give me fireflies"],
+    "aliases": [
+      "fireflies",
+      "fire flies",
+      "make it fireflies",
+      "set it to fireflies",
+      "give me fireflies"
+    ],
     "entity": "button.voice_simon_fx_fireflies",
     "confirm": "Setting the lights to fireflies.",
-    "sats": ["simon"]
+    "sats": [
+      "simon"
+    ]
   },
   "simon_fx_lava_lamp": {
-    "aliases": ["lava lamp", "lava", "make it lava lamp", "set it to lava lamp", "give me lava lamp"],
+    "aliases": [
+      "lava lamp",
+      "lava",
+      "make it lava lamp",
+      "set it to lava lamp",
+      "give me lava lamp"
+    ],
     "entity": "button.voice_simon_fx_lava_lamp",
     "confirm": "Setting the lights to lava lamp.",
-    "sats": ["simon"]
+    "sats": [
+      "simon"
+    ]
   },
   "simon_fx_candy_parade": {
-    "aliases": ["candy parade", "candy", "make it candy parade", "set it to candy parade", "give me candy"],
+    "aliases": [
+      "candy parade",
+      "candy",
+      "make it candy parade",
+      "set it to candy parade",
+      "give me candy"
+    ],
     "entity": "button.voice_simon_fx_candy_parade",
     "confirm": "Setting the lights to candy parade.",
-    "sats": ["simon"]
+    "sats": [
+      "simon"
+    ]
   },
   "simon_fx_starry_night": {
-    "aliases": ["starry night", "stars", "starry", "make it starry night", "set it to stars", "give me stars"],
+    "aliases": [
+      "starry night",
+      "stars",
+      "starry",
+      "make it starry night",
+      "set it to stars",
+      "give me stars"
+    ],
     "entity": "button.voice_simon_fx_starry_night",
     "confirm": "Setting the lights to starry night.",
-    "sats": ["simon"]
+    "sats": [
+      "simon"
+    ]
   },
   "simon_fx_dino_stomp": {
-    "aliases": ["dino stomp", "dinosaur stomp", "dinosaurs", "dino", "make it dino stomp", "set it to dino stomp", "give me dino stomp"],
+    "aliases": [
+      "dino stomp",
+      "dinosaur stomp",
+      "dinosaurs",
+      "dino",
+      "make it dino stomp",
+      "set it to dino stomp",
+      "give me dino stomp"
+    ],
     "entity": "button.voice_simon_fx_dino_stomp",
     "confirm": "Setting the lights to dino stomp.",
-    "sats": ["simon"]
+    "sats": [
+      "simon"
+    ]
   },
   "simon_fx_zoom_comet": {
-    "aliases": ["zoom comet", "comet", "make it comet", "set it to comet", "give me the comet"],
+    "aliases": [
+      "zoom comet",
+      "comet",
+      "make it comet",
+      "set it to comet",
+      "give me the comet"
+    ],
     "entity": "button.voice_simon_fx_zoom_comet",
     "confirm": "Setting the lights to zoom comet.",
-    "sats": ["simon"]
+    "sats": [
+      "simon"
+    ]
   },
   "simon_fx_red_blue": {
-    "aliases": ["red and blue", "red blue", "dual zoom", "make it red and blue", "set it to red and blue", "give me red and blue"],
+    "aliases": [
+      "red and blue",
+      "red blue",
+      "dual zoom",
+      "make it red and blue",
+      "set it to red and blue",
+      "give me red and blue"
+    ],
     "entity": "button.voice_simon_fx_red_blue",
     "confirm": "Setting the lights to red and blue.",
-    "sats": ["simon"]
+    "sats": [
+      "simon"
+    ]
   },
   "simon_fx_ocean_waves": {
-    "aliases": ["waves", "ocean waves", "ocean", "make it waves", "set it to waves", "give me waves", "give me ocean waves"],
+    "aliases": [
+      "waves",
+      "ocean waves",
+      "ocean",
+      "make it waves",
+      "set it to waves",
+      "give me waves",
+      "give me ocean waves"
+    ],
     "entity": "button.voice_simon_fx_ocean_waves",
     "confirm": "Setting the lights to ocean waves.",
-    "sats": ["simon"]
+    "sats": [
+      "simon"
+    ]
   },
   "simon_fx_pac_man": {
-    "aliases": ["pac man", "pacman", "pack man", "make it pac man", "set it to pac man", "give me pac man", "pac man lights"],
+    "aliases": [
+      "pac man",
+      "pacman",
+      "pack man",
+      "make it pac man",
+      "set it to pac man",
+      "give me pac man",
+      "pac man lights"
+    ],
     "entity": "button.voice_simon_fx_pac_man",
     "confirm": "Setting the lights to pac man.",
-    "sats": ["simon"]
+    "sats": [
+      "simon"
+    ]
   },
   "simon_fx_thunderstorm": {
-    "aliases": ["thunderstorm", "thunder storm", "thunder", "lightning", "storm", "make it a thunderstorm", "set it to thunderstorm", "give me a thunderstorm"],
+    "aliases": [
+      "thunderstorm",
+      "thunder storm",
+      "thunder",
+      "lightning",
+      "storm",
+      "make it a thunderstorm",
+      "set it to thunderstorm",
+      "give me a thunderstorm"
+    ],
     "entity": "button.voice_simon_fx_thunderstorm",
     "confirm": "Setting the lights to thunderstorm.",
-    "sats": ["simon"]
+    "sats": [
+      "simon"
+    ]
   },
   "simon_fx_campfire": {
-    "aliases": ["campfire", "camp fire", "fire", "make it a campfire", "set it to campfire", "give me a campfire"],
+    "aliases": [
+      "campfire",
+      "camp fire",
+      "fire",
+      "make it a campfire",
+      "set it to campfire",
+      "give me a campfire"
+    ],
     "entity": "button.voice_simon_fx_campfire",
     "confirm": "Setting the lights to campfire.",
-    "sats": ["simon"]
+    "sats": [
+      "simon"
+    ]
   },
   "claire_story_time": {
-    "aliases": ["story time", "it's story time", "story time please", "book time", "time for a story", "let's read a book", "reading time", "time for books"],
+    "aliases": [
+      "story time",
+      "it's story time",
+      "story time please",
+      "book time",
+      "time for a story",
+      "let's read a book",
+      "reading time",
+      "time for books"
+    ],
     "entity": "button.voice_claire_story_time",
     "confirm": "Story time.",
-    "sats": ["claire"]
+    "sats": [
+      "claire"
+    ]
   },
   "claire_bedtime": {
-    "aliases": ["bedtime", "it's bedtime", "bed time", "time for bed", "night night", "good night", "nap time", "it's nap time", "time for a nap"],
+    "aliases": [
+      "bedtime",
+      "it's bedtime",
+      "bed time",
+      "time for bed",
+      "night night",
+      "good night",
+      "nap time",
+      "it's nap time",
+      "time for a nap"
+    ],
     "entity": "button.voice_claire_bedtime",
     "confirm": "Good night, Claire.",
-    "sats": ["claire"]
+    "sats": [
+      "claire"
+    ]
   },
   "claire_blind_close": {
-    "aliases": ["close the blind", "close the blinds", "close the shade", "shut the blind"],
+    "aliases": [
+      "close the blind",
+      "close the blinds",
+      "close the shade",
+      "shut the blind"
+    ],
     "entity": "button.voice_claire_blind_close",
     "confirm": "Closing the blind.",
-    "sats": ["claire"]
+    "sats": [
+      "claire"
+    ]
   },
   "claire_blind_open": {
-    "aliases": ["open the blind", "open the blinds", "open the shade"],
+    "aliases": [
+      "open the blind",
+      "open the blinds",
+      "open the shade"
+    ],
     "entity": "button.voice_claire_blind_open",
     "confirm": "Opening the blind.",
-    "sats": ["claire"]
+    "sats": [
+      "claire"
+    ]
   },
   "claire_lights_on": {
-    "aliases": ["turn on the lights", "lights on", "turn the lights on", "turn on my lights"],
+    "aliases": [
+      "turn on the lights",
+      "lights on",
+      "turn the lights on",
+      "turn on my lights"
+    ],
     "entity": "button.voice_claire_lights_on",
     "confirm": "Turning on the lights.",
-    "sats": ["claire"]
+    "sats": [
+      "claire"
+    ]
   },
   "claire_lights_off": {
-    "aliases": ["turn off the lights", "lights off", "turn the lights off", "turn off my lights"],
+    "aliases": [
+      "turn off the lights",
+      "lights off",
+      "turn the lights off",
+      "turn off my lights"
+    ],
     "entity": "button.voice_claire_lights_off",
     "confirm": "Turning off the lights.",
-    "sats": ["claire"]
+    "sats": [
+      "claire"
+    ]
   },
   "claire_fan_on": {
-    "aliases": ["turn on the fan", "fan on", "turn the fan on", "turn on my fan", "turn on the ceiling fan", "start the fan"],
+    "aliases": [
+      "turn on the fan",
+      "fan on",
+      "turn the fan on",
+      "turn on my fan",
+      "turn on the ceiling fan",
+      "start the fan"
+    ],
     "entity": "button.voice_claire_fan_on",
     "confirm": "Turning on the fan.",
-    "sats": ["claire"]
+    "sats": [
+      "claire"
+    ]
   },
   "claire_fan_off": {
-    "aliases": ["turn off the fan", "fan off", "turn the fan off", "turn off my fan", "turn off the ceiling fan", "stop the fan"],
+    "aliases": [
+      "turn off the fan",
+      "fan off",
+      "turn the fan off",
+      "turn off my fan",
+      "turn off the ceiling fan",
+      "stop the fan"
+    ],
     "entity": "button.voice_claire_fan_off",
     "confirm": "Turning off the fan.",
-    "sats": ["claire"]
+    "sats": [
+      "claire"
+    ]
   },
   "claire_fan_low": {
-    "aliases": ["set the fan to low", "fan on low", "fan low", "turn the fan on low", "put the fan on low", "turn the fan down", "fan to low"],
+    "aliases": [
+      "set the fan to low",
+      "fan on low",
+      "fan low",
+      "turn the fan on low",
+      "put the fan on low",
+      "turn the fan down",
+      "fan to low"
+    ],
     "entity": "button.voice_claire_fan_low",
     "confirm": "Setting the fan to low.",
-    "sats": ["claire"]
+    "sats": [
+      "claire"
+    ]
   },
   "claire_fan_medium": {
-    "aliases": ["set the fan to medium", "fan on medium", "fan medium", "turn the fan on medium", "put the fan on medium", "fan to medium"],
+    "aliases": [
+      "set the fan to medium",
+      "fan on medium",
+      "fan medium",
+      "turn the fan on medium",
+      "put the fan on medium",
+      "fan to medium"
+    ],
     "entity": "button.voice_claire_fan_medium",
     "confirm": "Setting the fan to medium.",
-    "sats": ["claire"]
+    "sats": [
+      "claire"
+    ]
   },
   "claire_fan_high": {
-    "aliases": ["set the fan to high", "fan on high", "fan high", "turn the fan on high", "put the fan on high", "turn the fan up", "fan to high", "fan on full"],
+    "aliases": [
+      "set the fan to high",
+      "fan on high",
+      "fan high",
+      "turn the fan on high",
+      "put the fan on high",
+      "turn the fan up",
+      "fan to high",
+      "fan on full"
+    ],
     "entity": "button.voice_claire_fan_high",
     "confirm": "Setting the fan to high.",
-    "sats": ["claire"]
+    "sats": [
+      "claire"
+    ]
   },
   "claire_too_hot": {
-    "aliases": ["it's hot in here", "it is hot in here", "it's too hot in here", "it's too hot", "it's hot", "too hot", "i'm hot", "make it cooler", "make it colder", "cool it down", "turn it down", "it's warm in here", "it's too warm"],
+    "aliases": [
+      "it's hot in here",
+      "it is hot in here",
+      "it's too hot in here",
+      "it's too hot",
+      "it's hot",
+      "too hot",
+      "i'm hot",
+      "make it cooler",
+      "make it colder",
+      "cool it down",
+      "turn it down",
+      "it's warm in here",
+      "it's too warm"
+    ],
     "entity": "button.voice_claire_too_hot",
     "confirm": "Cooling it down a bit.",
-    "sats": ["claire"]
+    "sats": [
+      "claire"
+    ]
   },
   "claire_too_cold": {
-    "aliases": ["it's cold in here", "it is cold in here", "it's too cold in here", "it's too cold", "it's cold", "too cold", "i'm cold", "make it warmer", "warm it up", "turn it up", "it's chilly in here", "it's freezing in here"],
+    "aliases": [
+      "it's cold in here",
+      "it is cold in here",
+      "it's too cold in here",
+      "it's too cold",
+      "it's cold",
+      "too cold",
+      "i'm cold",
+      "make it warmer",
+      "warm it up",
+      "turn it up",
+      "it's chilly in here",
+      "it's freezing in here"
+    ],
     "entity": "button.voice_claire_too_cold",
     "confirm": "Warming it up a bit.",
-    "sats": ["claire"]
+    "sats": [
+      "claire"
+    ]
   },
   "claire_hvac_cool": {
-    "aliases": ["turn on the ac", "turn on the air conditioning", "turn on the air", "ac on", "turn on the cooling", "start the ac"],
+    "aliases": [
+      "turn on the ac",
+      "turn on the air conditioning",
+      "turn on the air",
+      "ac on",
+      "turn on the cooling",
+      "start the ac"
+    ],
     "entity": "button.voice_claire_hvac_cool",
     "confirm": "Turning on the AC.",
-    "sats": ["claire"]
+    "sats": [
+      "claire"
+    ]
   },
   "claire_hvac_heat": {
-    "aliases": ["turn on the heat", "turn on the heater", "heat on", "turn on the heating", "start the heat"],
+    "aliases": [
+      "turn on the heat",
+      "turn on the heater",
+      "heat on",
+      "turn on the heating",
+      "start the heat"
+    ],
     "entity": "button.voice_claire_hvac_heat",
     "confirm": "Turning on the heat.",
-    "sats": ["claire"]
+    "sats": [
+      "claire"
+    ]
   },
   "claire_hvac_off": {
-    "aliases": ["turn off the ac", "turn off the air conditioning", "turn off the heat", "turn off the heater", "turn off the mini split", "ac off", "heat off", "turn off the air"],
+    "aliases": [
+      "turn off the ac",
+      "turn off the air conditioning",
+      "turn off the heat",
+      "turn off the heater",
+      "turn off the mini split",
+      "ac off",
+      "heat off",
+      "turn off the air"
+    ],
     "entity": "button.voice_claire_hvac_off",
     "confirm": "Turning off the mini split.",
-    "sats": ["claire"]
+    "sats": [
+      "claire"
+    ]
   },
   "simon_brighter": {
-    "aliases": ["make it brighter", "brighter", "more light", "turn up the lights", "make the lights brighter", "lights to full", "full brightness", "all the way up", "brighten the lights", "it's too dark", "i can't see"],
+    "aliases": [
+      "make it brighter",
+      "brighter",
+      "more light",
+      "turn up the lights",
+      "make the lights brighter",
+      "lights to full",
+      "full brightness",
+      "all the way up",
+      "brighten the lights",
+      "it's too dark",
+      "i can't see"
+    ],
     "entity": "button.voice_simon_brighter",
     "confirm": "Brightening the lights.",
-    "sats": ["simon"]
+    "sats": [
+      "simon"
+    ]
   },
   "claire_brighter": {
-    "aliases": ["make it brighter", "brighter", "more light", "turn up the lights", "make the lights brighter", "lights to full", "full brightness", "all the way up", "brighten the lights", "it's too dark", "i can't see"],
+    "aliases": [
+      "make it brighter",
+      "brighter",
+      "more light",
+      "turn up the lights",
+      "make the lights brighter",
+      "lights to full",
+      "full brightness",
+      "all the way up",
+      "brighten the lights",
+      "it's too dark",
+      "i can't see"
+    ],
     "entity": "button.voice_claire_brighter",
     "confirm": "Brightening the lights.",
-    "sats": ["claire"]
+    "sats": [
+      "claire"
+    ]
   }
 }

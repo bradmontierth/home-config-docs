@@ -25,8 +25,8 @@ class HomeControlMatchTest(unittest.TestCase):
 
     def test_canonical_aliases_hit_their_buttons(self):
         cases = {
-            "close the blinds": "button.voice_blinds_all_close",
-            "open the kitchen blinds": "button.voice_blinds_all_open",
+            "close the blinds": "button.voice_blinds_kitchen_close",
+            "open the kitchen blinds": "button.voice_blinds_kitchen_open",
             "fix the glare": "button.voice_blind_glare_close",
             "close the kitchen sink": "button.voice_blind_sink_close",
             "close the sliding door": "button.voice_blind_slider_close",
@@ -46,14 +46,14 @@ class HomeControlMatchTest(unittest.TestCase):
 
     def test_paraphrases(self):
         cases = {
-            "shut the blinds": "button.voice_blinds_all_close",
+            "shut the blinds": "button.voice_blinds_kitchen_close",
             "make it brighter in here": "button.voice_kitchen_brighten",
             "close the little blinds": "button.voice_blind_small_close",
             "dinner mode": "button.voice_dinner_mood",
             "reset the lights": "button.voice_lights_normal",
-            "could you close the blinds": "button.voice_blinds_all_close",
+            "could you close the blinds": "button.voice_blinds_kitchen_close",
             "fix the glare please": "button.voice_blind_glare_close",
-            "closed the blinds": "button.voice_blinds_all_close",
+            "closed the blinds": "button.voice_blinds_kitchen_close",
         }
         for phrase, entity in cases.items():
             with self.subTest(phrase=phrase):
@@ -113,7 +113,7 @@ class HomeControlMatchTest(unittest.TestCase):
     def test_room_local_commands_are_invisible_elsewhere(self):
         self.press.reset_mock()
         _handle("close the blinds", "kitchen")
-        self.assertEqual(self._pressed(), "button.voice_blinds_all_close")
+        self.assertEqual(self._pressed(), "button.voice_blinds_kitchen_close")
         self.press.reset_mock()
         self.assertIsNone(_handle("keep the lights on", "kitchen"))
         self.press.assert_not_awaited()
@@ -123,7 +123,7 @@ class HomeControlMatchTest(unittest.TestCase):
         so the master satellite falls through to the house-wide table."""
         self.press.reset_mock()
         _handle("close the kitchen blinds", "master")
-        self.assertEqual(self._pressed(), "button.voice_blinds_all_close")
+        self.assertEqual(self._pressed(), "button.voice_blinds_kitchen_close")
         self.press.reset_mock()
         _handle("back to normal", "master")
         self.assertEqual(self._pressed(), "button.voice_lights_normal")
@@ -201,9 +201,13 @@ class HomeControlMatchTest(unittest.TestCase):
         self.press.assert_not_awaited()
 
     def test_simon_fan_is_room_local(self):
-        # Fan commands are Simon's room only.
+        # Simon's fan is Simon's room only: the kitchen's "turn on the fan"
+        # is the family-room ceiling fan, never his.
         self.press.reset_mock()
-        self.assertIsNone(_handle("turn on the fan", "kitchen"))
+        _handle("turn on the fan", "kitchen")
+        self.assertEqual(self._pressed(), "button.voice_fr_fan_on")
+        self.press.reset_mock()
+        self.assertIsNone(_handle("turn on the fan", "master"))
         self.press.assert_not_awaited()
 
     def test_claire_room_commands_are_local_and_unambiguous(self):
@@ -250,6 +254,91 @@ class HomeControlMatchTest(unittest.TestCase):
         self.press.reset_mock()
         _handle("turn on the lights", "simon")
         self.assertEqual(self._pressed(), "button.voice_simon_lights_on")
+
+    def test_the_blinds_are_per_microphone_in_the_open_space(self):
+        # Same phrase, different mic, different blinds: the kitchen's four
+        # from the kitchen mic, the family room's two from that mic.
+        _handle("close the blinds", sat="kitchen")
+        self.assertEqual(self._pressed(), "button.voice_blinds_kitchen_close")
+        _handle("close the blinds", sat="familyroom")
+        self.assertEqual(self._pressed(), "button.voice_blinds_family_close")
+        _handle("open the blinds", sat="familyroom")
+        self.assertEqual(self._pressed(), "button.voice_blinds_family_open")
+        # A caller with no room at all is the kitchen (pre-rooms behaviour).
+        _handle("close the blinds")
+        self.assertEqual(self._pressed(), "button.voice_blinds_kitchen_close")
+
+    def test_naming_the_family_room_reaches_it_from_the_kitchen(self):
+        _handle("close the family room blinds", sat="kitchen")
+        self.assertEqual(self._pressed(), "button.voice_blinds_family_close")
+        _handle("open the family room blinds", sat="master")
+        self.assertEqual(self._pressed(), "button.voice_blinds_family_open")
+        _handle("close the kitchen blinds", sat="familyroom")
+        self.assertEqual(self._pressed(), "button.voice_blinds_kitchen_close")
+
+    def test_all_the_blinds_is_the_six_from_either_mic(self):
+        # "close ALL the blinds" scores 89 against the room's own "close the
+        # blinds"; without the all-pin the local-first pass would take it.
+        for sat in ("kitchen", "familyroom"):
+            for phrase in ("close all the blinds", "close every blind",
+                           "close all of the blinds"):
+                _handle(phrase, sat=sat)
+                self.assertEqual(self._pressed(), "button.voice_blinds_all_close",
+                                 (sat, phrase))
+            _handle("open all the blinds", sat=sat)
+            self.assertEqual(self._pressed(), "button.voice_blinds_all_open", sat)
+        # "all the KITCHEN blinds" is still just the kitchen four.
+        _handle("close all the kitchen blinds", sat="familyroom")
+        self.assertEqual(self._pressed(), "button.voice_blinds_kitchen_close")
+
+    def test_all_the_blinds_elsewhere_stays_in_that_room(self):
+        # The six-blind command belongs to the open space; from a bedroom or
+        # the bath, "all the blinds" is that room's one blind.
+        _handle("close all the blinds", sat="simon")
+        self.assertEqual(self._pressed(), "button.voice_simon_blind_close")
+        _handle("close all the blinds", sat="master")
+        self.assertEqual(self._pressed(), "button.voice_blind_bath_close")
+        # And "all" never lifts the room-local guard elsewhere.
+        _handle("turn off all the lights", sat="simon")
+        self.assertEqual(self._pressed(), "button.voice_simon_lights_off")
+
+    def test_family_room_fan_from_both_mics_and_not_elsewhere(self):
+        for sat in ("kitchen", "familyroom"):
+            _handle("turn on the fan", sat=sat)
+            self.assertEqual(self._pressed(), "button.voice_fr_fan_on", sat)
+            _handle("set the fan to medium", sat=sat)
+            self.assertEqual(self._pressed(), "button.voice_fr_fan_medium", sat)
+            _handle("fan on high", sat=sat)
+            self.assertEqual(self._pressed(), "button.voice_fr_fan_high", sat)
+            _handle("turn the fan off", sat=sat)
+            self.assertEqual(self._pressed(), "button.voice_fr_fan_off", sat)
+        self.press.reset_mock()
+        self.assertIsNone(_handle("turn on the fan", sat="master"))
+        self.assertIsNone(self._pressed())
+        # A kid's room keeps its own fan.
+        _handle("turn on the fan", sat="simon")
+        self.assertEqual(self._pressed(), "button.voice_simon_fan_on")
+
+    def test_the_cans_are_the_family_room_cans(self):
+        for sat in ("kitchen", "familyroom"):
+            _handle("turn off the cans", sat=sat)
+            self.assertEqual(self._pressed(), "button.voice_fr_cans_off", sat)
+            _handle("kill the cans", sat=sat)
+            self.assertEqual(self._pressed(), "button.voice_fr_cans_off", sat)
+            _handle("turn on the can lights", sat=sat)
+            self.assertEqual(self._pressed(), "button.voice_fr_cans_on", sat)
+
+    def test_fan_and_cans_never_cross(self):
+        # fuzz.ratio("turn on the fan", "turn on the cans") is 90 — an ASR
+        # plural or a dropped consonant must not swap a light for a fan.
+        _handle("turn on the fans", sat="kitchen")
+        self.assertEqual(self._pressed(), "button.voice_fr_fan_on")
+        _handle("turn off the can", sat="kitchen")
+        self.assertEqual(self._pressed(), "button.voice_fr_cans_off")
+        _handle("turn on the can", sat="familyroom")
+        self.assertEqual(self._pressed(), "button.voice_fr_cans_on")
+        _handle("turn off the fans", sat="familyroom")
+        self.assertEqual(self._pressed(), "button.voice_fr_fan_off")
 
     def test_apostrophes_and_the_asr_split_artefact_still_match(self):
         for phrase in ("it's story time", "its story time", "it s story time",
@@ -300,7 +389,7 @@ class HomeControlMatchTest(unittest.TestCase):
         self.assertEqual(self._pressed(), "button.voice_blind_bath_close")
         self.press.reset_mock()
         _handle("close the kitchen blinds", "master")
-        self.assertEqual(self._pressed(), "button.voice_blinds_all_close")
+        self.assertEqual(self._pressed(), "button.voice_blinds_kitchen_close")
 
 
 class HomeControlFastPathTest(unittest.TestCase):
@@ -343,6 +432,33 @@ class HomeCommandsEditTest(unittest.TestCase):
         self.addCleanup(patcher.stop)
         home_control._commands_cache = None
         self.addCleanup(setattr, home_control, "_commands_cache", None)
+
+    def test_resplits_a_pre_split_live_table(self):
+        # A live table from before 2026-08-25 has blinds_all_* unscoped and
+        # carrying the bare phrase. On load it must become the six-blind
+        # command and the per-room entries must appear.
+        seed = json.loads(home_control._SEED_FILE.read_text())
+        old = {k: v for k, v in seed.items()
+               if not k.startswith(("blinds_", "fr_"))}
+        old["blinds_all_close"] = {
+            "aliases": ["close the blinds", "close all the blinds"],
+            "entity": "button.voice_blinds_all_close",
+            "confirm": "Closing all the kitchen blinds."}
+        old["blinds_all_open"] = {
+            "aliases": ["open the blinds", "open all the blinds"],
+            "entity": "button.voice_blinds_all_open",
+            "confirm": "Opening all the kitchen blinds."}
+        with open(self.file, "w") as f:
+            json.dump(old, f)
+        table = home_control._commands()
+        self.assertEqual(table["blinds_all_close"]["sats"], ["kitchen", "familyroom"])
+        self.assertNotIn("close the blinds", table["blinds_all_close"]["aliases"])
+        self.assertIn("blinds_kitchen_close", table)
+        self.assertIn("blinds_family_open", table)
+        self.assertIn("fr_fan_medium", table)
+        with open(self.file) as f:
+            self.assertEqual(json.load(f)["blinds_all_open"]["sats"],
+                             ["kitchen", "familyroom"])
 
     def test_seeds_from_repo_copy(self):
         commands = home_control._commands()
