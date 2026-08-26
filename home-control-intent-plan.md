@@ -346,3 +346,14 @@ The v2 chooser (attribute the room for `blinds_kitchen/blinds_family` by the lou
 mic, at command time, with a per-array gain offset — XVF3800 vs Pi4 ReSpeaker) is a
 `home_control.handle` change once the pairs show a usable margin. Log line to grep:
 `arb evidence winner=… rms=… | loser=… rms=…`.
+
+**Cans are staged (2026-08-25 eve, Brad):** a bare `light.turn_on` restored the last
+state (cool and very bright). Now `fr_cans_on` reads the group first (`family room
+cans now` → `family room cans stage`, ids `cafe000000000021/22`): off → `BriCurveCans`
+% at `CTCans` K, the same values the 5-min "Update CT Values while On" tick writes;
+already on, or `fr_cans_brighter` ("make the cans brighter" / "turn up the cans" /
+"cans up") → 100 % with `familyRoomCansOverride=true` so the tick leaves them, released
+by a 90-min stoptimer (`cafe000000000023/24`) or by `fr_cans_off`. Bare "brighter" /
+"make it brighter" stays the kitchen's staged brighten from both mics (it was already
+house-wide; scoping it per mic would just re-enter the hop-race problem). Press-tested
+off→on (4 %/2500 K) → brighter (100 %, override) → off → on.

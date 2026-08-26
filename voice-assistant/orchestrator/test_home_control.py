@@ -328,6 +328,17 @@ class HomeControlMatchTest(unittest.TestCase):
             _handle("turn on the can lights", sat=sat)
             self.assertEqual(self._pressed(), "button.voice_fr_cans_on", sat)
 
+    def test_cans_brighter_is_its_own_button_and_the_kitchen_keeps_brighter(self):
+        for sat in ("kitchen", "familyroom"):
+            _handle("make the cans brighter", sat=sat)
+            self.assertEqual(self._pressed(), "button.voice_fr_cans_brighter", sat)
+            _handle("turn up the cans", sat=sat)
+            self.assertEqual(self._pressed(), "button.voice_fr_cans_brighter", sat)
+        # Bare "brighter" is still the kitchen's staged brighten from both mics.
+        for sat in ("kitchen", "familyroom"):
+            _handle("make it brighter", sat=sat)
+            self.assertEqual(self._pressed(), "button.voice_kitchen_brighten", sat)
+
     def test_fan_and_cans_never_cross(self):
         # fuzz.ratio("turn on the fan", "turn on the cans") is 90 — an ASR
         # plural or a dropped consonant must not swap a light for a fan.

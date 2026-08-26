@@ -320,6 +320,24 @@
       "familyroom"
     ]
   },
+  "fr_cans_brighter": {
+    "aliases": [
+      "make the cans brighter",
+      "cans brighter",
+      "brighten the cans",
+      "turn up the cans",
+      "cans up",
+      "cans all the way up",
+      "cans to full",
+      "turn the cans all the way up"
+    ],
+    "entity": "button.voice_fr_cans_brighter",
+    "confirm": "Cans all the way up.",
+    "sats": [
+      "kitchen",
+      "familyroom"
+    ]
+  },
   "kitchen_brighten": {
     "aliases": [
       "brighten the lights",
