@@ -107,6 +107,21 @@ RETRIGGER_GUARD_S = float(os.getenv("RETRIGGER_GUARD_S", "1.5"))
 # Follow-up turns drain first (lag≈0), so short live replies ("yes") still land.
 MIN_COMMAND_VOICED_MS = int(os.getenv("MIN_COMMAND_VOICED_MS", "500"))
 ENDPOINT_LAG_SPURIOUS_MS = int(os.getenv("ENDPOINT_LAG_SPURIOUS_MS", "400"))
+# 2026-08-26: the guard above was eating real commands. `lag` is the pipe
+# backlog at capture start (~0.8-1.5s on every wake turn) and never shrinks
+# — reading the backlog takes ~0ms, after which we track real time at the
+# same offset — so "lag > 400" is true for the WHOLE wake capture, not just
+# the bleed, and the guard reduced to "any command under 500ms of voice is
+# a blip". Five short commands in 30 days went to no_speech_onset that way
+# ("what time is it" = 480ms voiced; "fix the glare" = 416ms). Bleed has a
+# POSITION, not just a length: wake-word tail and chime edge sit inside the
+# first ~1s of the buffer (observed 64-160ms; chime ends ~0.9s after the
+# trigger). A blip whose onset is later than that is the user, however
+# short. Follow-up turns drain first, so their onsets are always early and
+# still protected by the lag test. Blips under MIN_VOICED_MS (1-6 frames)
+# stay spurious at any position — the family room logs 64-128ms blips 2-4s
+# into a capture, and letting one endpoint the turn is the original bug.
+SPURIOUS_ONSET_WINDOW_MS = int(os.getenv("SPURIOUS_ONSET_WINDOW_MS", "1000"))
 # /command/audio can legitimately take a minute: a searched+reasoning ask
 # measured 61s on 2026-07-09 (9 web searches) — the old 30s default hung up
 # before the answer, so the dashboard showed it but the kitchen never spoke.
@@ -664,6 +679,7 @@ def capture_command(stdout, vad, min_capture_ms: int = MIN_CAPTURE_MS,
     frames: list[bytes] = []
     speech = False
     speech_t0 = 0.0
+    onset_at_ms = 0                     # buffer position of the speech onset
     silence_ms = voiced_ms = total_ms = 0
     last_partial_at = 0
     reason = "max_command"
@@ -696,6 +712,7 @@ def capture_command(stdout, vad, min_capture_ms: int = MIN_CAPTURE_MS,
         if is_speech:
             if not speech:
                 speech_t0 = time.time()
+                onset_at_ms = total_ms
             speech = True
             silence_ms = 0
             voiced_ms += VAD_FRAME_MS
@@ -725,9 +742,15 @@ def capture_command(stdout, vad, min_capture_ms: int = MIN_CAPTURE_MS,
             # discard it and re-arm onset. A real run-together command carries
             # ≥1s of voice, so it still endpoints straight from the buffer.
             lag_ms = total_ms - (time.time() - t0) * 1000
-            if voiced_ms < MIN_COMMAND_VOICED_MS and lag_ms > ENDPOINT_LAG_SPURIOUS_MS:
+            # Two prongs: a tiny blip (< MIN_VOICED_MS, 1-6 frames — a clank,
+            # a TV syllable; the family room logs them 2-4s in) is bleed
+            # wherever it sits; short real speech is bleed only in the window.
+            if lag_ms > ENDPOINT_LAG_SPURIOUS_MS and (
+                    voiced_ms < MIN_VOICED_MS
+                    or (voiced_ms < MIN_COMMAND_VOICED_MS
+                        and onset_at_ms < SPURIOUS_ONSET_WINDOW_MS)):
                 log(f"spurious onset discarded voiced={voiced_ms}ms "
-                    f"lag={round(lag_ms)}ms total={total_ms}ms")
+                    f"onset_at={onset_at_ms}ms lag={round(lag_ms)}ms total={total_ms}ms")
                 frames.clear()
                 last_partial_at = 0
                 speech = False

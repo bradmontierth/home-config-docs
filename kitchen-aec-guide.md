@@ -118,6 +118,44 @@ default (SYS_DELAY 12) is factory-tuned for.
   fixed beams (`AEC_FIXEDBEAMS*`) pointed into the room instead of the
   auto-beam that chases the speakers.
 
+## Post-chime first-word loss (found + fixed 2026-08-26)
+
+**Symptom:** since the cutover the kitchen dropped the first word of a
+command spoken right after the confirm chime — 8 of 40 kitchen commands
+08-20→08-26 (`three minutes to my call fire timer`, `bradley today to roast
+coffee`, `glare`, `timer for five minutes`…) vs 0 of 30 the week before and
+10/10 clean on the family room (no AEC). Brad listened to the clips
+(http://192.168.10.251:8782/): the word is simply absent from the audio.
+
+**Cause:** the far end isn't music, it's the **chime**. `respeaker_ch0` is
+the comms output with full post-processing, and the residual-echo
+suppressor was at its VoIP-conference defaults — `PP_DTSENSITIVE 0`
+("prefers high echo suppression at the cost of doubletalk"), tail
+over-subtraction `PP_GAMMA_ETAIL 1.0`, `PP_NLATTENONOFF 1`. After the chime
+it keeps clamping for an estimated echo tail; a word spoken in that window
+is treated as echo. (Pre-cutover the chime wasn't a far-end signal at all.)
+Not ASR — Parakeet re-run on the clips gives the same text — and not the
+satellite's spurious-onset guard.
+
+**Fix:** `PP_DTSENSITIVE 13` (best double-talk + the extra near-end speech
+detector that 2-digit values enable). Applied 2026-08-26 21:12 via
+`~/aec-trial.sh step1` — 5/5 commands kept their first word, including two
+"what time is it" right on the chime. **VOLATILE until `~/aec-trial.sh
+save`** (SAVE_CONFIGURATION) — a power cycle of the array reverts to 0.
+Remaining before save: wake-over-music check with music at normal volume.
+Fallback ladder if it ever regresses: `step2` (+GAMMA_ETAIL 0.5), `step3`
+(+NLATTENONOFF 0), `nuke` (+ECHOONOFF 0 — linear AEC only, ~30 dB).
+Helper + clip browser sources: `voice-assistant/tools/kitchen-aec/`.
+
+Found alongside (different bug, all satellites): the spurious-onset guard
+in `capture_command` discarded any wake-turn command under 500 ms of voice
+because the "decided on buffered audio" lag test is true for the whole
+capture (the pipe backlog offset never shrinks). Five short commands in 30
+days died as `no_speech_onset` ("what time is it", "fix the glare"). Fixed
+by adding an onset-position window (`SPURIOUS_ONSET_WINDOW_MS`, 1000) with
+tiny blips (< `MIN_VOICED_MS`) still spurious anywhere; deployed to the
+kitchen and family room 2026-08-26 21:24.
+
 ## Interim-state service map (delete after cutover)
 
 - `/etc/modules-load.d/snd-aloop.conf`, `/etc/modprobe.d/snd-aloop.conf`

@@ -1,0 +1,11 @@
+[Unit]
+Description=Read-only browser for kitchen satellite audio clips (:8782)
+After=network.target
+
+[Service]
+User=pi
+ExecStart=/usr/bin/python3 /home/pi/clip-browser.py
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
