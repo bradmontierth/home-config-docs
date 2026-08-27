@@ -1,6 +1,6 @@
 {
   "brad": {
-    "aliases": ["brad", "brads", "dad", "dads", "daddy"],
+    "aliases": ["brad", "brads", "bradley", "dad", "dads", "daddy"],
     "spoken": "Brad's phone",
     "service": "mobile_app_pixel_8_pro",
     "volume_sensor": "sensor.pixel_8_pro_volume_level_alarm"

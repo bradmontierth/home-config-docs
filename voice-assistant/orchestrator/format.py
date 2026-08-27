@@ -137,20 +137,24 @@ def _item_phrase(item: dict) -> str:
     return text
 
 
-def summarize_added(items: list[dict]) -> str:
-    """Confirmation for an add_items / set_reminder turn, grouped by type."""
+def summarize_added(items: list[dict], for_name: str | None = None) -> str:
+    """Confirmation for an add_items / set_reminder turn, grouped by type.
+    `for_name` = the OTHER person the item was filed for ("remind brad to…"),
+    spoken instead of "you" so the speaker hears where it went."""
     if not items:
         return "I didn't catch anything to add to your lists."
     buckets: dict[str, list[str]] = {"reminder": [], "todo": [], "shopping": []}
     for it in items:
         buckets.setdefault(it.get("type", "todo"), []).append(_item_phrase(it))
+    who = for_name.title() if for_name else "you"
+    whose = f"{for_name.title()}'s" if for_name else "your"
     clauses = []
     if buckets["reminder"]:
-        clauses.append("I'll remind you to " + join_natural(buckets["reminder"]))
+        clauses.append(f"I'll remind {who} to " + join_natural(buckets["reminder"]))
     if buckets["shopping"]:
         clauses.append("added " + join_natural(buckets["shopping"]) + " to the shopping list")
     if buckets["todo"]:
-        clauses.append("added " + join_natural(buckets["todo"]) + " to your to-dos")
+        clauses.append("added " + join_natural(buckets["todo"]) + f" to {whose} to-dos")
     if not clauses:
         return "Added to your lists."
     sentence = clauses[0][0].upper() + clauses[0][1:]

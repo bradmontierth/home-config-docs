@@ -40,6 +40,7 @@ from . import broadcast as broadcast_mod
 from . import camera as camera_mod
 from . import clock as clock_mod
 from . import find_phone as phone_mod
+from . import people
 from . import places as places_mod
 from . import policy as policy_mod
 from . import speaker as speaker_mod
@@ -732,6 +733,18 @@ async def handle_command(command: str, followup: bool = False,
                 session_set_clarify(command, question, kind="timer",
                                     label=parsed["label"],
                                     theme=parsed["sound_theme"])
+        elif (parsed["label"] and intent_mod.is_implicit_adjust(command)
+              and any(t["label"] == parsed["label"] for t in ENGINE.active())):
+            # "three minutes to my call fire timer" with a call fire timer
+            # already running: an add-time command that lost its verb (see
+            # is_implicit_adjust). A duplicate timer is the worse mistake.
+            timer = await ENGINE.adjust(parsed["label"], parsed["duration_seconds"],
+                                        _CUR_SAT.get())
+            intent = parsed["intent"] = "timer_adjust"
+            result["timer"] = timer
+            result["response"] = fmt.confirm_adjust(timer)
+            result["ok"] = True
+            await _timer_event("timer_updated", timer=timer)
         else:
             timer = await ENGINE.create(
                 parsed["label"], parsed["duration_seconds"],
@@ -838,7 +851,11 @@ async def handle_command(command: str, followup: bool = False,
         if clarify and clarify.get("kind") == "add":
             text = f"{clarify['partial']} {command}".strip()
             owner = clarify.get("owner")
-        owner = owner or await _speaker_name(speaker_task)
+        # "remind brad to…": the item belongs to the person NAMED, not the
+        # speaker — it lands on their list and their phone. The text goes to
+        # the companion in first person (see people.py for why).
+        target, text = people.target_in(text)
+        owner = target or owner or await _speaker_name(speaker_task)
         private = intent_mod.wants_private(text)
         try:
             added = await lists_mod.add_from_text(text, owner=owner, private=private)
@@ -848,7 +865,7 @@ async def handle_command(command: str, followup: bool = False,
             result["ok"] = False
         else:
             result["added"] = added
-            result["response"] = fmt.summarize_added(added)
+            result["response"] = fmt.summarize_added(added, for_name=target)
             # Name the voice-resolved owner aloud (shopping is household-
             # shared, so attribution is only worth speaking for the rest):
             # cheap trust-building plus the audible correction path. A private
@@ -856,6 +873,8 @@ async def handle_command(command: str, followup: bool = False,
             # hear that it took.
             if private:
                 result["response"] += " Just on your phone."
+            elif target and any(i.get("type") != "shopping" for i in added):
+                result["response"] += f" It'll pop up on {target.title()}'s phone."
             elif owner and any(i.get("type") != "shopping" for i in added):
                 result["response"] += f" On {owner.title()}'s list."
             result["ok"] = bool(added)
@@ -1544,6 +1563,23 @@ async def telemetry(payload: dict) -> dict:
         # and that difference is only meaningful between two numbers taken
         # from the same pair of clocks.
         server_ms=payload.get("server_ms"),
+        clip=payload.get("clip"),
+    )
+    return {"ok": True}
+
+
+@app.post("/near_miss")
+async def near_miss(payload: dict, sat: str | None = None) -> dict:
+    """A stage-1 score that got close but never crossed the trigger line. The
+    satellite never calls /verify for these, so without this row a wake the
+    house heard as "nothing happened" is indistinguishable from silence (live
+    2026-08-26: Adrienne's 5pm "okay computer" left no trace anywhere). One
+    row per near-miss episode, rate-limited on the satellite; the pre-roll
+    clip is kept there (near-*.wav) for listening and for retraining."""
+    turns_mod.start(
+        sat, "near_miss",
+        stage1_score=payload.get("peak_score"),
+        wake_model=payload.get("model"),
         clip=payload.get("clip"),
     )
     return {"ok": True}

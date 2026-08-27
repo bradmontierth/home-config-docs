@@ -206,7 +206,10 @@ Rules:
   "put paper towels on the list", "add a todo to call the plumber". Leave label/query/item_text null;
   the full command is forwarded to the list service, which figures out the items itself.
 - set_reminder = a time-based reminder: "remind me to take the roast out at 5", "remind me to call mom
-  tomorrow morning". Also forwarded whole; leave item_text null.
+  tomorrow morning". Also forwarded whole; leave item_text null. A reminder FOR ANOTHER PERSON is
+  still set_reminder ("remind brad to roast coffee today", "set a reminder for mom to call the
+  dentist") — the assistant works out whose phone it goes to. Only "tell X …" said for right now
+  ("tell simon to come eat") is broadcast.
 - An add or reminder command that STOPS BEFORE NAMING WHAT is still add_items / set_reminder, with
   "missing_content" true — never "unclear". People pause to compose the thing itself and the mic
   endpoints on the gap: "remind me to", "remind me", "set a reminder", "add to my to-do list", "put
@@ -368,7 +371,7 @@ def is_truncated_timer(command: str) -> bool:
 # reach for in general intent routing.
 _TRUNCATED_REMINDER_RE = re.compile(
     r"^(?:please\s+)?(?:can\s+you\s+|could\s+you\s+)?"
-    r"(?:remind\s+me(?:\s+(?:to|that))?"
+    r"(?:remind\s+(?:me|[a-z]+)(?:\s+(?:to|that))?"
     r"|(?:set|add|make|create)\s+(?:me\s+)?(?:a|an|the)?\s*reminder"
     r"(?:\s+(?:to|for|that))?)$"
 )
@@ -380,6 +383,28 @@ _TRUNCATED_TODO_RE = re.compile(
     rf"(?:(?:a|an)\s+(?:new\s+)?(?:{_LIST_NOUN}|item)(?:\s+{_LIST_TAIL})?"
     rf"|{_LIST_TAIL})$"
 )
+
+
+# "three minutes to my call fire timer" — a timer_adjust whose "add" never
+# made it into the audio (live 2026-08-26: the kitchen's echo suppressor ate
+# the first word after the chime, and the classifier, quite reasonably, read
+# what was left as set_timer and made a duplicate). The words that survive
+# still say what was meant: no verb that CREATES a timer, and an additive
+# cue — "to my/the X timer", "more", "extra". Only consulted when a timer
+# with that name is already running, so a plain "call fire timer for three
+# minutes" with no such timer stays a set.
+_CREATE_VERB_RE = re.compile(r"\b(?:set|start|make|create|put|begin|new)\b")
+_ADJUST_CUE_RE = re.compile(
+    r"\b(?:more|extra|additional|onto|to\s+(?:my|the|that|our))\b")
+
+
+def is_implicit_adjust(command: str) -> bool:
+    """True when a set_timer parse reads like an add-time command that lost
+    its verb. Caller checks that the named timer actually exists."""
+    text = command.strip().lower()
+    if _CREATE_VERB_RE.search(text):
+        return False
+    return bool(_ADJUST_CUE_RE.search(text))
 
 
 def is_truncated_add(command: str) -> str | None:

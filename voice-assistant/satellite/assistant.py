@@ -96,6 +96,18 @@ SILENCE_MS = int(os.getenv("SILENCE_MS", "700"))
 MAX_COMMAND_S = float(os.getenv("MAX_COMMAND_S", "20"))
 MIN_VOICED_MS = int(os.getenv("MIN_VOICED_MS", "200"))
 RETRIGGER_GUARD_S = float(os.getenv("RETRIGGER_GUARD_S", "1.5"))
+# Stage-1 near misses (2026-08-26): a wake that scores 0.3-0.49 leaves no
+# trace anywhere — /verify is never called, nothing is logged — so a room
+# that "didn't hear me" is indistinguishable from silence (Adrienne's 5pm
+# "okay computer" that evening). Track the PEAK of each sub-threshold episode,
+# keep its pre-roll clip (near-*.wav: listen to it, retrain on it) and post
+# one row to the orchestrator. Rate-limited on purpose: one row per episode,
+# a cooldown after each, and a per-hour cap, because a TV can sit at 0.3 for
+# an hour. Setting NEAR_MISS_THRESHOLD >= the trigger threshold disables it.
+NEAR_MISS_THRESHOLD = float(os.getenv("NEAR_MISS_THRESHOLD", "0.3"))
+NEAR_MISS_GAP_S = float(os.getenv("NEAR_MISS_GAP_S", "2.0"))
+NEAR_MISS_PER_HOUR = int(os.getenv("NEAR_MISS_PER_HOUR", "30"))
+NEAR_MISS_KEEP = int(os.getenv("NEAR_MISS_KEEP", "300"))
 # Spurious-onset guard (2026-07-09, the family-demo bug): the un-drained wake
 # buffer holds ~1.5s of trigger→verify→chime bleed, and a short Silero blip in
 # it (wake-word tail, chime edge, ducked-music vocals) counted as speech onset —
@@ -782,6 +794,75 @@ def _persist_verify(preroll_pcm: bytes, event: dict) -> None:
             log(f"clip save failed: {exc}")
             event = {**event, "clip": None}
     append_event(event)
+
+
+def _persist_near_miss(preroll_pcm: bytes, peak: float, model: str | None,
+                       clip: str | None) -> None:
+    """Clip write + event + orchestrator row for a near miss, off the main
+    loop (same reason _persist_verify runs on a thread)."""
+    try:
+        if preroll_pcm and clip:
+            with CLIP_LOCK:
+                (CLIP_DIR / clip).write_bytes(wrap_wav(preroll_pcm))
+                for old in sorted(CLIP_DIR.glob("near-*.wav"))[:-NEAR_MISS_KEEP]:
+                    old.unlink(missing_ok=True)
+        payload = {"peak_score": peak, "model": model, "clip": clip}
+        append_event({"type": "near_miss", **payload})
+        post_json(sat_path("/near_miss"), payload, timeout=5)
+    except Exception as exc:  # noqa: BLE001 — diagnostics never break the loop
+        log(f"near-miss persist failed: {exc}")
+
+
+class NearMissTracker:
+    """Peak-of-episode tracker for sub-threshold stage-1 scores (NEAR_MISS_*).
+    An episode opens when a hop scores >= NEAR_MISS_THRESHOLD and closes on
+    the first hop below it; the pre-roll is snapshotted at the peak hop so the
+    clip holds whatever scored highest."""
+
+    def __init__(self) -> None:
+        self.cooldown_until = 0.0
+        self.hour_t0 = 0.0
+        self.hour_n = 0
+        self.capped = False
+        self.reset()
+
+    def reset(self) -> None:
+        self.peak = 0.0
+        self.model: str | None = None
+        self.t0 = 0.0
+        self.preroll = b""
+
+    def observe(self, score: float, model: str, now: float, preroll_fn) -> None:
+        if NEAR_MISS_THRESHOLD >= TRIGGER_THRESHOLD or now < self.cooldown_until:
+            return
+        if score >= NEAR_MISS_THRESHOLD:
+            if not self.t0:
+                self.t0 = now
+            if score > self.peak:
+                self.peak, self.model, self.preroll = score, model, preroll_fn()
+            return
+        if self.t0:
+            self._emit(now)
+
+    def _emit(self, now: float) -> None:
+        peak, model, preroll = round(self.peak, 3), self.model, self.preroll
+        self.reset()
+        self.cooldown_until = now + NEAR_MISS_GAP_S
+        if now - self.hour_t0 > 3600:
+            self.hour_t0, self.hour_n, self.capped = now, 0, False
+        self.hour_n += 1
+        if self.hour_n > NEAR_MISS_PER_HOUR:
+            if not self.capped:
+                log(f"near-miss cap ({NEAR_MISS_PER_HOUR}/h) reached; quiet until the hour rolls")
+                self.capped = True
+            return
+        clip = f"near-{datetime.now().strftime('%Y%m%d-%H%M%S')}.wav" if preroll else None
+        log(f"stage-1 near miss peak={peak} model={model} clip={clip}")
+        threading.Thread(target=_persist_near_miss, args=(preroll, peak, model, clip),
+                         daemon=True).start()
+
+
+NEAR_MISS = NearMissTracker()
 
 
 def run_turn(preroll_pcm: bytes, stdout, vad, trigger_t0: float,
@@ -1771,7 +1852,13 @@ def main() -> int:
         score = float(scores.get(top_key, 0.0))
         now = time.time()
         if score < TRIGGER_THRESHOLD or now < guard_until:
+            if mode == "active" and now >= guard_until:
+                NEAR_MISS.observe(
+                    score, top_key, now,
+                    lambda: (b"".join(list(ring)[-min(preroll_frames, frames_since_resync):])
+                             if min(preroll_frames, frames_since_resync) else b""))
             continue
+        NEAR_MISS.reset()   # a real trigger owns this episode; /verify logs it
 
         STATE.stats["triggers"] += 1
         peak = round(score, 3)

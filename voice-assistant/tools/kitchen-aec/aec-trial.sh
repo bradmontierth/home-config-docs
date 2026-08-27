@@ -23,7 +23,7 @@ case "${1:-show}" in
   step3)  x PP_DTSENSITIVE 13; x PP_GAMMA_ETAIL 0.5; x PP_NLATTENONOFF 0; mark step3; show ;;
   nuke)   x PP_DTSENSITIVE 13; x PP_GAMMA_ETAIL 0.5; x PP_NLATTENONOFF 0; x PP_ECHOONOFF 0; mark nuke; show ;;
   revert) x PP_DTSENSITIVE 0; x PP_GAMMA_ETAIL 1.0; x PP_NLATTENONOFF 1; x PP_ECHOONOFF 1; mark revert; show ;;
-  save)   x SAVE_CONFIGURATION; mark save ;;
+  save)   x SAVE_CONFIGURATION 1; mark save ;;
   results)
     python3 - "$LOG" <<'PY'
 import json,sys,datetime

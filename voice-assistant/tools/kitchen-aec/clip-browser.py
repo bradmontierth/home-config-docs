@@ -17,7 +17,7 @@ from urllib.parse import parse_qs, urlparse
 DATA = "/home/pi/voice-pipeline/data"
 CLIPS = os.path.join(DATA, "clips")
 EVENTS = os.path.join(DATA, "events.jsonl")
-NAME_RE = re.compile(r"^(cmd|verify-ok|verify-rej|mark)-(\d{8})-(\d{6})\.wav$")
+NAME_RE = re.compile(r"^(cmd|verify-ok|verify-rej|near|mark)-(\d{8})-(\d{6})\.wav$")
 
 
 def load_events():
@@ -99,15 +99,15 @@ class H(SimpleHTTPRequestHandler):
             "<!doctype html><meta charset=utf-8><title>kitchen clips</title>",
             "<style>body{font:14px system-ui;margin:1em;max-width:1100px}table{border-collapse:collapse;width:100%}",
             "td,th{border-bottom:1px solid #ddd;padding:6px;vertical-align:top;text-align:left}",
-            ".k-cmd{color:#06c}.k-verify-rej{color:#a00}.k-verify-ok{color:#080}audio{width:280px}",
+            ".k-cmd{color:#06c}.k-verify-rej{color:#a00}.k-verify-ok{color:#080}.k-near{color:#a60}audio{width:280px}",
             "form input{margin-right:.5em}</style>",
             "<h2>Kitchen satellite clips (.251)</h2>",
             "<form>kind <input name=kind value='%s' size=16> date <input name=date value='%s' size=9 placeholder=YYYYMMDD> "
             "q <input name=q value='%s'> limit <input name=limit value='%d' size=4><button>go</button> "
-            "<small>kind = cmd | verify-ok | verify-rej | all (comma-join)</small></form>"
+            "<small>kind = cmd | verify-ok | verify-rej | near | all (comma-join)</small></form>"
             % (html.escape(kind), html.escape(date), html.escape(needle), limit),
             "<p><small>cmd clips = pre-roll (wake phrase) + command capture, exactly what the orchestrator transcribed. "
-            "verify-* = the 2.5 s pre-roll that stage 2 judged. Transcript/intent/response come from events.jsonl.</small></p>",
+            "verify-* = the 2.5 s pre-roll that stage 2 judged. near = stage-1 scored 0.3-0.49 and never fired (peak in events). Transcript/intent/response come from events.jsonl.</small></p>",
             "<table><tr><th>when</th><th>kind</th><th>len</th><th>play</th><th>transcript &rarr; intent &rarr; response</th></tr>",
         ]
         for n, k, d, t, e in rows:
