@@ -334,6 +334,18 @@ fun HomeAgentApp(launchSessionId: MutableState<String?>) {
                             sessionRunning = true
                             resetReconnect()
                         }
+                        "waiting" -> {
+                            // Claude parked on background work (background Bash,
+                            // Monitor, subagent, timed wake-up). The process is
+                            // alive and will wake itself; keep the session attached.
+                            sessionRunning = true
+                            resetReconnect()
+                            val tasks = event.optJSONArray("tasks")
+                            val summary = if (tasks != null && tasks.length() > 0) {
+                                (0 until tasks.length()).joinToString(", ") { tasks.optString(it) }
+                            } else ""
+                            status = if (summary.isBlank()) "Waiting on background work" else "Waiting: $summary"
+                        }
                         "exited" -> {
                             sessionRunning = false
                             if (activeSessionId() == id) socket = null
@@ -369,7 +381,7 @@ fun HomeAgentApp(launchSessionId: MutableState<String?>) {
                     selectedSessionReasoning = info.reasoningEffort
                     selectedSessionAccount = info.codexAccount
                     selectedSessionModel = info.codexModel
-                    if (info.status == "running") {
+                    if (info.status == "running" || info.status == "waiting") {
                         attachSession(id, selectedSessionTitle ?: info.title)
                     } else {
                         status = "Selected $id"
@@ -730,7 +742,7 @@ fun HomeAgentApp(launchSessionId: MutableState<String?>) {
         fetchSessionInfo(client, gatewayUrl, token, target) { result ->
             result.onSuccess { info ->
                 if (activeSessionId() == target && reconnectSessionId == target) {
-                    if (info.status == "running") {
+                    if (info.status == "running" || info.status == "waiting") {
                         fetchSessionLog(client, gatewayUrl, token, target) { historyResult ->
                             historyResult.onSuccess { terminal = it }
                             attachSession(target, info.displayTitle.ifBlank { info.title })
