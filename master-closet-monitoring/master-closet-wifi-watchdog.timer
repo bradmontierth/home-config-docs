@@ -1,0 +1,11 @@
+[Unit]
+Description=Run master closet Wi-Fi reconnect watchdog once per minute
+
+[Timer]
+OnBootSec=90s
+OnUnitActiveSec=1min
+AccuracySec=15s
+Persistent=true
+
+[Install]
+WantedBy=timers.target

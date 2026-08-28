@@ -1014,3 +1014,11 @@ group back on the `default` silence stream with no orphaned snapcast stream.
   torn down and rebuilt.
 - **Phase 3 was not built** — naming a room from another room ("play Charlie
   Hope in the bath" from the kitchen). Brad deferred it.
+
+## 13. Monitoring & self-recovery (2026-08-27)
+
+The Pi went dark on the evening of 2026-08-25 and nobody knew for two days.
+Persistent journal, hardware watchdog, per-minute metrics to the Beelink
+`DeviceMonitoring` pipeline with a 5-minute offline Pushover, a Wi-Fi watchdog,
+and a Grafana dashboard now exist — see `master-closet-monitoring-guide.md`.
+The board runs 78–81 °C with no fan or hat; cooling is the outstanding item.

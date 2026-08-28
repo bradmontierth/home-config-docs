@@ -1,0 +1,135 @@
+[
+  {
+    "id": "mcpi_mqtt_in",
+    "type": "mqtt in",
+    "z": "3453be336e524ff8",
+    "name": "Master closet metrics",
+    "topic": "pi/metrics/master-closet-pi",
+    "qos": "0",
+    "datatype": "auto-detect",
+    "broker": "4b107de303592735",
+    "nl": false,
+    "rap": true,
+    "rh": 0,
+    "inputs": 0,
+    "x": 180,
+    "y": 1980,
+    "wires": [
+      [
+        "mcpi_insert",
+        "mcpi_heartbeat"
+      ]
+    ]
+  },
+  {
+    "id": "mcpi_insert",
+    "type": "function",
+    "z": "3453be336e524ff8",
+    "name": "Build Master closet insert",
+    "func": "const stats = msg.payload;\nif (!stats || typeof stats !== 'object' || Array.isArray(stats)) return null;\n\nconst allowed = [\n    'cpu_pct', 'mem_used_kb', 'mem_total_kb', 'mem_pct',\n    'swap_used_kb', 'swap_total_kb',\n    'load1', 'load5', 'load15', 'uptime_s', 'temp_c',\n    'disk_used_root_kb', 'disk_total_root_kb',\n    'disk_avail_root_kb', 'disk_pct_root',\n    'rx_bytes', 'tx_bytes'\n];\n\nfunction statName(key) {\n    return key.replace(/_/g, ' ').replace(/\\b\\w/g, c => c.toUpperCase());\n}\n\nconst values = [];\nfor (const key of allowed) {\n    const value = Number(stats[key]);\n    if (!Number.isFinite(value)) continue;\n    values.push(`('Master Closet Pi', '${statName(key)}', '${value}')`);\n}\n\nif (!values.length) return null;\nmsg.topic = 'INSERT INTO DeviceMonitoring(DeviceNM, StatNM, StatNBR) VALUES ' + values.join(', ') + ';';\nreturn msg;",
+    "outputs": 1,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 440,
+    "y": 1980,
+    "wires": [
+      [
+        "mcpi_mysql"
+      ]
+    ]
+  },
+  {
+    "id": "mcpi_mysql",
+    "type": "mysql",
+    "z": "3453be336e524ff8",
+    "mydb": "cb4207eb6afa62a8",
+    "name": "Master closet metrics DB insert",
+    "x": 740,
+    "y": 1980,
+    "wires": [
+      []
+    ]
+  },
+  {
+    "id": "mcpi_heartbeat",
+    "type": "function",
+    "z": "3453be336e524ff8",
+    "name": "Master closet heartbeat",
+    "func": "// Master closet satellite heartbeat. Output 1 feeds the offline trigger\n// (every sample re-arms it); output 2 sends a recovery push once after an outage.\nconst stats = msg.payload || {};\nconst wasDown = flow.get('masterClosetDown') === true;\nflow.set('masterClosetLastSeen', Date.now());\nif (!wasDown) return [msg, null];\nflow.set('masterClosetDown', false);\nconst up = Number(stats.uptime_s);\nconst upTxt = Number.isFinite(up) ? `${Math.round(up / 60)} min` : 'unknown';\nreturn [msg, {\n    topic: 'Master Closet Pi back online',\n    payload: `Master closet satellite is publishing again (uptime ${upTxt}, ${stats.temp_c ?? '?'} C, IP 192.168.10.24).`,\n    priority: 0\n}];",
+    "outputs": 2,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 440,
+    "y": 2060,
+    "wires": [
+      [
+        "mcpi_offline_trigger"
+      ],
+      [
+        "mcpi_pushover"
+      ]
+    ]
+  },
+  {
+    "id": "mcpi_offline_trigger",
+    "type": "trigger",
+    "z": "3453be336e524ff8",
+    "name": "silent 5 min?",
+    "op1": "",
+    "op2": "",
+    "op1type": "nul",
+    "op2type": "pay",
+    "duration": "5",
+    "extend": true,
+    "overrideDelay": false,
+    "units": "min",
+    "reset": "",
+    "bytopic": "all",
+    "topic": "topic",
+    "outputs": 1,
+    "x": 660,
+    "y": 2060,
+    "wires": [
+      [
+        "mcpi_offline_msg"
+      ]
+    ]
+  },
+  {
+    "id": "mcpi_offline_msg",
+    "type": "function",
+    "z": "3453be336e524ff8",
+    "name": "Master closet offline alert",
+    "func": "// Fires when the trigger node has seen no sample for 5 minutes.\nconst last = flow.get('masterClosetLastSeen');\nconst lastTxt = last\n    ? new Date(last).toLocaleString('en-US', { timeZone: 'America/Denver', hour12: true })\n    : 'unknown';\nflow.set('masterClosetDown', true);\nreturn {\n    topic: 'Master Closet Pi OFFLINE',\n    payload: `No metrics from the master closet voice satellite for 5 min. Last sample ${lastTxt} MT. Check power / Wi-Fi at 192.168.10.24 (shelf next to the LED controller).`,\n    priority: 0\n};",
+    "outputs": 1,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 880,
+    "y": 2060,
+    "wires": [
+      [
+        "mcpi_pushover"
+      ]
+    ]
+  },
+  {
+    "id": "mcpi_pushover",
+    "type": "pushover api",
+    "z": "3453be336e524ff8",
+    "keys": "077c27e2a4052ec4",
+    "title": "Master Closet Pi",
+    "name": "Master closet push",
+    "x": 1120,
+    "y": 2100,
+    "wires": []
+  }
+]

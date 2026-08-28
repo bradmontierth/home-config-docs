@@ -1,0 +1,15 @@
+[Unit]
+Description=Master closet satellite metrics publisher to MQTT
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/master-closet-metrics-mqtt
+Restart=always
+RestartSec=5
+MemoryMax=32M
+CPUQuota=2%
+
+[Install]
+WantedBy=multi-user.target
