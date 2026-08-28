@@ -1929,3 +1929,57 @@ When the hours return, build these first:
    ESPHome action: low-volume sound + a one-second dim amber ring. Fire it for
    both the bridge's local quiet check and an orchestrator policy refusal.
    One firmware rebuild for both units, ~10 lines in `bridge.py`.
+
+## In-capture re-wake chime during continued conversation — SHIPPED 2026-08-28
+
+**Problem (Brad):** with your back to the display you can't tell whether
+continued conversation is still listening. People forget the follow-up window
+is open, say "okay computer" again, hear no ding, and stop — is it listening,
+did the wake miss, or is CC still going? The orchestrator already understood a
+mid-conversation wake (`verify_and_extract` strips it from a follow-up
+transcript; a bare one returned `rewake` and the satellite dinged) but the
+acknowledgement was absent (run-together) or ~1.5–2 s late (bare: endpoint +
+ASR round trip, and `drain_input` at the top of the loop ate anything said
+during that trip).
+
+**Build:**
+* `orchestrator/app.py` `/partial?followup=1` — the follow-up capture's live
+  partials run the same wake matcher as the final transcript and return
+  `wake` / `bare`; the caption drops the phrase. Same matcher ⇒ the chime fires
+  iff the final turn will strip/rewake. Tests: `test_partial_rewake.py`.
+* `satellite/assistant.py` `capture_command(rewake=True)` (follow-up captures
+  only): `PartialStreamer` tags follow-up partials and records the first hit
+  (`begin_capture()` floors the seq so a late reply from an earlier capture
+  can't chime into this one). On a hit: chime off-thread, keep the buffer,
+  reset silence, and open a **post-ding onset window** (`REWAKE_ONSET_MS`
+  4 s) — the endpoint waits for NEW speech, so the pause people leave for the
+  chime doesn't ship a bare phrase. Expiry → `rewake_no_speech`, orchestrator
+  `rewake` → relisten **without a second chime** (`LAST_CAPTURE`).
+  **Race hold:** the phrase partial lands 0.6–1.0 s after it's spoken, right
+  on the 700 ms endpoint; if a partial is still in flight when silence would
+  endpoint, hold ≤ `REWAKE_HOLD_MS` 400 (normally already back → no cost).
+  **Bleed guard** (`REWAKE_BLEED_MS` 800 default): a voiced run that STARTS
+  inside the window is the chime (560 ms audible) on the no-AEC rooms; speech
+  already running when the ding lands is the person. Kitchen `.env` sets
+  `REWAKE_BLEED_MS=0` — its AEC cancels the chime to −50 dBFS.
+* Validated with a paced synthetic harness on .251 (fake mic/VAD/streamer,
+  8 scenarios incl. race hold, bleed, run-together) — not committed
+  (scratchpad); orchestrator suite 462 OK.
+
+**Deployed:** orchestrator rebuilt; satellite pushed to .251 / pw-poller-pi /
+master-closet-assist, all `active`.
+
+**Watch:** satellite log `rewake heard mid-conversation ... lag=Nms held=y/n` —
+`lag` ≥ 700 means the hold saved it; if `held=y` is common or bare `rewake`
+rows keep appearing in the turns table, the partial route is too slow and the
+fallback is scoring the stage-1 wake model inside `capture_command` (~400 ms,
+local). Kitchen: the in-capture chime re-triggers the XVF3800 residual-echo
+suppressor — the volatile `PP_DTSENSITIVE 13` matters here too (still
+unsaved; `~/aec-trial.sh save`). Known corner on no-AEC rooms: a reply that
+starts <800 ms after the ding AND ends inside that window isn't counted, so
+it answers after the 4 s window instead of immediately.
+
+**Open (pre-existing, more exposed now):** the family-room mic hears a
+kitchen re-wake while the kitchen is in capture and never posts `/verify`, so
+arbitration can hand the turn to the family room → two answers. Not yet
+checked whether the orchestrator suppresses other sats during a follow-up.

@@ -162,6 +162,31 @@ WAKE_MIN_CAPTURE_MS = int(os.getenv("WAKE_MIN_CAPTURE_MS", "400"))
 # /command/audio decode is still the only thing intents run on.
 PARTIALS_ENABLED = os.getenv("PARTIALS_ENABLED", "1").lower() not in ("0", "false", "no", "")
 PARTIAL_INTERVAL_MS = int(os.getenv("PARTIAL_INTERVAL_MS", "400"))
+# In-capture re-wake (2026-08-28). Saying "okay computer" during continued
+# conversation used to be understood (the orchestrator strips it / relistens on
+# a bare one) but never ACKNOWLEDGED until after the endpoint + round trip, so
+# with your back to the display you couldn't tell "still listening" from a
+# missed wake and stopped talking. Now follow-up partials also answer "does
+# the wake phrase lead this?" and the satellite chimes the moment one says
+# yes. The ding then means what it means on a cold wake -- "go ahead" -- so:
+#  - onset window: after the ding, wait up to REWAKE_ONSET_MS for NEW speech
+#    before a silence endpoint can fire (people pause for the chime).
+#  - bleed guard: a voiced run that STARTS inside REWAKE_BLEED_MS of the ding
+#    is the chime itself on the no-AEC rooms (~560ms audible), not the person;
+#    speech already running when the ding lands is the person. The kitchen's
+#    AEC cancels the chime (-50 dBFS), so its .env sets this to 0 -- there a
+#    short reply given right on the ding is never mistaken for bleed.
+#  - race hold: the partial that carries the phrase lands ~0.6-1.0s after it
+#    is spoken, right around the 700ms silence endpoint. On a follow-up
+#    capture only, if a partial is still in flight when silence would
+#    endpoint, hold up to REWAKE_HOLD_MS for it -- normally the last partial is
+#    already back, so this costs nothing on a typical turn.
+# Stage-1-in-capture (local, ~400ms) is the fallback if the hold loses often:
+# the "rewake ... lag=" log line is the number to watch.
+REWAKE_ENABLED = os.getenv("REWAKE_ENABLED", "1").lower() not in ("0", "false", "no", "")
+REWAKE_ONSET_MS = int(os.getenv("REWAKE_ONSET_MS", "4000"))
+REWAKE_BLEED_MS = int(os.getenv("REWAKE_BLEED_MS", "800"))   # 560ms audible + start latency; kitchen .env sets 0 (AEC cancels the chime)
+REWAKE_HOLD_MS = int(os.getenv("REWAKE_HOLD_MS", "400"))
 
 # Playback volume (0-100) applied as software gain to OUR audio only (chimes,
 # alarm, TTS) — music on the shared card is untouched. Driven by day-mode via
@@ -601,15 +626,33 @@ class PartialStreamer:
 
     def __init__(self):
         self._lock = threading.Lock()
-        self._latest: tuple[int, bytes] | None = None
+        self._latest: tuple[int, bytes, bool] | None = None
         self._wake = threading.Event()
         self._seq = int(time.time())
+        # In-capture re-wake bookkeeping (see REWAKE_* above). `_floor` is the
+        # seq at the start of the current capture, so a late reply to an
+        # earlier capture's partial can never chime into this one.
+        self._floor = self._seq
+        self._returned = self._seq       # newest seq whose POST has completed
+        self.wake_seq: int | None = None  # first partial of this capture with the phrase
+        self.wake_bare = False
         threading.Thread(target=self._worker, daemon=True).start()
 
-    def offer(self, pcm: bytes) -> None:
+    def begin_capture(self) -> None:
+        with self._lock:
+            self._floor = self._seq
+            self.wake_seq = None
+            self.wake_bare = False
+
+    def pending(self) -> bool:
+        """A partial offered during this capture has not come back yet."""
+        with self._lock:
+            return self._seq > max(self._returned, self._floor)
+
+    def offer(self, pcm: bytes, followup: bool = False) -> None:
         with self._lock:
             self._seq += 1
-            self._latest = (self._seq, pcm)
+            self._latest = (self._seq, pcm, followup)
         self._wake.set()
 
     def _worker(self) -> None:
@@ -620,11 +663,19 @@ class PartialStreamer:
                 self._wake.clear()
             if item is None:
                 continue
-            seq, pcm = item
+            seq, pcm, followup = item
+            resp: dict = {}
             try:
-                post_wav(sat_path(f"/partial?seq={seq}"), wrap_wav(pcm), timeout=4)
+                resp = post_wav(sat_path(f"/partial?seq={seq}&followup={1 if followup else 0}"),
+                                wrap_wav(pcm), timeout=4)
             except Exception:  # noqa: BLE001 — captions are cosmetic, never log-spam
                 pass
+            with self._lock:
+                self._returned = max(self._returned, seq)
+                if followup and resp.get("wake") and seq > self._floor \
+                        and self.wake_seq is None:
+                    self.wake_seq = seq
+                    self.wake_bare = bool(resp.get("bare"))
 
 
 PARTIALS = PartialStreamer() if PARTIALS_ENABLED else None
@@ -669,8 +720,24 @@ class SileroVad:
 
 
 # --- command capture (min window, then Silero endpointing) -----------------
+# What the last capture_command did, for the caller that needs to know whether
+# the re-wake chime already played (run_followups must not ding twice).
+LAST_CAPTURE: dict = {"reason": "", "rewake_dinged": False}
+
+
+def _rewake_chime() -> None:
+    """The in-capture acknowledgement. Off-thread so the capture loop keeps
+    reading the mic at frame cadence; PLAYBACK_LOCK serializes it behind a
+    reply that is still playing."""
+    try:
+        play_file(SOUNDS_DIR / "wake.wav")
+    except Exception as exc:  # noqa: BLE001
+        log(f"rewake chime failed: {exc}")
+
+
 def capture_command(stdout, vad, min_capture_ms: int = MIN_CAPTURE_MS,
-                    onset_ms: int | None = None, partials: bool = False) -> bytes:
+                    onset_ms: int | None = None, partials: bool = False,
+                    rewake: bool = False) -> bytes:
     """Capture one utterance. Two independent windows:
       - `onset_ms`: how long to wait for speech to START before giving up (the
         wake turn = min_capture_ms; a follow-up = the longer FOLLOWUP window).
@@ -683,9 +750,20 @@ def capture_command(stdout, vad, min_capture_ms: int = MIN_CAPTURE_MS,
     don't violate the follow-ups-are-unobtrusive rule the way audio would —
     and it's a local pipeline, so seeing chatter transcribed isn't creepy.
     Dropped-chatter captions just fade out (dashboard re-arms a short hide
-    timer per partial)."""
+    timer per partial).
+    `rewake` (follow-up captures): chime as soon as a partial reports the wake
+    phrase leading the buffer, then re-arm an onset window so the pause people
+    leave for the chime doesn't endpoint the turn. See REWAKE_* above."""
     if onset_ms is None:
         onset_ms = min_capture_ms
+    rewake_on = bool(REWAKE_ENABLED and PARTIALS and partials and rewake)
+    if rewake_on:
+        PARTIALS.begin_capture()
+    dinged = False
+    ding_at = 0.0
+    voiced_since_ding = 0
+    silent_since_ding = False
+    hold_t0 = 0.0
     frame_bytes = SileroVad.CHUNK * 2   # 512 samples * int16
     vad.reset()                         # fresh recurrent state per utterance
     frames: list[bytes] = []
@@ -728,15 +806,45 @@ def capture_command(stdout, vad, min_capture_ms: int = MIN_CAPTURE_MS,
             speech = True
             silence_ms = 0
             voiced_ms += VAD_FRAME_MS
+            # Post-ding: voice that was already running when the chime fired
+            # is the person (run-together "okay computer what's..."); a voiced
+            # run that STARTS inside the chime's bleed window is the chime
+            # itself on the no-AEC rooms, so it only counts once the window
+            # has passed (wake.wav is ~1s; nothing else lasts that long).
+            if dinged and (not silent_since_ding
+                           or (time.time() - ding_at) * 1000 >= REWAKE_BLEED_MS):
+                voiced_since_ding += VAD_FRAME_MS
         elif speech:
             silence_ms += VAD_FRAME_MS
+            if dinged:
+                silent_since_ding = True
+        # In-capture re-wake: a follow-up partial just reported the wake phrase
+        # leading this buffer. Chime now (the person is likely still talking),
+        # keep the buffer (the orchestrator strips the phrase from the final
+        # transcript), and re-arm: silence restarts from here and the endpoint
+        # waits for NEW speech, so a pause-for-the-chime doesn't ship a bare
+        # "okay computer" and cost a second round trip + second ding.
+        if rewake_on and not dinged and PARTIALS.wake_seq is not None:
+            dinged = True
+            ding_at = time.time()
+            # lag = how long the person had been quiet when the ding landed; if
+            # this regularly exceeds SILENCE_MS the hold below is losing the race
+            lag = silence_ms
+            silence_ms = 0
+            voiced_since_ding = 0
+            silent_since_ding = lag > 0
+            hold_t0 = 0.0
+            log(f"rewake heard mid-conversation (bare={PARTIALS.wake_bare}) -> chime, "
+                f"onset window {REWAKE_ONSET_MS}ms re-armed (lag={lag}ms "
+                f"held={'y' if lag >= SILENCE_MS else 'n'})")
+            threading.Thread(target=_rewake_chime, daemon=True).start()
         # Live captions: once speech has started, offer the WHOLE buffer-so-far
         # every ~PARTIAL_INTERVAL_MS. offer() is a lock+event set (microseconds);
         # the POST happens on the streamer's own thread, so the capture loop's
         # timing is untouched even if the orchestrator is slow or down.
         if PARTIALS and partials and speech and len(frames) - last_partial_at >= PARTIAL_FRAMES:
             last_partial_at = len(frames)
-            PARTIALS.offer(b"".join(frames))
+            PARTIALS.offer(b"".join(frames), followup=rewake_on)
         if not speech:
             # Onset timeout is WALL-CLOCK, not audio-duration: the buffered
             # chime/pre-roll bleed (read in ~0ms of real time) must NOT count
@@ -748,7 +856,25 @@ def capture_command(stdout, vad, min_capture_ms: int = MIN_CAPTURE_MS,
             continue                        # keep waiting for speech to start
         if total_ms < min_capture_ms:
             continue                        # never endpoint inside the min window
+        if dinged and voiced_since_ding < MIN_VOICED_MS:
+            # Post-ding onset window: the ding said "go ahead", so wait for the
+            # person to actually continue before silence can endpoint. Expiry
+            # ships what we have (a bare wake phrase) and the orchestrator's
+            # rewake path relistens -- without a second chime (LAST_CAPTURE).
+            if (time.time() - ding_at) * 1000 >= REWAKE_ONSET_MS:
+                reason = "rewake_no_speech"
+                break
+            continue
         if silence_ms >= SILENCE_MS:
+            # Race hold (follow-up captures only): the partial that would tell
+            # us this utterance opened with the wake phrase may still be in
+            # flight. Bounded wait; a typical turn's last partial is already
+            # back, so this normally costs nothing.
+            if rewake_on and not dinged and PARTIALS.pending():
+                if not hold_t0:
+                    hold_t0 = time.time()
+                if (time.time() - hold_t0) * 1000 < REWAKE_HOLD_MS:
+                    continue
             # A short voiced blip whose trailing "silence" was mostly BUFFERED
             # audio is bleed, not the user (see MIN_COMMAND_VOICED_MS above) —
             # discard it and re-arm onset. A real run-together command carries
@@ -777,7 +903,10 @@ def capture_command(stdout, vad, min_capture_ms: int = MIN_CAPTURE_MS,
     voiced_pct = round(100 * voiced_ms / total_ms) if total_ms else 0
     log(f"capture reason={reason} total={total_ms}ms voiced={voiced_ms}ms "
         f"({voiced_pct}%) tail_silence={silence_ms}ms wall={wall_ms}ms "
-        f"min={min_capture_ms} onset={onset_ms} thr={SILERO_THRESHOLD}")
+        f"min={min_capture_ms} onset={onset_ms} thr={SILERO_THRESHOLD}"
+        + (" rewake_dinged" if dinged else ""))
+    LAST_CAPTURE["reason"] = reason
+    LAST_CAPTURE["rewake_dinged"] = dinged
     return b"".join(frames) if voiced_ms >= MIN_VOICED_MS else b""
 
 
@@ -1094,7 +1223,7 @@ def run_followups(stdout, vad, awaiting: bool = False) -> None:
         # the right answer for a room with no display -- see the build guide.
         cmd = capture_command(stdout, vad, min_capture_ms=FOLLOWUP_MIN_MS,
                               onset_ms=CLARIFY_WINDOW_MS if awaiting else FOLLOWUP_WINDOW_MS,
-                              partials=True)
+                              partials=True, rewake=True)
         if not cmd:
             return                          # quiet window -> conversation over
         try:
@@ -1113,8 +1242,14 @@ def run_followups(stdout, vad, awaiting: bool = False) -> None:
         # A bare "okay computer" mid-conversation: acknowledge and re-open,
         # rather than treating it as a command and ending the session.
         if resp.get("rewake"):
-            log("followup: wake word only -> re-arming")
-            play_file(SOUNDS_DIR / "wake.wav")
+            # The in-capture path (REWAKE_*) usually chimed already and held an
+            # onset window that expired; only ding here if it never got the
+            # chance (partial lost the race / partials off).
+            if LAST_CAPTURE.get("rewake_dinged"):
+                log("followup: wake word only (already chimed in-capture) -> re-arming")
+            else:
+                log("followup: wake word only -> re-arming")
+                play_file(SOUNDS_DIR / "wake.wav")
             continue
         turns += 1
         intent = resp.get("intent")

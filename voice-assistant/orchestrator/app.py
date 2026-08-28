@@ -1638,14 +1638,25 @@ async def command_shadow(request: Request, sat: str = "unknown") -> dict:
 
 
 @app.post("/partial")
-async def partial(request: Request, seq: int = 0, sat: str | None = None) -> dict:
+async def partial(request: Request, seq: int = 0, sat: str | None = None,
+                  followup: int = 0) -> dict:
     """Live-caption snapshot. During command capture the satellite POSTs the
     ENTIRE buffer-so-far every ~400ms; each one is re-decoded as a normal
     full-context batch (so partials have zero accuracy penalty vs the final)
     and fanned to the dashboard as partial_transcript {text, seq}. Display-only
     by design: intent parsing always runs on the final /command/audio
     transcript, never a partial. Best-effort throughout — failures return ok
-    False and cost nothing but a skipped caption frame."""
+    False and cost nothing but a skipped caption frame.
+
+    `followup=1` (continued-conversation capture): also report whether the
+    wake phrase leads the partial — `wake` — and whether it is ALL of it —
+    `bare`. The satellite chimes on `wake` so a re-wake said mid-conversation
+    ("okay computer, what about tomorrow") is acknowledged while the person is
+    still talking instead of only after the endpoint + round trip (user
+    request 2026-08-28: with no ding you can't tell listening from a missed
+    wake). Same matcher the final transcript goes through below, so the chime
+    fires iff the final turn will strip/rewake on it. The caption drops the
+    wake phrase for the same reason the final transcript does."""
     wav = await request.body()
     if not wav:
         raise HTTPException(400, "empty audio body")
@@ -1654,9 +1665,15 @@ async def partial(request: Request, seq: int = 0, sat: str | None = None) -> dic
     except Exception as exc:  # noqa: BLE001 — captions are cosmetic
         log.debug("partial transcribe failed: %s", exc)
         return {"ok": False, "seq": seq}
-    if text:
-        await _turn_event("partial_transcript", text=text, seq=seq, sat=sat)
-    return {"ok": True, "seq": seq, "text": text}
+    wake = bare = False
+    caption = text
+    if text and followup:
+        found, stripped, _ = verify.verify_and_extract(text)
+        if found:
+            wake, bare, caption = True, not stripped, stripped
+    if caption:
+        await _turn_event("partial_transcript", text=caption, seq=seq, sat=sat)
+    return {"ok": True, "seq": seq, "text": text, "wake": wake, "bare": bare}
 
 
 # -- music ducking (satellite) ----------------------------------------------
