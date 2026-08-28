@@ -382,6 +382,42 @@ class HomeControlMatchTest(unittest.TestCase):
         _handle("close simon's blind", "kitchen")
         self.assertEqual(self._pressed(), "button.voice_simon_blind_close")
 
+    def test_effects_are_verb_blind(self):
+        """Live 2026-08-27: "show me pac man" x3 -> unclear, "show me lava
+        lamp" -> unclear, while "give me ..." worked. The effect name is the
+        command; whichever verb the speaker reaches for must not matter."""
+        cases = {
+            "show me pac man": "button.voice_simon_fx_pac_man",
+            "show me lava lamp": "button.voice_simon_fx_lava_lamp",
+            "put on pac man": "button.voice_simon_fx_pac_man",
+            "switch it to waves": "button.voice_simon_fx_ocean_waves",
+            "change it to dino stomp": "button.voice_simon_fx_dino_stomp",
+            "okay show me pac man": "button.voice_simon_fx_pac_man",
+            "show me the comet": "button.voice_simon_fx_zoom_comet",
+            "give me pac man": "button.voice_simon_fx_pac_man",
+        }
+        for phrase, entity in cases.items():
+            with self.subTest(phrase=phrase):
+                self.press.reset_mock()
+                self.assertIsNotNone(_handle(phrase, "simon"), phrase)
+                self.assertEqual(self._pressed(), entity)
+        # Verb-stripped phrases are exact aliases too — the pre-classifier
+        # fast path, not just the fuzzy rescue.
+        self.assertTrue(home_control.has_exact_match("show me pac man", "simon"))
+        self.assertTrue(home_control.has_exact_match("show me lava lamp", "simon"))
+        # Stripping "show me" must not turn camera / place phrases into
+        # button presses.
+        for phrase in ("show me simon", "show me claire", "show me home depot",
+                       "show me that again", "show me the doorbell"):
+            with self.subTest(phrase=phrase):
+                self.assertFalse(home_control.has_exact_match(phrase, "simon"))
+                self.assertIsNone(home_control.fuzzy_match(phrase, "simon"))
+                self.assertIsNone(home_control.fuzzy_match(phrase, "kitchen"))
+        # Claire's climate phrases share "make it" and must still land.
+        self.press.reset_mock()
+        _handle("make it cooler", "claire")
+        self.assertEqual(self._pressed(), "button.voice_claire_too_hot")
+
     def test_exact_simon_alias_can_rescue_an_intent_model_miss(self):
         self.assertTrue(home_control.has_exact_match("set a font color", "simon"))
         self.assertFalse(home_control.has_exact_match("set a font color", "kitchen"))
@@ -429,6 +465,36 @@ class HomeControlFastPathTest(unittest.TestCase):
 
     def test_cool_color_bypasses_classifier(self):
         self._assert_fast_path("give me a cool color")
+
+    def _run_with_classifier(self, phrase: str, intent: str):
+        press = AsyncMock()
+        parsed = app.intent_mod.validate({"intent": intent})
+        token = app._CUR_SAT.set("simon")
+        self.addCleanup(app._CUR_SAT.reset, token)
+        with (
+            patch.object(app.intent_mod, "parse",
+                         new=AsyncMock(return_value=parsed)),
+            patch.object(app.home_mod, "_press", new=press),
+            patch.object(app, "_speak_reply", new=AsyncMock()),
+            patch.object(app.broadcast_mod, "send", new=AsyncMock()),
+            patch.object(app.events, "emit", new=AsyncMock()),
+        ):
+            result = asyncio.run(app.handle_command(phrase))
+        return result, press
+
+    def test_unclear_is_rescued_by_a_room_alias(self):
+        # A near-alias the exact path misses; the classifier says unclear.
+        result, press = self._run_with_classifier("show me pac man please",
+                                                  "unclear")
+        self.assertEqual(result["intent"], "home_control")
+        self.assertTrue(result["ok"])
+        press.assert_awaited_once_with("button.voice_simon_fx_pac_man")
+
+    def test_unclear_with_no_alias_stays_unclear(self):
+        result, press = self._run_with_classifier("flibber the wozzle",
+                                                  "unclear")
+        self.assertEqual(result["intent"], "unclear")
+        press.assert_not_awaited()
 
 
 class HomeCommandsEditTest(unittest.TestCase):

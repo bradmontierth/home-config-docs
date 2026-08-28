@@ -692,14 +692,16 @@ async def handle_command(command: str, followup: bool = False,
                      add_intent, intent, command)
             parsed = {**parsed, "intent": add_intent, "missing_content": True}
             intent = add_intent
-    if intent == "none" and not followup and command:
+    if intent in ("none", "unclear") and not followup and command:
         # The classifier does not know every curated phrase ("it's story
-        # time" came back none, live 2026-08-25). A room-scoped alias that
-        # clears the home_control threshold is the same decision that path
-        # already makes, so take it here rather than apologising.
+        # time" came back none, live 2026-08-25; "show me pac man" came back
+        # unclear three times running, live 2026-08-27). A room-scoped alias
+        # that clears the home_control threshold is the same decision that
+        # path already makes, so take it here rather than apologising.
         rescued = home_mod.fuzzy_match(command, _CUR_SAT.get())
         if rescued:
-            log.info("none rescued by home command %s: %r", rescued, command)
+            log.info("%s rescued by home command %s: %r",
+                     intent, rescued, command)
             parsed = {**parsed, "intent": "home_control", "query": command}
             intent = "home_control"
     if followup and intent == "none":

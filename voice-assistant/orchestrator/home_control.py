@@ -55,9 +55,22 @@ _THRESHOLD = 80
 
 # Politeness/filler that ASR or habit prepends/appends; stripped before
 # scoring so "could you close the blinds please" scores as "close the blinds".
+#
+# The second group is the command verb: "show me pac man", "give me pac man",
+# "make it pac man" and "put on pac man" are all the same request, and only
+# one of them was ever curated as an alias (live 2026-08-27, Simon's room:
+# five "show me <effect>" turns in a row died as unclear/Piano Man while
+# "give me <effect>" worked all week). Stripping the verb from BOTH the phrase
+# and the alias makes the effect name the thing that scores, whichever verb
+# the speaker reaches for. "show me" cannot collide with show_camera /
+# place_search ("show me Simon", "show me Home Depot"): the camera check runs
+# before this table is consulted, and a bare "simon" / "home depot" is no
+# alias of anything.
 _LEAD_FILLER = re.compile(
     r"^(?:(?:uh|um|hey|ok|okay|so|please|can you|could you|would you|"
-    r"will you|go ahead and)\s+)+")
+    r"will you|go ahead and|"
+    r"show me|give me|make it|set it to|put on|put it on|switch to|"
+    r"switch it to|change it to)\s+)+")
 _TAIL_FILLER = re.compile(r"(?:\s+(?:please|for me|now|thanks|thank you))+$")
 
 
@@ -280,7 +293,10 @@ def _best(query: str, commands: dict) -> tuple[str, dict, float] | None:
 
     best: tuple[str, dict, float] | None = None
     for key, entry in commands.items():
-        score = max(fuzz.ratio(query, _fold(a)) for a in entry["aliases"])
+        # Score the alias both as written and verb-stripped, the way the
+        # query was: "pac man" must hit "give me pac man" at 100, not 64.
+        score = max(fuzz.ratio(query, x) for a in entry["aliases"]
+                    for x in (_fold(a), _clean(a)))
         if best is None or score > best[2]:
             best = (key, entry, score)
     return best
@@ -334,8 +350,9 @@ def has_exact_match(query: str, sat: str | None = None) -> bool:
     commands = _commands()
     sat = _named_room(query) or sat or config.DEFAULT_SAT
     for entry in _house(commands, sat).values():
-        if query in (_fold(alias) for alias in entry["aliases"]):
-            return True
+        for alias in entry["aliases"]:
+            if query in (_fold(alias), _clean(alias)):
+                return True
     return False
 
 
