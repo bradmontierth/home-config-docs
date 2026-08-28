@@ -411,6 +411,23 @@ VERIFY_TAIL_S = float(os.getenv("VERIFY_TAIL_S", "1.5"))
 # Both mics trigger within ~1s of each other, so the window only needs to
 # cover verify skew plus margin — NOT the whole turn.
 ARB_SUPPRESS_S = float(os.getenv("ARB_SUPPRESS_S", "3"))
+# In-capture re-wake vs a peer's cold wake (2026-08-28, live double-ding /
+# double-answer). A satellite mid-follow-up never posts /verify, so a peer mic
+# that heard the same "okay computer" won the turn outright; the reverse
+# (peer in follow-up, we cold-wake) had both answer. Now a follow-up partial
+# that reports the phrase CLAIMS arbitration like a verify does, and a /verify
+# from a PEER (a mic that can hear the same speaker -- the family room shares
+# the kitchen's speakers) defers up to REWAKE_ARB_WAIT_S while another sat is
+# in a follow-up listen, so the conversation that is already open keeps the
+# turn (and its ask history). Groups of peers separated by ';'. Sats not in
+# any group never wait.
+ARB_PEERS = [
+    {s.strip() for s in grp.split(",") if s.strip()}
+    for grp in os.getenv("ARB_PEERS", "kitchen,familyroom").split(";") if grp.strip()
+]
+REWAKE_ARB_WAIT_S = float(os.getenv("REWAKE_ARB_WAIT_S", "0.9"))
+# Safety cap on a follow-up listen marker whose /session/idle never arrived.
+FOLLOWUP_LISTEN_MAX_S = float(os.getenv("FOLLOWUP_LISTEN_MAX_S", "30"))
 
 # --- timers ----------------------------------------------------------------
 DB_PATH = os.getenv("ORCH_DB_PATH", "/home/pi/voice-orchestrator/data/orchestrator.db")

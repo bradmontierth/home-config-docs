@@ -192,7 +192,7 @@ def session_context() -> str | None:
 # can be paired onto the winner's row (turns.other_*) — the evidence for
 # attributing a room by which mic heard the speaker louder, see loudness.py.
 _ARB = {"sat": None, "until": 0.0, "turn_id": None, "rms_db": None,
-        "stage1": None}
+        "stage1": None, "at": 0.0}
 
 
 def _arb_holder(sat: str) -> str | None:
@@ -203,8 +203,44 @@ def _arb_holder(sat: str) -> str | None:
 
 
 def _arb_claim(sat: str, stage1: float | None = None) -> None:
-    _ARB.update(sat=sat, until=time.time() + config.ARB_SUPPRESS_S,
-                turn_id=None, rms_db=None, stage1=stage1)
+    now = time.time()
+    _ARB.update(sat=sat, until=now + config.ARB_SUPPRESS_S,
+                turn_id=None, rms_db=None, stage1=stage1, at=now)
+
+
+# Which satellites are inside a follow-up listen window right now (sat ->
+# when it opened). A satellite in capture never posts /verify, so this is how
+# the in-capture re-wake takes part in arbitration: see config.ARB_PEERS.
+_FOLLOWUP_LISTEN: dict[str, float] = {}
+
+
+def _followup_listening(sat: str) -> float | None:
+    since = _FOLLOWUP_LISTEN.get(sat)
+    if since is None or time.time() - since > config.FOLLOWUP_LISTEN_MAX_S:
+        return None
+    return since
+
+
+def _peer_in_followup(sat: str) -> str | None:
+    """A PEER mic (same audio space) that is mid-follow-up, if any."""
+    for group in config.ARB_PEERS:
+        if sat in group:
+            for other in group:
+                if other != sat and _followup_listening(other) is not None:
+                    return other
+    return None
+
+
+async def _await_rewake_claim(sat: str) -> str | None:
+    """A peer is in a follow-up listen: give its partial the chance to claim
+    this wake before we do. Returns the claimant, or None on timeout."""
+    deadline = time.time() + config.REWAKE_ARB_WAIT_S
+    while time.time() < deadline:
+        holder = _arb_holder(sat)
+        if holder:
+            return holder
+        await asyncio.sleep(0.05)
+    return _arb_holder(sat)
 
 
 async def _note_wake_loudness(turn_id: str, wav: bytes, sat: str,
@@ -1249,7 +1285,18 @@ async def session_listening(sat: str | None = None) -> dict:
     """Satellite pings this when it opens a follow-up listen window (no wake
     word). Emits a dashboard cue so the kiosk shows 'Listening…' — the user must
     be able to tell the mic is still open without guessing."""
+    if sat:
+        _FOLLOWUP_LISTEN[sat] = time.time()
     await _turn_event("followup_listening", sat=sat)
+    return {"ok": True}
+
+
+@app.post("/session/idle")
+async def session_idle(sat: str | None = None) -> dict:
+    """Satellite pings this when its follow-up loop ends (any exit path), so
+    a peer's cold wake stops deferring to a conversation that is over."""
+    if sat:
+        _FOLLOWUP_LISTEN.pop(sat, None)
     return {"ok": True}
 
 
@@ -1374,6 +1421,14 @@ async def verify_wake(request: Request, sat: str = "kitchen",
         raise HTTPException(400, "empty audio body")
     t0 = time.time()
     timing.start()
+    peer = _peer_in_followup(sat)
+    if peer:
+        # A peer mic is mid-follow-up and may be about to claim this very
+        # phrase off its live partials (~0.6-1.0s after it is spoken, vs our
+        # ~0.3s). The open conversation keeps the turn if it heard it.
+        log.info("verify sat=%s peer %s in follow-up -> deferring up to %.1fs",
+                 sat, peer, config.REWAKE_ARB_WAIT_S)
+        await _await_rewake_claim(sat)
     winner = _arb_holder(sat)
     if winner:
         # Race already lost — don't burn an ASR decode (it's the same
@@ -1462,6 +1517,21 @@ async def command_audio(request: Request, followup: bool = False,
     timing.start()
     if not turn_id:
         turn_id = turns_mod.start(sat, "followup" if followup else "manual")
+    if followup:
+        listen_since = _followup_listening(sat)
+        _FOLLOWUP_LISTEN.pop(sat, None)
+        # A peer mic verified a cold wake AFTER this listen opened: that wake
+        # was the person re-waking (or a different person the peer owns), and
+        # the peer is answering it. Whatever we captured is theirs -- drop it,
+        # or both rooms answer (live 2026-08-28, kitchen + family room).
+        if (listen_since is not None and _ARB["sat"] and _ARB["sat"] != sat
+                and _ARB["at"] >= listen_since):
+            log.info("followup sat=%s yields: %s took a wake during this listen",
+                     sat, _ARB["sat"])
+            turns_mod.update(turn_id, intent="none", ok=False,
+                             reject_reason="yield", arb_winner=_ARB["sat"])
+            return {"ok": False, "yield": True, "winner": _ARB["sat"],
+                    "transcript": "", "response": "", "intent": "none"}
     transcript = await clients.transcribe(wav)
     log.info("command sat=%s followup=%s transcript=%r", sat, followup, transcript)
     if stitched and transcript:
@@ -1670,6 +1740,17 @@ async def partial(request: Request, seq: int = 0, sat: str | None = None,
     if text and followup:
         found, stripped, _ = verify.verify_and_extract(text)
         if found:
+            # This is a wake, so it takes part in arbitration: a peer mic that
+            # cold-verified the same phrase first owns it -> this capture
+            # yields (no chime, session ends quietly). Otherwise claim, so the
+            # peer's /verify (deferred, see _peer_in_followup) is suppressed.
+            holder = _arb_holder(sat) if sat else None
+            if holder:
+                log.info("partial sat=%s rewake yields to %s", sat, holder)
+                return {"ok": True, "seq": seq, "text": text, "wake": False,
+                        "bare": False, "yield": True, "winner": holder}
+            if sat:
+                _arb_claim(sat)
             wake, bare, caption = True, not stripped, stripped
     if caption:
         await _turn_event("partial_transcript", text=caption, seq=seq, sat=sat)

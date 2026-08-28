@@ -636,6 +636,9 @@ class PartialStreamer:
         self._returned = self._seq       # newest seq whose POST has completed
         self.wake_seq: int | None = None  # first partial of this capture with the phrase
         self.wake_bare = False
+        # A peer mic cold-verified this same wake first: the orchestrator says
+        # yield -> this capture is theirs, drop it and end the session quietly.
+        self.yield_to: str | None = None
         threading.Thread(target=self._worker, daemon=True).start()
 
     def begin_capture(self) -> None:
@@ -643,6 +646,7 @@ class PartialStreamer:
             self._floor = self._seq
             self.wake_seq = None
             self.wake_bare = False
+            self.yield_to = None
 
     def pending(self) -> bool:
         """A partial offered during this capture has not come back yet."""
@@ -672,10 +676,12 @@ class PartialStreamer:
                 pass
             with self._lock:
                 self._returned = max(self._returned, seq)
-                if followup and resp.get("wake") and seq > self._floor \
-                        and self.wake_seq is None:
-                    self.wake_seq = seq
-                    self.wake_bare = bool(resp.get("bare"))
+                if followup and seq > self._floor:
+                    if resp.get("yield"):
+                        self.yield_to = resp.get("winner") or "peer"
+                    elif resp.get("wake") and self.wake_seq is None:
+                        self.wake_seq = seq
+                        self.wake_bare = bool(resp.get("bare"))
 
 
 PARTIALS = PartialStreamer() if PARTIALS_ENABLED else None
@@ -722,7 +728,7 @@ class SileroVad:
 # --- command capture (min window, then Silero endpointing) -----------------
 # What the last capture_command did, for the caller that needs to know whether
 # the re-wake chime already played (run_followups must not ding twice).
-LAST_CAPTURE: dict = {"reason": "", "rewake_dinged": False}
+LAST_CAPTURE: dict = {"reason": "", "rewake_dinged": False, "yield_to": None}
 
 
 def _rewake_chime() -> None:
@@ -824,6 +830,14 @@ def capture_command(stdout, vad, min_capture_ms: int = MIN_CAPTURE_MS,
         # transcript), and re-arm: silence restarts from here and the endpoint
         # waits for NEW speech, so a pause-for-the-chime doesn't ship a bare
         # "okay computer" and cost a second round trip + second ding.
+        if rewake_on and PARTIALS.yield_to:
+            # A peer mic owns this wake (it cold-verified first, and is
+            # chiming/answering through the same speakers). Drop the capture.
+            reason = "yield"
+            log(f"rewake yields to {PARTIALS.yield_to} -> dropping capture, session over")
+            frames.clear()
+            voiced_ms = 0
+            break
         if rewake_on and not dinged and PARTIALS.wake_seq is not None:
             dinged = True
             ding_at = time.time()
@@ -907,6 +921,7 @@ def capture_command(stdout, vad, min_capture_ms: int = MIN_CAPTURE_MS,
         + (" rewake_dinged" if dinged else ""))
     LAST_CAPTURE["reason"] = reason
     LAST_CAPTURE["rewake_dinged"] = dinged
+    LAST_CAPTURE["yield_to"] = PARTIALS.yield_to if rewake_on else None
     return b"".join(frames) if voiced_ms >= MIN_VOICED_MS else b""
 
 
@@ -1197,6 +1212,18 @@ def run_followups(stdout, vad, awaiting: bool = False) -> None:
     answered ("for how long?"), so give this turn the longer thinking window."""
     if not FOLLOWUP_ENABLED:
         return
+    try:
+        _run_followups(stdout, vad, awaiting)
+    finally:
+        # Tell the orchestrator the listen window is closed, whichever way the
+        # loop ended, so a peer mic's cold wake stops deferring to us.
+        try:
+            post_json(sat_path("/session/idle"), {}, timeout=2)
+        except Exception:  # noqa: BLE001
+            pass
+
+
+def _run_followups(stdout, vad, awaiting: bool) -> None:
     turns = 0
     # Echo/re-wake rounds deliberately don't spend a turn, so bound the loop
     # separately: a mic that keeps hearing something echo-shaped must not spin.
@@ -1224,6 +1251,8 @@ def run_followups(stdout, vad, awaiting: bool = False) -> None:
         cmd = capture_command(stdout, vad, min_capture_ms=FOLLOWUP_MIN_MS,
                               onset_ms=CLARIFY_WINDOW_MS if awaiting else FOLLOWUP_WINDOW_MS,
                               partials=True, rewake=True)
+        if LAST_CAPTURE.get("yield_to"):
+            return                          # a peer mic owns this wake
         if not cmd:
             return                          # quiet window -> conversation over
         try:
@@ -1231,6 +1260,9 @@ def run_followups(stdout, vad, awaiting: bool = False) -> None:
                             timeout=COMMAND_TIMEOUT_S)
         except Exception as exc:  # noqa: BLE001
             log(f"followup /command/audio failed: {exc}")
+            return
+        if resp.get("yield"):
+            log(f"followup yields to {resp.get('winner')} (took a wake during this listen)")
             return
         # Our own reply, heard off the room speakers. Listen again WITHOUT
         # spending a turn — this is the mechanism that lets the follow-up

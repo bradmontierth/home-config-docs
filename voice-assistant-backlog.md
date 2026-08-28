@@ -1979,7 +1979,25 @@ unsaved; `~/aec-trial.sh save`). Known corner on no-AEC rooms: a reply that
 starts <800 ms after the ding AND ends inside that window isn't counted, so
 it answers after the 4 s window instead of immediately.
 
-**Open (pre-existing, more exposed now):** the family-room mic hears a
-kitchen re-wake while the kitchen is in capture and never posts `/verify`, so
-arbitration can hand the turn to the family room → two answers. Not yet
-checked whether the orchestrator suppresses other sats during a follow-up.
+**Two-mic arbitration — FIXED same day (Brad's first live test: double
+dings ×2, double answer ×1).** The family-room satellite relays its audio to
+the kitchen speakers, so its chime/answer sounds like the kitchen's. Logs
+showed both directions: (a) kitchen mid-follow-up, family room cold-verified
+the same "okay computer" and won (the kitchen never posts `/verify` while
+capturing); (b) kitchen cold-verified while the family room was in ITS
+follow-up window → both dinged and both answered.
+* `/partial?followup=1` with the phrase now **claims** `_ARB` like a verify;
+  if a peer already holds it → `yield` (satellite drops the capture, no chime,
+  session ends).
+* `/verify` from a **peer** mic (`ARB_PEERS`, default `kitchen,familyroom`;
+  `;`-separated groups, non-peers never wait) **defers up to
+  `REWAKE_ARB_WAIT_S` 0.9** while the other is in a follow-up listen
+  (`/session/listening` … new `/session/idle`, cap `FOLLOWUP_LISTEN_MAX_S`
+  30), so the open conversation keeps the turn and its ask history.
+* Final `/command/audio?followup=1` **yields** if a peer claimed a wake after
+  this listen opened (`_ARB["at"]`) → reject_reason `yield`.
+* Satellite: `PartialStreamer.yield_to`, capture reason `yield`,
+  `LAST_CAPTURE.yield_to`, `run_followups` posts `/session/idle` in `finally`.
+* 8 tests in `test_partial_rewake.py` (470 OK), harness case 10.
+Cost: a family-room/kitchen cold wake gets up to +0.9 s chime latency only
+while the other room is mid-follow-up. Closet unaffected.
