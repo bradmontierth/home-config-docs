@@ -117,6 +117,9 @@ function connectSession(id) {
       if (payload.status === "exited") {
         setStatus(`Session exited (${payload.returncode})`);
         stopBtn.disabled = true;
+      } else if (payload.status === "waiting") {
+        const tasks = Array.isArray(payload.tasks) ? payload.tasks.join(", ") : "";
+        setStatus(tasks ? `Waiting on background work: ${tasks}` : "Waiting on background work");
       } else {
         setStatus(payload.status);
       }

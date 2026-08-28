@@ -491,7 +491,7 @@ async def start_session(request: Request) -> dict:
     if response.status_code >= 400:
         raise HTTPException(status_code=502, detail=response.text)
     payload = response.json()
-    if str(payload.get("status") or "") in {"starting", "running"}:
+    if str(payload.get("status") or "") in {"starting", "running", "waiting"}:
         schedule_session_monitor(str(payload.get("session_id") or ""))
     return payload
 
@@ -741,7 +741,7 @@ async def monitor_session_for_push(session_id: str) -> None:
                     if await push_session_event(session_info, event_type):
                         mark_push_event_sent(session_id, event_type)
                 return
-            if status not in {"starting", "running"}:
+            if status not in {"starting", "running", "waiting"}:
                 return
             await asyncio.sleep(PUSH_POLL_SECONDS)
     except asyncio.CancelledError:
@@ -761,7 +761,7 @@ async def scan_running_sessions_once() -> None:
         LOGGER.warning("runner session scan failed: %s", response.text)
         return
     for session_info in response.json():
-        if str(session_info.get("status") or "") in {"starting", "running"}:
+        if str(session_info.get("status") or "") in {"starting", "running", "waiting"}:
             schedule_session_monitor(str(session_info.get("session_id") or ""))
 
 
@@ -787,7 +787,7 @@ async def get_session(request: Request, session_id: str) -> dict:
     if response.status_code >= 400:
         raise HTTPException(status_code=502, detail=response.text)
     payload = response.json()
-    if str(payload.get("status") or "") in {"starting", "running"}:
+    if str(payload.get("status") or "") in {"starting", "running", "waiting"}:
         schedule_session_monitor(str(payload.get("session_id") or ""))
     return payload
 

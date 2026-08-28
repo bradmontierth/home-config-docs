@@ -52,6 +52,11 @@ CLAUDE_MODELS = os.environ.get(
     "HOME_AGENT_CLAUDE_MODELS",
     "claude-fable-5:Fable 5,claude-opus-4-8:Opus 4.8,claude-sonnet-5:Sonnet 5,claude-haiku-4-5:Haiku 4.5",
 )
+# How long a Claude session may sit idle waiting on background work (background
+# Bash, Monitor, subagents, ScheduleWakeup) before the runner closes stdin and
+# lets the CLI wind the session down. ScheduleWakeup can legitimately sleep up
+# to 60 min, so keep this generous.
+CLAUDE_WAIT_MAX_S = int(os.environ.get("HOME_AGENT_CLAUDE_WAIT_MAX_S", "3900"))
 MAX_COMMAND_OUTPUT_CHARS = int(os.environ.get("HOME_AGENT_MAX_COMMAND_OUTPUT_CHARS", "1800"))
 SHOW_SUCCESSFUL_COMMAND_OUTPUT = os.environ.get("HOME_AGENT_SHOW_COMMAND_OUTPUT", "0") == "1"
 ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
@@ -160,6 +165,15 @@ class CodexSession:
         self.master_fd: Optional[int] = None
         self.use_pty = CODEX_MODE == "interactive"
         self.auth_required_sent = False
+        # Claude bidirectional-session state. The CLI runs with
+        # --input-format stream-json and stays alive until stdin closes, so
+        # background work it parked on (run_in_background Bash, Monitor,
+        # subagents, ScheduleWakeup) survives the end of a turn and the harness
+        # wakes the model itself. We decide "done" from the task list, not exit.
+        self.render_state = ClaudeRenderState()
+        self.stdin_closed = False
+        self.wait_token = 0
+        self.waiting_since: Optional[float] = None
         self.session_dir = DEFAULT_SESSION_ROOT / time.strftime("%Y-%m-%d") / session_id
         self.session_dir.mkdir(parents=True, exist_ok=True)
         self.log_path = self.session_dir / "codex.log"
@@ -209,9 +223,13 @@ class CodexSession:
         return cmd
 
     def claude_command(self, prompt: str) -> list[str]:
+        # The prompt is NOT passed on argv: it is written to stdin as a
+        # stream-json user message so the session stays open afterwards.
         cmd = [
             CLAUDE_BIN,
             "-p",
+            "--input-format",
+            "stream-json",
             "--output-format",
             "stream-json",
             "--verbose",
@@ -226,7 +244,6 @@ class CodexSession:
             cmd.extend(["--model", self.codex_model])
         if self.reasoning_effort:
             cmd.extend(["--effort", self.reasoning_effort])
-        cmd.append(prompt)
         return cmd
 
     async def start(self, prompt: str) -> None:
@@ -283,7 +300,7 @@ class CodexSession:
                 cmd,
                 cwd=str(self.cwd),
                 env=env,
-                stdin=subprocess.DEVNULL,
+                stdin=subprocess.PIPE if self.agent == "claude" else subprocess.DEVNULL,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 text=True,
@@ -292,6 +309,8 @@ class CodexSession:
                 preexec_fn=os.setsid,
             )
             read_target = self._read_exec_loop
+            if self.agent == "claude":
+                self.write_user_message(prompt)
 
         self.status = "running"
         threading.Thread(target=read_target, name=f"reader-{self.session_id}", daemon=True).start()
@@ -331,7 +350,10 @@ class CodexSession:
                 log.flush()
                 self.record_exec_metadata(line)
                 self.maybe_broadcast_auth_required(line)
-                text = format_exec_event(line)
+                if self.agent == "claude":
+                    text = self.handle_claude_line(line)
+                else:
+                    text = format_exec_event(line)
                 if not text:
                     continue
                 self.loop.call_soon_threadsafe(
@@ -348,6 +370,107 @@ class CodexSession:
         if thread_id:
             self.codex_thread_id = thread_id
             self.update_metadata({"codex_thread_id": thread_id})
+
+    # ---- Claude bidirectional session handling -------------------------------
+
+    def write_user_message(self, text: str) -> None:
+        """Queue a user turn on the live Claude session's stdin."""
+        if not self.proc or self.proc.stdin is None or self.stdin_closed:
+            raise HTTPException(status_code=409, detail="claude session is not accepting input")
+        payload = {"type": "user", "message": {"role": "user", "content": text}}
+        try:
+            self.proc.stdin.write(json.dumps(payload) + "\n")
+            self.proc.stdin.flush()
+        except (BrokenPipeError, OSError, ValueError) as exc:
+            self.stdin_closed = True
+            raise HTTPException(status_code=409, detail=f"claude session stdin is closed: {exc}") from exc
+        # Runner-authored marker so log replays show the follow-up turn; the
+        # CLI only echoes tool_result user messages, not the ones we send.
+        marker = {"type": "runner", "subtype": "user_input", "text": text}
+        try:
+            with self.log_path.open("a", encoding="utf-8") as log:
+                log.write(json.dumps(marker) + "\n")
+        except OSError:
+            pass
+
+    def close_stdin(self) -> None:
+        """End the Claude session: EOF on stdin makes the CLI wind down and exit."""
+        if self.stdin_closed:
+            return
+        self.stdin_closed = True
+        if self.proc and self.proc.stdin is not None:
+            try:
+                self.proc.stdin.close()
+            except OSError:
+                pass
+
+    def accepts_follow_up(self) -> bool:
+        return (
+            self.agent == "claude"
+            and self.proc is not None
+            and self.proc.poll() is None
+            and not self.stdin_closed
+            and self.status in {"running", "waiting"}
+        )
+
+    def _set_status(self, status: str, **extra: object) -> None:
+        self.status = status
+        event = {"type": "status", "status": status, "session_id": self.session_id}
+        event.update(extra)
+        self.loop.call_soon_threadsafe(asyncio.create_task, self.broadcast(event))
+
+    def _schedule_wait_cap(self, token: int) -> None:
+        def arm() -> None:
+            self.loop.call_later(CLAUDE_WAIT_MAX_S, self._wait_cap_fired, token)
+
+        self.loop.call_soon_threadsafe(arm)
+
+    def _wait_cap_fired(self, token: int) -> None:
+        if self.status != "waiting" or self.wait_token != token:
+            return
+        pending = ", ".join(self.render_state.pending_tasks.values()) or "unknown"
+        asyncio.create_task(
+            self.broadcast(
+                {
+                    "type": "output",
+                    "data": (
+                        f"\n[claude] still waiting on background work after {CLAUDE_WAIT_MAX_S}s "
+                        f"({pending}); ending session.\n"
+                    ),
+                }
+            )
+        )
+        self.close_stdin()
+
+    def handle_claude_line(self, line: str) -> str:
+        """Drive session lifecycle from the stream-json events and render output."""
+        event = parse_json_line(line)
+        if event is None:
+            return "" if line.startswith("Reading additional input from stdin") else line
+        state = self.render_state
+        text = render_claude_event(event, state)
+        event_type = event.get("type")
+        subtype = event.get("subtype")
+
+        if event_type == "system" and subtype == "init" and state.wake_count > 0 and self.status == "waiting":
+            # A wake: the harness started a new turn on its own.
+            self.waiting_since = None
+            self._set_status("running")
+        elif event_type == "result":
+            if event.get("is_error") or not state.pending_tasks:
+                # Idle with nothing in flight: the conversation is over.
+                self.close_stdin()
+            else:
+                # Idle but the model parked on background work. Keep the session
+                # alive; the CLI starts the next turn when the work completes.
+                self.wait_token += 1
+                self.waiting_since = time.time()
+                self._set_status("waiting", tasks=list(state.pending_tasks.values()))
+                self._schedule_wait_cap(self.wait_token)
+        elif event_type in {"assistant", "user", "runner"} and self.status == "waiting":
+            self.waiting_since = None
+            self._set_status("running")
+        return text
 
     def maybe_broadcast_auth_required(self, line: str) -> None:
         if self.agent != "codex":
@@ -404,6 +527,10 @@ class CodexSession:
         self.meta_path.write_text(json.dumps(metadata, indent=2) + "\n", encoding="utf-8")
 
     async def send_input(self, text: str) -> None:
+        if self.accepts_follow_up():
+            self.write_user_message(text.rstrip("\n"))
+            await self.broadcast({"type": "output", "data": "\n[input queued for claude]\n"})
+            return
         if self.status != "running":
             raise HTTPException(status_code=409, detail="session is not running")
         if not self.use_pty:
@@ -908,7 +1035,67 @@ def is_auth_required_text(text: str) -> bool:
     return any(marker in lowered for marker in auth_markers)
 
 
-def format_exec_event(line: str) -> str:
+class ClaudeRenderState:
+    """Per-session context needed to render a Claude stream-json log faithfully.
+
+    Shared by the live reader and the log replay so both show the same thing:
+    repeated `init` events (wakes) render as "woke up", task notifications get
+    their descriptions, and a `result` with work in flight renders as waiting.
+    """
+
+    def __init__(self) -> None:
+        self.wake_count = 0
+        self.pending_tasks: dict[str, str] = {}
+        self.task_descriptions: dict[str, str] = {}
+
+
+def parse_json_line(line: str) -> Optional[dict]:
+    try:
+        event = json.loads(line)
+    except json.JSONDecodeError:
+        return None
+    return event if isinstance(event, dict) else None
+
+
+def render_claude_event(event: dict, state: ClaudeRenderState) -> str:
+    event_type = event.get("type")
+    subtype = event.get("subtype")
+    if event_type == "runner":
+        if subtype == "user_input":
+            text = str(event.get("text") or "").strip()
+            return f"\n> {text}\n" if text else ""
+        return ""
+    if event_type == "system":
+        if subtype == "background_tasks_changed":
+            tasks = event.get("tasks") or []
+            state.pending_tasks = {
+                str(t.get("task_id")): str(t.get("description") or t.get("task_type") or "task")
+                for t in tasks
+                if isinstance(t, dict) and t.get("task_id")
+            }
+            state.task_descriptions.update(state.pending_tasks)
+            return ""
+        if subtype == "task_notification":
+            task_id = str(event.get("task_id") or "")
+            desc = state.task_descriptions.get(task_id, task_id or "task")
+            status = str(event.get("status") or "finished")
+            return f"\n[claude] background task {status}: {desc}\n"
+        if subtype == "init":
+            state.wake_count += 1
+            if state.wake_count > 1:
+                return "\n[claude] woke up\n"
+            return format_claude_event(event)
+        return ""
+    if event_type == "result":
+        text = format_claude_event(event)
+        if not event.get("is_error") and state.pending_tasks:
+            pending = ", ".join(state.pending_tasks.values())
+            return f"{text}[claude] waiting on background work: {pending}\n"
+        return text
+    return format_claude_event(event)
+
+
+def format_exec_event(line: str, claude_state: Optional[ClaudeRenderState] = None) -> str:
     if line.startswith("Reading additional input from stdin"):
         return ""
     try:
@@ -919,7 +1106,9 @@ def format_exec_event(line: str) -> str:
         return line
 
     event_type = event.get("type")
-    if event_type in {"system", "assistant", "user", "result"}:
+    if event_type in {"system", "assistant", "user", "result", "runner"}:
+        if claude_state is not None:
+            return render_claude_event(event, claude_state)
         return format_claude_event(event)
     if event_type == "thread.started":
         thread_id = event.get("thread_id")
@@ -1315,8 +1504,9 @@ def format_session_log(path: Path, max_chars: int) -> tuple[str, bool]:
 
     formatted_parts: list[str] = []
     parsed_any = False
+    claude_state = ClaudeRenderState()
     for line in raw.splitlines(keepends=True):
-        text = format_exec_event(line)
+        text = format_exec_event(line, claude_state)
         if text:
             formatted_parts.append(text)
             parsed_any = True
@@ -1440,6 +1630,17 @@ async def resume_session(session_id: str, request: ResumeRequest) -> SessionInfo
     source_info = source.info() if source else find_session_info(session_id)
     if not source_info:
         raise HTTPException(status_code=404, detail="unknown session")
+
+    if source is not None and source.accepts_follow_up():
+        # The Claude process is still alive (running, or parked on background
+        # work). Two processes must never share one session id, so the
+        # follow-up goes to the live process's stdin and the same session
+        # continues instead of spawning `--resume`.
+        source.write_user_message(request.prompt)
+        await source.broadcast(
+            {"type": "output", "data": f"\n[resume] follow-up queued on live session: {request.prompt[:120]}\n"}
+        )
+        return source.info()
 
     thread_id = source_info.codex_thread_id or find_codex_thread_id(session_id)
     if not thread_id:
