@@ -350,6 +350,13 @@ JUKEBOX_EXTERNAL_PLAY_URL = os.getenv(
 JUKEBOX_VOLUME_HOLD_URL = os.getenv(
     "JUKEBOX_VOLUME_HOLD_URL", "http://192.168.10.217:8769/api/volume-hold"
 )
+# Before voice starts kitchen music it asks the jukebox what level to start
+# at (the party hold while one is active, the normal baseline otherwise) —
+# the same rule an NFC scan applies. Empty disables: plays then inherit
+# whatever the player was last left at.
+JUKEBOX_VOLUME_URL = os.getenv(
+    "JUKEBOX_VOLUME_URL", "http://192.168.10.217:8769/api/volume"
+)
 # Ducking: on a wake trigger / alarm, music volume drops to cur*FACTOR (but at
 # least MIN). TTL is the watchdog that restores volume if the satellite dies
 # mid-turn and its unduck never arrives.
@@ -369,10 +376,21 @@ MUSIC_OWNED_ONLY = os.getenv("MUSIC_OWNED_ONLY", "1") != "0"
 
 # --- wake stage-2 ----------------------------------------------------------
 WAKE_PHRASE = os.getenv("WAKE_PHRASE", "okay computer")
-# All phrases the verifier accepts (dual wake: okay_google model on the
-# satellite; "hey google" covers the common spoken variant). Comma-separated.
+# All phrases the verifier accepts. Comma-separated.
+#
+# "okay google"/"hey google" were dropped 2026-08-12 with the okay_google
+# stage-1 model. That model earned 22 confirmed wakes in the kitchen in 25 days
+# and ZERO in the family room and master, while firing 4,568 times — two thirds
+# of every stage-1 trigger in the house, and the entire reason the dashboard's
+# stage-2 pass rate looked catastrophic (kitchen okay_computer alone: 10.5%).
+# It also missed real wakes often enough that we had stopped using the phrase.
+# With the model gone the satellite can no longer fire on it, so leaving the
+# phrases here bought nothing and kept a false-accept path open: any trigger
+# whose transcript happened to contain "okay google" — a TV, or someone
+# addressing an actual Google device — would have verified. Re-add via the
+# WAKE_PHRASES env var if the model ever comes back.
 WAKE_PHRASES = [p.strip() for p in os.getenv(
-    "WAKE_PHRASES", f"{WAKE_PHRASE},okay google,hey google"
+    "WAKE_PHRASES", WAKE_PHRASE
 ).split(",") if p.strip()]
 # rapidfuzz partial_ratio (0-100) the wake phrase must clear in the transcript.
 WAKE_FUZZ_THRESHOLD = float(os.getenv("WAKE_FUZZ_THRESHOLD", "80"))

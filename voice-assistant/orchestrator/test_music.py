@@ -544,6 +544,39 @@ class RoomPlaybackTest(unittest.TestCase):
         self.assertEqual(held, 80)
         self.assertEqual(self._volumes()[-1], (config.MA_QUEUE_ID, 80))
 
+    def test_a_kitchen_play_starts_at_the_jukebox_level(self):
+        """The jukebox owns the kitchen's level (hold while a party is on,
+        baseline otherwise); a voice play must not inherit whatever the
+        player was last left at."""
+        kitchen = {"queue": config.MA_QUEUE_ID, "local": True}
+        with patch.object(music, "_jukebox_volume", new=AsyncMock(return_value=65)):
+            asyncio.run(music.play("spooky scary skeletons", target=kitchen))
+        self.assertIn((config.MA_QUEUE_ID, 65), self._volumes())
+
+    def test_a_kitchen_play_while_ducked_sets_the_restore_target(self):
+        self._playing()
+        kitchen = {"queue": config.MA_QUEUE_ID, "local": True}
+
+        async def ducked_then_play():
+            with patch.object(music, "_jukebox_volume", new=AsyncMock(return_value=65)):
+                await music.duck(kitchen)
+                await music.play("spooky scary skeletons", target=kitchen)
+                await music.unduck(kitchen)
+
+        asyncio.run(ducked_then_play())
+        self.assertEqual(self._volumes()[-1], (config.MA_QUEUE_ID, 65))
+
+    def test_other_rooms_do_not_ask_the_jukebox(self):
+        with patch.object(music, "_jukebox_volume", new=AsyncMock(return_value=65)) as jb:
+            asyncio.run(music.play("spooky scary skeletons", target=self.BATH))
+        jb.assert_not_awaited()
+
+    def test_a_dead_jukebox_does_not_break_a_kitchen_play(self):
+        kitchen = {"queue": config.MA_QUEUE_ID, "local": True}
+        with patch.object(music, "_jukebox_volume", new=AsyncMock(return_value=None)):
+            result = asyncio.run(music.play("spooky scary skeletons", target=kitchen))
+        self.assertEqual(result["kind"], "track")
+
     def test_absolute_volume_obeys_a_rooms_safety_ceiling(self):
         effective = asyncio.run(music.control("volume_set", self.BATH, 80))
         self.assertEqual(effective, 40)

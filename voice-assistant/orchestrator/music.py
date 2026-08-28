@@ -633,6 +633,7 @@ async def play(query: str | None, media_type: str | None = None,
     qid = t["queue"]
     if not query:
         await _prepare_room(t)
+        await _apply_jukebox_volume(t)
         await client.player_queues.queue_command_resume(qid)
         _arm_cap(t)
         return {"kind": "resume", "name": None}
@@ -702,6 +703,7 @@ async def play(query: str | None, media_type: str | None = None,
     # the runner-up is usually the same song from the library.
     tried: set[str] = set()
     await _prepare_room(t)
+    await _apply_jukebox_volume(t)
     while True:
         # Artist/playlist get shuffle (fresh mix each time); album/track in order.
         shuffle = sel["kind"] in ("artist", "playlist")
@@ -752,6 +754,49 @@ async def _notify_jukebox_takeover() -> None:
                                timeout=aiohttp.ClientTimeout(total=4))
     except Exception as exc:  # noqa: BLE001
         log.warning("jukebox external-play notify failed: %s", exc)
+
+
+async def _jukebox_volume() -> int | None:
+    """The level the NFC jukebox says kitchen music should start at now:
+    its party hold while one is active, its normal baseline otherwise."""
+    if not config.JUKEBOX_VOLUME_URL:
+        return None
+    try:
+        async with aiohttp.ClientSession() as session:
+            response = await session.get(
+                config.JUKEBOX_VOLUME_URL,
+                timeout=aiohttp.ClientTimeout(total=4))
+            response.raise_for_status()
+            level = (await response.json()).get("volume")
+            return int(level) if level is not None else None
+    except Exception as exc:  # noqa: BLE001
+        log.warning("jukebox volume read failed: %s", exc)
+        return None
+
+
+async def _apply_jukebox_volume(target: dict) -> None:
+    """Start kitchen music at the jukebox's level, by the same rule a scan
+    uses. The kitchen deliberately has no music_volume of its own (the
+    jukebox owns that domain), so without this a voice play inherited
+    whatever the player was last left at — and a "volume 80" that had
+    expired an hour ago rode on the player for the rest of the day.
+
+    Duck-aware like control(): mid-turn the live level is ducked and the
+    unduck would wipe a live write, so the restore target is set instead.
+    Best-effort — a dead jukebox must never break play.
+    """
+    if target["queue"] != config.MA_QUEUE_ID:
+        return
+    level = await _jukebox_volume()
+    if level is None:
+        return
+    level = max(0, min(target.get("max_volume") or 100, level))
+    async with _duck_lock:
+        state = _duck.get(target["queue"])
+        if state and state["count"] and state["restore"] is not None:
+            state["restore"] = level
+            return
+    await _set_volume(target, level)
 
 
 async def _notify_jukebox_volume_hold(level: int) -> None:
