@@ -285,6 +285,16 @@ decode pegged >100% CPU and triggered low-voltage warnings). Transcode runs
 on the Jetson only while a viewer is connected. Editing them requires a
 frigate container restart (~40s detection gap).
 
+VLC on the display Pi hardware-decodes these (`/dev/video10` V4L2 + DRM
+`wl_dmabuf`, ~6% CPU) and go2rtc's RTSP server is TCP-only, so VLC's session
+is always `rtsp+tcp` — there is no UDP packet loss to chase on the Pi's Wi-Fi.
+When a feed shows corruption (smearing / partial frames), look at the Jetson
+transcode, not the Pi: Simon's 4K H.265 camera did exactly that until
+2026-08-29, when its restream was moved to NVDEC hardware decode + real 15 fps
+(details and the two Frigate config gotchas in `frigate-guide.md`, "Kitchen
+Display Restreams"). No display-side change was needed; the stream name and
+`.env` URLs are unchanged.
+
 Old Blue Iris endpoints (working fallback, but lag-prone after stalls):
 
 ```text

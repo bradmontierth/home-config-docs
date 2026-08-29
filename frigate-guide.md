@@ -105,6 +105,45 @@ helper (see `kitchen-dashboard-display-guide.md`). Do not remove them; they
 cost nothing while no viewer is connected. They replaced the Blue Iris HTTP
 endpoints because those accumulated permanent lag after network stalls.
 
+**Simon is different (2026-08-29).** Simon's camera is the 4K Reolink and its
+main stream is **H.265 3840x2160 @ 15 fps (~6.5 Mbit/s)**; Claire's is H.264
+2560x1920 @ 15 fps. The plain `ffmpeg:simon_cam_record#video=h264#width=1440`
+source ran a *software* HEVC 4K decode + libx264 encode that measured ~1.3x
+realtime on an idle box and 0.7x with the Jetson at its usual load 6-8 on 6
+cores. go2rtc drops RTP packets to any consumer that can't keep up — here the
+consumer was the transcoder's own decoder — so the HEVC decoder lost
+reference frames (`Could not find ref with POC n`) and the smeared/partial
+frames were encoded into the h264 the display shows. That was the "artifacts,
+glitching, partial picture" on the kitchen display; Claire never showed it
+because 2560x1920 H.264 decodes fast enough. It also duplicated the 15 fps
+source to 25 fps (judder + 40% wasted encode + Pi decode).
+
+Fix: `simon_kitchen_display` is now an `exec:` source that decodes on NVDEC
+(`-c:v hevc_nvmpi -resize 1440x810`, the same decoder Frigate's own
+`preset-jetson-h264` uses) and encodes with the same libx264 settings, with
+`-fps_mode passthrough` so it outputs the camera's real 15 fps. Measured:
+35% of one core (was 92-106%), 301 frames/20 s, ~2.3 Mbit/s, 0 decode errors,
+Jetson load dropped ~2. Two Frigate-specific gotchas when editing it:
+
+- Frigate runs Python `str.format()` over the go2rtc section (for
+  `{FRIGATE_CAMERA_PASSWORD}`), so go2rtc's `{output}` placeholder must be
+  written `{{output}}` in `config.yml` or go2rtc dies at start with
+  `Invalid substitution found` (every Frigate camera then loses its
+  restream — detection stops).
+- Frigate 0.17 refuses `exec:`/`echo:`/`expr:` sources unless the container
+  has `GO2RTC_ALLOW_ARBITRARY_EXEC=true`; it silently *removes the stream*
+  (VLC gets 404). That env var is set in `docker-compose.yml` `environment:`
+  (not `.env`). The go2rtc HTTP API also refuses `exec:` (400), so live
+  testing was done by publishing a manual ffmpeg into a placeholder stream
+  (`-f rtsp rtsp://127.0.0.1:8554/<name>`).
+
+The Orin Nano has NVDEC but **no NVENC**, so the encode stays libx264
+(`h264_nvmpi` is listed but has no hardware behind it). Claire's transcode
+still software-decodes (~100% of a core) and could get the same treatment with
+`-c:v h264_nvmpi -resize 1440x1080` if Jetson CPU ever becomes the problem;
+left alone because it displays cleanly. Backups of the pre-change files:
+`config.yml.bak-simon-hw-20260829`, `docker-compose.yml.bak-exec-env-20260829`.
+
 ## MQTT
 
 MQTT is enabled against the Home Assistant broker:
@@ -130,6 +169,10 @@ frigate_jetson/events/#
 ```
 
 The Blue Iris alert webhooks and legacy Blue Iris MQTT alert topics are disabled in the Node-RED `Blue Iris` tab. Blue Iris should no longer be treated as the object-detection or phone-alert source.
+
+**History (2026-08-26):** until this date those nodes were only *renamed* "legacy BI disabled" — none had the disabled flag set, so the `/frontyard`, `/backyard`, `/garage`, `/doorbell`, `/bigkitty` `http in` webhooks and the `kitchen_alert`, `garage_alert`, `backyard_alert`, `sideyard_alert`, `driveway_small_alert`, `driveway_alert/trigger` `mqtt in` nodes were all still live. While Deepstack filtered BI alerts this was invisible; once Deepstack was turned off in Blue Iris (2026-08-25), BI's raw-motion "Web request" alert actions started hitting the webhooks. The man-door spotlight then ran a self-sustaining loop every evening: BI backyard alert → `/backyard` → Hubitat spotlight on → 5-min off timer → the light switching off registers as motion on the backyard cam → new alert → on again (started at the `sunset` gate, ~20:29, on 08-25 and 08-26). All 11 nodes were genuinely disabled (`d: true`) via `PUT /flow/9ae0a3d4d3f8a27a` on 2026-08-26; the webhooks now return 404. The equivalent lighting/alert behavior is already handled by the `Frigate alert/light filter` function below (output 3 = backyard person → spotlight chain).
+
+Blue Iris cameras (driveway, driveway2, frontdoor, garagedoors, garagehousedoors, backyard) still have "Web request" alert actions configured on the BI side; they now just get a 404 and can be removed at leisure.
 
 Current Jetson alert behavior:
 
