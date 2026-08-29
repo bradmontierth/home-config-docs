@@ -290,10 +290,13 @@ VLC on the display Pi hardware-decodes these (`/dev/video10` V4L2 + DRM
 is always `rtsp+tcp` — there is no UDP packet loss to chase on the Pi's Wi-Fi.
 When a feed shows corruption (smearing / partial frames), look at the Jetson
 transcode, not the Pi: Simon's 4K H.265 camera did exactly that until
-2026-08-29, when its restream was moved to NVDEC hardware decode + real 15 fps
-(details and the two Frigate config gotchas in `frigate-guide.md`, "Kitchen
-Display Restreams"). No display-side change was needed; the stream name and
-`.env` URLs are unchanged.
+2026-08-29, when its restream was moved to NVDEC hardware decode + real 15 fps;
+Claire's followed the same day (details, the two Frigate config gotchas, and
+the 7-minute lag-accumulation test with a 30 s block in `frigate-guide.md`,
+"Kitchen Display Restreams"). No display-side change was needed; the stream
+names and `.env` URLs are unchanged. `grim -t ppm -s 0.25` works over ssh with
+`WAYLAND_DISPLAY=wayland-0 XDG_RUNTIME_DIR=/run/user/1000` (~0.8 s per shot)
+for measuring what the screen actually shows.
 
 Old Blue Iris endpoints (working fallback, but lag-prone after stalls):
 

@@ -138,11 +138,28 @@ Jetson load dropped ~2. Two Frigate-specific gotchas when editing it:
   (`-f rtsp rtsp://127.0.0.1:8554/<name>`).
 
 The Orin Nano has NVDEC but **no NVENC**, so the encode stays libx264
-(`h264_nvmpi` is listed but has no hardware behind it). Claire's transcode
-still software-decodes (~100% of a core) and could get the same treatment with
-`-c:v h264_nvmpi -resize 1440x1080` if Jetson CPU ever becomes the problem;
-left alone because it displays cleanly. Backups of the pre-change files:
-`config.yml.bak-simon-hw-20260829`, `docker-compose.yml.bak-exec-env-20260829`.
+(`h264_nvmpi` is listed but has no hardware behind it). Later the same day
+`claire_kitchen_display` got the identical treatment (`-c:v h264_nvmpi
+-resize 1440x1080`, 50% of a core instead of ~106%, verified under night-IR
+with 0 decode errors). Backups of the pre-change files:
+`config.yml.bak-simon-hw-20260829`, `config.yml.bak-claire-hw-20260829`,
+`docker-compose.yml.bak-exec-env-20260829`.
+
+**Lag-accumulation check (2026-08-29, Simon exec source, real display VLC):**
+7-minute run with a wall-clock-stamped reference capture on the Beelink and
+`grim` screenshots of the kitchen screen, ceiling-light flashes at +1 min and
++6 min, and a 30 s nftables block of the display Pi's RTSP at +2 min. Results:
+reference delivered 6,266 frames in 418 s = 14.99 fps (a 15 fps camera), i.e.
+the producer never fell behind; the screen trailed the reference by 0.46 s
+before the block and 0.63 s two and a half minutes after it (VLC kept the same
+TCP session through the block — `etime` unchanged — go2rtc dropped the
+backlog and VLC resumed at the live edge). End-to-end camera→screen was ~1–2 s
+including the dimmer's own ramp. No accumulation, unlike the old Blue Iris
+MJPEG/`temp.ts` endpoints. Test script pattern: `-use_wallclock_as_timestamps 1
+-copyts -f matroska` + `timeout -s INT` (do not use `-t`, it exits after one
+frame with copyts) and `signalstats` YAVG per frame; the Reolink auto-exposure
+smears light edges over several seconds, so use the sharp AE-compensated dip
+after light-OFF as the edge, not the ON ramp.
 
 ## MQTT
 
