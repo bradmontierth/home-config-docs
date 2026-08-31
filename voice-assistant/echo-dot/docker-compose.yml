@@ -1,0 +1,38 @@
+services:
+  master-echo-dot-bridge:
+    build:
+      context: ..
+      dockerfile: echo-dot/Dockerfile
+    container_name: master-echo-dot-bridge
+    network_mode: host
+    restart: unless-stopped
+    cpus: "1.5"
+    environment:
+      SATELLITE_ID: master
+      ORCH_BASE: http://127.0.0.1:8785
+      HTTP_PORT: "8796"
+      DOT_PORT: "8770"
+      CONTROLLER_IP: 192.168.10.217
+      MDNS_NAME: Beelink Echo Dot Bridge
+      MODE: active
+      AUDIO_CHANNEL: raw
+      HOP_MS: "320"
+      OMP_NUM_THREADS: "1"
+      OMP_WAIT_POLICY: PASSIVE
+      OPENBLAS_NUM_THREADS: "1"
+      TRIGGER_THRESHOLD: "0.5"
+      QUIET_START: "00:00"
+      QUIET_END: "00:00"
+      TZ: America/Denver
+      MODEL_PATHS: /models/okay_computer.onnx,/models/okay_google.onnx
+      SILERO_MODEL: /models/silero_vad.onnx
+      STOP_MODEL_ENABLED: "false"
+      DATA_DIR: /data
+      ACTIVE_ARM_FILE: /data/routed-audio-armed
+      SOUNDS_DIR: /sounds
+      DOT_STARTUP_VOLUME: "65"
+      DOT_AEC_ENABLED: "true"
+    volumes:
+      - ./data:/data
+      - /home/pi/backups/pw_pi-20260728/blobs:/models:ro
+      - ../satellite/sounds:/sounds:ro
