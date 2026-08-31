@@ -32,6 +32,7 @@ from fastapi.responses import FileResponse
 
 from . import answers as answers_mod
 from . import ask as ask_mod
+from . import climate as climate_mod
 from . import covers as covers_mod
 from . import home_control as home_mod
 from . import lists as lists_mod
@@ -459,7 +460,7 @@ def _summarize_turn(intent: str, result: dict) -> str:
         return f"you told the music player: {parsed.get('music_action')}"
     if intent == "music_query":
         return "you asked what music is playing"
-    if intent in ("home_control", "cover_set"):
+    if intent in ("home_control", "cover_set", "climate_set"):
         return f"you gave a home command and heard: {(result.get('response') or '')[:100]}"
     if intent == "broadcast" and result.get("broadcast"):
         b = result["broadcast"]
@@ -684,6 +685,13 @@ async def handle_command(command: str, followup: bool = False,
         # intent here, not a shortcut around one.
         parsed = cover
         log.info("deterministic cover_set bypassed classifier: %r", command)
+    elif (clim := intent_mod.fast_parse_climate_setpoint(
+            command, _CUR_SAT.get())) is not None:
+        # Same idea one appliance over: a thermostat word plus a degree in a
+        # room with a mini split. Live 2026-08-30 "set temperature to 72" in a
+        # kid's room reached home_control as a button phrase and was refused.
+        parsed = clim
+        log.info("deterministic climate_set bypassed classifier: %r", command)
     elif clarify:
         parsed = await _parse_clarify_reply(clarify, command)
     elif followup and (
@@ -1108,6 +1116,20 @@ async def handle_command(command: str, followup: bool = False,
             result.update(cover_result)
         else:
             result["response"] = "Sorry, I couldn't move that blind."
+            result["ok"] = False
+
+    elif intent == "climate_set":
+        # Same refusal rules as cover_set: no ask fallback, and an HA failure
+        # says so rather than claiming the setpoint moved.
+        climate_result = None
+        try:
+            climate_result = await climate_mod.handle(parsed)
+        except Exception as exc:  # noqa: BLE001 — HA down/slow; refuse below
+            log.warning("climate set failed: %s", exc)
+        if climate_result:
+            result.update(climate_result)
+        else:
+            result["response"] = "Sorry, I couldn't set the temperature."
             result["ok"] = False
 
     elif intent == "broadcast":

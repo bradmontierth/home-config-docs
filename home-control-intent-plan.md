@@ -250,6 +250,65 @@ broadcast to room `claire` at 15. Gotchas: the lamp reports ~13 s late and the
 fan bounces back on if told off within a few seconds of `set_percentage` — do
 not chain presses in tests faster than the devices settle. Live-voice pending.
 
+## Kid rooms — mini split temperature control (2026-08-31)
+
+Two live misses from Brad in the kids' rooms: "set temperature to 72" got
+"I don't control that" (no path for a number), and "it's hot in here" with
+the unit off turned it on at *room − 2* — a room at 80 got cool @ 79 (the
+device max), which is no relief at all. Also Simon's room had no HVAC buttons
+at all; only Claire's did.
+
+- **Numeric setpoints — `climate.py` + `intent.fast_parse_climate_setpoint`,
+  intent `climate_set`.** Same narrow exception as `covers.py`: closed room →
+  entity map (`simon` → `climate.hvac100_my_heat_pump`, `claire` →
+  `climate.clairehvac2_my_heat_pump`), one number, one
+  `climate.set_temperature` call, no ask fallback. Runs before the classifier,
+  right after the cover grammar in `app.py`. The one decision it cannot
+  avoid: a unit that is off / dry / fan_only has no mode to apply a setpoint
+  to, so it is switched on toward the ask (room warmer than the ask → `cool`,
+  colder → `heat`) and the reply says so ("Turning on the AC and setting it to
+  72."). Already cool/heat/auto → mode kept. Clamped to the device range
+  (61–79 °F) out loud ("… 79 — that's as high as it goes").
+- **Grammar bands.** A phrase that names the thermostat ("the temperature",
+  "the AC", "the heat", "the mini split", "N degrees") takes 50–95 so an
+  over-ask reaches the clamp; a pronoun-only phrase ("set it to 72", "turn it
+  up to 74", "make it 72 in here") takes 60–80 so fan speeds, blind levels and
+  volumes can never read as a temperature. Only rooms with a mini split
+  resolve — from the kitchen the same phrase falls through to the classifier
+  untouched, unless a kid's room is named ("set Claire's room to 70").
+  Tests: `test_climate.py`.
+- **Node-RED — one shared `kid mini split decide`** (was `Claire mini split
+  decide`) fed by `Claire mini split now` / new `Simon mini split now`
+  (`api-current-state`, entity on `msg.data.entity_id`); `Simon room command`
+  grew a third output for `simon_too_*` / `simon_hvac_*`. New rule for
+  "it's hot / cold in here":
+  - already conditioning the right way (cool/auto when hot, heat/auto when
+    cold): step 2 °F from **min(setpoint, room)** when hot / max when cold —
+    so an idle cool @ 79 in an 80° room steps from the room, not the setpoint;
+  - anything else (off, dry, fan_only, or heating when told it's hot): switch
+    on at a fixed start, **cool @ 72 / heat @ 70**, bounded by the room
+    (cool never above room − 2, heat never below room + 2), clamped 61–79.
+- **Buttons:** five new `button.voice_simon_{too_hot,too_cold,hvac_cool,hvac_heat,hvac_off}`
+  in the discovery list; `home_commands.json` (seed + live `/data` table) got
+  the `simon_*` twins of Claire's HVAC aliases, `sats: ["simon"]`; confirms
+  shortened to "Cooling it down." / "Warming it up." (no longer "a bit" — it
+  may be a cold start now).
+- **Matcher guard:** `_EXCLUDE_WORDS` — a phrase saying `fan` drops the
+  `*_hvac_*` commands; one saying `air` / `ac` / `heat` / `heater` drops
+  `simon_fan` / `claire_fan` / `fr_fan`. The last one fixed a latent bug the
+  new tests caught: "turn on the AC" from the kitchen mic scored 87 against
+  the family-room fan's "turn on the fan" and would have started it.
+- **Verified 2026-08-31 07:20** on Claire's unit (cool, 73.5 set / 71.5 room):
+  `climate.handle` 72 → unit reports 71.5 (it snaps to a 0.5 °C grid, so
+  spoken numbers land ±0.5); API press `voice_claire_too_hot` → 70; restored
+  73.5. The off → cool @ 72 start is covered by unit tests (`decide()` in
+  both Python and the Node-RED function) — not pressed live, Simon's unit was
+  just switched off by hand at 07:00 and the room was occupied. Live-voice
+  pending for both rooms.
+- **Not in scope:** the master-bed `hvac99` unit (the closet satellite) — it
+  has its own morning-setpoint automation and watchdog; adding it is one
+  `_TARGETS` entry + `_ROOM_WORDS` if wanted.
+
 ## Kid rooms — staged "turn on the lights" / "brighter" + quiet hours off (2026-08-25)
 
 The 2 a.m. hands-full case (Brad): lights must work by voice in both kid rooms

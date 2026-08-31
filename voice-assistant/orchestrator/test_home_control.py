@@ -234,12 +234,50 @@ class HomeControlMatchTest(unittest.TestCase):
                 self.assertIsNotNone(result)
                 self.assertEqual(self._pressed(), entity)
 
-        # Nothing of Claire's is reachable from the kitchen or Simon's room.
+        # Nothing of Claire's is reachable from the kitchen or Simon's room
+        # ("it's hot in here" in Simon's room is now HIS mini split, below).
         for phrase in ("story time", "bedtime", "it's hot in here"):
             for sat in ("kitchen", "simon"):
                 self.press.reset_mock()
-                self.assertIsNone(_handle(phrase, sat), (phrase, sat))
+                result = _handle(phrase, sat)
+                if result is not None:
+                    self.assertNotIn("claire", self._pressed(), (phrase, sat))
+                elif sat == "kitchen":
+                    self.press.assert_not_awaited()
+
+    def test_simon_mini_split_is_room_local_and_not_the_fan(self):
+        """Simon's HVAC buttons (2026-08-31), twins of Claire's. The mini split
+        and the ceiling fan sit one short word apart ("turn off the air" /
+        "turn off the fan"), so each phrase must land on its own appliance."""
+        cases = {
+            "it's hot in here": "button.voice_simon_too_hot",
+            "it's too hot": "button.voice_simon_too_hot",
+            "it's cold in here": "button.voice_simon_too_cold",
+            "turn on the ac": "button.voice_simon_hvac_cool",
+            "turn on the air": "button.voice_simon_hvac_cool",
+            "turn on the heat": "button.voice_simon_hvac_heat",
+            "turn off the ac": "button.voice_simon_hvac_off",
+            "turn off the air": "button.voice_simon_hvac_off",
+            "turn off the mini split": "button.voice_simon_hvac_off",
+            "turn on the fan": "button.voice_simon_fan_on",
+            "turn off the fan": "button.voice_simon_fan_off",
+        }
+        for phrase, entity in cases.items():
+            with self.subTest(phrase=phrase):
+                self.press.reset_mock()
+                self.assertIsNotNone(_handle(phrase, "simon"), phrase)
+                self.assertEqual(self._pressed(), entity)
+        for phrase in ("it's hot in here", "turn on the ac", "turn off the mini split"):
+            with self.subTest(phrase=phrase, sat="kitchen"):
+                self.press.reset_mock()
+                self.assertIsNone(_handle(phrase, "kitchen"))
                 self.press.assert_not_awaited()
+        # Same split in Claire's room: the fan/air words keep them apart.
+        for phrase, entity in {"turn off the air": "button.voice_claire_hvac_off",
+                               "turn off the fan": "button.voice_claire_fan_off"}.items():
+            self.press.reset_mock()
+            _handle(phrase, "claire")
+            self.assertEqual(self._pressed(), entity, phrase)
 
     def test_brighter_is_room_local_and_the_kitchen_keeps_its_own(self):
         for sat in ("simon", "claire"):

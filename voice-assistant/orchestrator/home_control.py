@@ -110,13 +110,26 @@ _PIN_WORDS = {
 # The family room adds "the cans" (four BR30 recessed lights) next to its
 # ceiling fan: fuzz.ratio("turn on the fan", "turn on the cans") is 90, so an
 # ASR slip on either noun would swap a light for a fan. Same cure.
+#
+# The kid rooms' mini splits sit next to the same fans: "turn off the air" vs
+# "turn off the fan" is one short word, and so is "turn on the ac" vs "turn
+# on the fan". A phrase that says fan is not about the mini split; a phrase
+# that says air / ac / heat is not about the fan.
 _EXCLUDE_WORDS = {
-    "fan": ("simon_lights", "claire_lights", "fr_cans"),
+    "fan": ("simon_lights", "claire_lights", "fr_cans",
+            "simon_hvac", "claire_hvac"),
     "fans": ("fr_cans",),
     "light": ("simon_fan", "claire_fan", "fr_fan"),
     "lights": ("simon_fan", "claire_fan", "fr_fan"),
     "can": ("fr_fan",),
     "cans": ("fr_fan",),
+    # ...and the family-room fan too: "turn on the ac" from the kitchen mic
+    # scored 87 against its "turn on the fan" before this (caught by the
+    # Simon HVAC tests, 2026-08-31).
+    "air": ("simon_fan", "claire_fan", "fr_fan"),
+    "ac": ("simon_fan", "claire_fan", "fr_fan"),
+    "heat": ("simon_fan", "claire_fan", "fr_fan"),
+    "heater": ("simon_fan", "claire_fan", "fr_fan"),
 }
 
 # "All" pins a phrase to the house-wide form of a room-split command. Without

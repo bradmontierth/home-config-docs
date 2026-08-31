@@ -970,7 +970,7 @@
       "it's too warm"
     ],
     "entity": "button.voice_claire_too_hot",
-    "confirm": "Cooling it down a bit.",
+    "confirm": "Cooling it down.",
     "sats": [
       "claire"
     ]
@@ -991,7 +991,7 @@
       "it's freezing in here"
     ],
     "entity": "button.voice_claire_too_cold",
-    "confirm": "Warming it up a bit.",
+    "confirm": "Warming it up.",
     "sats": [
       "claire"
     ]
@@ -1058,6 +1058,95 @@
     ],
     "entity": "button.voice_simon_brighter",
     "confirm": "Brightening the lights.",
+    "sats": [
+      "simon"
+    ]
+  },
+  "simon_too_hot": {
+    "aliases": [
+      "it's hot in here",
+      "it is hot in here",
+      "it's too hot in here",
+      "it's too hot",
+      "it's hot",
+      "too hot",
+      "i'm hot",
+      "make it cooler",
+      "make it colder",
+      "cool it down",
+      "turn it down",
+      "it's warm in here",
+      "it's too warm"
+    ],
+    "entity": "button.voice_simon_too_hot",
+    "confirm": "Cooling it down.",
+    "sats": [
+      "simon"
+    ]
+  },
+  "simon_too_cold": {
+    "aliases": [
+      "it's cold in here",
+      "it is cold in here",
+      "it's too cold in here",
+      "it's too cold",
+      "it's cold",
+      "too cold",
+      "i'm cold",
+      "make it warmer",
+      "warm it up",
+      "turn it up",
+      "it's chilly in here",
+      "it's freezing in here"
+    ],
+    "entity": "button.voice_simon_too_cold",
+    "confirm": "Warming it up.",
+    "sats": [
+      "simon"
+    ]
+  },
+  "simon_hvac_cool": {
+    "aliases": [
+      "turn on the ac",
+      "turn on the air conditioning",
+      "turn on the air",
+      "ac on",
+      "turn on the cooling",
+      "start the ac"
+    ],
+    "entity": "button.voice_simon_hvac_cool",
+    "confirm": "Turning on the AC.",
+    "sats": [
+      "simon"
+    ]
+  },
+  "simon_hvac_heat": {
+    "aliases": [
+      "turn on the heat",
+      "turn on the heater",
+      "heat on",
+      "turn on the heating",
+      "start the heat"
+    ],
+    "entity": "button.voice_simon_hvac_heat",
+    "confirm": "Turning on the heat.",
+    "sats": [
+      "simon"
+    ]
+  },
+  "simon_hvac_off": {
+    "aliases": [
+      "turn off the ac",
+      "turn off the air conditioning",
+      "turn off the heat",
+      "turn off the heater",
+      "turn off the mini split",
+      "ac off",
+      "heat off",
+      "turn off the air"
+    ],
+    "entity": "button.voice_simon_hvac_off",
+    "confirm": "Turning off the mini split.",
     "sats": [
       "simon"
     ]

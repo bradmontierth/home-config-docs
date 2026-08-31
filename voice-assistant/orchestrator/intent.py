@@ -10,7 +10,7 @@ from __future__ import annotations
 import logging
 import re
 
-from . import camera, clients, clock, config, covers, zones
+from . import camera, clients, climate, clock, config, covers, zones
 
 log = logging.getLogger("orchestrator.intent")
 
@@ -20,7 +20,7 @@ INTENTS = (
     "complete_item",
     "remove_items", "clear_list", "play_music", "music_control", "music_query",
     "sports", "weather", "time_query", "business_hours", "place_search",
-    "home_control", "cover_set",
+    "home_control", "cover_set", "climate_set",
     "broadcast", "find_phone", "show_camera", "close_camera",
     "ask", "show_answer", "unclear", "none",
 )
@@ -915,6 +915,111 @@ def fast_parse_cover_level(command: str, sat: str | None = None) -> dict | None:
     return None
 
 
+# "set the temperature to 72" -- the other home command carrying a number.
+# Anchored like the cover grammar: a verb (or a bare "N degrees"), a thing
+# that means the thermostat, then the number after "to"/"at". Two bands: a
+# phrase that names the thermostat ("the temperature", "the AC") takes 50-95
+# so an over-ask ("set it to 90") reaches the handler and is clamped out
+# loud; a phrase with only a pronoun ("set it to 72", "turn it up to 74")
+# takes the 60-80 band a person asks a bedroom to be, so a fan speed, a blind
+# level or a volume can never be read as a temperature. Pronoun forms work at
+# all because the room decides: only a room with a mini split resolves, and in
+# those rooms nothing else takes a bare number in that band.
+_CLIMATE_VERBS = "|".join(sorted(
+    ("set", "put", "make", "turn", "change", "adjust", "move", "bring",
+     "take", "get", "keep", "leave", "lower", "raise", "drop"),
+    key=len, reverse=True))
+_CLIMATE_ROOM = r"(?:simons?|simon's|claires?|claire's)"
+_CLIMATE_NOUNS = (
+    r"temperature|temp|thermostat|heat|heater|heating|ac|a c|"
+    r"air conditioning|air conditioner|air|cooling|cool|mini split|minisplit|"
+    r"split|unit|climate")
+_CLIMATE_THING = (
+    r"(?:the\s+|this\s+|my\s+|our\s+)?"
+    rf"(?:{_CLIMATE_ROOM}\s+)?"
+    r"(?:(?:room|bedroom)\s+)?"
+    rf"(?:(?P<noun>{_CLIMATE_NOUNS})|room|bedroom|it|this|things?)"
+    r"(?:\s+(?:in|for)\s+(?:here|there|the\s+room|this\s+room|"
+    rf"{_CLIMATE_ROOM}(?:\s+(?:room|bedroom))?))?"
+)
+_CLIMATE_TAIL = (
+    r"(?:\s+(?:in\s+here|in\s+there|in\s+(?:the|this|my)\s+room|"
+    rf"in\s+{_CLIMATE_ROOM}(?:\s+room)?|tonight|today|for\s+(?:now|tonight)))?"
+)
+_CLIMATE_AMOUNT = (
+    r"(?P<amount>[a-z0-9 ]+?)"
+    r"(?P<deg>(?:\s*(?:degrees?|deg|fahrenheit))?(?:\s+f)?)"
+)
+_CLIMATE_LEVEL_RE = re.compile(
+    rf"^(?:{_CLIMATE_VERBS})\s+{_CLIMATE_THING}\s+"
+    r"(?:(?:up|down|back)\s+)?"
+    r"(?:to|at|on)\s+(?:about\s+|around\s+|like\s+)?"
+    rf"{_CLIMATE_AMOUNT}{_CLIMATE_TAIL}$"
+)
+# "make it 72 in here" / "keep it at 70 degrees": no "to" -- the verb is
+# enough because "make it <number>" has no other reading in a bedroom.
+_CLIMATE_MAKE_RE = re.compile(
+    rf"^(?:make|keep)\s+{_CLIMATE_THING}\s+(?:about\s+|around\s+)?"
+    rf"{_CLIMATE_AMOUNT}{_CLIMATE_TAIL}$"
+)
+# "72 degrees" / "temperature 72" / "72 degrees in here": no verb, so the
+# degree word or the thermostat word is what anchors it (at least one).
+_CLIMATE_BARE_RE = re.compile(
+    rf"^(?:(?:the\s+)?(?P<noun>temperature|temp|thermostat)\s+(?:to\s+|at\s+)?)?"
+    rf"{_CLIMATE_AMOUNT}{_CLIMATE_TAIL}$"
+)
+_CLIMATE_BAND_NAMED = (50, 95)
+_CLIMATE_BAND_PRONOUN = (60, 80)
+_CLIMATE_MIN_F, _CLIMATE_MAX_F = _CLIMATE_BAND_NAMED
+
+
+def _climate_amount(text: str, band: tuple[int, int]) -> int | None:
+    """A whole degree from "72", "seventy two", "seventy-two" inside the band,
+    or None."""
+    words = text.replace("-", " ").split()
+    if not words or len(words) > 2:
+        return None
+    if len(words) == 1:
+        word = words[0]
+        value = int(word) if word.isdigit() else _NUM_WORDS.get(word)
+    else:
+        first, second = (_NUM_WORDS.get(w) for w in words)
+        if (first is None or second is None
+                or first < 20 or first % 10 or not 0 < second < 10):
+            return None
+        value = first + second
+    if value is None or not band[0] <= value <= band[1]:
+        return None
+    return value
+
+
+def fast_parse_climate_setpoint(command: str, sat: str | None = None) -> dict | None:
+    """A complete "temperature to N" command without the classifier, or None.
+
+    Requires an explicit number, so the relative buttons ("it's hot in here",
+    "turn on the AC") in home_control are untouched. Takes the satellite
+    because the target is the room: only rooms with a curated mini split
+    resolve, everything else falls through to the classifier.
+    """
+    text = _fast_clean(command)
+    for pattern in (_CLIMATE_LEVEL_RE, _CLIMATE_MAKE_RE, _CLIMATE_BARE_RE):
+        match = pattern.fullmatch(text)
+        if not match:
+            continue
+        named = bool(match.group("noun")) or bool(match.group("deg").strip())
+        if pattern is _CLIMATE_BARE_RE and not named:
+            return None
+        band = _CLIMATE_BAND_NAMED if named else _CLIMATE_BAND_PRONOUN
+        amount = _climate_amount(match.group("amount"), band)
+        if amount is None:
+            return None
+        target = climate.resolve(text, sat)
+        if target is None:
+            return None
+        return _validate({"intent": "climate_set", "climate_target": target,
+                          "climate_setpoint": amount})
+    return None
+
 def fast_parse_weather_location(command: str) -> dict | None:
     """Parse a narrow named-place forecast without risking home fallback."""
     text = _fast_clean(command)
@@ -1255,6 +1360,21 @@ def _validate(data: dict) -> dict:
     if intent != "cover_set":
         cover_target = cover_position = None
 
+    # Same shape for the thermostat: the parser resolved the room against
+    # climate._TARGETS, and an unknown key means nothing to set.
+    climate_target = data.get("climate_target")
+    if not isinstance(climate_target, str) or not climate.entity(climate_target):
+        climate_target = None
+    climate_setpoint = data.get("climate_setpoint")
+    if (isinstance(climate_setpoint, (int, float))
+            and not isinstance(climate_setpoint, bool)
+            and _CLIMATE_MIN_F <= climate_setpoint <= _CLIMATE_MAX_F):
+        climate_setpoint = int(climate_setpoint)
+    else:
+        climate_setpoint = None
+    if intent != "climate_set":
+        climate_target = climate_setpoint = None
+
     return {
         "intent": intent,
         "label": label,
@@ -1283,4 +1403,6 @@ def _validate(data: dict) -> dict:
         "camera_target": camera_target,
         "cover_target": cover_target,
         "cover_position": cover_position,
+        "climate_target": climate_target,
+        "climate_setpoint": climate_setpoint,
     }
