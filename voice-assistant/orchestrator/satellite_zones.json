@@ -5,6 +5,13 @@
     "host": "http://192.168.10.251:8781",
     "note": "The kitchen mini PC: mic, speakers and NFC in one box. No rooms key, so its replies stay on its own speaker. music_player is the squeezelite jukebox the NFC reader also drives. Deliberately no music_volume: the kitchen's levels are their own domain (jukebox knob, announcements, New Mode) and voice music must not override them."
   },
+  "familyroom": {
+    "spoken": "kitchen",
+    "display_sat": "kitchen",
+    "host": "http://192.168.10.251:8781",
+    "music_player": "e4:5f:01:67:1e:56",
+    "note": "Second microphone for the same open kitchen/family-room voice domain. Playback and alarms relay to the kitchen satellite, and its captions, responses and timers belong on the kitchen display. music_player is the SAME jukebox as the kitchen's, so the kitchen queue counts as local here: this mic hears those speakers, and a wake or alarm from it must duck them (2026-08-31: it wasn't, and 'close the left blind' over music came through as 'corner'). Deliberately no music_volume, for the kitchen's reasons."
+  },
   "master": {
     "spoken": "master bath",
     "rooms": [
@@ -40,8 +47,6 @@
     "music_cap_minutes": 60,
     "snap_client": "simon_room",
     "note": "Voice PE in Simon's room. The device owns only mic, LED and chimes; replies, timer alarms and music use the Simon amp-zone speakers. Child-safe ceilings and a one-hour music cap are intentional."
-  }
-}
   },
   "claire": {
     "spoken": "Claire's room",
@@ -60,3 +65,10 @@
     "music_cap_minutes": 60,
     "snap_client": "claire_room",
     "note": "Voice PE in Claire's room, a twin of Simon's: the device owns only mic, LED and chimes; replies, timer alarms and music use the Claire amp-zone speakers. Same child-safe ceilings and one-hour music cap."
+  },
+  "office-dot": {
+    "spoken": "office",
+    "host": "http://127.0.0.1:8796",
+    "note": "Repurposed Echo Dot 2 test satellite. No rooms key: wake feedback, ask fillers and final replies all stay on the Dot speaker."
+  }
+}
