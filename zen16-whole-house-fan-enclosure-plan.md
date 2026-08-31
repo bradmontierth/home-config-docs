@@ -12,7 +12,19 @@ with NO enclosure).
      metal 4-squares).
   2. ZEN16 body is ~3.9" long — even a 4"-square (2-gang) box is wall-to-wall
      with no room for splices. 6×6×4 is the right size.
-- Box mounts surface-flush to the wall at the ceiling line.
+- Box mounts surface-flush to the wall at the ceiling line, **cover facing OUT**
+  (service access to ZEN16 buttons/LED; a down-facing cover fights gravity).
+- Exterior mounting lugs would hold the box off the ceiling: if the lugs are on
+  two opposite edges, just rotate the square box 90° so they point left/right;
+  if one still lands ceiling-side, nip it flush (cosmetic, not structural).
+  Primary mounting = **2 pan-head screws through the interior back wall** into
+  drywall anchors — box sits dead flush, heads hide behind the ZEN16.
+- **ZEN16 mounts on a 3D-printed adapter plate** (decided 2026-08-31): flat
+  plate with two mushroom-head studs at the ZEN16 keyhole spacing + countersunk
+  through-holes for the box's back-wall screws between them. Wall screws clamp
+  plate + box; ZEN16 hangs on the studs, lifts off for service. Measure keyhole
+  center-to-center off the ACTUAL device, not a spec sheet. Parametric model:
+  `zen16-mount-plate.scad` (all dims are placeholders to verify with calipers).
 - **No knockouts on these boxes** — they come blank; drill your own with a step
   bit. 7/8" hole = standard ½" trade-size KO, so normal fittings seat perfectly.
 - USB-C wall wart stays OUTSIDE at the outlet; only the cable enters the box.
