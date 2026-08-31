@@ -53,7 +53,7 @@ CAMERA_AUDIO_DELAY_S = float(os.getenv("CAMERA_AUDIO_DELAY_S", "2.5"))
 # zones table (zones.host_for); this remains the fallback for a satellite the
 # table has never heard of, so an unlisted box still rings.
 SATELLITE_ALARM_URL = os.getenv(
-    "SATELLITE_ALARM_URL", "http://192.168.10.24:8781/alarm"
+    "SATELLITE_ALARM_URL", "http://192.168.10.251:8781/alarm"
 )
 # Which room an un-attributed request belongs to — the kitchen touchscreen's
 # stop button, and timers created before the sat column existed.
@@ -290,7 +290,7 @@ PLACES_CACHE_TTL_S = float(os.getenv("PLACES_CACHE_TTL_S", "86400"))
 # playback serializes behind the satellite's PLAYBACK_LOCK. Empty URL disables.
 ASK_FILLER = os.getenv("ASK_FILLER", "1") not in ("0", "false", "no", "")
 SATELLITE_SPEAK_URL = os.getenv(
-    "SATELLITE_SPEAK_URL", "http://192.168.10.24:8781/speak"
+    "SATELLITE_SPEAK_URL", "http://192.168.10.251:8781/speak"
 )
 # Follow-up context: recent ask Q+A pairs replayed to the smart model so
 # "but who's playing in it?" works. Turns kept / freshness window.

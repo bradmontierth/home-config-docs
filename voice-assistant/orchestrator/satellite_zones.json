@@ -27,7 +27,7 @@
     "music_volume": 20,
     "music_max_volume": 40,
     "music_cap_minutes": 60,
-    "note": "Master closet. Since 2026-08-31 the microphone is the rooted Echo Dot 2 (EchoMuse), whose bridge on the Beelink is the host: mic, wake ding, light ring and the alarm dismiss listener live there. Spoken replies and timer alarms still go out the master bath speakers via the amp zone. Volume 20 - the amp runs hot gain on this zone; 50 was way too loud and 30 still a touch loud (measured 2026-08-07). alarm_volume is well above the reply volume on purpose - a reply is for someone standing there, an alarm has to carry over a running shower. Music starts at 20 and cannot be talked above 40 (the alarm is 45). music_cap_minutes stops it by itself: the people it plays for are in the tub, two rooms from the nearest microphone. The old Pi is `master-pi`, shadow.",
+    "note": "Master closet. Since 2026-08-31 the microphone is the rooted Echo Dot 2 (EchoMuse), whose bridge on the Beelink is the host: mic, wake ding, light ring and the alarm dismiss listener live there. Spoken replies and timer alarms still go out the master bath speakers via the amp zone. Volume 20 - the amp runs hot gain on this zone; 50 was way too loud and 30 still a touch loud (measured 2026-08-07). alarm_volume is well above the reply volume on purpose - a reply is for someone standing there, an alarm has to carry over a running shower. Music starts at 20 and cannot be talked above 40 (the alarm is 45). music_cap_minutes stops it by itself: the people it plays for are in the tub, two rooms from the nearest microphone. The Pi 4 that used to be this satellite was retired 2026-08-31 (Dot verified 100% from the bath where the Pi's USB mic failed half the time).",
     "snap_client": "shower"
   },
   "simon": {
@@ -65,10 +65,5 @@
     "music_cap_minutes": 60,
     "snap_client": "claire_room",
     "note": "Voice PE in Claire's room, a twin of Simon's: the device owns only mic, LED and chimes; replies, timer alarms and music use the Claire amp-zone speakers. Same child-safe ceilings and one-hour music cap."
-  },
-  "master-pi": {
-    "spoken": "master bath",
-    "host": "http://192.168.10.24:8781",
-    "note": "The Pi 4 that WAS the master closet satellite until 2026-08-31, kept on the shelf in SHADOW mode (stage-1 detect + local log only, never posts /verify) as the comparison mic for the Echo Dot. No rooms key on purpose: if it is ever flipped active by mistake its replies stay on its own little USB speaker instead of the bath amp."
   }
 }
