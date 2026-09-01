@@ -238,3 +238,38 @@ Kids: no real audio in any set; synthetic positives remained the majority.
 v1 stays in wake-bench for instant rollback), keep TRIGGER_THRESHOLD 0.40,
 watch voice-ops stage-2 pass rate + near-miss volume for a week; Simon/Claire
 bridges untouched until kids' recall is checked live.
+
+## Phase 2 RESULT — 2026-08-31 23:31, v2 CLEARS THE BAR
+Trained 21:24→23:02 on the GX10 (1 h 38 m). Synthetic: recall 90.0→86.9%,
+FPPH 0.39→0.14 @0.5. Real held-out bundle on .251 (`eval_wake_v2.py`, 86
+positives / 569 negatives / 976 backgrounds, original pre-rolls, satellite
+geometry; offline replay is RELATIVE — v1 does not read 100% here):
+
+| | v1 | v2 |
+|---|---|---|
+| positive recall @0.5 (@0.4) | 80.2% (86.0%) | **90.7%** (91.9%) |
+| positive median / p10 | 0.857 / 0.394 | **0.932 / 0.577** |
+| Adrienne @0.5 | 16/21 | **19/21** |
+| Brad @0.5 | 36/40 | **40/40** |
+| missed_positive (the 4 near-miss wakes) @0.5 (@0.4) | 0/4 | **2/4 (3/4)** |
+| negatives still firing @0.5 (@0.4) | 45.3% (59.6%) | **6.3%** (8.3%) |
+| backgrounds still firing @0.5 (@0.4) | 41.2% (53.8%) | **2.7%** (3.9%) |
+| camera clip 17:23:45 / 17:23:56 | 0.17 / 0.31 | **0.49 / 0.67** |
+
+Arm bar §5: recall ≥ v1 for every speaker ✓ (Adrienne, Brad, unlabelled;
+"unsure" 4/5 vs 5/5 is one clip and not a person), ≥50% on missed positives
+✓ (2/4 @0.5, 3/4 @0.4), ≤50% of v1's false-fire rate ✓ (14% of it). Note:
+positive_test clips were the trainer's validation set (checkpoint selection
+only, never weights) — mild selection leakage, not training leakage.
+
+**Recommendation:** skip the two-model A/B — max-over-models is the UNION of
+fires, so it cannot show the false-fire drop, only recall. Run v2 ALONE on
+the kitchen at `TRIGGER_THRESHOLD=0.40` (Adrienne's camera attempt scores
+0.49; @0.4 costs +2 pp negatives vs 0.5). Stage 2 gatekeeps chimes,
+`turns.wake_model` = `okay_computer_v2` marks every row, rollback is one
+`.env` line + restart. Watch for 3 days in voice-ops: kitchen stage-2 pass
+rate (v1 4.2%) and per-speaker verified counts; then family room, then the
+Dot bridge. Model copies: dgx output dir, `.251:~/wake-bench/okay_computer_v2.onnx`,
+Beelink `wake-corpus/models/okay_computer_v2-20260901.onnx` (+ eval JSONs).
+NOT ARMED as of 23:35 — Brad's go pending (a second session was working the
+same task in parallel; one owner for the arm step).
