@@ -167,3 +167,20 @@ excluded from per-speaker eval.
 write `configs/okay_computer_v2.yaml`, run `generate` → `inject
 --dup-positive 10 --backgrounds-dir /work/data/backgrounds_real` → `augment`
 → `train` → `export`, then Phase 2 eval on .251.
+
+## GX10 run LAUNCHED 2026-08-31 21:24 MDT
+Brad labelled all 235 (24 wake / 211 not). Rebuilt →
+`real_sets/2026-09-01-labelled` (positives 331 train / 86 test incl. 21
+`human_wake`; negatives 2,547 / 569 incl. 211 `human_not`; backgrounds 5,436 /
+976). Brad's ear note: many ambiguous clips were *very* quiet — the family-room
+mic hearing someone in the kitchen — which is the paired-mic loudness story,
+not a labelling problem.
+
+Container `wake-train-okay-computer-v2` on dgx (`launch_okay_computer_v2.sh`
+→ `run_okay_computer_v2.sh`, log `~/wake-train/train_okay_computer_v2.log`,
+memwatch fail-safe). v1's 24,936 synthetic originals reused (no TTS), real
+positives ×10 → positive_train 28,246 originals; augment 3 rounds → train
+100k steps → export → synthetic eval. Output:
+`~/wake-train/output/okay_computer_v2/okay_computer_v2/okay_computer_v2.onnx`.
+Then Phase 2: copy to `.251:~/wake-bench/okay_computer_v2.onnx`, eval on the
+held-out real test split with `bi_wake_probe.py stage1` geometry.
