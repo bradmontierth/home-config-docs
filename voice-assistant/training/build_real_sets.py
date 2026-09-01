@@ -7,7 +7,7 @@ orchestrator) and on the GX10 (inject step).
 
   build_real_sets.py build  [--corpus /home/pi/wake-corpus] [--out <corpus>/real_sets/<date>]
                             [--db <corpus>/orchestrator-snapshot.db] [--test-days 14]
-                            [--no-probe] [--probe-limit N]
+                            [--no-probe] [--probe-limit N] [--labels <set>/ambiguous_labels.jsonl]
   build_real_sets.py inject --sets <out dir> --model-dir /work/output/okay_computer_v2
                             [--dup-positive 10] [--backgrounds-dir /work/data/backgrounds_real]
 
@@ -26,6 +26,12 @@ Positives are trimmed to the phrase: trailing silence cut, then the last
 Split is BY TIME: the newest --test-days go to *_test, the rest to *_train.
 Output: {positive,negative,background}_{train,test}/<sat>-<clip>.wav,
 ambiguous/, manifest.csv, summary.txt.
+
+`--labels` is the human pass from tools/ambiguous_label_server.py (:8797),
+one JSON line per clip {"key": "<sat>/<clip>", "label": "wake|not|unsure"},
+last wins. It re-routes ambiguous clips — wake -> positive (label human_wake),
+not -> negative (human_not) — and drops a short-flagged positive labelled not.
+Anything unsure or unlabelled stays held out, exactly as before.
 
 `inject` copies a built set into the trainer's model dir as clip_NNNNNN.wav
 (numbering continues after the TTS clips, so run it AFTER `generate` and
@@ -189,8 +195,22 @@ def classify(kind: str, turn: dict | None, verdict: dict | None) -> tuple[str, s
     return "negative", "near-speech"
 
 
+def load_human_labels(p: Path | None) -> dict[str, str]:
+    out: dict[str, str] = {}
+    if p and p.exists():
+        for line in p.read_text().splitlines():
+            try:
+                d = json.loads(line)
+                if d.get("label") in ("wake", "not", "unsure"):
+                    out[d["key"]] = d["label"]
+            except (ValueError, KeyError):
+                pass
+    return out
+
+
 def build(a: argparse.Namespace) -> None:
     corpus = Path(a.corpus)
+    human = load_human_labels(Path(a.labels) if a.labels else None)
     out = Path(a.out or corpus / "real_sets" / dt.date.today().isoformat())
     out.mkdir(parents=True, exist_ok=True)
     turns = load_turns(Path(a.db))
@@ -225,13 +245,21 @@ def build(a: argparse.Namespace) -> None:
                     except Exception as exc:  # noqa: BLE001
                         print(f"probe failed {key}: {exc}", file=sys.stderr)
             set_, label = classify(kind, turn, verdict)
+            heard = human.get(f"{sat}/{path.name}")
+            if set_ == "ambiguous" and heard == "wake":
+                set_, label = "positive", "human_wake"
+            elif set_ == "ambiguous" and heard == "not":
+                set_, label = "negative", "human_not"
             split = "test" if ts >= cutoff else "train"
             voiced = None
             dest = None
+            if set_ == "positive":
+                kept, voiced = trim_positive(read_wav(path))
+                if voiced < MIN_PHRASE_S and heard == "not":
+                    set_, label = "dropped", "short-not"
             if set_ in ("positive", "negative", "background"):
                 dest = out / f"{set_}_{split}" / f"{sat}-{path.name}"
                 if set_ == "positive":
-                    kept, voiced = trim_positive(read_wav(path))
                     write_wav(dest, kept)
                 else:
                     dest.parent.mkdir(parents=True, exist_ok=True)
@@ -259,7 +287,7 @@ def build(a: argparse.Namespace) -> None:
         w.writeheader(); w.writerows(rows)
     lines = [f"real sets built {dt.datetime.now():%Y-%m-%d %H:%M} from {corpus} "
              f"(db {a.db}, test = newest {a.test_days} d, probed {probed} new near clips)", ""]
-    for set_ in ("positive", "negative", "background", "ambiguous", "unjoined"):
+    for set_ in ("positive", "negative", "background", "ambiguous", "dropped", "unjoined"):
         for split in ("train", "test"):
             per = {s: counts[(set_, split, s)] for s in PI_SATS if counts[(set_, split, s)]}
             if per:
@@ -271,7 +299,8 @@ def build(a: argparse.Namespace) -> None:
     lines += ["", f"positives by label: {dict(by_label)}",
               f"positives by speaker: {dict(by_spk)}",
               f"positives flagged short (<{MIN_PHRASE_S}s voiced): {short} — listen before training",
-              f"ambiguous clips for a human ear: {sum(1 for r in rows if r['set'] == 'ambiguous')}"]
+              f"ambiguous clips for a human ear: {sum(1 for r in rows if r['set'] == 'ambiguous')}"
+              f" (human labels applied: {sum(1 for r in rows if r['label'] in ('human_wake', 'human_not', 'short-not'))})"]
     (out / "summary.txt").write_text("\n".join(lines) + "\n")
     print("\n".join(lines))
     print(f"\n-> {out}")
@@ -315,6 +344,7 @@ def main() -> None:
     b.add_argument("--test-days", type=int, default=14)
     b.add_argument("--no-probe", action="store_true")
     b.add_argument("--probe-limit", type=int)
+    b.add_argument("--labels", help="ambiguous_labels.jsonl from tools/ambiguous_label_server.py")
     i = sub.add_parser("inject")
     i.add_argument("--sets", required=True); i.add_argument("--model-dir", required=True)
     i.add_argument("--dup-positive", type=int, default=10)
