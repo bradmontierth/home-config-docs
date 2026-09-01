@@ -184,3 +184,19 @@ positives ×10 → positive_train 28,246 originals; augment 3 rounds → train
 `~/wake-train/output/okay_computer_v2/okay_computer_v2/okay_computer_v2.onnx`.
 Then Phase 2: copy to `.251:~/wake-bench/okay_computer_v2.onnx`, eval on the
 held-out real test split with `bi_wake_probe.py stage1` geometry.
+
+## v2 TRAINED 2026-08-31 23:02 MDT — eval in progress
+Container exited 0: augment 69 min, train 28 min (100k steps), export OK.
+Model: `dgx:~/wake-train/output/okay_computer_v2/okay_computer_v2/okay_computer_v2.onnx`
+(952 KB, same size as v1) — copies at `beelink:/home/pi/wake-corpus/models/` and
+`.251:~/wake-bench/okay_computer_v2.onnx` (staged, NOT in MODEL_PATHS).
+Synthetic eval @0.5: v2 recall 86.9% / FPPH 0.14 (opt. T 0.58 → 85.5% / 0.07)
+vs v1 90.0% / 0.39 (opt. 0.66 → 86.6% / 0.08). Sanity only.
+
+**v1 baseline on the real held-out bundle (.251, `eval_wake_v2.py`, 86 pos /
+569 neg / 976 bg original pre-rolls):** recall 86% @0.40 (adrienne 19/21,
+brad 37/40; the 4 real misses 0/4), 80% @0.50; negatives still fire 60% /
+45%, backgrounds 54% / 41%; camera 0.17 / 0.31. Offline replay is not the
+live loop (live-caught positives replay 14–20% under threshold; rejects
+re-fire ~50%), so read v1-vs-v2 as RELATIVE, same geometry both.
+v2 eval running on .251 → `~/wake-bench/eval_v2.{log,json}`.
