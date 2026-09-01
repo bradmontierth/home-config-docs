@@ -200,3 +200,41 @@ brad 37/40; the 4 real misses 0/4), 80% @0.50; negatives still fire 60% /
 live loop (live-caught positives replay 14–20% under threshold; rejects
 re-fire ~50%), so read v1-vs-v2 as RELATIVE, same geometry both.
 v2 eval running on .251 → `~/wake-bench/eval_v2.{log,json}`.
+
+## v2 RESULT on the real held-out bundle — 2026-08-31 23:40 MDT (`.251:~/wake-bench/eval_v2.json`)
+
+| | v1 @0.40 | **v2 @0.40** | v1 @0.50 | **v2 @0.50** |
+|---|---|---|---|---|
+| positives recall (n=86) | 86.0% | **91.9%** | 80.2% | **90.7%** |
+| adrienne (21) | 19 | 19 | 16 | **19** |
+| brad (40) | 37 | **40** | 36 | **40** |
+| unlabelled voice (20) | 13 | **16** | 12 | **15** |
+| unsure (5) | 5 | 4 | 5 | 4 |
+| the 4 real misses (near, s2-verified) | 0 | **3** | 0 | **2** |
+| negatives still firing (569) | 59.6% | **8.3%** | 45.3% | **6.3%** |
+| backgrounds still firing (976) | 53.8% | **3.9%** | 41.2% | **2.7%** |
+| positive score median / p10 | 0.86 / 0.39 | **0.93 / 0.58** | | |
+| camera 17:23:44 / 17:23:56 (blind) | 0.17 / 0.31 | **0.49 / 0.67** | | |
+
+**Arm bar (§5):** recall ≥ v1 per speaker — met for adrienne/brad/unlabelled,
+one clip lost in the 5-clip "unsure" group; ≥50% on real misses — **met**
+(3/4); ≤50% of v1's false-fire rate — **met by 7–14×**. Blind evidence: the
+camera clip (in no set) went 0.17→0.49 and 0.31→0.67, i.e. the 17:23:44
+attempt now clears the kitchen's 0.40 trigger.
+
+Regressions (3): `kitchen-verify-ok-20260826-180107` (adrienne, v1 0.47→v2
+0.15), `kitchen-verify-ok-20260831-072313` (unsure, 0.53→0.34),
+`kitchen-verify-rej-20260826-195950` (human_wake "Okay, here.", 0.88→0.29 —
+arguably correct). Gains include 3 of the 4 family-room real misses and 4
+kitchen wakes v1 replayed under 0.4. Remaining false fires at ≥0.5: 62 of
+1,545, mostly plain conversation; 6 of 34 human_not "okay…" negatives still ≥0.4.
+
+**Caveats.** The bundle doubled as the trainer's validation split (checkpoint
+averaging / threshold pick), so it is validation, not blind — only the camera
+clip and the live A/B are blind. Offline replay ≠ live loop (relative numbers).
+Kids: no real audio in any set; synthetic positives remained the majority.
+
+**Recommendation:** arm v2 ALONE in the kitchen (`MODEL_PATHS` one-line swap,
+v1 stays in wake-bench for instant rollback), keep TRIGGER_THRESHOLD 0.40,
+watch voice-ops stage-2 pass rate + near-miss volume for a week; Simon/Claire
+bridges untouched until kids' recall is checked live.
