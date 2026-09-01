@@ -139,3 +139,31 @@ auto-negatives.
 
 **Effort.** Set builder + manifest ~1 day; GX10 training ~2 h (same recipe);
 eval 1 h; one week each of collection and live A/B.
+
+## Phase 1 status — 2026-08-31 21:05, first sets BUILT
+Early sync pulled the 600 surviving near-miss clips (300/mic) + 12,323-row
+turns snapshot; `training/build_real_sets.py build` (home_config c4e6b71)
+probe-labelled all 600 and wrote `/home/pi/wake-corpus/real_sets/2026-08-31`
+(14-day test split) and `…-t7` (7-day split). Every clip joined to a turn.
+
+| set | train | test | notes |
+|---|---|---|---|
+| positive | 276 (t7: 320) | 121 (t7: 77) | 391 verified + 2 mark + **4 missed_positive**; trimmed to 1.6 s, median 1.2 s voiced; 4 flagged short — drop or listen |
+| negative | 2,090 | 816 | low_score speech, "okay…" excluded |
+| background | 4,940 | 1,472 | empty rejects + near-empty (≈ 4.4 h of real room noise) |
+| ambiguous | 231 | | "Okay.", "Okay, Peter." … held out for a human ear |
+
+**Findings.** (1) Near misses are almost never real wakes: 600 probed → 399
+no-speech, 181 other speech, 16 "okay…", **4 verified** (all family room,
+s1 0.30–0.45). Adrienne's misses sit *below* 0.3, so the near-miss band is
+not where the recall is hiding — the retrain has to move the model, not the
+threshold. (2) Speaker labels only exist since speaker-ID shipped (07-27),
+so a 14-day hold-out takes 30 of Adrienne's 43 clips out of training; **use
+the 7-day split** (adrienne 22 train / 21 test, brad 48 / 40). (3) 256
+positives are pre-speaker-ID and unlabelled by voice — fine for training,
+excluded from per-speaker eval.
+
+**Next:** rsync `real_sets/2026-08-31-t7` to `dgx:/home/pi/wake-train/real_sets/`,
+write `configs/okay_computer_v2.yaml`, run `generate` → `inject
+--dup-positive 10 --backgrounds-dir /work/data/backgrounds_real` → `augment`
+→ `train` → `export`, then Phase 2 eval on .251.
