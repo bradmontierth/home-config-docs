@@ -173,6 +173,20 @@ ZONE_ECHO_THRESHOLD = float(os.getenv("ZONE_ECHO_THRESHOLD", "80"))
 # Only compare against a reply this recent, so a stale one cannot eat a
 # genuine later command that happens to resemble it.
 ZONE_ECHO_WINDOW_S = float(os.getenv("ZONE_ECHO_WINDOW_S", "45"))
+# The mic is reopened DURING the reply on purpose (barge-in), so the capture
+# can be reply + command run together, not just the reply: live 2026-08-31
+# Simon re-woke over "Playing the album Piano Man." and the turn arrived as
+# "play the album piano man give me pac man" -> the classifier took the
+# first clause and played Piano Man again. strip_echo() aligns the reply
+# against the FRONT of the transcript (never a substring search, so a short
+# real command can't be eaten) and keeps whatever follows it. That applies to
+# cold wakes too -- a Voice PE room has no follow-up capture, so the re-wake
+# over a reply IS a wake turn -- under a tighter window, since a wake that
+# overlaps the reply lands within seconds of it.
+ZONE_ECHO_WAKE_WINDOW_S = float(os.getenv("ZONE_ECHO_WAKE_WINDOW_S", "20"))
+# A reply shorter than this is not distinctive enough to strip off the front
+# of a command ("Done." vs "done turn on the fan").
+ZONE_ECHO_MIN_WORDS = int(os.getenv("ZONE_ECHO_MIN_WORDS", "3"))
 # Announcement volume 0-100; unset/empty -> the subflow's own default
 # (global defaultSpeakerVolume in Node-RED).
 _bv = os.getenv("BROADCAST_VOLUME", "").strip()
@@ -426,6 +440,28 @@ ARB_PEERS = [
     for grp in os.getenv("ARB_PEERS", "kitchen,familyroom").split(";") if grp.strip()
 ]
 REWAKE_ARB_WAIT_S = float(os.getenv("REWAKE_ARB_WAIT_S", "0.9"))
+# Loudness hand-off (2026-08-31). The verify race is a hop race, not a
+# statement about which room the speaker is in: Claire's mic won a wake at
+# -41 dBFS over Simon's at -21 and answered in the wrong room. Between mics
+# of the SAME hardware the wake loudness is directly comparable (no per-mic
+# gain calibration), and the louder mic is the room the person is standing
+# in. So when a suppressed /verify comes from a sat in the same group as the
+# claim holder and is louder by the margin, the turn is handed to it: it
+# verifies, chimes and captures as the primary, and the first mic's capture
+# is demoted to a silent shadow when it arrives. No waiting for both mics --
+# the loser's /verify lands a median 120 ms after the claim, seconds before
+# either command does, so the chime path is untouched. The wrong room still
+# dings once; the right room dings too and answers. Groups ';'-separated;
+# sats in no group never hand off. Kitchen/family room share speakers, so
+# they are deliberately NOT here. Margin ~8 dB flips the clearly-wrong
+# pairs seen in the turns table (+14..+20 dB) and leaves the +-5 dB noise on
+# the status quo.
+ARB_LOUDNESS_GROUPS = [
+    {s.strip() for s in grp.split(",") if s.strip()}
+    for grp in os.getenv("ARB_LOUDNESS_GROUPS", "simon,claire").split(";")
+    if grp.strip()
+]
+ARB_LOUDNESS_MARGIN_DB = float(os.getenv("ARB_LOUDNESS_MARGIN_DB", "8"))
 # Safety cap on a follow-up listen marker whose /session/idle never arrived.
 FOLLOWUP_LISTEN_MAX_S = float(os.getenv("FOLLOWUP_LISTEN_MAX_S", "30"))
 

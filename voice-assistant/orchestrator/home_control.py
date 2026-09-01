@@ -379,6 +379,22 @@ def fuzzy_match(query: str, sat: str | None = None) -> str | None:
     return best[0] if best else None
 
 
+def strong_match(query: str | None, sat: str | None = None,
+                 bar: float = 90) -> str | None:
+    """Key of a room-reachable command this phrase near-exactly names, or None.
+
+    Stricter than fuzzy_match: used to overrule a classifier that already
+    picked another intent, so the alias has to be the plainly stronger claim
+    on the words. Same room-first search as _match, so a kid-room effect
+    named like a song ("pac man", "waves") is found in its own room."""
+    if not query:
+        return None
+    best = _match(query, sat)
+    if best and best[2] >= bar:
+        return best[0]
+    return None
+
+
 def evaluate(query: str) -> dict:
     """Score a phrase without pressing anything — the editor's phrase tester.
     Reports the best candidate even when it misses, so a failed phrase can be

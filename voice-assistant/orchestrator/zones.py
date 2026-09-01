@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import shutil
 import time
 from pathlib import Path
@@ -109,21 +110,69 @@ def note_reply(sat: str | None, text: str) -> None:
         _last_reply[sat] = (time.time(), text)
 
 
-def is_echo(sat: str | None, transcript: str) -> bool:
-    """True if `transcript` is this satellite hearing its own last reply."""
+_WORD = re.compile(r"[a-z0-9']+")
+
+
+def _norm(text: str) -> str:
+    return " ".join(_WORD.findall(text.lower()))
+
+
+def strip_echo(sat: str | None, transcript: str,
+               followup: bool = True) -> tuple[str, bool]:
+    """Take this satellite's own recent reply off the FRONT of `transcript`.
+
+    Returns (remainder, echoed). remainder == "" with echoed True is the
+    whole-capture echo (the original is_echo case); a non-empty remainder is
+    the barge-in case -- the person talked over or right after the reply and
+    the capture holds both. The reply is aligned as a word-count prefix
+    (reply length +-1 word, so ASR splitting "Pac-Man" differently still
+    lines up) and scored with full-string ratio against just that prefix.
+    Never a substring search: partial_ratio would score 100 whenever a short
+    real command ("yes", "stop") happens to appear inside the reply.
+    """
     if not sat or not transcript:
-        return False
+        return transcript, False
     entry = _last_reply.get(sat)
     if not entry:
-        return False
+        return transcript, False
     said_at, said = entry
-    if time.time() - said_at > config.ZONE_ECHO_WINDOW_S:
-        return False
-    score = fuzz.ratio(transcript.strip().lower(), said.strip().lower())
-    if score >= config.ZONE_ECHO_THRESHOLD:
-        log.info("echo drop sat=%s score=%.0f %r", sat, score, transcript)
-        return True
-    return False
+    window = config.ZONE_ECHO_WINDOW_S if followup else config.ZONE_ECHO_WAKE_WINDOW_S
+    if time.time() - said_at > window:
+        return transcript, False
+    said_norm = _norm(said)
+    heard = transcript.split()
+    n = len(said_norm.split())
+    # Candidate cut points: the reply's word count give or take ASR drift
+    # ("It's" vs "It is", "Pac-Man" vs "pac man"). The best-scoring cut wins,
+    # so a short real command after the reply survives -- "turning on pac
+    # man stop" scores 100 at k=4 and only 88 as a whole, and the whole-string
+    # check alone would have eaten the "stop". A cut at the very end is the
+    # whole-capture echo. A reply too short to be distinctive ("Done.") is
+    # only ever matched whole, never stripped off the front of a command.
+    if n < config.ZONE_ECHO_MIN_WORDS:
+        cuts = [len(heard)] if len(heard) <= n + 1 else []
+    else:
+        cuts = [k for k in range(n - 2, n + 3) if 1 <= k <= len(heard)]
+    best_score, best_k = 0.0, 0
+    for k in cuts:
+        s = fuzz.ratio(_norm(" ".join(heard[:k])), said_norm)
+        if s > best_score:
+            best_score, best_k = s, k
+    if best_score < config.ZONE_ECHO_THRESHOLD:
+        return transcript, False
+    rest = " ".join(heard[best_k:])
+    if rest:
+        log.info("echo strip sat=%s score=%.0f dropped %r kept %r",
+                 sat, best_score, " ".join(heard[:best_k]), rest)
+    else:
+        log.info("echo drop sat=%s score=%.0f %r", sat, best_score, transcript)
+    return rest, True
+
+
+def is_echo(sat: str | None, transcript: str) -> bool:
+    """True if `transcript` is this satellite hearing its own last reply."""
+    rest, echoed = strip_echo(sat, transcript)
+    return echoed and not rest
 
 
 def _entry(sat: str | None) -> dict | None:

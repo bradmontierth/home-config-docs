@@ -195,6 +195,23 @@ def session_context() -> str | None:
 _ARB = {"sat": None, "until": 0.0, "turn_id": None, "rms_db": None,
         "stage1": None, "at": 0.0}
 
+# Wake turns handed to a louder same-hardware peer (config.ARB_LOUDNESS_GROUPS):
+# the first mic's turn_id -> the sat that answers instead. Consumed when the
+# first mic's /command/audio arrives and is demoted to a shadow. Bounded: a
+# capture that never posts (empty VAD) would otherwise leave its key behind.
+_ARB_HANDOFF: dict[str, str] = {}
+_ARB_HANDOFF_MAX = 32
+
+
+def _loudness_peers(a: str | None, b: str | None) -> bool:
+    """Same hardware class, so wake loudness is directly comparable."""
+    return bool(a and b and a != b
+                and any(a in g and b in g for g in config.ARB_LOUDNESS_GROUPS))
+
+
+def _in_loudness_group(sat: str | None) -> bool:
+    return bool(sat and any(sat in g for g in config.ARB_LOUDNESS_GROUPS))
+
 
 def _arb_holder(sat: str) -> str | None:
     """The OTHER satellite currently holding the turn, if any."""
@@ -203,10 +220,11 @@ def _arb_holder(sat: str) -> str | None:
     return None
 
 
-def _arb_claim(sat: str, stage1: float | None = None) -> None:
+def _arb_claim(sat: str, stage1: float | None = None,
+               rms: float | None = None) -> None:
     now = time.time()
     _ARB.update(sat=sat, until=now + config.ARB_SUPPRESS_S,
-                turn_id=None, rms_db=None, stage1=stage1, at=now)
+                turn_id=None, rms_db=rms, stage1=stage1, at=now)
 
 
 # Which satellites are inside a follow-up listen window right now (sat ->
@@ -246,7 +264,8 @@ async def _await_rewake_claim(sat: str) -> str | None:
 
 async def _note_wake_loudness(turn_id: str, wav: bytes, sat: str,
                               winner: str | None = None,
-                              stage1: float | None = None) -> None:
+                              stage1: float | None = None,
+                              rms: float | None = None) -> None:
     """Measure this wake's loudness off the chime path and file it.
 
     Runs as a task after the /verify response is on the wire: a few ms of
@@ -254,10 +273,11 @@ async def _note_wake_loudness(turn_id: str, wav: bytes, sat: str,
     arbitration loser, also pairs the reading onto the winner's row, so one
     row carries both mics' loudness and stage-1 scores for the same wake.
     """
-    rms = loudness.peak_window_dbfs(wav)
+    if rms is None:
+        rms = loudness.peak_window_dbfs(wav)
     turns_mod.update(turn_id, wake_rms_db=rms)
     if winner is None:
-        if _ARB["sat"] == sat:
+        if _ARB["sat"] == sat and _ARB["rms_db"] is None:
             _ARB["rms_db"] = rms
         return
     if _ARB["sat"] == winner and _ARB["turn_id"]:
@@ -265,6 +285,60 @@ async def _note_wake_loudness(turn_id: str, wav: bytes, sat: str,
                          other_rms_db=rms)
     log.info("arb evidence winner=%s rms=%s stage1=%s | loser=%s rms=%s stage1=%s",
              winner, _ARB["rms_db"], _ARB["stage1"], sat, rms, stage1)
+
+
+async def _loudness_handoff(sat: str, winner: str, wav: bytes,
+                            peak: float | None,
+                            decoded: tuple | None) -> dict | None:
+    """Hand the turn `winner` just claimed to `sat` if `sat` heard the wake
+    louder by config.ARB_LOUDNESS_MARGIN_DB -- same-hardware peers only.
+
+    Returns the /verify response that makes `sat` the primary (it chimes and
+    captures), or None to leave the suppression in place. `decoded` is the
+    stage-2 result if the caller already ran it; otherwise it runs here, and
+    only once the loudness test has passed, so a plain loser costs no ASR.
+    The winner's capture, when it posts, is demoted via _ARB_HANDOFF.
+    """
+    if not _loudness_peers(sat, winner):
+        return None
+    heard = _ARB["rms_db"]
+    if heard is None or _ARB["sat"] != winner:
+        return None
+    rms = loudness.peak_window_dbfs(wav)
+    if rms is None or rms - heard < config.ARB_LOUDNESS_MARGIN_DB:
+        return None
+    if decoded is None:
+        decoded = await _decode_wake(wav)
+    verified, command, transcript, score, decode = decoded
+    if not verified:
+        log.info("arb handoff refused: sat=%s louder by %.1f dB but stage-2 "
+                 "rejected %r", sat, rms - heard, transcript)
+        return None
+    winner_turn = _ARB["turn_id"]
+    turn_id = turns_mod.start(
+        sat, "wake", verified=True, transcript=transcript, wake_score=score,
+        decode=decode, stage1_score=peak, arb_turn_id=winner_turn,
+        wake_rms_db=rms, **_wake_timings())
+    if winner_turn:
+        turns_mod.update(winner_turn, other_sat=sat, other_stage1=peak,
+                         other_rms_db=rms, arb_winner=sat,
+                         reject_reason="handoff")
+        _ARB_HANDOFF[winner_turn] = sat
+        while len(_ARB_HANDOFF) > _ARB_HANDOFF_MAX:
+            del _ARB_HANDOFF[next(iter(_ARB_HANDOFF))]
+    log.info("arb handoff %s -> %s: %.1f dBFS vs %.1f (margin %.1f) turn=%s",
+             winner, sat, rms, heard, config.ARB_LOUDNESS_MARGIN_DB, turn_id)
+    _ARB.update(sat=sat, turn_id=turn_id, rms_db=rms, stage1=peak,
+                at=time.time())
+    route = zones.route_for(sat)
+    if route:
+        asyncio.create_task(
+            broadcast_mod.amp_wake(route["rooms"], route.get("volume")))
+    await _turn_event("wake_confirmed", sat=sat, score=score,
+                      transcript=transcript)
+    return {"verified": True, "score": score, "transcript": transcript,
+            "command": command, "decode": decode, "turn_id": turn_id,
+            "handoff_from": winner}
 
 
 # Which satellite the in-flight turn belongs to, so _finalize can route the
@@ -748,6 +822,22 @@ async def handle_command(command: str, followup: bool = False,
                      intent, rescued, command)
             parsed = {**parsed, "intent": "home_control", "query": command}
             intent = "home_control"
+    if intent == "play_music" and command:
+        # A room's effect buttons are named like songs ("pac man", "waves",
+        # "dino stomp") and the classifier cannot see the room's table. Live
+        # 2026-08-27 and 08-31: "sorry i didnt touch that give me pac man"
+        # became play_music, and the resolver then fuzzy-matched the album
+        # "Piano Man" at 75. A near-exact room alias for the query or for the
+        # whole command is the stronger claim on the words; "play the album
+        # piano man" matches no alias and stays music.
+        for text in (parsed.get("query"), command):
+            pressed = home_mod.strong_match(text, _CUR_SAT.get())
+            if pressed:
+                log.info("play_music overridden by home command %s: %r",
+                         pressed, text)
+                parsed = {**parsed, "intent": "home_control", "query": text}
+                intent = "home_control"
+                break
     if followup and intent == "none":
         # Background chatter / not addressed to us. Drop silently: no events, no
         # audio, no dashboard flash — a dropped follow-up must be invisible. The
@@ -1453,6 +1543,10 @@ async def verify_wake(request: Request, sat: str = "kitchen",
         await _await_rewake_claim(sat)
     winner = _arb_holder(sat)
     if winner:
+        handed = await _loudness_handoff(sat, winner, wav, peak, None)
+        if handed:
+            handed["latency_ms"] = round((time.time() - t0) * 1000)
+            return handed
         # Race already lost — don't burn an ASR decode (it's the same
         # utterance the winner just verified) and don't double the dashboard
         # badge events. The satellite shadow-captures on this response.
@@ -1466,11 +1560,18 @@ async def verify_wake(request: Request, sat: str = "kitchen",
     # call, putting a cosmetic badge (with a 4s timeout tail) on the chime path.
     asyncio.create_task(_turn_event("verifying", sat=sat))
     verified, command, transcript, score, decode = await _decode_wake(wav)
+    rms: float | None = None
     log.info("verify sat=%s transcript=%r verified=%s score=%s decode=%s",
              sat, transcript, verified, score, decode)
     if verified:
         winner = _arb_holder(sat)
         if winner:
+            handed = await _loudness_handoff(
+                sat, winner, wav, peak,
+                (verified, command, transcript, score, decode))
+            if handed:
+                handed["latency_ms"] = round((time.time() - t0) * 1000)
+                return handed
             # The other mic's verify completed while our ASR ran. Its events
             # already drove the dashboard; go quiet.
             log.info("verify sat=%s suppressed post-ASR (winner=%s)", sat, winner)
@@ -1482,7 +1583,12 @@ async def verify_wake(request: Request, sat: str = "kitchen",
                                       **_wake_timings())
             asyncio.create_task(_note_wake_loudness(turn_id, wav, sat, winner, peak))
             return {"verified": False, "suppressed": True, "winner": winner}
-        _arb_claim(sat, peak)
+        # Same-hardware peers compare wake loudness at hand-off time, and the
+        # peer's /verify can land ~10 ms behind this claim -- too soon for
+        # the background reading below. A few ms of pure-Python RMS, only for
+        # sats in a loudness group; everyone else keeps it off the chime path.
+        rms = loudness.peak_window_dbfs(wav) if _in_loudness_group(sat) else None
+        _arb_claim(sat, peak, rms)
         # Zone-routed satellites answer through the whole-home amp, which needs
         # ~3s to come out of standby. Start that now so it finishes under the
         # ASR + intent + TTS that follows, instead of eating the reply's first
@@ -1504,7 +1610,7 @@ async def verify_wake(request: Request, sat: str = "kitchen",
         **_wake_timings())
     if verified:
         _ARB["turn_id"] = turn_id
-    asyncio.create_task(_note_wake_loudness(turn_id, wav, sat))
+    asyncio.create_task(_note_wake_loudness(turn_id, wav, sat, rms=rms))
     return {
         "verified": verified, "score": score, "transcript": transcript,
         "command": command, "decode": decode, "turn_id": turn_id,
@@ -1539,6 +1645,19 @@ async def command_audio(request: Request, followup: bool = False,
     timing.start()
     if not turn_id:
         turn_id = turns_mod.start(sat, "followup" if followup else "manual")
+    if turn_id and (answer := _ARB_HANDOFF.pop(turn_id, None)):
+        # This wake was handed to a louder same-hardware peer at /verify
+        # (_loudness_handoff); that room is answering. Transcribe for the
+        # paper trail -- the two captures side by side are the evidence for
+        # which mic hears the command better -- and go quiet.
+        transcript = await clients.transcribe(wav)
+        log.info("shadow command (handoff to %s) sat=%s transcript=%r",
+                 answer, sat, transcript)
+        turns_mod.update(turn_id, transcript=transcript, intent="none",
+                         ok=False, reject_reason="handoff", arb_winner=answer,
+                         **_wake_timings())
+        return {"ok": False, "silent": True, "yield": True, "winner": answer,
+                "transcript": transcript, "response": "", "intent": "none"}
     if followup:
         listen_since = _followup_listening(sat)
         _FOLLOWUP_LISTEN.pop(sat, None)
@@ -1563,24 +1682,33 @@ async def command_audio(request: Request, followup: bool = False,
             transcript = command
         # No wake phrase in the decode (odd, /verify just matched this audio):
         # keep the full transcript — a stray lead-in beats a lost turn.
+    # A zone-routed satellite hears its own answer off the room speakers, and
+    # the mic is open during the reply on purpose (barge-in), so the capture
+    # can be the reply alone or the reply with the person's words after it.
+    # Strip the reply off the front and act on what is left. Whole-capture
+    # echo on a follow-up tells the satellite to keep listening rather than
+    # end the conversation -- that is what makes the follow-up window
+    # self-timing instead of a guess at the reply's length.
+    heard = transcript
+    echoed = False
+    if transcript:
+        transcript, echoed = zones.strip_echo(sat, transcript, followup=followup)
     if not transcript:
+        if echoed and followup:
+            turns_mod.update(turn_id, transcript=heard, intent="none",
+                             ok=False, reject_reason="echo", **_wake_timings())
+            return {"ok": False, "echo": True, "transcript": heard,
+                    "response": "", "intent": "none"}
         # Silence: on a follow-up, stay quiet; on a wake turn, say we missed it.
         if not followup:
             await _turn_event("response", text="I didn't catch that.", intent="none")
         turns_mod.update(turn_id, intent="none", ok=False,
-                         reject_reason="no_command", **_wake_timings())
+                         reject_reason="echo" if echoed else "no_command",
+                         **({"transcript": heard} if heard else {}),
+                         **_wake_timings())
         return {"ok": False, "transcript": "", "response": "",
                 "intent": "none", "silent": followup}
     if followup:
-        # A zone-routed satellite hears its own answer off the room speakers.
-        # Drop it and tell the satellite to keep listening rather than ending
-        # the conversation -- this is what makes the follow-up window
-        # self-timing instead of a guess at the reply's length.
-        if zones.is_echo(sat, transcript):
-            turns_mod.update(turn_id, transcript=transcript, intent="none",
-                             ok=False, reject_reason="echo", **_wake_timings())
-            return {"ok": False, "echo": True, "transcript": transcript,
-                    "response": "", "intent": "none"}
         # Saying the wake word again mid-conversation is natural, and without
         # this it lands in the classifier as part of the command ("okay
         # computer what's the forecast") or, said bare, ends the session.
