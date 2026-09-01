@@ -11,8 +11,12 @@ held-out test bundle with each model and reports, at T = 0.40 and 0.50:
   camera clip peak score, if present
 
 Honest caveat printed with the results: every corpus positive is one the
-OLD model already fired on, so recall here measures "no regression", not
-the misses below 0.3 that started this. Those need live A/B or mined audio.
+OLD model already fired on LIVE, and every negative/background fired live
+too — but offline replay of the saved 2.5 s pre-roll does not reproduce the
+live peak (v1 baseline 2026-08-31: recall 80% @0.5, negatives fire 45%, not
+~100%), so read v1 vs v2 as a RELATIVE comparison on identical passes. The
+misses below 0.3 that started this are not in the corpus at all; those need
+the camera clip, /mark captures, or the live A/B.
 
 Bundle layout (built by stage_eval_bundle on the Beelink):
   <bundle>/{positive,negative,background}/<sat>-<clip>.wav   ORIGINAL pre-rolls
@@ -128,9 +132,9 @@ def main() -> None:
                 best[zone] = max(best.get(zone, 0.0), v)
             res["camera"] = best
             lines.append("camera clip peaks: " + ", ".join(f"{k} {v:.3f}" for k, v in best.items()))
-    lines.append("\nCAVEAT: corpus positives are ones the OLD model already fired on (>= its threshold), "
-                 "so recall here is a no-regression check; negatives/backgrounds all fired on v1, "
-                 "so v1 reads ~100% and v2's drop is the specificity gain.")
+    lines.append("\nCAVEAT: every clip here fired on v1 LIVE, but offline replay of the saved pre-roll "
+                 "does not reproduce the live peak (v1 reads ~80% recall / ~45% negative fires, not 100%). "
+                 "Compare models RELATIVELY on this identical pass; the sub-0.3 misses are not in the corpus.")
     print("\n".join(lines))
     if a.json:
         out["per_clip"] = scores
