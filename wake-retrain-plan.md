@@ -273,3 +273,74 @@ Dot bridge. Model copies: dgx output dir, `.251:~/wake-bench/okay_computer_v2.on
 Beelink `wake-corpus/models/okay_computer_v2-20260901.onnx` (+ eval JSONs).
 NOT ARMED as of 23:35 — Brad's go pending (a second session was working the
 same task in parallel; one owner for the arm step).
+
+## LIVE RESULT 2026-09-04 — v2 confirmed on both Pi mics, rolled to all three bridges
+
+Kitchen went to v2 ALONE @0.40 on 2026-09-01 ~02:00 (first v2 row), family
+room 2026-09-01 07:10 (`~/voice-pipeline/.env` on each box, v1 + okay_google
+left in `~/wake-bench`). `turns` table, kind=wake, per-day averages, pre =
+08-18..08-31 (14 d, v1 @0.40 kitchen / @0.5 family), post = 09-01..09-04 (3.7 d):
+
+| | kitchen v1 | **kitchen v2** | family v1 | **family v2** |
+|---|---|---|---|---|
+| stage-1 fires / day | 83.0 | **22.4** (−73%) | 49.8 | **17.5** (−65%) |
+| stage-2 pass rate | 7.7% | **17%** | 3.4% | **19%** |
+| verified wakes / day | 6.4 | 3.8 | 1.7 | 3.3 |
+| near-miss rows / day | 43 | **19** | 31 | **8.5** |
+| verified stage-1 score median / p10 | 0.86 / 0.57 | 0.89 / **0.42** | | |
+
+Reads: false stage-1 fires are down ~3× on both mics (the whole point — every
+one was a silent Parakeet call); the pass rate tripled to quintupled; the
+v2 rejects that remain are plain conversation ("Or do you think we should
+wait?" 0.68). Recall cannot be measured from turns (a true miss leaves no
+row) — near-miss volume halved, which is v2 being more decisive, not fewer
+attempts. Kitchen verified/day dipped (6.4→3.8) but the post window is 3.7
+days including a Tue/Wed with 1–7 verified house-wide, i.e. usage; Thu 09-03
+had 16. Adrienne verified 29 pre / 4 post — small n, WATCH (her camera-probe
+case was the motivating miss). 3 of 26 v2 verified wakes scored 0.40–0.50:
+**0.40 is the right threshold; 0.5 would have cost 12% of real wakes.**
+`okay_google` had not fired anywhere since 08-18, so dropping it from
+MODEL_PATHS lost nothing.
+
+**Bridges rolled 2026-09-04 15:54 MDT** — simon (:8793), claire (:8795),
+master Dot (:8796): `okay_computer_v2.onnx` copied (sha256 ba3c2ee8…) into the
+mounted models dir `/home/pi/backups/pw_pi-20260728/blobs/`, compose
+`MODEL_PATHS=/models/okay_computer_v2.onnx`, `TRIGGER_THRESHOLD=0.40` (was
+0.5), `docker compose up -d --build`. Why not the union A/B the plan wrote:
+the kids' rooms' verified wakes are Brad (51/54 Simon, 40/43 Claire) — the
+kids don't successfully wake it today, so there is no kid recall to regress,
+and v2 is 40/40 on Brad. Bridges chime only after stage 2
+(`bridge_wake_confirmed`), so a stage-1 regression is silent either way.
+Baselines to beat (14 d, v1 @0.5): simon 67 fires/d, 5.7% pass; claire 40/d,
+7.6%; master 7.8/d, 10%. Rollback = the two compose lines + `up -d`.
+
+**Bridge rows now carry the stage-1 score.** The bridges never sent
+`peak`/model on `/verify` (Pi sats always did), so simon/claire/master rows
+had `stage1_score=NULL, wake_model=NULL` — nothing to pick a threshold from.
+`bridge.py verify_path()` now appends `&peak=&model=` from `last_trigger`
+(Dot bridge inherits it). The orchestrator stores `peak` today; `model` is
+ignored until `verify_wake()` gains a `model` param (one-liner, NOT done —
+another session is deploying the orchestrator; when it lands, kids' rows get
+`wake_model` too and voice-ops can split by model).
+
+**Simon Voice PE incident (same afternoon, not the model).** After the
+container recreate the new bridge could not connect (SYN unanswered for 60 s
+× 20 min); HA lost the device 16:01; ring red-twinkle = firmware
+`control_leds_no_ha_connection_state` (Wi-Fi up, no API client). Evidence it
+was the DEVICE's IP stack, not the AP/DHCP/MAC: same IP + MAC throughout, UDM
+neighbor table REACHABLE (ARP answered), signal −30 dBm ("roam check skipped,
+signal good"), yet the UDM itself (192.168.30.1, same VLAN) got 0/4 pings and
+its own SYNs were UNREPLIED, and the two connections the device still held
+sat with unacked Send-Q. Brad power-cycled ~16:05 (blue twinkle = boot,
+waiting for API); it wedged again within ~3 min, then cleared at 16:13:13 and
+has streamed since. Device-log drop history (the 3-week `esphome logs`
+streamer container): 1/day on 08-11, 08-14, 08-22, 08-24, then **6 on 08-30, 6
+on 09-03, 6 on 09-04** — escalating before today's restart. Open: add `debug:`
+free-heap + `wifi_signal` + uptime sensors to both Voice PE yamls so the next
+wedge shows heap; consider dropping the always-on log streamer (a 4th API
+client that reconnects on every hiccup); firmware bump past HAVPE 26.6.0.
+Ethernet is not an option on the Voice PE hardware.
+
+**Watch (voice-ops, ~2026-09-11):** per-bridge fires/day + pass rate vs the
+baselines above; kitchen+family Adrienne verified count; first bridge rows
+with `stage1_score` populated (p10 of verified → threshold check).

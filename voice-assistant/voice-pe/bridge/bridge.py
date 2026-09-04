@@ -399,6 +399,23 @@ class Bridge:
                 response.raise_for_status()
                 return await response.json()
 
+    def verify_path(self, endpoint: str) -> str:
+        """`/verify`-style path carrying the stage-1 detector's score + model.
+
+        The orchestrator stores `peak` as `turns.stage1_score` (the Pi
+        satellites have always sent it; the bridges never did, so their rows
+        had no score to judge a threshold by). `model` is what the Pi sats
+        report through /telemetry; sent here so the same column fills once
+        /verify accepts it.
+        """
+        path = f"{endpoint}?sat={SATELLITE_ID}"
+        trig = self.last_trigger or {}
+        if trig.get("score") is not None:
+            path += f"&peak={float(trig['score']):.3f}"
+        if trig.get("model"):
+            path += f"&model={trig['model']}"
+        return path
+
     async def post_json(self, path: str, body: dict, timeout_s: float) -> dict:
         timeout = aiohttp.ClientTimeout(total=timeout_s)
         async with aiohttp.ClientSession(timeout=timeout) as session:
@@ -704,7 +721,7 @@ class Bridge:
         """Stage-2 validation with no feedback, turn claim, amp wake, or action."""
         try:
             result = await self.post_wav(
-                f"/verify/probe?sat={SATELLITE_ID}", preroll, timeout_s=20
+                self.verify_path("/verify/probe"), preroll, timeout_s=20
             )
             self.last_probe = {
                 "at": datetime.now(TZ).isoformat(timespec="seconds"),
@@ -764,7 +781,7 @@ class Bridge:
     async def run_turn(self, preroll: bytes) -> None:
         try:
             verify = await self.post_wav(
-                f"/verify?sat={SATELLITE_ID}", preroll, timeout_s=20
+                self.verify_path("/verify"), preroll, timeout_s=20
             )
             if not verify.get("verified"):
                 log.info("stage-2 rejected transcript=%r", verify.get("transcript"))

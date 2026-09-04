@@ -20,11 +20,13 @@ services:
       OMP_NUM_THREADS: "1"
       OMP_WAIT_POLICY: PASSIVE
       OPENBLAS_NUM_THREADS: "1"
-      TRIGGER_THRESHOLD: "0.5"
+      # okay_computer v2 alone at 0.40 (2026-09-04), same as the Pi satellites
+      # and the Voice PE bridges; rollback = v1 line + 0.5 + up -d.
+      TRIGGER_THRESHOLD: "0.40"
       QUIET_START: "00:00"
       QUIET_END: "00:00"
       TZ: America/Denver
-      MODEL_PATHS: /models/okay_computer.onnx,/models/okay_google.onnx
+      MODEL_PATHS: /models/okay_computer_v2.onnx
       SILERO_MODEL: /models/silero_vad.onnx
       STOP_MODEL_ENABLED: "false"
       DATA_DIR: /data
