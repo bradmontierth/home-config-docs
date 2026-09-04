@@ -80,17 +80,35 @@ async def add_from_text(text: str, owner: str | None = None,
         return []
     # analyze returns items WITHOUT ids (type/text/due_at/confidence only). Match
     # them back to the stored active rows so callers get ids (needed to delete on
-    # a follow-up "undo" / complete by tap). Companion stores the exact text, so
-    # match on (type, lowercased text).
+    # a follow-up "undo" / complete by tap). Every row the companion stored for
+    # THIS turn carries our note_id, so match inside that note first. Matching
+    # on (type, text) across the whole active list is wrong: a same-text item
+    # from an earlier day (a "roast coffee" reminder that fired last Sunday and
+    # was never checked off) sorts ahead of the new one and gets spoken back
+    # with its stale due date. The text fallback is only for the case where
+    # the companion deduped the new item against an existing one.
     active = await fetch(status="active")
-    resolved = []
-    for it in items:
-        key = (it.get("type"), (it.get("text") or "").strip().lower())
-        row = next((r for r in active
-                    if (r.get("type"), (r.get("text") or "").strip().lower()) == key), None)
-        resolved.append(row or it)
+    resolved = [_match_stored(it, active, note_id) for it in items]
     log.info("add_from_text %r -> %d item(s)", text, len(resolved))
     return resolved
+
+
+def _match_stored(item: dict, active: list[dict], note_id: str) -> dict:
+    """Find the stored row for one analyzed `item`: same note first, then any
+    same-text row with the same due date, then the newest same-text row."""
+    key = (item.get("type"), (item.get("text") or "").strip().lower())
+    same_text = [r for r in active
+                 if (r.get("type"), (r.get("text") or "").strip().lower()) == key]
+    for pick in (
+        lambda r: r.get("client_note_id") == note_id,
+        lambda r: r.get("due_at") == item.get("due_at"),
+    ):
+        hits = [r for r in same_text if pick(r)]
+        if hits:
+            return hits[0]
+    if same_text:
+        return max(same_text, key=lambda r: r.get("created_at") or "")
+    return item
 
 
 async def add_shopping(texts: list[str], owner: str | None = None) -> dict:
