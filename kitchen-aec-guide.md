@@ -147,6 +147,90 @@ Fallback ladder if it ever regresses: `step2` (+GAMMA_ETAIL 0.5), `step3`
 (+NLATTENONOFF 0), `nuke` (+ECHOONOFF 0 — linear AEC only, ~30 dB).
 Helper + clip browser sources: `voice-assistant/tools/kitchen-aec/`.
 
+**2026-09-03 — still swallowing; step2 applied, listen-test tooling.**
+Adrienne's "set a timer for fifteen minutes" at 16:58 came through as
+`for fifteen minutes` → unclear ("Sorry, I didn't catch that", and the
+LLM classifier on the GX10 took 14 s to say so). `PP_DTSENSITIVE 13` WAS
+live and saved (mini PC up 14 days, `aec-trial.sh show` confirmed), so step1
+is not enough. The cmd clip (`cmd-20260903-165844.wav`) shows 1.1 s of floor
+after capture start and speech surfacing mid-sentence; the head of the
+phrase was spoken 0.5–1.2 s after the chime ended and is absent from the
+audio. Tally since step1: 1 hard loss in ~40 kitchen commands (vs ~5/25
+before), so the fix cut it 5–10x but did not close it. The 08-26 "5/5" was
+judged by transcript; the browser now shows one of those very test clips
+(`cmd-20260826-211430`, "what time is it") with the floor held 5 dB down
+right up to the first word — transcript survived, audio was damaged.
+Adrienne is hit more than Brad: she speaks sooner and from farther away.
+
+- `~/aec-trial.sh step2` applied 2026-09-03 17:20 (PP_GAMMA_ETAIL 1.0→0.5)
+  — **FAILED**: Brad listened to the 18:20 "who let dogs out fast version"
+  and 18:24 "what does the fox say" clips (both "play …" with the head
+  gone, onset 1.3 s into capture). No trace of the ding survives the AEC;
+  the clamp simply lingers ~1 s after the far end stops, and everyone waits
+  for the ding, so it lands on the first word every time.
+- `~/aec-trial.sh step3` applied 2026-09-03 ~18:45 (PP_NLATTENONOFF 1→0,
+  the non-linear residual-echo attenuator = the clamp itself; DTSENSITIVE 13
+  and GAMMA_ETAIL 0.5 stay). **VOLATILE** — `save` to keep, `step2` to go
+  back. Listen test pending. Last rung: `nuke` (PP_ECHOONOFF 0, linear AEC
+  only ~30 dB — expect music bleed into ASR).
+- **step3 verdict (Brad, ~19:45):** "set a timer for five seconds" clean,
+  "play crap wave" still just clipped the head of "play" (lag remains), and
+  **cancel-during-music was noticeably worse** — NLATTEN is what makes
+  wake-over-music work. The ladder trades the two against each other, so
+  the two-stream path was built instead (below) and the array is back at
+  the saved step1 state (`revert` + `step1`, 2026-09-03 20:03).
+- **Measured 20:00 with the satellite stopped for 15 s** (chime through the
+  big speakers, 2-ch 16 k capture, no talker): ch0 dips ~4 dB during the
+  ding and recovers ~0.1 s after it; ch1 = `MUX_AEC_RESIDUALS 3` (linear
+  AEC residual of mic 3, no post-processing) shows the chime's linear
+  residual at ~−40 dBFS over a −50 dBFS floor and NO hangover — there is no
+  suppressor on that path to hang. `AUDIO_MGR_OP_R 8 1` (user-chosen 1) was
+  tried and is just a copy of ch0, so the "ASR output" is not reachable
+  that way; ch1 stays on the residual. Recordings: `/tmp/chtest/` on .251.
+
+### Two-stream capture (SHIPPED 2026-09-03 20:03, kitchen only)
+
+`satellite/assistant.py`: `MIC_CHANNELS=2` opens the array stereo via
+`plughw:CARD=Array`; a `StereoDemux` wrapper hands every existing reader
+ch0 exactly as before (wake model, verify pre-roll, Silero endpointing,
+stop/alarm barge-in, `/mark` ring) and keeps the same frames' ch1 as
+`last_side`; `capture_command` appends `last_side` to the command buffer
+when `CMD_CHANNEL=1`. So `/command/audio` gets ch0 pre-roll + ch1 command
+(a level step at the seam — Parakeet doesn't care), and the ding's clamp on
+ch0 can no longer remove anything from the command. `CMD_CHANNEL_GAIN`
+(1.0) is a software gain on ch1 (no AGC there; floor ~10 dB below ch0 —
+raise it if commands transcribe weak). Kitchen `.env` now:
+`MIC_DEVICE=plughw:CARD=Array`, `MIC_CHANNELS=2`, `CMD_CHANNEL=1`,
+`CMD_CHANNEL_GAIN=1.0`. Rollback: `.env.pre-2stream` + `assistant.py.pre-2stream`
+in `~/voice-pipeline`, restart `voice-assistant`. Other satellites are
+untouched (`MIC_CHANNELS` defaults to 1). Caveats: the 1 MB pipe is now
+16 s of headroom instead of 32 (a >16 s ask overruns, but that backlog is
+drained anyway); VAD still judges ch0, so a command spoken ENTIRELY inside
+the clamp (~1 s, e.g. a lone "stop") can still endpoint as no speech.
+Correction to the earlier note: the wake turn deliberately does NOT drain
+after the chime, so the capture starts at the trigger and the ding sits
+~0.4–1.4 s into it (grey band in the clip browser).
+
+- Structural option if the ladder costs too much over music: the array has
+  a separate ASR output path (`AEC_ASROUTONOFF` 1, `AEC_ASROUTGAIN` 1.0,
+  lighter post-processing by design) and the USB R channel is freely
+  routable (`AUDIO_MGR_OP_R`, currently `MUX_AEC_RESIDUALS 3` = linear AEC
+  residual of mic 3, no PP). Point R at the ASR output (or leave the linear
+  residual), add `pcm.respeaker_ch1` in `~/.asoundrc` (ttable.0.1), and
+  capture commands from ch1 while wake stays on ch0. The XMOS docs are not
+  in the on-box repo — the USER_CHOSEN_CHANNELS source index for the ASR
+  output needs the XVF3800 user guide.
+- Clip browser (http://192.168.10.251:8782/) now draws the 50 ms RMS
+  envelope per clip: dotted line = capture start, yellow band = capture
+  start → first speech, red = onset; `clamp` = floor in that band minus the
+  clip's own tail floor (negative = suppressor holding the mic down);
+  `?only=suspect` lists cmd clips whose transcript opens on a non-head word
+  ("for", "a", "the", a number…) or whose floor was held ≥4 dB down until an
+  onset 0.2–1.2 s in. Listen test protocol: say "set a timer for five
+  minutes" starting ON the ding from where you normally stand, then play the
+  clip and listen for "set a" inside the yellow band — judge by ear and by
+  the band, not by the transcript. Source: `voice-assistant/tools/kitchen-aec/clip-browser.py`.
+
 Found alongside (different bug, all satellites): the spurious-onset guard
 in `capture_command` discarded any wake-turn command under 500 ms of voice
 because the "decided on buffered audio" lag test is true for the whole

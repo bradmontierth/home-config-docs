@@ -55,6 +55,21 @@ WAKE_PHRASE = os.getenv("WAKE_PHRASE", "okay computer")
 TRIGGER_THRESHOLD = float(os.getenv("TRIGGER_THRESHOLD", "0.5"))
 HOP_MS = int(os.getenv("HOP_MS", "352"))
 MIC_DEVICE = os.getenv("MIC_DEVICE", "plughw:CARD=microphone")
+# Two-stream capture (kitchen, 2026-09-03). The XVF3800's comms output (USB
+# ch0: AEC + beamform + NS + AGC + residual-echo suppressor) is what makes
+# "okay computer" work over music, but its suppressor keeps the mic clamped
+# for ~1 s after our own chime and eats the first word of any command spoken
+# on the ding (DTSENSITIVE/GAMMA_ETAIL/NLATTEN ladder: every rung that freed
+# the first word also let music back in). USB ch1 is routable on-chip and set
+# to the linear AEC residual (no post-processing at all -> nothing to hang
+# over). So: wake detection, verify pre-roll, VAD endpointing, stop/alarm
+# barge-in all stay on ch0; the COMMAND bytes come from ch1. MIC_CHANNELS=2
+# opens the array stereo; CMD_CHANNEL picks the command channel (0 = old
+# single-stream behaviour even in stereo); CMD_CHANNEL_GAIN is a plain
+# software gain on it (the residual has no AGC, ~10 dB below ch0).
+MIC_CHANNELS = int(os.getenv("MIC_CHANNELS", "1"))
+CMD_CHANNEL = int(os.getenv("CMD_CHANNEL", "0"))
+CMD_CHANNEL_GAIN = float(os.getenv("CMD_CHANNEL_GAIN", "1.0"))
 PLAYBACK_DEVICE = os.getenv("PLAYBACK_DEVICE", "plughw:CARD=Headphones")
 ORCH_BASE = os.getenv("ORCH_BASE", "http://192.168.10.217:8785")
 SOUNDS_DIR = Path(os.getenv("SOUNDS_DIR", "/home/pi/voice-pipeline/sounds"))
@@ -430,6 +445,41 @@ def wrap_wav(pcm: bytes) -> bytes:
 
 
 # --- audio in/out ----------------------------------------------------------
+class StereoDemux:
+    """Wraps the arecord pipe when MIC_CHANNELS=2. read(n) returns n bytes of
+    the PRIMARY channel (ch0) exactly like the mono pipe did, so every existing
+    reader is unchanged; the same frames' side channel is kept in `last_side`
+    for the one reader that wants it (capture_command's command buffer).
+    fileno() is the pipe's, so drain_input's non-blocking trick still works."""
+
+    def __init__(self, pipe, side: int, gain: float = 1.0, use_side: bool = True):
+        self.pipe = pipe
+        self.side = 1 if side else 0
+        self.gain = gain
+        self.use_side = use_side      # False: stereo device, command stays on ch0
+        self.last_side = b""
+        self._rem = b""
+
+    def fileno(self):
+        return self.pipe.fileno()
+
+    def read(self, n: int):
+        raw = self.pipe.read(2 * n)
+        if raw is None:
+            return None
+        raw = self._rem + raw
+        cut = len(raw) - (len(raw) % 4)
+        raw, self._rem = raw[:cut], raw[cut:]
+        if not raw:
+            return b""
+        a = np.frombuffer(raw, dtype=np.int16).reshape(-1, 2)
+        side = a[:, self.side]
+        if self.gain != 1.0:
+            side = np.clip(side.astype(np.float32) * self.gain, -32768, 32767).astype(np.int16)
+        self.last_side = side.tobytes()
+        return a[:, 1 - self.side].tobytes()
+
+
 def drain_input(stdout) -> None:
     """Discard whatever the mic buffered during our own playback (chime/alarm
     bleed) so the next capture starts on live audio, not our own sound."""
@@ -800,7 +850,9 @@ def capture_command(stdout, vad, min_capture_ms: int = MIN_CAPTURE_MS,
             reason = "stream_end"
             break
         total_ms += VAD_FRAME_MS
-        frames.append(b)
+        # Command bytes come from the side channel when there is one (see
+        # MIC_CHANNELS); the VAD below keeps judging the processed channel.
+        frames.append(stdout.last_side if getattr(stdout, "use_side", False) else b)
         try:
             is_speech = vad.is_speech(b)
         except Exception:  # noqa: BLE001
@@ -1833,8 +1885,17 @@ def main() -> int:
 
     arecord = subprocess.Popen(
         ["arecord", "-D", MIC_DEVICE, "-f", "S16_LE", "-r", str(SAMPLE_RATE),
-         "-c", "1", "-t", "raw", "-q"],
+         "-c", str(MIC_CHANNELS), "-t", "raw", "-q"],
         stdout=subprocess.PIPE)
+    # Everything below reads `mic`, which is the raw pipe for a mono device and
+    # a StereoDemux (ch0 out, command channel on the side) for MIC_CHANNELS=2.
+    if MIC_CHANNELS == 2:
+        mic = StereoDemux(arecord.stdout, side=1, gain=CMD_CHANNEL_GAIN,
+                          use_side=bool(CMD_CHANNEL))
+        if CMD_CHANNEL:
+            log(f"two-stream capture: wake/VAD on ch0, command on ch1 gain={CMD_CHANNEL_GAIN}")
+    else:
+        mic = arecord.stdout
     # The default 64KB pipe holds only ~2.0s of 16k mono audio. Reply playback
     # blocks the reader for 5-8s and the pre-capture seam (verify+chime) for up
     # to ~2s — both overflowed it, making arecord overrun and silently DROP mic
@@ -1868,7 +1929,7 @@ def main() -> int:
 
     def resync():
         nonlocal window, frames_since_hop, guard_until, wake_filled, frames_since_resync
-        drain_input(arecord.stdout)
+        drain_input(mic)
         window = np.zeros(WINDOW_SAMPLES, dtype=np.int16)
         frames_since_hop = 0
         wake_filled = 0
@@ -1913,7 +1974,7 @@ def main() -> int:
                 except Exception as exc:  # noqa: BLE001
                     log(f"ring capture open failed: {exc}")
                     ring_wav = None
-            b = arecord.stdout.read(SileroVad.CHUNK * 2)
+            b = mic.read(SileroVad.CHUNK * 2)
             if not b or len(b) < SileroVad.CHUNK * 2:
                 log("arecord stream ended; exiting for restart")
                 return 1
@@ -1975,7 +2036,7 @@ def main() -> int:
                 ring_wav = None
             resync()
 
-        chunk = arecord.stdout.read(frame_bytes)
+        chunk = mic.read(frame_bytes)
         if not chunk or len(chunk) < frame_bytes:
             log("arecord stream ended; exiting for restart")
             return 1
@@ -1994,7 +2055,7 @@ def main() -> int:
                 media_stop()
                 duck_music()
                 try:
-                    run_manual_turn(arecord.stdout, vad)
+                    run_manual_turn(mic, vad)
                 finally:
                     unduck_music()
                 resync()
@@ -2047,7 +2108,7 @@ def main() -> int:
         take = min(preroll_frames, frames_since_resync)
         preroll = b"".join(list(ring)[-take:]) if take else b""
         media_stop()   # slideshow video audio would talk over the turn
-        run_turn(preroll, arecord.stdout, vad, now,
+        run_turn(preroll, mic, vad, now,
                  peak_score=peak, model=top_key)
         resync()
 
