@@ -85,3 +85,30 @@ WAV, looping with ~4s dismiss gaps. Best-effort until that service exists.
 - restart-safety: timers reload from absolute `ends_at`; an expiry missed
   during downtime fires on startup.
 - events confirmed arriving over the real dashboard `/api/live` socket.
+
+## Final ASR hedge (2026-09-04)
+
+`/command/audio` decodes through `clients.transcribe_final`. With
+`FINAL_ASR_URL` unset it is plain Parakeet (`ASR_URL`), as before. With it set
+(Cohere Transcribe on the GX10, `:8099/cohere/transcribe`, same contract as
+Parakeet), the clip goes to both at once: the primary's answer is used when it
+lands inside `FINAL_ASR_DEADLINE_MS` OR ahead of Parakeet's, whichever is
+later (the GX10 slows both models ~3x while the local LLM is generating), never
+past `FINAL_ASR_HARD_CAP_MS`, and passes the sanity checks; Parakeet's
+otherwise. Partials, wake verify and the shadow decodes stay on Parakeet.
+
+Sanity checks on an in-time primary: a word repeated more than
+`FINAL_ASR_MAX_REPEAT` times in a row (`repeat`); more than 3x Parakeet's word
+count AND at least `FINAL_ASR_LENGTH_MIN_WORDS` words (`length`); an empty
+transcript when Parakeet heard something (`empty`). A primary HTTP/connection
+failure or hard-cap miss trips a `FINAL_ASR_BREAKER_S` Parakeet-only window; a
+lost race (`timeout`) does not, it cost nothing. The Parakeet leg retries once
+on 429 (its API rejects past two in-flight decodes).
+
+Per turn the row records `asr_model`, `asr_primary_ms`, `asr_fallback_ms` and
+`asr_fallback_reason` (`none | timeout | http_<code> | error | hard_cap | repeat |
+length | empty | breaker`); voice-ops shows them on the turn page. `asr_fallback_ms`
+is NULL on a primary win when Parakeet had not finished yet.
+
+Rollback: comment `FINAL_ASR_URL` out of `~/voice-pipeline/docker-compose.yml`
+and `docker compose up -d`. Tests: `test_final_asr.py`.

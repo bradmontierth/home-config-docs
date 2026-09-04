@@ -1673,8 +1673,17 @@ async def command_audio(request: Request, followup: bool = False,
                              reject_reason="yield", arb_winner=_ARB["sat"])
             return {"ok": False, "yield": True, "winner": _ARB["sat"],
                     "transcript": "", "response": "", "intent": "none"}
-    transcript = await clients.transcribe(wav)
-    log.info("command sat=%s followup=%s transcript=%r", sat, followup, transcript)
+    # The final decode: hedged Cohere/Parakeet when FINAL_ASR_URL is set,
+    # plain Parakeet otherwise (clients.transcribe_final). Partials, verify
+    # and the shadow paths above stay on Parakeet.
+    asr = await clients.transcribe_final(wav)
+    transcript = asr.text
+    log.info("command sat=%s followup=%s transcript=%r%s", sat, followup,
+             transcript,
+             f" asr={asr.model} primary_ms={asr.primary_ms} "
+             f"fallback_ms={asr.fallback_ms} reason={asr.fallback_reason or 'none'}"
+             if asr.model else "")
+    turns_mod.update(turn_id, **asr.turn_fields())
     if stitched and transcript:
         wake_found, command, _ = verify.verify_and_extract(transcript)
         if wake_found:

@@ -72,7 +72,11 @@ CREATE TABLE IF NOT EXISTS turns (
     arb_turn_id    TEXT,
     other_sat      TEXT,
     other_stage1   REAL,
-    other_rms_db   REAL
+    other_rms_db   REAL,
+    asr_model      TEXT,
+    asr_primary_ms INTEGER,
+    asr_fallback_ms INTEGER,
+    asr_fallback_reason TEXT
 );
 CREATE INDEX IF NOT EXISTS turns_at  ON turns(at DESC);
 CREATE INDEX IF NOT EXISTS turns_sat ON turns(sat, at DESC);
@@ -87,6 +91,7 @@ _UPDATABLE = frozenset({
     "chime_ms", "rtt_ms", "server_ms", "asr_ms", "classify_ms", "handler_ms",
     "tts_ms", "total_ms", "clip", "ok", "backfilled",
     "wake_rms_db", "arb_turn_id", "other_sat", "other_stage1", "other_rms_db",
+    "asr_model", "asr_primary_ms", "asr_fallback_ms", "asr_fallback_reason",
 })
 
 # Applied on open, ignoring "duplicate column" — same pattern as timers.py.
@@ -104,6 +109,15 @@ _MIGRATIONS = (
     "ALTER TABLE turns ADD COLUMN other_sat TEXT",
     "ALTER TABLE turns ADD COLUMN other_stage1 REAL",
     "ALTER TABLE turns ADD COLUMN other_rms_db REAL",
+    # 2026-09-04 hedged final decode (clients.transcribe_final): which model's
+    # transcript the command ran on, both legs' wall time, and why Parakeet's
+    # answer was taken when it was (none | timeout | http_<code> | error |
+    # hard_cap | repeat | length | empty | breaker). NULL on rows decoded
+    # before the hedge.
+    "ALTER TABLE turns ADD COLUMN asr_model TEXT",
+    "ALTER TABLE turns ADD COLUMN asr_primary_ms INTEGER",
+    "ALTER TABLE turns ADD COLUMN asr_fallback_ms INTEGER",
+    "ALTER TABLE turns ADD COLUMN asr_fallback_reason TEXT",
 )
 
 _db: sqlite3.Connection | None = None

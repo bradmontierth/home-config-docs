@@ -15,6 +15,38 @@ ASR_URL = os.getenv("ASR_URL", "http://192.168.10.187:8090/parakeet/transcribe")
 # Named bias profile on the GX10 (per-client phrase biasing); the server falls
 # back to its "default" profile if the name doesn't exist.
 ASR_CLIENT = os.getenv("ASR_CLIENT", "kitchen")
+# Final-pass ASR for the /command/audio decode (2026-09-04): Cohere Transcribe
+# on the GX10, same request/response contract as ASR_URL. When set, the final
+# decode is HEDGED -- the clip goes to this URL and to Parakeet at the same
+# time, and Parakeet's answer is used whenever this one misses the deadline,
+# errors, or fails the sanity checks (clients.transcribe_final). Unset =
+# Parakeet only, exactly as before. Partials and wake verify never use it.
+FINAL_ASR_URL = os.getenv("FINAL_ASR_URL", "")
+# The primary is accepted if it returns within this OR before Parakeet's
+# result, whichever is later (the GX10 slows ~3x for both while the local LLM
+# is generating, so a fixed deadline alone would fall back on every busy
+# turn). Cohere p90 89 ms against Parakeet's 177, GPU idle.
+FINAL_ASR_DEADLINE_MS = int(os.getenv("FINAL_ASR_DEADLINE_MS", "250"))
+# Past this the primary is treated as wedged even if Parakeet is also late:
+# fall back and trip the breaker.
+FINAL_ASR_HARD_CAP_MS = int(os.getenv("FINAL_ASR_HARD_CAP_MS", "1500"))
+# A word repeated more than this many times in a row marks a decoder loop
+# (the "ding loop": an in-time result that is garbage) -> use Parakeet.
+FINAL_ASR_MAX_REPEAT = int(os.getenv("FINAL_ASR_MAX_REPEAT", "4"))
+# Length sanity: primary is rejected when it has more than 3x Parakeet's word
+# count AND at least this many words. The floor keeps a legitimately fuller
+# decode ("set a timer for five minutes" against a Parakeet "timer" whose head
+# was clipped by the chime) from being thrown away as a loop.
+FINAL_ASR_LENGTH_MIN_WORDS = int(os.getenv("FINAL_ASR_LENGTH_MIN_WORDS", "8"))
+# The Parakeet leg retries once after this pause on a 429 (its API rejects,
+# not queues, past two in-flight interactive decodes; a partial can still be
+# decoding when the final clip arrives).
+FINAL_ASR_RETRY_429_S = float(os.getenv("FINAL_ASR_RETRY_429_S", "0.15"))
+# After a primary timeout/error, go Parakeet-only for this long, then retry.
+FINAL_ASR_BREAKER_S = float(os.getenv("FINAL_ASR_BREAKER_S", "30"))
+# Label recorded as asr_model for a Parakeet result (its API has no model
+# field). The primary's own `model` field is recorded verbatim.
+ASR_FALLBACK_LABEL = os.getenv("ASR_FALLBACK_LABEL", "parakeet")
 # qwen3-next LLM (GX10), OpenAI-compatible; respects enable_thinking=false.
 LLM_URL = os.getenv("LLM_URL", "http://192.168.10.187:8095/v1/chat/completions")
 LLM_MODEL = os.getenv("LLM_MODEL", "qwen3-next")
