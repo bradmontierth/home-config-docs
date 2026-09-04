@@ -38,10 +38,19 @@ esphome:
 wifi:
   ssid: !secret wifi_ssid
   password: !secret wifi_password
+  # 2026-09-04: was LIGHT (compiled default). Continuous 16 kHz audio to the
+  # bridge; modem sleep only adds RX loss and 100+ ms RTT spikes (Claire
+  # pinged 2-186 ms). Same fix as the U6-LR C3s. See observability block.
+  power_save_mode: none
 
 api:
   encryption:
     key: !secret voice_pe_api_key
+  # 2026-09-04: default 15min. No completed API client for this long =
+  # reboot. During the 09-04 wedge the device dropped every client as
+  # "unresponsive" within ~3 min, so a wedge self-heals in <10 min instead
+  # of a red ring until someone pulls the plug.
+  reboot_timeout: 5min
   actions:
     - action: bridge_start_stream
       then:
@@ -274,3 +283,64 @@ voice_assistant:
   id: va
   use_wake_word: false
   on_client_connected: !remove
+
+# ---------------------------------------------------------------------------
+# Observability + self-heal (2026-09-04). Simon's unit wedged its IP stack
+# (answered ARP, dropped ping/TCP even from the UDM on its own VLAN, at
+# -30 dBm) with nothing on the device to say why. These sensors put heap,
+# Wi-Fi and uptime into HA history so the next wedge shows a trend, and the
+# API reboot_timeout turns a wedge into a self-reboot instead of a red ring
+# until someone pulls the plug. See home_config/wake-retrain-plan.md
+# "Simon Voice PE incident" and voice-assistant/tools/voicepe_diag.sh.
+# ---------------------------------------------------------------------------
+debug:
+  update_interval: 30s
+
+sensor:
+  - platform: debug
+    # Explicit ids: HA 2025.11's ESPHome integration derives unique_id from an
+    # object_id this firmware (API 1.14) no longer sends for name-only
+    # entities, so nameless-id sensors collapse onto one unique_id and all but
+    # the first are dropped ("Platform esphome does not generate unique IDs").
+    free:
+      name: "Free heap"
+      id: dbg_free_heap
+    block:
+      name: "Largest free block"
+      id: dbg_largest_block
+    loop_time:
+      name: "Loop time"
+      id: dbg_loop_time
+    psram:
+      name: "Free PSRAM"
+      id: dbg_free_psram
+  - platform: wifi_signal
+    name: "WiFi signal"
+    id: dbg_wifi_signal
+    update_interval: 30s
+  - platform: uptime
+    name: "Uptime"
+    id: dbg_uptime
+    update_interval: 60s
+
+text_sensor:
+  - platform: debug
+    reset_reason:
+      name: "Reset reason"
+      id: dbg_reset_reason
+  - platform: wifi_info
+    bssid:
+      name: "BSSID"
+      id: dbg_bssid
+    ip_address:
+      name: "IP address"
+      id: dbg_ip_address
+
+# Upstream sets `sensor: WARN` to keep debug-sensor updates out of the log.
+# Here the log IS the record: the <room>-voice-pe-logs container keeps every
+# "Sending state" line (docker json-file, 50 MB x 5), so heap/WiFi/uptime
+# history survives an HA that cannot register the entities.
+logger:
+  logs:
+    sensor: DEBUG
+    text_sensor: DEBUG

@@ -106,3 +106,61 @@ The spoken announcement is flushed before the listener arms. A successful
 dismissal plays the same local `dismiss.wav` confirmation as the Pi satellites;
 it has no Snapclient routing path. The center button remains an independent
 fallback.
+
+## Observability, self-heal, and the wedge playbook (2026-09-04)
+
+Simon's unit wedged its IP stack on 2026-09-04 (ring red-twinkle = firmware
+"no HA connection"; answered ARP but dropped ping/TCP even from the UDM on
+its own VLAN, at −30 dBm; drops had been escalating since 08-30). Nothing on
+the device said why, so both yamls now carry:
+
+- `sensor:` **Free heap, Largest free block, Loop time, Free PSRAM** (debug
+  platform, 30 s), **WiFi signal** (30 s), **Uptime** (60 s); `text_sensor:`
+  **Reset reason, BSSID, IP address**. **They do NOT reach HA**: HA 2025.11's
+  ESPHome integration builds unique_ids from an object_id this firmware
+  (API 1.14) no longer sends, so it keeps one sensor per type
+  (`wifi_signal`, `reset_reason`) and drops the rest ("Platform esphome does
+  not generate unique IDs") — explicit `id:`s did not help. Until HA is
+  upgraded past ~2026.1 the **record is the device log**: `logger.logs
+  sensor/text_sensor: DEBUG` makes the firmware print every state
+  (`[S][sensor]: 'Free heap' >> 117416 B`, every 30 s) into the
+  `<room>-voice-pe-logs` container. Healthy baseline 2026-09-04 after boot:
+  free heap ~117 kB, largest block 106 kB, loop 17–18 ms, PSRAM 4.1 MB,
+  Simon −30 dBm / Claire −47 dBm.
+- **Never adopt a Voice PE into HA** (Claire was, briefly, 2026-09-04): a
+  fresh HA entry registers an `assist_satellite` client, the device allows
+  ONE voice-assistant client ("Multiple API Clients attempting to connect to
+  Voice Assistant"), and the bridge silently loses the mic after the next
+  reboot. Simon's old entry (`Home Assistant Voice 094708`) predates that
+  entity and coexists; do not re-create it.
+- `wifi: power_save_mode: none` (compiled default was LIGHT; Claire pinged
+  2–186 ms). `api: reboot_timeout: 5min` (was 15) so a wedge that sheds every
+  client self-reboots inside ~10 min instead of waiting for a power pull.
+- Device-side logs are durable: `simon-voice-pe-logs` / `claire-voice-pe-logs`
+  compose services (`esphome logs`, restart unless-stopped, docker json-file
+  rotation 50 MB×5). `docker logs -t simon-voice-pe-logs` for host timestamps.
+  The pre-09-04 ad-hoc streamer's output is archived at
+  `/home/pi/backups/voice-pe/device-logs/`.
+- **Watchdog:** `watchdog/voicepe_watchdog.py` runs every minute from the
+  user timer `voicepe-watchdog.timer` (`watchdog/install.sh`, no sudo). A
+  bridge that is unreachable / `audio_started=false` / audio stale >60 s for
+  3 min gets one Pushover push with the TCP probe of the device and the HA
+  heap/WiFi/uptime/reset-reason snapshot, then one "back" push on recovery.
+  Covers simon, claire and the master Echo Dot bridge.
+
+**When the ring goes red or the push arrives**, before pulling power:
+
+```bash
+/home/pi/home_config/voice-assistant/tools/voicepe_diag.sh simon   # or claire
+```
+
+It prints bridge health, Beelink↔device sockets (Send-Q = device not
+ACKing), ping/TCP from the Beelink and from the UDM (ARP REACHABLE + no
+ping/TCP there = the device, not the AP/DHCP/MAC), the latest sensor values
+parsed from the device log (heap, largest block, loop time, WiFi, uptime),
+the device log's last events + drops per day, and the last turns. Save that output with the incident; then power-cycle if
+`reboot_timeout` has not already done it.
+
+Flash procedure is unchanged (compile + upload above); record new image
+hashes in `FIRMWARE-SHA256SUMS` and copy the images to
+`/home/pi/backups/voice-pe/<device>-<date>/`.

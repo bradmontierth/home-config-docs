@@ -344,3 +344,37 @@ Ethernet is not an option on the Voice PE hardware.
 **Watch (voice-ops, ~2026-09-11):** per-bridge fires/day + pass rate vs the
 baselines above; kitchen+family Adrienne verified count; first bridge rows
 with `stage1_score` populated (p10 of verified → threshold check).
+
+### Wedge prep SHIPPED 2026-09-04 16:30–16:55 (Brad: "get proactive… better armed")
+- **Firmware** (both Voice PEs, OTA'd twice, images + yamls in
+  `/home/pi/backups/voice-pe/*-20260904`, hashes in `FIRMWARE-SHA256SUMS`):
+  debug sensors free heap / largest block / loop time / PSRAM (30 s), WiFi
+  signal, uptime, reset reason, BSSID, IP; `wifi.power_save_mode: none`
+  (compiled default was LIGHT); `api.reboot_timeout: 5min` (was 15) so a
+  client-shedding wedge self-reboots. Ping jitter after: Simon 2–102 ms
+  (avg 35, was 190 avg right after the wedge), Claire 1–70 (avg 26, was 95).
+- **HA cannot hold the sensors** — HA 2025.11 vs firmware API 1.14 unique_id
+  clash, one sensor per type survives. So `logger.logs sensor/text_sensor:
+  DEBUG` and the record is the device log: compose services
+  `simon-voice-pe-logs` / `claire-voice-pe-logs` (restart unless-stopped,
+  docker rotation 50 MB×5); old ad-hoc streamer archived to
+  `/home/pi/backups/voice-pe/device-logs/`. Baseline: heap 117 kB, largest
+  block 106 kB, loop 17–18 ms.
+- **Lesson (cost 10 min of Claire's mic):** adopting Claire into HA to get
+  sensor history registered an `assist_satellite` client; the device allows
+  one voice-assistant client, so after the OTA reboot HA took the mic and
+  the bridge's `audio_started` went stale (444 s). Device log:
+  "Multiple API Clients attempting to connect to Voice Assistant". Entry
+  deleted, bridge restarted, streaming. Never adopt a Voice PE into HA.
+- **Watchdog** `voice-pe/watchdog/voicepe_watchdog.py`, user timer every
+  minute (`install.sh`, no sudo): bridge unreachable / `audio_started`
+  false / audio stale >60 s for 3 min → one Pushover with TCP probe + HA +
+  device-log sensor snapshot + the diag command; "back" push on recovery.
+  **First real alert fired 16:49:44 on Claire** (the HA conflict above).
+- **Playbook** `voice-assistant/tools/voicepe_diag.sh simon|claire` — the
+  whole 09-04 checklist in one run (bridge, sockets/Send-Q, Beelink + UDM
+  reachability + conntrack, sensors from the log, drops/day, last turns).
+- Open: HA upgrade (would restore sensor entities); HAVPE firmware is at the
+  newest release (26.6.0, 2026-06-18) — ESPHome builder 2026.7.4 → 2026.8.2
+  is the only bump available; Simon's HA entry is safe but must never be
+  re-created.

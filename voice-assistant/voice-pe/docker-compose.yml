@@ -8,6 +8,38 @@ services:
       - ../..:/workspace:ro
       - /home/pi/esphome/config/secrets.yaml:/config/secrets.yaml:ro
 
+  # Durable device-side log capture (2026-09-04). Replaces the 3-week
+  # `docker compose run esphome-voice-pe logs …` container that held the only
+  # evidence of Simon's IP-stack wedge but would have vanished on a host
+  # reboot. Docker's json-file rotation (50 MB x 5) bounds it; `docker logs -t`
+  # gives host timestamps. One per device so Claire is the control. Note each
+  # is one more API client on the device — if a wedge ever correlates with
+  # log-client reconnect churn, stop these first.
+  simon-voice-pe-logs:
+    image: ghcr.io/esphome/esphome:2026.7.4
+    container_name: simon-voice-pe-logs
+    network_mode: host
+    working_dir: /config
+    restart: unless-stopped
+    command: logs simon-voice-pe.yaml --device 192.168.30.62
+    volumes:
+      - ./config:/config
+      - ../..:/workspace:ro
+      - /home/pi/esphome/config/secrets.yaml:/config/secrets.yaml:ro
+
+  claire-voice-pe-logs:
+    image: ghcr.io/esphome/esphome:2026.7.4
+    container_name: claire-voice-pe-logs
+    network_mode: host
+    working_dir: /config
+    restart: unless-stopped
+    # Claire's unit is DHCP (192.168.30.60, not reserved) — fix here if it moves.
+    command: logs claire-voice-pe.yaml --device 192.168.30.60
+    volumes:
+      - ./config:/config
+      - ../..:/workspace:ro
+      - /home/pi/esphome/config/secrets.yaml:/config/secrets.yaml:ro
+
   simon-voice-bridge:
     build: ./bridge
     container_name: simon-voice-bridge

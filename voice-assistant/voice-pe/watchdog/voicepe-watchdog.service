@@ -1,0 +1,8 @@
+[Unit]
+Description=Voice PE / Echo Dot bridge-audio watchdog (Pushover after 3 min without audio)
+Documentation=file:/home/pi/home_config/voice-assistant/voice-pe/README.md
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /home/pi/home_config/voice-assistant/voice-pe/watchdog/voicepe_watchdog.py
+TimeoutStartSec=60

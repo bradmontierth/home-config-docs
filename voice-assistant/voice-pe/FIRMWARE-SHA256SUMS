@@ -4,3 +4,11 @@ ffbdf5f30d9a6470d679554c65401ed3f1289c467099a960726b8ef91b8678cf  firmware.ota.b
 # claire-voice-pe (built 2026-08-25, ESPHome 2026.7.4 / Voice PE 26.6.0; copies in /home/pi/backups/voice-pe/claire-voice-pe-20260825)
 b23cb252a18b21f1126cdaa056d020c42819c1dd12abd6906cc60ec9989ce257  claire-voice-pe/firmware.factory.bin
 36d5ac77dc18288ac09f15b3e62624311298afabae8af5adbefcf4fe99a002d2  claire-voice-pe/firmware.ota.bin
+
+# simon-voice-pe + claire-voice-pe (built + OTA-flashed 2026-09-04, ESPHome 2026.7.4 / Voice PE 26.6.0;
+# observability sensors + power_save none + api reboot_timeout 5min; copies + yamls in
+# /home/pi/backups/voice-pe/{simon,claire}-voice-pe-20260904)
+475d4ea4c3ee011e68d40808a848de340c9a4a396d9567a543606d06074149e1  simon-voice-pe-20260904/firmware.factory.bin
+f67580d4fd2c07eca1a0f5f50b4511023266b0a69203d744cab1fd693222fef9  simon-voice-pe-20260904/firmware.ota.bin
+e46b6a8045becb83732dc90d8b91287b182028360921c1eb2a28609ab3b511f7  claire-voice-pe-20260904/firmware.factory.bin
+7dc6e640a9c15a664f90500308425c57c66a7bfd5e728e449303cf963269d5a4  claire-voice-pe-20260904/firmware.ota.bin

@@ -1,0 +1,12 @@
+[Unit]
+Description=Run the Voice PE bridge-audio watchdog every minute
+Documentation=file:/home/pi/home_config/voice-assistant/voice-pe/README.md
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=1min
+AccuracySec=10s
+Unit=voicepe-watchdog.service
+
+[Install]
+WantedBy=timers.target
