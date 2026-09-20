@@ -435,6 +435,12 @@ class CodexSession:
                 self.claude_model_seen = str(message.get("model") or "")
                 if window is None:
                     window = 1_000_000 if "[1m]" in (self.codex_model or "") else 200_000
+            elif event_type == "system" and event.get("subtype") == "compact_boundary":
+                # No model reply follows a compaction, so the last assistant
+                # usage still describes the context that was just dropped.
+                post = (event.get("compact_metadata") or {}).get("post_tokens")
+                if post is not None:
+                    tokens, persist = int(post), True
             elif event_type == "result":
                 model_usage = event.get("modelUsage") or {}
                 entry = model_usage.get(getattr(self, "claude_model_seen", "")) or {}
@@ -1871,6 +1877,12 @@ def describe_claude_transcript(path: Path) -> Optional[ExternalSession]:
                 text = _message_text(message.get("content"))
                 if _is_real_prompt(text):
                     first_prompt = text
+            elif kind == "system" and event.get("subtype") == "compact_boundary":
+                # A compaction with no reply after it: the last assistant usage
+                # describes the context that was dropped.
+                post = (event.get("compactMetadata") or {}).get("postTokens")
+                if post is not None:
+                    tokens = int(post)
             elif kind == "assistant":
                 usage = message.get("usage") or {}
                 total = sum(int(usage.get(k) or 0) for k in ("input_tokens", "cache_read_input_tokens", "cache_creation_input_tokens"))
