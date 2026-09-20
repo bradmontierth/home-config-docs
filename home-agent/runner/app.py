@@ -95,6 +95,7 @@ class ExternalSession(BaseModel):
     cwd: str
     updated_at: float
     context_tokens: Optional[int] = None
+    model: Optional[str] = None
     live: bool = False
     live_detail: Optional[str] = None
 
@@ -842,6 +843,8 @@ def configured_claude_models() -> list[CodexModelInfo]:
 
 
 _claude_models_cache: tuple[float, list[CodexModelInfo]] = (0.0, [])
+# picker value -> resolved model name, from the same CLI answer
+_claude_resolved_models: dict[str, str] = {}
 CLAUDE_MODELS_CACHE_S = 600
 
 
@@ -877,6 +880,8 @@ def claude_models_from_cli() -> list[CodexModelInfo]:
         value = str(entry.get("value") or "")
         if not value or value == "default":
             continue
+        if entry.get("resolvedModel"):
+            _claude_resolved_models[value] = str(entry["resolvedModel"])
         description = str(entry.get("description") or "")
         headline, _, rest = description.partition(" \u00b7 ")
         models.append(
@@ -889,6 +894,18 @@ def claude_models_from_cli() -> list[CodexModelInfo]:
             )
         )
     return models
+
+
+def claude_picker_model(transcript_model: Optional[str]) -> Optional[str]:
+    """Picker id for the model name a transcript records ("claude-fable-5-1"
+    -> "claude-fable-5-1[1m]"), so an adopted session resumes on its own model."""
+    name = (transcript_model or "").split("[")[0].strip()
+    if not name or name.startswith("<"):
+        return None
+    for value, resolved in _claude_resolved_models.items():
+        if resolved.split("[")[0] == name:
+            return value
+    return normalize_codex_model(name)
 
 
 def discover_claude_models(force: bool = False) -> list[CodexModelInfo]:
@@ -1821,7 +1838,7 @@ def _is_real_prompt(text: str) -> bool:
 
 
 def describe_claude_transcript(path: Path) -> Optional[ExternalSession]:
-    title, last_prompt, cwd, tokens, interactive = "", "", "", None, False
+    title, last_prompt, cwd, tokens, interactive, model = "", "", "", None, False, None
     try:
         chunks = [_read_tail(path, 300_000)]
         if path.stat().st_size > 300_000:
@@ -1858,6 +1875,9 @@ def describe_claude_transcript(path: Path) -> Optional[ExternalSession]:
                 usage = message.get("usage") or {}
                 total = sum(int(usage.get(k) or 0) for k in ("input_tokens", "cache_read_input_tokens", "cache_creation_input_tokens"))
                 tokens = total or tokens
+                seen = str(message.get("model") or "")
+                if seen and not seen.startswith("<"):  # skip "<synthetic>"
+                    model = seen
     if not interactive or not cwd:
         # Headless (`-p`) sessions belong to Home Agent or other automation.
         return None
@@ -1871,6 +1891,7 @@ def describe_claude_transcript(path: Path) -> Optional[ExternalSession]:
         cwd=cwd,
         updated_at=path.stat().st_mtime,
         context_tokens=tokens,
+        model=claude_picker_model(model),
     )
 
 
@@ -2230,6 +2251,8 @@ async def adopt_external_session(request: AdoptRequest) -> SessionInfo:
         "adopted_from": str(path),
         "context_tokens": described.context_tokens,
     }
+    if described.model:
+        metadata["codex_model"] = described.model
     (session_dir / "metadata.json").write_text(json.dumps(metadata, indent=2) + "\n", encoding="utf-8")
     info = find_session_info(session_id)
     assert info is not None

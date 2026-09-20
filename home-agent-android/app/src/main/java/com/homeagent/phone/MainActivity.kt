@@ -1074,13 +1074,23 @@ fun HomeAgentApp(launchSessionId: MutableState<String?>) {
 
         selectedSessionTitle?.let {
             val agentName = selectedSessionAgent?.let { value -> " - ${agentLabel(value)}" }.orEmpty()
-            val effort = selectedSessionReasoning?.let { value -> " - ${reasoningLabel(value)}" }.orEmpty()
+            // A reply is sent with the Settings model and effort, not the ones
+            // the session last ran with, so show what the next reply will use.
+            val effort = " - ${reasoningLabel(reasoningEffort)}"
             val account = selectedSessionAccount
                 ?.takeIf { selectedSessionAgent != "claude" && codexAccounts.size > 1 }
                 ?.let { value -> " - ${codexAccountLabel(value, codexAccounts)}" }
                 .orEmpty()
-            val model = selectedSessionModel?.let { value -> " - ${codexModelLabel(value, codexModels + claudeModels)}" }.orEmpty()
-            Text("Selected: $it$agentName$effort$account$model", color = Muted, style = MaterialTheme.typography.bodySmall)
+            val allModels = codexModels + claudeModels
+            val replyModel = modelForAgent(activeAgent()).ifBlank { selectedSessionModel.orEmpty() }
+            val model = replyModel.takeIf { value -> value.isNotBlank() }
+                ?.let { value -> " - ${codexModelLabel(value, allModels)}" }
+                .orEmpty()
+            val was = selectedSessionModel
+                ?.takeIf { value -> value.isNotBlank() && replyModel.isNotBlank() && value != replyModel }
+                ?.let { value -> " (was ${codexModelLabel(value, allModels)})" }
+                .orEmpty()
+            Text("Selected: $it$agentName$effort$account$model$was", color = Muted, style = MaterialTheme.typography.bodySmall)
         }
 
         TalkButton(
