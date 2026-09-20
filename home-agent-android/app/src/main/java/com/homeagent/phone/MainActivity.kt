@@ -21,6 +21,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -101,6 +102,11 @@ import java.util.Date
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.delay
+import android.content.ComponentName
+import androidx.media3.common.MediaItem
+import androidx.media3.common.MediaMetadata
+import androidx.media3.session.MediaController
+import androidx.media3.session.SessionToken
 
 
 private val AppBackground = Color(0xFFF6F7F4)
@@ -156,6 +162,19 @@ private fun Intent.homeAgentSessionId(): String? {
 }
 
 
+// A Claude/Codex session on the box that Home Agent did not start (tmux, desk).
+data class ExternalSession(
+    val agent: String,
+    val threadId: String,
+    val title: String,
+    val cwd: String,
+    val updatedAt: Double,
+    val contextTokens: Long?,
+    val live: Boolean,
+    val liveDetail: String?
+)
+
+
 data class AgentSession(
     val sessionId: String,
     val title: String,
@@ -169,7 +188,9 @@ data class AgentSession(
     val reasoningEffort: String,
     val codexAccount: String,
     val codexModel: String,
-    val resumeFrom: String?
+    val resumeFrom: String?,
+    val contextTokens: Long? = null,
+    val contextWindow: Long? = null
 )
 
 
@@ -236,6 +257,16 @@ fun HomeAgentApp(launchSessionId: MutableState<String?>) {
     var codexAccount by remember { mutableStateOf(prefs.getString("codex_account", "account1") ?: "account1") }
     var codexModel by remember { mutableStateOf(prefs.getString("codex_model", "") ?: "") }
     var claudeModel by remember { mutableStateOf(prefs.getString("claude_model", "") ?: "") }
+    // "quick" = terse phone replies; "deep" = full-length planning/design answers.
+    var promptMode by remember { mutableStateOf(prefs.getString("prompt_mode", "quick") ?: "quick") }
+    var contextTokens by remember { mutableStateOf<Long?>(null) }
+    // Spoken-reply playback (PlaybackService owns the player; this is a remote).
+    var mediaController by remember { mutableStateOf<MediaController?>(null) }
+    var audioState by remember { mutableStateOf("idle") } // idle | preparing | loaded
+    var audioPlaying by remember { mutableStateOf(false) }
+    var audioPositionMs by remember { mutableStateOf(0L) }
+    var audioDurationMs by remember { mutableStateOf(0L) }
+    var contextWindow by remember { mutableStateOf<Long?>(null) }
     var codexAccounts by remember { mutableStateOf<List<CodexAccount>>(emptyList()) }
     var codexModels by remember { mutableStateOf<List<CodexModel>>(emptyList()) }
     var claudeModels by remember { mutableStateOf<List<CodexModel>>(emptyList()) }
@@ -248,6 +279,7 @@ fun HomeAgentApp(launchSessionId: MutableState<String?>) {
     var sessionRunning by remember { mutableStateOf(false) }
     var sessions by remember { mutableStateOf<List<AgentSession>>(emptyList()) }
     var showSessions by remember { mutableStateOf(false) }
+    var externalSessions by remember { mutableStateOf<List<ExternalSession>>(emptyList()) }
     var showSettings by remember { mutableStateOf(false) }
     var terminalExpanded by remember { mutableStateOf(false) }
     var selectedSessionId by remember { mutableStateOf<String?>(null) }
@@ -326,6 +358,10 @@ fun HomeAgentApp(launchSessionId: MutableState<String?>) {
                         ?: CodexAccount(accountId, codexAccountLabel(accountId, codexAccounts), false, false)
                     authDialogAccount = account
                 }
+                "context" -> {
+                    contextTokens = event.optLong("tokens", 0L).takeIf { it > 0L }
+                    contextWindow = event.optLong("window", 0L).takeIf { it > 0L }
+                }
                 "status" -> {
                     val nextStatus = event.optString("status", status)
                     status = nextStatus
@@ -345,6 +381,14 @@ fun HomeAgentApp(launchSessionId: MutableState<String?>) {
                                 (0 until tasks.length()).joinToString(", ") { tasks.optString(it) }
                             } else ""
                             status = if (summary.isBlank()) "Waiting on background work" else "Waiting: $summary"
+                        }
+                        "idle" -> {
+                            // Turn finished; the runner keeps the Claude process
+                            // warm so a follow-up reuses the prompt cache. Stay
+                            // attached, but let the next message go out as a resume.
+                            sessionRunning = false
+                            resetReconnect()
+                            status = "Done - session warm"
                         }
                         "exited" -> {
                             sessionRunning = false
@@ -381,6 +425,8 @@ fun HomeAgentApp(launchSessionId: MutableState<String?>) {
                     selectedSessionReasoning = info.reasoningEffort
                     selectedSessionAccount = info.codexAccount
                     selectedSessionModel = info.codexModel
+                    contextTokens = info.contextTokens
+                    contextWindow = info.contextWindow
                     if (info.status == "running" || info.status == "waiting") {
                         attachSession(id, selectedSessionTitle ?: info.title)
                     } else {
@@ -435,6 +481,16 @@ fun HomeAgentApp(launchSessionId: MutableState<String?>) {
         }
     }
 
+    fun refreshExternalSessions() {
+        listExternalSessions(client, gatewayUrl, token) { result ->
+            result.onSuccess {
+                externalSessions = it
+            }.onFailure {
+                terminal += "\n[sessions error] ${it.message}\n"
+            }
+        }
+    }
+
     fun refreshCodexAccounts() {
         listCodexAccounts(client, gatewayUrl, token) { result ->
             result.onSuccess { accounts ->
@@ -475,8 +531,8 @@ fun HomeAgentApp(launchSessionId: MutableState<String?>) {
         }
     }
 
-    fun refreshClaudeModels() {
-        listClaudeModels(client, gatewayUrl, token) { result ->
+    fun refreshClaudeModels(force: Boolean = false) {
+        listClaudeModels(client, gatewayUrl, token, force) { result ->
             result.onSuccess { models ->
                 claudeModels = models
                 val modelIds = models.map { it.modelId }.toSet()
@@ -573,6 +629,8 @@ fun HomeAgentApp(launchSessionId: MutableState<String?>) {
         selectedSessionReasoning = null
         selectedSessionAccount = null
         selectedSessionModel = null
+        contextTokens = null
+        contextWindow = null
         sessionRunning = false
         transcript = ""
         replyText = ""
@@ -581,6 +639,59 @@ fun HomeAgentApp(launchSessionId: MutableState<String?>) {
         lastRecordingFile = null
         canRetryTranscription = false
         status = "Ready"
+    }
+
+    fun playAudio(url: String, title: String) {
+        fun start(controller: MediaController) {
+            val item = MediaItem.Builder()
+                .setUri(url)
+                .setMediaMetadata(MediaMetadata.Builder().setTitle(title).setArtist("Home Agent").build())
+                .build()
+            controller.setMediaItem(item)
+            controller.prepare()
+            controller.play()
+            audioState = "loaded"
+        }
+        mediaController?.let { start(it); return }
+        val sessionToken = SessionToken(context, ComponentName(context, PlaybackService::class.java))
+        val future = MediaController.Builder(context, sessionToken).buildAsync()
+        future.addListener({
+            try {
+                val controller = future.get()
+                mediaController = controller
+                start(controller)
+            } catch (error: Exception) {
+                audioState = "idle"
+                terminal += "\n[audio error] ${error.message}\n"
+            }
+        }, ContextCompat.getMainExecutor(context))
+    }
+
+    fun listenToReply() {
+        val target = selectedSessionId ?: sessionId ?: return
+        audioState = "preparing"
+        speakSession(client, gatewayUrl, token, target) { result ->
+            result.onSuccess { path ->
+                playAudio("${gatewayUrl.trimEnd('/')}$path${tokenQuery(token)}", selectedSessionTitle ?: "Agent reply")
+            }.onFailure {
+                audioState = "idle"
+                terminal += "\n[audio error] ${it.message}\n"
+            }
+        }
+    }
+
+    fun compactContext() {
+        val target = selectedSessionId ?: sessionId ?: return
+        status = "Compacting $target"
+        compactSession(client, gatewayUrl, token, target) { result ->
+            result.onSuccess { id ->
+                terminal += "\n[compact] Compacting context on $id\n"
+                attachSession(id)
+            }.onFailure {
+                status = "Compact failed"
+                terminal += "\n[compact error] ${it.message}\n"
+            }
+        }
     }
 
     fun resumeOrSend(text: String) {
@@ -597,7 +708,7 @@ fun HomeAgentApp(launchSessionId: MutableState<String?>) {
         }
         status = "Resuming $target"
         val resumeAgent = activeAgent()
-        resumeSession(client, gatewayUrl, token, target, text, resumeAgent, reasoningEffort, codexAccount, modelForAgent(resumeAgent)) { result ->
+        resumeSession(client, gatewayUrl, token, target, text, resumeAgent, reasoningEffort, codexAccount, modelForAgent(resumeAgent), promptMode) { result ->
             result.onSuccess { id ->
                 terminal += "\n[resume] Continuing $target as $id\n"
                 attachSession(id)
@@ -682,9 +793,9 @@ fun HomeAgentApp(launchSessionId: MutableState<String?>) {
         }
         if (target == null) {
             selectedSessionAgent = runAgentId
-            startSession(client, gatewayUrl, token, transcript, runAgentId, reasoningEffort, codexAccount, modelForAgent(runAgentId), callback)
+            startSession(client, gatewayUrl, token, transcript, runAgentId, reasoningEffort, codexAccount, modelForAgent(runAgentId), promptMode, callback)
         } else {
-            resumeSession(client, gatewayUrl, token, target, transcript, runAgentId, reasoningEffort, codexAccount, modelForAgent(runAgentId), callback)
+            resumeSession(client, gatewayUrl, token, target, transcript, runAgentId, reasoningEffort, codexAccount, modelForAgent(runAgentId), promptMode, callback)
         }
     }
 
@@ -764,6 +875,21 @@ fun HomeAgentApp(launchSessionId: MutableState<String?>) {
         }
     }
 
+    LaunchedEffect(mediaController) {
+        val controller = mediaController ?: return@LaunchedEffect
+        while (true) {
+            audioPlaying = controller.isPlaying
+            audioPositionMs = controller.currentPosition.coerceAtLeast(0L)
+            audioDurationMs = controller.duration.coerceAtLeast(0L)
+            delay(500L)
+        }
+    }
+
+    DisposableEffect(Unit) {
+        // Releases only this remote; the service keeps playing in the background.
+        onDispose { mediaController?.release() }
+    }
+
     LaunchedEffect(authPollTrigger) {
         val login = authLoginSession ?: return@LaunchedEffect
         if (login.status != "running") return@LaunchedEffect
@@ -836,7 +962,7 @@ fun HomeAgentApp(launchSessionId: MutableState<String?>) {
             },
             onRefreshAccounts = ::refreshCodexAccounts,
             onRefreshModels = ::refreshCodexModels,
-            onRefreshClaudeModels = ::refreshClaudeModels,
+            onRefreshClaudeModels = { refreshClaudeModels(force = true) },
             onSaveCodexAccountLabel = ::saveCodexLabel,
             onStartCodexLogin = {
                 showSettings = false
@@ -904,6 +1030,25 @@ fun HomeAgentApp(launchSessionId: MutableState<String?>) {
                 modifier = Modifier.weight(1f)
             )
 
+            ListenBar(
+                state = audioState,
+                playing = audioPlaying,
+                positionMs = audioPositionMs,
+                durationMs = audioDurationMs,
+                enabled = hasCurrentSession && !sessionRunning && gatewayUrl.isNotBlank(),
+                onListen = ::listenToReply,
+                onToggle = { mediaController?.let { if (it.isPlaying) it.pause() else it.play() } },
+                onBack = { mediaController?.seekBack() },
+                onForward = { mediaController?.seekForward() }
+            )
+
+            ContextMeter(
+                tokens = contextTokens,
+                window = contextWindow,
+                canCompact = activeAgent() == "claude" && hasCurrentSession && !sessionRunning,
+                onCompact = ::compactContext
+            )
+
             StopAgentButton(onStop = ::stopAgent)
 
             QuickActions(
@@ -919,7 +1064,10 @@ fun HomeAgentApp(launchSessionId: MutableState<String?>) {
             status = status,
             onSessions = {
                 showSessions = !showSessions
-                if (showSessions) refreshSessions()
+                if (showSessions) {
+                    refreshSessions()
+                    refreshExternalSessions()
+                }
             },
             onSettings = { showSettings = true }
         )
@@ -928,7 +1076,7 @@ fun HomeAgentApp(launchSessionId: MutableState<String?>) {
             val agentName = selectedSessionAgent?.let { value -> " - ${agentLabel(value)}" }.orEmpty()
             val effort = selectedSessionReasoning?.let { value -> " - ${reasoningLabel(value)}" }.orEmpty()
             val account = selectedSessionAccount
-                ?.takeIf { selectedSessionAgent != "claude" }
+                ?.takeIf { selectedSessionAgent != "claude" && codexAccounts.size > 1 }
                 ?.let { value -> " - ${codexAccountLabel(value, codexAccounts)}" }
                 .orEmpty()
             val model = selectedSessionModel?.let { value -> " - ${codexModelLabel(value, codexModels + claudeModels)}" }.orEmpty()
@@ -961,6 +1109,14 @@ fun HomeAgentApp(launchSessionId: MutableState<String?>) {
             maxLines = 5
         )
 
+        ModeToggle(
+            mode = promptMode,
+            onChange = {
+                promptMode = it
+                prefs.edit().putString("prompt_mode", it).apply()
+            }
+        )
+
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -988,6 +1144,25 @@ fun HomeAgentApp(launchSessionId: MutableState<String?>) {
             }
         }
 
+        ListenBar(
+            state = audioState,
+            playing = audioPlaying,
+            positionMs = audioPositionMs,
+            durationMs = audioDurationMs,
+            enabled = hasCurrentSession && !sessionRunning && gatewayUrl.isNotBlank(),
+            onListen = ::listenToReply,
+            onToggle = { mediaController?.let { if (it.isPlaying) it.pause() else it.play() } },
+            onBack = { mediaController?.seekBack() },
+            onForward = { mediaController?.seekForward() }
+        )
+
+        ContextMeter(
+            tokens = contextTokens,
+            window = contextWindow,
+            canCompact = activeAgent() == "claude" && hasCurrentSession && !sessionRunning,
+            onCompact = ::compactContext
+        )
+
         StopAgentButton(onStop = ::stopAgent)
 
         Terminal(
@@ -1013,8 +1188,29 @@ fun HomeAgentApp(launchSessionId: MutableState<String?>) {
             ) {
                 SessionDrawer(
                     sessions = sessions,
+                    externalSessions = externalSessions,
+                    onAdopt = { external ->
+                        status = "Opening ${external.title.take(40)}"
+                        adoptExternalSession(client, gatewayUrl, token, external) { result ->
+                            result.onSuccess { session ->
+                                selectedSessionTitle = session.displayTitle.ifBlank { session.title }
+                                selectedSessionAgent = session.agent.takeIf { value -> value.isNotBlank() }
+                                selectedSessionReasoning = null
+                                selectedSessionAccount = session.codexAccount.takeIf { value -> value.isNotBlank() }
+                                selectedSessionModel = null
+                                loadSession(session.sessionId, expandTerminal = true)
+                                showSessions = false
+                            }.onFailure {
+                                status = "Open failed"
+                                terminal += "\n[adopt error] ${it.message}\n"
+                            }
+                        }
+                    },
                     selectedSessionId = selectedSessionId,
-                    onRefresh = ::refreshSessions,
+                    onRefresh = {
+                        refreshSessions()
+                        refreshExternalSessions()
+                    },
                     onDismiss = { showSessions = false },
                     onSelect = { session ->
                         selectedSessionTitle = session.displayTitle.ifBlank { session.title }
@@ -1203,14 +1399,18 @@ fun SettingsDialog(
                         onRefresh = onRefreshClaudeModels
                     )
                 } else {
-                    CodexAccountSelector(
-                        selected = codexAccount,
-                        accounts = codexAccounts,
-                        onSelected = onCodexAccount,
-                        onRefresh = onRefreshAccounts,
-                        onSaveLabel = onSaveCodexAccountLabel,
-                        onStartLogin = onStartCodexLogin
-                    )
+                    // One login (the machine's) is the normal setup now; the
+                    // switcher only appears if the runner is given several again.
+                    if (codexAccounts.size > 1) {
+                        CodexAccountSelector(
+                            selected = codexAccount,
+                            accounts = codexAccounts,
+                            onSelected = onCodexAccount,
+                            onRefresh = onRefreshAccounts,
+                            onSaveLabel = onSaveCodexAccountLabel,
+                            onStartLogin = onStartCodexLogin
+                        )
+                    }
                     AgentModelSelector(
                         title = "Codex model",
                         selected = codexModel,
@@ -1529,6 +1729,8 @@ fun CodexLoginDialog(
 @Composable
 fun SessionDrawer(
     sessions: List<AgentSession>,
+    externalSessions: List<ExternalSession>,
+    onAdopt: (ExternalSession) -> Unit,
     selectedSessionId: String?,
     onRefresh: () -> Unit,
     onDismiss: () -> Unit,
@@ -1536,6 +1738,7 @@ fun SessionDrawer(
 ) {
     val groups = remember(sessions) { groupedSessions(sessions) }
     var expandedGroups by remember(groups) { mutableStateOf<Set<String>>(emptySet()) }
+    var showExternal by remember { mutableStateOf(false) }
     Card(
         modifier = Modifier
             .fillMaxHeight()
@@ -1568,7 +1771,41 @@ fun SessionDrawer(
                     }
                 }
             }
-            if (sessions.isEmpty()) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                listOf(false to "Home Agent", true to "This machine").forEach { (external, label) ->
+                    if (showExternal == external) {
+                        Button(
+                            onClick = {},
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.buttonColors(containerColor = Primary)
+                        ) { Text(label) }
+                    } else {
+                        OutlinedButton(onClick = { showExternal = external }, modifier = Modifier.weight(1f)) {
+                            Text(label)
+                        }
+                    }
+                }
+            }
+            if (showExternal) {
+                if (externalSessions.isEmpty()) {
+                    Text("No terminal sessions found.", color = Muted)
+                } else {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f)
+                            .verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        externalSessions.forEach { external ->
+                            ExternalSessionRow(external = external, onClick = { onAdopt(external) })
+                        }
+                    }
+                }
+            } else if (sessions.isEmpty()) {
                 Text("No sessions found.", color = Muted)
             } else {
                 Column(
@@ -1595,6 +1832,48 @@ fun SessionDrawer(
                         )
                     }
                 }
+            }
+        }
+    }
+}
+
+
+fun relativeAge(epochSeconds: Double): String {
+    val minutes = ((System.currentTimeMillis() / 1000.0 - epochSeconds) / 60.0).toLong().coerceAtLeast(0L)
+    return when {
+        minutes < 1L -> "just now"
+        minutes < 60L -> "${minutes}m ago"
+        minutes < 48L * 60L -> "${minutes / 60L}h ago"
+        else -> "${minutes / (60L * 24L)}d ago"
+    }
+}
+
+
+@Composable
+fun ExternalSessionRow(external: ExternalSession, onClick: () -> Unit) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(8.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        border = BorderStroke(1.dp, Color(0xFFD7E2DD))
+    ) {
+        Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Text(external.title, color = Ink, fontWeight = FontWeight.Bold, maxLines = 2)
+            val folder = external.cwd.removePrefix("/home/pi/").ifBlank { external.cwd }
+            val context = external.contextTokens?.let { " - ${formatTokens(it)} context" }.orEmpty()
+            Text(
+                "${agentLabel(external.agent)} - $folder - ${relativeAge(external.updatedAt)}$context",
+                color = Muted,
+                style = MaterialTheme.typography.bodySmall
+            )
+            if (external.live) {
+                Text(
+                    "Open in ${external.liveDetail ?: "a terminal"} - replies here continue on a fork",
+                    color = Color(0xFFB7791F),
+                    style = MaterialTheme.typography.bodySmall
+                )
             }
         }
     }
@@ -1821,6 +2100,115 @@ fun RetryTranscribeButton(
         Text(if (isTranscribing) "Transcribing" else "Retry Transcribe Last Recording")
     }
 }
+
+fun formatClock(ms: Long): String {
+    val seconds = ms / 1000L
+    return "%d:%02d".format(seconds / 60L, seconds % 60L)
+}
+
+
+@Composable
+fun ListenBar(
+    state: String,
+    playing: Boolean,
+    positionMs: Long,
+    durationMs: Long,
+    enabled: Boolean,
+    onListen: () -> Unit,
+    onToggle: () -> Unit,
+    onBack: () -> Unit,
+    onForward: () -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        OutlinedButton(onClick = onListen, enabled = enabled && state != "preparing", modifier = Modifier.weight(1f)) {
+            Text(
+                when (state) {
+                    "preparing" -> "Preparing audio..."
+                    "loaded" -> "Listen to latest reply"
+                    else -> "Listen to reply"
+                }
+            )
+        }
+        if (state == "loaded") {
+            TextButton(onClick = onBack) { Text("-15", color = Primary) }
+            TextButton(onClick = onToggle) { Text(if (playing) "Pause" else "Play", color = Primary, fontWeight = FontWeight.Bold) }
+            TextButton(onClick = onForward) { Text("+30", color = Primary) }
+            Text("${formatClock(positionMs)} / ${formatClock(durationMs)}", color = Muted, style = MaterialTheme.typography.bodySmall)
+        }
+    }
+}
+
+
+fun formatTokens(value: Long): String =
+    if (value >= 1_000_000L) String.format("%.1fM", value / 1_000_000.0) else "${value / 1000}k"
+
+
+@Composable
+fun ContextMeter(tokens: Long?, window: Long?, canCompact: Boolean, onCompact: () -> Unit) {
+    if (tokens == null) return
+    val fraction = if (window != null && window > 0L) (tokens.toFloat() / window).coerceIn(0f, 1f) else 0f
+    val barColor = when {
+        fraction >= 0.8f -> Danger
+        fraction >= 0.6f -> Color(0xFFB7791F)
+        else -> Primary
+    }
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            val label = if (window != null) {
+                "Context ${formatTokens(tokens)} / ${formatTokens(window)} (${(fraction * 100).toInt()}%)"
+            } else {
+                "Context ${formatTokens(tokens)}"
+            }
+            Text(label, color = Muted, style = MaterialTheme.typography.bodySmall)
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(5.dp)
+                    .background(Color(0x22000000), RoundedCornerShape(3.dp))
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth(fraction)
+                        .height(5.dp)
+                        .background(barColor, RoundedCornerShape(3.dp))
+                )
+            }
+        }
+        if (canCompact) {
+            TextButton(onClick = onCompact) { Text("Compact", color = Primary) }
+        }
+    }
+}
+
+
+@Composable
+fun ModeToggle(mode: String, onChange: (String) -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        listOf("quick" to "Quick fix", "deep" to "Deep / long-form").forEach { (value, label) ->
+            if (mode == value) {
+                Button(
+                    onClick = {},
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.buttonColors(containerColor = Primary)
+                ) { Text(label) }
+            } else {
+                OutlinedButton(onClick = { onChange(value) }, modifier = Modifier.weight(1f)) { Text(label) }
+            }
+        }
+    }
+}
+
 
 @Composable
 fun StopAgentButton(onStop: () -> Unit) {
@@ -2191,10 +2579,12 @@ fun startSession(
     reasoningEffort: String,
     codexAccount: String,
     codexModel: String,
+    mode: String,
     callback: (Result<String>) -> Unit
 ) {
     val json = JSONObject(
         mapOf(
+            "mode" to mode,
             "text" to transcript,
             "agent" to agent,
             "reasoning_effort" to reasoningEffort,
@@ -2222,10 +2612,12 @@ fun resumeSession(
     reasoningEffort: String,
     codexAccount: String,
     codexModel: String,
+    mode: String,
     callback: (Result<String>) -> Unit
 ) {
     val json = JSONObject(
         mapOf(
+            "mode" to mode,
             "text" to text,
             "agent" to agent,
             "reasoning_effort" to reasoningEffort,
@@ -2258,6 +2650,53 @@ fun listSessions(
         (0 until array.length()).map { index ->
             parseAgentSession(array.getJSONObject(index))
         }
+    })
+}
+
+
+fun listExternalSessions(
+    client: OkHttpClient,
+    gatewayUrl: String,
+    token: String,
+    callback: (Result<List<ExternalSession>>) -> Unit
+) {
+    val request = Request.Builder()
+        .url("${gatewayUrl.trimEnd('/')}/api/external/sessions${tokenQuery(token)}")
+        .get()
+        .build()
+    client.newCall(request).enqueue(resultCallback(callback) { response ->
+        val array = JSONArray(response.body?.string().orEmpty())
+        (0 until array.length()).map { index ->
+            val item = array.getJSONObject(index)
+            ExternalSession(
+                agent = item.optString("agent", "claude"),
+                threadId = item.getString("thread_id"),
+                title = item.optString("title", item.getString("thread_id")),
+                cwd = item.optString("cwd", ""),
+                updatedAt = item.optDouble("updated_at", 0.0),
+                contextTokens = item.optLong("context_tokens", 0L).takeIf { it > 0L },
+                live = item.optBoolean("live", false),
+                liveDetail = item.optString("live_detail").takeIf { it.isNotBlank() && it != "null" }
+            )
+        }
+    })
+}
+
+
+fun adoptExternalSession(
+    client: OkHttpClient,
+    gatewayUrl: String,
+    token: String,
+    external: ExternalSession,
+    callback: (Result<AgentSession>) -> Unit
+) {
+    val json = JSONObject(mapOf("agent" to external.agent, "thread_id" to external.threadId)).toString()
+    val request = Request.Builder()
+        .url("${gatewayUrl.trimEnd('/')}/api/external/adopt${tokenQuery(token)}")
+        .post(json.toRequestBody("application/json".toMediaType()))
+        .build()
+    client.newCall(request).enqueue(resultCallback(callback) { response ->
+        parseAgentSession(JSONObject(response.body?.string().orEmpty()))
     })
 }
 
@@ -2312,6 +2751,7 @@ fun listClaudeModels(
     client: OkHttpClient,
     gatewayUrl: String,
     token: String,
+    force: Boolean = false,
     callback: (Result<List<CodexModel>>) -> Unit
 ) {
     if (gatewayUrl.isBlank()) {
@@ -2319,7 +2759,10 @@ fun listClaudeModels(
         return
     }
     val request = Request.Builder()
-        .url("${gatewayUrl.trimEnd('/')}/api/claude/models${tokenQuery(token)}")
+        .url(
+            "${gatewayUrl.trimEnd('/')}/api/claude/models${tokenQuery(token)}" +
+                if (force) (if (token.isBlank()) "?refresh=true" else "&refresh=true") else ""
+        )
         .get()
         .build()
     client.newCall(request).enqueue(resultCallback(callback) { response ->
@@ -2481,7 +2924,9 @@ fun parseAgentSession(item: JSONObject): AgentSession {
         reasoningEffort = item.optString("reasoning_effort", "medium"),
         codexAccount = item.optString("codex_account", "account1"),
         codexModel = item.optString("codex_model", ""),
-        resumeFrom = item.optString("resume_from").takeIf { it.isNotBlank() && it != "null" }
+        resumeFrom = item.optString("resume_from").takeIf { it.isNotBlank() && it != "null" },
+        contextTokens = item.optLong("context_tokens", 0L).takeIf { it > 0L },
+        contextWindow = item.optLong("context_window", 0L).takeIf { it > 0L }
     )
 }
 
@@ -2499,6 +2944,42 @@ fun fetchSessionLog(
         .build()
     client.newCall(request).enqueue(resultCallback(callback) { response ->
         JSONObject(response.body?.string().orEmpty()).optString("text")
+    })
+}
+
+
+fun speakSession(
+    client: OkHttpClient,
+    gatewayUrl: String,
+    token: String,
+    sessionId: String,
+    callback: (Result<String>) -> Unit
+) {
+    // Rendering a long reply takes a while; don't inherit the short API timeout.
+    val patient = client.newBuilder().readTimeout(300, java.util.concurrent.TimeUnit.SECONDS).build()
+    val request = Request.Builder()
+        .url("${gatewayUrl.trimEnd('/')}/api/sessions/$sessionId/speak${tokenQuery(token)}")
+        .post(ByteArray(0).toRequestBody(null))
+        .build()
+    patient.newCall(request).enqueue(resultCallback(callback) { response ->
+        JSONObject(response.body?.string().orEmpty()).getString("audio")
+    })
+}
+
+
+fun compactSession(
+    client: OkHttpClient,
+    gatewayUrl: String,
+    token: String,
+    sessionId: String,
+    callback: (Result<String>) -> Unit
+) {
+    val request = Request.Builder()
+        .url("${gatewayUrl.trimEnd('/')}/api/sessions/$sessionId/compact${tokenQuery(token)}")
+        .post(ByteArray(0).toRequestBody(null))
+        .build()
+    client.newCall(request).enqueue(resultCallback(callback) { response ->
+        JSONObject(response.body?.string().orEmpty()).getString("session_id")
     })
 }
 

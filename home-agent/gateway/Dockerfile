@@ -12,6 +12,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app.py ./app.py
+COPY speech.py ./speech.py
 COPY static ./static
 
 EXPOSE 8767

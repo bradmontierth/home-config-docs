@@ -15,6 +15,8 @@ from fastapi import FastAPI, File, HTTPException, Request, UploadFile, WebSocket
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
+import speech
+
 
 APP_NAME = "home-agent-gateway"
 LOGGER = logging.getLogger(__name__)
@@ -215,7 +217,49 @@ async def send_push_notification(title: str, body: str, data: dict[str, str]) ->
     return sent
 
 
-def build_prompt(transcript: str) -> str:
+# "quick" = small fixes from the phone, terse replies. "deep" = planning/design/
+# serious builds: full-length answers, often listened to as audio while driving.
+PROMPT_MODES = {"quick", "deep"}
+MODE_STYLE = {
+    "quick": "I am on my phone. Keep progress updates concise and clear.",
+    "deep": (
+        "I am on my phone, but this is a deep-work session (planning, design, or a substantial build), "
+        "so do not compress your answers for a small screen. When you lay out a plan, findings, or "
+        "trade-offs, write them in full the way you would at a desk: the complete reasoning, specifics "
+        "and numbers, and what you verified versus what you only suspect. I often listen to replies as "
+        "audio while driving, so prefer flowing, well-organized prose over terse bullets and tables. "
+        "Unconstrained is not padded: say everything that matters once. Progress updates while you "
+        "work can stay short."
+    ),
+}
+
+
+def normalize_mode(value: object) -> str:
+    mode = str(value or "").strip().lower()
+    return mode if mode in PROMPT_MODES else "quick"
+
+
+def modes_path() -> Path:
+    return SESSION_ROOT / "_modes.json"
+
+
+def read_modes() -> dict:
+    try:
+        data = json.loads(modes_path().read_text(encoding="utf-8"))
+    except (FileNotFoundError, OSError, json.JSONDecodeError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def remember_mode(conversation_id: str, mode: str) -> None:
+    if not conversation_id:
+        return
+    modes = read_modes()
+    modes[conversation_id] = mode
+    modes_path().write_text(json.dumps(modes, indent=2) + "\n", encoding="utf-8")
+
+
+def build_prompt(transcript: str, mode: str = "quick") -> str:
     return f"""You are helping with my home automation and home lab.
 
 Working directory:
@@ -223,7 +267,7 @@ Working directory:
 
 Read the markdown guides in this folder first and use them as the source of truth for hostnames, SSH targets, service ownership, troubleshooting paths, and operational constraints.
 
-I am on my phone. Keep progress updates concise and clear. Investigate freely with read-only commands. Before disruptive actions such as service restarts, config edits, SSH changes, package installs, destructive commands, or broad filesystem changes, state the proposed action and wait for explicit approval.
+{MODE_STYLE[mode]} Investigate freely with read-only commands. Before disruptive actions such as service restarts, config edits, SSH changes, package installs, destructive commands, or broad filesystem changes, state the proposed action and wait for explicit approval.
 
 When you need phone approval, end your message with exactly this marker on its own line:
 AWAITING_PHONE_APPROVAL: <short action summary>
@@ -437,10 +481,12 @@ async def list_codex_models(request: Request) -> list[dict]:
 
 
 @app.get("/api/claude/models")
-async def list_claude_models(request: Request) -> list[dict]:
+async def list_claude_models(request: Request, refresh: bool = False) -> list[dict]:
     require_token(request)
-    async with httpx.AsyncClient(timeout=20.0) as client:
-        response = await client.get(f"{RUNNER_URL.rstrip('/')}/claude/models")
+    async with httpx.AsyncClient(timeout=45.0) as client:
+        response = await client.get(
+            f"{RUNNER_URL.rstrip('/')}/claude/models", params={"refresh": str(refresh).lower()}
+        )
     if response.status_code >= 400:
         raise HTTPException(status_code=502, detail=response.text)
     return response.json()
@@ -474,7 +520,8 @@ async def start_session(request: Request) -> dict:
     reasoning_effort = normalize_reasoning_effort(body.get("reasoning_effort"))
     codex_account = normalize_codex_account(body.get("codex_account"))
     codex_model = normalize_codex_model(body.get("codex_model"))
-    prompt = build_prompt(transcript)
+    mode = normalize_mode(body.get("mode"))
+    prompt = build_prompt(transcript, mode)
     async with httpx.AsyncClient(timeout=30.0) as client:
         response = await client.post(
             f"{RUNNER_URL.rstrip('/')}/sessions",
@@ -491,6 +538,7 @@ async def start_session(request: Request) -> dict:
     if response.status_code >= 400:
         raise HTTPException(status_code=502, detail=response.text)
     payload = response.json()
+    remember_mode(str(payload.get("root_session_id") or payload.get("session_id") or ""), mode)
     if str(payload.get("status") or "") in {"starting", "running", "waiting"}:
         schedule_session_monitor(str(payload.get("session_id") or ""))
     return payload
@@ -563,7 +611,7 @@ def normalize_codex_model(value: object) -> str | None:
     model = str(value).strip()
     if not model:
         return None
-    if not re.fullmatch(r"[A-Za-z0-9._:/+-]+", model):
+    if not re.fullmatch(r"[A-Za-z0-9._:/+\[\]-]+", model):
         raise HTTPException(status_code=400, detail=f"invalid codex_model: {value}")
     return model
 
@@ -734,12 +782,23 @@ async def monitor_session_for_push(session_id: str) -> None:
                     mark_push_event_sent(session_id, "approval_needed")
 
             status = str(session_info.get("status") or "")
+            # A kept-alive Claude session serves many turns on one session id
+            # ("idle" = turn finished, process warm for a follow-up), so the
+            # finished push is keyed per turn, not once per session.
+            turn = int(session_info.get("turn") or 0)
+            finished_key = f"finished:{turn}" if turn else "finished"
+            if status == "idle":
+                if finished_key not in read_sent_push_events(session_id):
+                    if await push_session_event(session_info, "finished"):
+                        mark_push_event_sent(session_id, finished_key)
+                return
             if status == "exited":
                 returncode = session_info.get("returncode")
                 event_type = "finished" if returncode == 0 else "failed"
-                if event_type not in read_sent_push_events(session_id):
+                sent_key = finished_key if event_type == "finished" else event_type
+                if sent_key not in read_sent_push_events(session_id):
                     if await push_session_event(session_info, event_type):
-                        mark_push_event_sent(session_id, event_type)
+                        mark_push_event_sent(session_id, sent_key)
                 return
             if status not in {"starting", "running", "waiting"}:
                 return
@@ -816,6 +875,16 @@ async def resume_session(request: Request, session_id: str) -> dict:
     reasoning_effort = normalize_reasoning_effort(body.get("reasoning_effort"))
     codex_account = normalize_codex_account(body.get("codex_account"))
     codex_model = normalize_codex_model(body.get("codex_model"))
+    if body.get("mode"):
+        # The style preamble is only sent at session start, so a mode switch
+        # mid-conversation rides along on the follow-up that made it.
+        mode = normalize_mode(body.get("mode"))
+        source_info = await fetch_runner_session_info(session_id) or {}
+        conversation_id = str(source_info.get("root_session_id") or session_id)
+        previous = read_modes().get(conversation_id, "quick")
+        if mode != previous:
+            prompt = f"[Reply style from now on: {MODE_STYLE[mode]}]\n\n{prompt}"
+            remember_mode(conversation_id, mode)
     async with httpx.AsyncClient(timeout=30.0) as client:
         response = await client.post(
             f"{RUNNER_URL.rstrip('/')}/sessions/{session_id}/resume",
@@ -830,6 +899,85 @@ async def resume_session(request: Request, session_id: str) -> dict:
         )
     if response.status_code >= 400:
         raise HTTPException(status_code=502, detail=response.text)
+    payload = response.json()
+    schedule_session_monitor(str(payload.get("session_id") or ""))
+    return payload
+
+
+speech_locks: dict[str, asyncio.Lock] = {}
+
+
+@app.post("/api/sessions/{session_id}/speak")
+async def speak_session_reply(request: Request, session_id: str) -> dict:
+    """Render the session's latest reply as audio; cached per reply text."""
+    require_token(request)
+    directory = session_dir_for_id(session_id)
+    if not directory:
+        raise HTTPException(status_code=404, detail="unknown session")
+    reply = speech.latest_reply(directory / "codex.log", directory / "last_response.txt")
+    paragraphs = await speech.speakable_reply(reply, directory) if reply else []
+    if not paragraphs:
+        raise HTTPException(status_code=409, detail="this session has no finished reply to read yet")
+    out = speech.speech_path(directory, "\n".join(paragraphs))
+    lock = speech_locks.setdefault(out.name, asyncio.Lock())
+    async with lock:
+        if not out.exists():
+            try:
+                await speech.render_speech(paragraphs, out)
+            except Exception as exc:
+                raise HTTPException(status_code=502, detail=f"speech rendering failed: {exc}") from exc
+    return {
+        "session_id": session_id,
+        "audio": f"/api/sessions/{session_id}/speech/{out.name}",
+        "chars": sum(len(p) for p in paragraphs),
+        "preview": paragraphs[0][:160],
+    }
+
+
+@app.get("/api/sessions/{session_id}/speech/{name}")
+async def get_session_speech(request: Request, session_id: str, name: str) -> FileResponse:
+    require_token(request)
+    directory = session_dir_for_id(session_id)
+    if not directory or not re.fullmatch(r"speech-[0-9a-f]{16}\.mp3", name) or not (directory / name).exists():
+        raise HTTPException(status_code=404, detail="no such audio")
+    return FileResponse(directory / name, media_type="audio/mpeg")
+
+
+@app.get("/api/external/sessions")
+async def list_external_sessions(request: Request, limit: int = 40) -> list[dict]:
+    """Claude/Codex sessions on the box that Home Agent did not start (tmux etc.)."""
+    require_token(request)
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        response = await client.get(f"{RUNNER_URL.rstrip('/')}/external/sessions", params={"limit": limit})
+    if response.status_code >= 400:
+        raise HTTPException(status_code=502, detail=response.text)
+    return response.json()
+
+
+@app.post("/api/external/adopt")
+async def adopt_external_session(request: Request) -> dict:
+    require_token(request)
+    body = await request.json()
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        response = await client.post(
+            f"{RUNNER_URL.rstrip('/')}/external/adopt",
+            json={"agent": str(body.get("agent") or ""), "thread_id": str(body.get("thread_id") or "")},
+        )
+    if response.status_code >= 400:
+        raise HTTPException(
+            status_code=response.status_code if response.status_code in {404, 409, 422} else 502,
+            detail=response.text,
+        )
+    return enrich_session_info(response.json())
+
+
+@app.post("/api/sessions/{session_id}/compact")
+async def compact_session(request: Request, session_id: str) -> dict:
+    require_token(request)
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        response = await client.post(f"{RUNNER_URL.rstrip('/')}/sessions/{session_id}/compact")
+    if response.status_code >= 400:
+        raise HTTPException(status_code=response.status_code if response.status_code == 409 else 502, detail=response.text)
     payload = response.json()
     schedule_session_monitor(str(payload.get("session_id") or ""))
     return payload

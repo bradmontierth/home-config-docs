@@ -50,13 +50,22 @@ CLAUDE_BIN = (
 )
 CLAUDE_MODELS = os.environ.get(
     "HOME_AGENT_CLAUDE_MODELS",
-    "claude-fable-5:Fable 5,claude-opus-4-8:Opus 4.8,claude-sonnet-5:Sonnet 5,claude-haiku-4-5:Haiku 4.5",
+    "claude-fable-5-1:Fable 5.1,claude-opus-5:Opus 5,claude-sonnet-5:Sonnet 5,claude-haiku-4-5:Haiku 4.5",
 )
 # How long a Claude session may sit idle waiting on background work (background
 # Bash, Monitor, subagents, ScheduleWakeup) before the runner closes stdin and
 # lets the CLI wind the session down. ScheduleWakeup can legitimately sleep up
 # to 60 min, so keep this generous.
 CLAUDE_WAIT_MAX_S = int(os.environ.get("HOME_AGENT_CLAUDE_WAIT_MAX_S", "3900"))
+# How long a finished Claude turn keeps its process alive ("idle") so a
+# follow-up goes down the live stdin instead of spawning `--resume`. A fresh
+# `--resume` process rebuilds the conversation prefix (git status, memory
+# index, CLAUDE.md) and any change there misses the whole prompt cache; a live
+# process never rebuilds it. Just under the 1 h cache TTL: past that a live
+# process saves nothing. 0 disables (close stdin at end of turn, as before).
+CLAUDE_IDLE_KEEPALIVE_S = int(os.environ.get("HOME_AGENT_CLAUDE_IDLE_KEEPALIVE_S", "3300"))
+# Each idle process holds a few hundred MB; the oldest idle ones are closed first.
+CLAUDE_IDLE_MAX = int(os.environ.get("HOME_AGENT_CLAUDE_IDLE_MAX", "4"))
 MAX_COMMAND_OUTPUT_CHARS = int(os.environ.get("HOME_AGENT_MAX_COMMAND_OUTPUT_CHARS", "1800"))
 SHOW_SUCCESSFUL_COMMAND_OUTPUT = os.environ.get("HOME_AGENT_SHOW_COMMAND_OUTPUT", "0") == "1"
 ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
@@ -72,6 +81,27 @@ class StartRequest(BaseModel):
     reasoning_effort: Optional[str] = None
     codex_account: Optional[str] = None
     codex_model: Optional[str] = None
+    # Claude only: resume as a fork (new session id) because another live
+    # process, e.g. a tmux pane, still owns the original session file.
+    fork_session: bool = False
+
+
+class ExternalSession(BaseModel):
+    """An agent session on this machine that Home Agent did not start."""
+
+    agent: str
+    thread_id: str
+    title: str
+    cwd: str
+    updated_at: float
+    context_tokens: Optional[int] = None
+    live: bool = False
+    live_detail: Optional[str] = None
+
+
+class AdoptRequest(BaseModel):
+    agent: str
+    thread_id: str = Field(min_length=8, max_length=80, pattern=r"^[A-Za-z0-9-]+$")
 
 
 class ResumeRequest(BaseModel):
@@ -133,6 +163,12 @@ class SessionInfo(BaseModel):
     codex_model: Optional[str] = None
     codex_thread_id: Optional[str] = None
     resume_from: Optional[str] = None
+    # Completed Claude turns on this process; the gateway keys its "finished"
+    # push on it because one kept-alive session now serves many turns.
+    turn: int = 0
+    # Size of the last model request vs. the model's window (the context meter).
+    context_tokens: Optional[int] = None
+    context_window: Optional[int] = None
 
 
 class SessionLog(BaseModel):
@@ -148,6 +184,7 @@ class CodexSession:
         self.title = request.title or "Voice Codex session"
         self.resume_from = request.resume_from
         self.codex_thread_id = request.codex_thread_id
+        self.fork_session = bool(request.fork_session)
         self.agent = normalize_agent(request.agent)
         self.reasoning_effort = normalize_reasoning_effort(request.reasoning_effort)
         self.codex_account = normalize_codex_account(request.codex_account)
@@ -173,6 +210,11 @@ class CodexSession:
         self.render_state = ClaudeRenderState()
         self.stdin_closed = False
         self.wait_token = 0
+        self.turn = 0
+        self.context_tokens: Optional[int] = None
+        self.context_window: Optional[int] = None
+        self.idle_token = 0
+        self.idle_since: Optional[float] = None
         self.waiting_since: Optional[float] = None
         self.session_dir = DEFAULT_SESSION_ROOT / time.strftime("%Y-%m-%d") / session_id
         self.session_dir.mkdir(parents=True, exist_ok=True)
@@ -240,6 +282,8 @@ class CodexSession:
             cmd.extend(["--permission-mode", "acceptEdits"])
         if self.codex_thread_id:
             cmd.extend(["--resume", self.codex_thread_id])
+            if self.fork_session:
+                cmd.append("--fork-session")
         if self.codex_model:
             cmd.extend(["--model", self.codex_model])
         if self.reasoning_effort:
@@ -266,7 +310,8 @@ class CodexSession:
             "title": self.title,
             "cwd": str(self.cwd),
             "started_at": self.started_at,
-            "command": redact_prompt(cmd),
+            # Claude's prompt goes over stdin, so its argv has nothing to redact.
+            "command": cmd if self.agent == "claude" else redact_prompt(cmd),
             "danger_bypass": CODEX_DANGER_BYPASS,
             "sandbox": CODEX_SANDBOX,
             "approvals": CODEX_APPROVALS,
@@ -370,6 +415,49 @@ class CodexSession:
         if thread_id:
             self.codex_thread_id = thread_id
             self.update_metadata({"codex_thread_id": thread_id})
+        self.record_context_usage(event)
+
+    def record_context_usage(self, event: dict) -> None:
+        """Track how full the model's context is (last request size / window)."""
+        event_type = event.get("type")
+        tokens, window, persist = self.context_tokens, self.context_window, False
+        if self.agent == "claude":
+            if event_type == "assistant" and not event.get("parent_tool_use_id"):
+                # Main-thread request only; subagents have their own context.
+                message = event.get("message") or {}
+                usage = message.get("usage") or {}
+                tokens = (
+                    int(usage.get("input_tokens") or 0)
+                    + int(usage.get("cache_read_input_tokens") or 0)
+                    + int(usage.get("cache_creation_input_tokens") or 0)
+                )
+                self.claude_model_seen = str(message.get("model") or "")
+                if window is None:
+                    window = 1_000_000 if "[1m]" in (self.codex_model or "") else 200_000
+            elif event_type == "result":
+                model_usage = event.get("modelUsage") or {}
+                entry = model_usage.get(getattr(self, "claude_model_seen", "")) or {}
+                windows = [int(entry.get("contextWindow") or 0)] if entry else [
+                    int(v.get("contextWindow") or 0) for v in model_usage.values() if isinstance(v, dict)
+                ]
+                if windows and max(windows) > 0:
+                    window = max(windows)
+                persist = True
+        elif event_type == "turn.completed":
+            # `turn.completed.usage` is a running thread total, not the context
+            # size; the rollout's last token_count has the real last request.
+            found = codex_context_from_rollout(self.codex_home, self.codex_account, self.codex_thread_id)
+            if found:
+                tokens, window = found
+            persist = True
+        if (tokens, window) != (self.context_tokens, self.context_window):
+            self.context_tokens, self.context_window = tokens, window
+            self.loop.call_soon_threadsafe(
+                asyncio.create_task,
+                self.broadcast({"type": "context", "tokens": tokens, "window": window}),
+            )
+        if persist and self.context_tokens is not None:
+            self.update_metadata({"context_tokens": self.context_tokens, "context_window": self.context_window})
 
     # ---- Claude bidirectional session handling -------------------------------
 
@@ -384,8 +472,14 @@ class CodexSession:
         except (BrokenPipeError, OSError, ValueError) as exc:
             self.stdin_closed = True
             raise HTTPException(status_code=409, detail=f"claude session stdin is closed: {exc}") from exc
+        if self.status == "idle":
+            # Set before returning so the gateway sees a live status and
+            # re-arms its push monitor for this turn.
+            self.idle_since = None
+            self._set_status("running")
         # Runner-authored marker so log replays show the follow-up turn; the
         # CLI only echoes tool_result user messages, not the ones we send.
+        self.render_state.user_turn_pending = self.render_state.wake_count > 0
         marker = {"type": "runner", "subtype": "user_input", "text": text}
         try:
             with self.log_path.open("a", encoding="utf-8") as log:
@@ -410,8 +504,24 @@ class CodexSession:
             and self.proc is not None
             and self.proc.poll() is None
             and not self.stdin_closed
-            and self.status in {"running", "waiting"}
+            and self.status in {"running", "waiting", "idle"}
         )
+
+    def _enter_idle(self) -> None:
+        self.idle_token += 1
+        self.idle_since = time.time()
+        self._set_status("idle", turn=self.turn)
+        token = self.idle_token
+
+        def arm() -> None:
+            self.loop.call_later(CLAUDE_IDLE_KEEPALIVE_S, self._idle_cap_fired, token)
+            trim_idle_sessions()
+
+        self.loop.call_soon_threadsafe(arm)
+
+    def _idle_cap_fired(self, token: int) -> None:
+        if self.status == "idle" and self.idle_token == token:
+            self.close_stdin()
 
     def _set_status(self, status: str, **extra: object) -> None:
         self.status = status
@@ -452,14 +562,25 @@ class CodexSession:
         event_type = event.get("type")
         subtype = event.get("subtype")
 
-        if event_type == "system" and subtype == "init" and state.wake_count > 0 and self.status == "waiting":
+        if (
+            event_type == "system"
+            and subtype == "init"
+            and state.wake_count > 0
+            and self.status in {"waiting", "idle"}
+        ):
             # A wake: the harness started a new turn on its own.
             self.waiting_since = None
+            self.idle_since = None
             self._set_status("running")
         elif event_type == "result":
-            if event.get("is_error") or not state.pending_tasks:
-                # Idle with nothing in flight: the conversation is over.
+            if not state.pending_tasks:
+                self.turn += 1
+            if event.get("is_error") or (not state.pending_tasks and CLAUDE_IDLE_KEEPALIVE_S <= 0):
+                # Nothing in flight and no keep-alive: the conversation is over.
                 self.close_stdin()
+            elif not state.pending_tasks:
+                # Turn finished. Keep the process warm for a follow-up.
+                self._enter_idle()
             else:
                 # Idle but the model parked on background work. Keep the session
                 # alive; the CLI starts the next turn when the work completes.
@@ -467,8 +588,9 @@ class CodexSession:
                 self.waiting_since = time.time()
                 self._set_status("waiting", tasks=list(state.pending_tasks.values()))
                 self._schedule_wait_cap(self.wait_token)
-        elif event_type in {"assistant", "user", "runner"} and self.status == "waiting":
+        elif event_type in {"assistant", "user", "runner"} and self.status in {"waiting", "idle"}:
             self.waiting_since = None
+            self.idle_since = None
             self._set_status("running")
         return text
 
@@ -586,6 +708,9 @@ class CodexSession:
             codex_model=self.codex_model,
             codex_thread_id=self.codex_thread_id,
             resume_from=self.resume_from,
+            turn=self.turn,
+            context_tokens=self.context_tokens,
+            context_window=self.context_window,
         )
 
 
@@ -716,9 +841,105 @@ def configured_claude_models() -> list[CodexModelInfo]:
     return models
 
 
+_claude_models_cache: tuple[float, list[CodexModelInfo]] = (0.0, [])
+CLAUDE_MODELS_CACHE_S = 600
+
+
+def claude_models_from_cli() -> list[CodexModelInfo]:
+    """Ask the installed CLI what it offers, the way the Agent SDK does: an
+    `initialize` control request on the stream-json pipe. No model call."""
+    proc = subprocess.Popen(
+        [CLAUDE_BIN, "-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose"],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+        text=True,
+        cwd=str(DEFAULT_HOME_CONFIG),
+    )
+    request = {"type": "control_request", "request_id": "models", "request": {"subtype": "initialize"}}
+    try:
+        out, _ = proc.communicate(json.dumps(request) + "\n", timeout=30)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        return []
+    raw_models: list[dict] = []
+    for line in out.splitlines():
+        event = parse_json_line(line)
+        if not event or event.get("type") != "control_response":
+            continue
+        response = event.get("response") or {}
+        body = response.get("response") if isinstance(response.get("response"), dict) else response
+        raw_models = [m for m in (body.get("models") or []) if isinstance(m, dict)]
+        break
+    default_resolved = next((m.get("resolvedModel") for m in raw_models if m.get("value") == "default"), None)
+    models: list[CodexModelInfo] = []
+    for entry in raw_models:
+        value = str(entry.get("value") or "")
+        if not value or value == "default":
+            continue
+        description = str(entry.get("description") or "")
+        headline, _, rest = description.partition(" \u00b7 ")
+        models.append(
+            CodexModelInfo(
+                model_id=value,
+                label=headline or str(entry.get("displayName") or value),
+                description=rest,
+                is_default=bool(default_resolved) and entry.get("resolvedModel") == default_resolved
+                and not any(m.is_default for m in models),
+            )
+        )
+    return models
+
+
+def discover_claude_models(force: bool = False) -> list[CodexModelInfo]:
+    """CLI-reported models (cached), falling back to HOME_AGENT_CLAUDE_MODELS."""
+    global _claude_models_cache
+    cached_at, cached = _claude_models_cache
+    if cached and not force and time.time() - cached_at < CLAUDE_MODELS_CACHE_S:
+        return cached
+    try:
+        models = claude_models_from_cli()
+    except OSError:
+        models = []
+    if models:
+        _claude_models_cache = (time.time(), models)
+        return models
+    return cached or configured_claude_models()
+
+
 def default_claude_model() -> Optional[str]:
-    models = configured_claude_models()
-    return models[0].model_id if models else None
+    # Never blocks: uses whatever discovery has cached, else the env list.
+    models = _claude_models_cache[1] or configured_claude_models()
+    return next((m.model_id for m in models if m.is_default), models[0].model_id if models else None)
+
+
+def codex_context_from_rollout(
+    codex_home: Path, account_id: str, thread_id: Optional[str]
+) -> Optional[tuple[int, Optional[int]]]:
+    """(last request input tokens, context window) from the thread's rollout."""
+    if not thread_id:
+        return None
+    home = default_machine_codex_home() if uses_machine_codex_home(account_id) else codex_home
+    rollouts = sorted((home / "sessions").glob(f"*/*/*/rollout-*{thread_id}.jsonl"))
+    if not rollouts:
+        return None
+    try:
+        with rollouts[-1].open("rb") as handle:
+            handle.seek(0, os.SEEK_END)
+            handle.seek(max(handle.tell() - 400_000, 0))
+            tail = handle.read().decode("utf-8", errors="replace")
+    except OSError:
+        return None
+    for line in reversed(tail.splitlines()):
+        if '"token_count"' not in line:
+            continue
+        event = parse_json_line(line)
+        info = ((event or {}).get("payload") or {}).get("info") or {}
+        last = info.get("last_token_usage") or {}
+        if last.get("input_tokens"):
+            window = info.get("model_context_window")
+            return int(last["input_tokens"]), int(window) if window else None
+    return None
 
 
 def extract_thread_id(event: dict) -> Optional[str]:
@@ -745,7 +966,7 @@ def normalize_codex_model(value: object) -> Optional[str]:
     model = str(raw or "").strip()
     if not model:
         return None
-    if not re.fullmatch(r"[A-Za-z0-9._:/+-]+", model):
+    if not re.fullmatch(r"[A-Za-z0-9._:/+\[\]-]+", model):
         raise HTTPException(status_code=400, detail=f"invalid codex_model: {value}")
     return model
 
@@ -985,10 +1206,10 @@ def default_codex_account() -> str:
 def normalize_codex_account(value: object) -> str:
     requested = normalize_account_id(value) if value is not None else ""
     account_ids = {account.account_id for account in configured_codex_accounts()}
-    if not requested:
+    if not requested or requested not in account_ids:
+        # Retired accounts (old sessions, a stale phone pref) fall back to the
+        # default login instead of failing the request.
         requested = default_codex_account()
-    if requested not in account_ids:
-        raise HTTPException(status_code=400, detail=f"invalid codex_account: {value}")
     return requested
 
 
@@ -1047,6 +1268,7 @@ class ClaudeRenderState:
         self.wake_count = 0
         self.pending_tasks: dict[str, str] = {}
         self.task_descriptions: dict[str, str] = {}
+        self.user_turn_pending = False
 
 
 def parse_json_line(line: str) -> Optional[dict]:
@@ -1062,6 +1284,8 @@ def render_claude_event(event: dict, state: ClaudeRenderState) -> str:
     subtype = event.get("subtype")
     if event_type == "runner":
         if subtype == "user_input":
+            # The CLI re-emits `init` for the turn this starts; not a self-wake.
+            state.user_turn_pending = True
             text = str(event.get("text") or "").strip()
             return f"\n> {text}\n" if text else ""
         return ""
@@ -1080,10 +1304,22 @@ def render_claude_event(event: dict, state: ClaudeRenderState) -> str:
             desc = state.task_descriptions.get(task_id, task_id or "task")
             status = str(event.get("status") or "finished")
             return f"\n[claude] background task {status}: {desc}\n"
+        if subtype == "status" and event.get("status") == "compacting":
+            return "\n[claude] compacting context...\n"
+        if subtype == "compact_boundary":
+            meta = event.get("compact_metadata") or {}
+            pre, post = meta.get("pre_tokens"), meta.get("post_tokens")
+            if pre and post is not None:
+                return f"[claude] compacted: {int(pre):,} -> {int(post):,} conversation tokens\n"
+            return "[claude] compacted\n"
         if subtype == "init":
             state.wake_count += 1
             if state.wake_count > 1:
+                if state.user_turn_pending:
+                    state.user_turn_pending = False
+                    return ""
                 return "\n[claude] woke up\n"
+            state.user_turn_pending = False
             return format_claude_event(event)
         return ""
     if event_type == "result":
@@ -1390,6 +1626,8 @@ def session_info_from_metadata(path: Path) -> Optional[SessionInfo]:
         or (default_claude_model() if agent == "claude" else default_codex_model()),
         codex_thread_id=metadata.get("codex_thread_id") or find_codex_thread_id(session_id),
         resume_from=metadata.get("resume_from"),
+        context_tokens=metadata.get("context_tokens"),
+        context_window=metadata.get("context_window"),
     )
 
 
@@ -1517,8 +1755,246 @@ def format_session_log(path: Path, max_chars: int) -> tuple[str, bool]:
     return text, False
 
 
+CLAUDE_HOME = Path(os.environ.get("HOME_AGENT_CLAUDE_HOME", str(Path.home() / ".claude")))
+
+
+def _read_tail(path: Path, max_bytes: int) -> str:
+    with path.open("rb") as handle:
+        handle.seek(0, os.SEEK_END)
+        handle.seek(max(handle.tell() - max_bytes, 0))
+        return handle.read().decode("utf-8", errors="replace")
+
+
+def _read_head(path: Path, max_bytes: int) -> str:
+    with path.open("rb") as handle:
+        return handle.read(max_bytes).decode("utf-8", errors="replace")
+
+
+def live_claude_sessions() -> dict[str, str]:
+    """session id -> where it is open, from the CLI's own pid registry."""
+    live: dict[str, str] = {}
+    for path in (CLAUDE_HOME / "sessions").glob("*.json"):
+        try:
+            entry = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        pid, session_id = entry.get("pid"), entry.get("sessionId")
+        if not pid or not session_id or not Path(f"/proc/{pid}").exists():
+            continue
+        if entry.get("kind") != "interactive":
+            continue
+        pane = str(entry.get("tmux") or "").split(":")[0]
+        where = f"tmux {pane}" if pane else f"pid {pid}"
+        live[str(session_id)] = f"{where}, {entry.get('status') or 'open'}"
+    return live
+
+
+def known_thread_sessions() -> dict[str, str]:
+    """agent thread id -> newest Home Agent session id that uses it."""
+    known: dict[str, str] = {}
+    for path in sorted(DEFAULT_SESSION_ROOT.glob("*/*/metadata.json")):
+        try:
+            metadata = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        thread_id = metadata.get("codex_thread_id")
+        if thread_id:
+            known[str(thread_id)] = str(metadata.get("session_id") or path.parent.name)
+    return known
+
+
+def _message_text(content: object) -> str:
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        return "\n".join(
+            str(block.get("text") or "")
+            for block in content
+            if isinstance(block, dict) and block.get("type") in {"text", "input_text", "output_text"}
+        )
+    return ""
+
+
+def _is_real_prompt(text: str) -> bool:
+    stripped = text.lstrip()
+    return bool(stripped) and not stripped.startswith(("<", "Caveat:", "# AGENTS.md", "[Request interrupted"))
+
+
+def describe_claude_transcript(path: Path) -> Optional[ExternalSession]:
+    title, last_prompt, cwd, tokens, interactive = "", "", "", None, False
+    try:
+        chunks = [_read_tail(path, 300_000)]
+        if path.stat().st_size > 300_000:
+            chunks.insert(0, _read_head(path, 60_000))
+    except OSError:
+        return None
+    first_prompt = ""
+    for chunk in chunks:
+        for line in chunk.splitlines():
+            event = parse_json_line(line)
+            if not event:
+                continue
+            kind = event.get("type")
+            if kind == "ai-title":
+                title = str(event.get("aiTitle") or title)
+            elif kind == "custom-title":
+                title = str(event.get("customTitle") or title)
+            elif kind == "last-prompt":
+                last_prompt = str(event.get("lastPrompt") or last_prompt)
+            if event.get("cwd") and not cwd:
+                # First cwd = where it was launched = the project it resumes from
+                # (later lines follow the shell's `cd`s).
+                cwd = str(event["cwd"])
+            if event.get("entrypoint") == "cli":
+                interactive = True
+            if event.get("isSidechain"):
+                continue
+            message = event.get("message") if isinstance(event.get("message"), dict) else {}
+            if kind == "user" and not first_prompt:
+                text = _message_text(message.get("content"))
+                if _is_real_prompt(text):
+                    first_prompt = text
+            elif kind == "assistant":
+                usage = message.get("usage") or {}
+                total = sum(int(usage.get(k) or 0) for k in ("input_tokens", "cache_read_input_tokens", "cache_creation_input_tokens"))
+                tokens = total or tokens
+    if not interactive or not cwd:
+        # Headless (`-p`) sessions belong to Home Agent or other automation.
+        return None
+    label = title or last_prompt or first_prompt
+    if not label:
+        return None
+    return ExternalSession(
+        agent="claude",
+        thread_id=path.stem,
+        title=" ".join(label.split())[:120],
+        cwd=cwd,
+        updated_at=path.stat().st_mtime,
+        context_tokens=tokens,
+    )
+
+
+def describe_codex_rollout(path: Path) -> Optional[ExternalSession]:
+    try:
+        head = _read_head(path, 400_000)
+        tail = _read_tail(path, 300_000)
+    except OSError:
+        return None
+    meta = parse_json_line(head.split("\n", 1)[0]) or {}
+    payload = meta.get("payload") or {}
+    thread_id, cwd = str(payload.get("id") or ""), str(payload.get("cwd") or "")
+    if meta.get("type") != "session_meta" or not thread_id or not cwd:
+        return None
+    if str(payload.get("originator") or "") == "codex_exec":
+        return None
+    title = ""
+    for line in head.splitlines():
+        if '"UserMessage"' not in line:
+            continue
+        item = ((parse_json_line(line) or {}).get("payload") or {}).get("item") or {}
+        text = _message_text(item.get("content"))
+        if _is_real_prompt(text):
+            title = text
+            break
+    tokens = None
+    for line in reversed(tail.splitlines()):
+        if '"token_count"' in line:
+            info = ((parse_json_line(line) or {}).get("payload") or {}).get("info") or {}
+            tokens = (info.get("last_token_usage") or {}).get("input_tokens")
+            break
+    if not title:
+        return None
+    return ExternalSession(
+        agent="codex",
+        thread_id=thread_id,
+        title=" ".join(title.split())[:120],
+        cwd=cwd,
+        updated_at=path.stat().st_mtime,
+        context_tokens=int(tokens) if tokens else None,
+    )
+
+
+def find_external_transcript(agent: str, thread_id: str) -> Optional[Path]:
+    if agent == "claude":
+        return next((CLAUDE_HOME / "projects").glob(f"*/{thread_id}.jsonl"), None)
+    return next((default_machine_codex_home() / "sessions").glob(f"*/*/*/rollout-*{thread_id}.jsonl"), None)
+
+
+def discover_external_sessions(limit: int) -> list[ExternalSession]:
+    known = known_thread_sessions()
+    live = live_claude_sessions()
+    candidates: list[tuple[str, Path]] = [("claude", p) for p in (CLAUDE_HOME / "projects").glob("*/*.jsonl")]
+    candidates += [("codex", p) for p in (default_machine_codex_home() / "sessions").glob("*/*/*/rollout-*.jsonl")]
+    candidates.sort(key=lambda item: item[1].stat().st_mtime, reverse=True)
+    found: list[ExternalSession] = []
+    for agent, path in candidates:
+        if len(found) >= limit:
+            break
+        if agent == "claude" and path.stem in known:
+            continue
+        session = describe_claude_transcript(path) if agent == "claude" else describe_codex_rollout(path)
+        if not session or session.thread_id in known:
+            continue
+        if session.thread_id in live:
+            session.live, session.live_detail = True, live[session.thread_id]
+        found.append(session)
+    return found
+
+
+def render_external_history(agent: str, path: Path, max_chars: int = 120_000) -> tuple[str, str]:
+    """(plain-text transcript for the phone's history view, last assistant reply)."""
+    parts: list[str] = []
+    last_reply = ""
+    try:
+        raw = _read_tail(path, 3_000_000)
+    except OSError:
+        return "", ""
+    for line in raw.splitlines():
+        event = parse_json_line(line)
+        if not event:
+            continue
+        if agent == "claude":
+            if event.get("isSidechain") or event.get("type") not in {"user", "assistant"}:
+                continue
+            message = event.get("message") if isinstance(event.get("message"), dict) else {}
+            text = _message_text(message.get("content")).strip()
+            if not text:
+                continue
+            if event["type"] == "user":
+                if _is_real_prompt(text):
+                    parts.append(f"\n> {text}\n")
+            else:
+                parts.append(f"\n{text}\n")
+                last_reply = text
+        else:
+            payload = event.get("payload") or {}
+            if payload.get("type") != "item_completed":
+                continue
+            item = payload.get("item") or {}
+            text = (_message_text(item.get("content")) or str(item.get("text") or "")).strip()
+            if item.get("type") == "UserMessage" and _is_real_prompt(text):
+                parts.append(f"\n> {text}\n")
+            elif item.get("type") == "AgentMessage" and text:
+                parts.append(f"\n{text}\n")
+                last_reply = text
+    history = "".join(parts)
+    if len(history) > max_chars:
+        history = "[earlier history trimmed]\n" + history[-max_chars:]
+    return history, last_reply
+
+
 app = FastAPI(title=APP_NAME)
 sessions: dict[str, CodexSession] = {}
+
+
+def trim_idle_sessions() -> None:
+    """Close the oldest idle Claude processes beyond CLAUDE_IDLE_MAX."""
+    idle = sorted(
+        (s for s in sessions.values() if s.status == "idle" and not s.stdin_closed),
+        key=lambda s: s.idle_since or 0.0,
+    )
+    for session in idle[: max(len(idle) - CLAUDE_IDLE_MAX, 0)]:
+        session.close_stdin()
 login_sessions: dict[str, CodexLoginSession] = {}
 
 
@@ -1538,8 +2014,13 @@ async def list_codex_models() -> list[CodexModelInfo]:
 
 
 @app.get("/claude/models", response_model=list[CodexModelInfo])
-async def list_claude_models() -> list[CodexModelInfo]:
-    return configured_claude_models()
+async def list_claude_models(refresh: bool = False) -> list[CodexModelInfo]:
+    return await asyncio.to_thread(discover_claude_models, refresh)
+
+
+@app.on_event("startup")
+async def warm_claude_models() -> None:
+    asyncio.get_running_loop().run_in_executor(None, discover_claude_models)
 
 
 @app.post("/codex/accounts/{account_id}/label", response_model=CodexAccountInfo)
@@ -1631,11 +2112,27 @@ async def resume_session(session_id: str, request: ResumeRequest) -> SessionInfo
     if not source_info:
         raise HTTPException(status_code=404, detail="unknown session")
 
+    if source is not None and source.status == "idle" and source.accepts_follow_up():
+        # A model/effort switch needs a new process (and misses the cache
+        # anyway: it is per model). Wind the warm one down first so two
+        # processes never share one session id.
+        wanted_model = normalize_codex_model(request.codex_model)
+        wanted_effort = normalize_reasoning_effort(request.reasoning_effort) if request.reasoning_effort else None
+        if (wanted_model and wanted_model != source.codex_model) or (
+            wanted_effort and wanted_effort != source.reasoning_effort
+        ):
+            source.close_stdin()
+            if source.proc is not None:
+                try:
+                    await asyncio.to_thread(source.proc.wait, 20)
+                except subprocess.TimeoutExpired:
+                    await source.stop()
+
     if source is not None and source.accepts_follow_up():
-        # The Claude process is still alive (running, or parked on background
-        # work). Two processes must never share one session id, so the
-        # follow-up goes to the live process's stdin and the same session
-        # continues instead of spawning `--resume`.
+        # The Claude process is still alive (running, parked on background
+        # work, or idle after a finished turn). Two processes must never share
+        # one session id, so the follow-up goes to the live process's stdin and
+        # the same session continues instead of spawning `--resume`.
         source.write_user_message(request.prompt)
         await source.broadcast(
             {"type": "output", "data": f"\n[resume] follow-up queued on live session: {request.prompt[:120]}\n"}
@@ -1652,8 +2149,15 @@ async def resume_session(session_id: str, request: ResumeRequest) -> SessionInfo
     source_agent = normalize_agent(source_info.agent)
     requested_agent = normalize_agent(request.agent) if request.agent else source_agent
     requested_model = request.codex_model if requested_agent == source_agent else None
+    fork_session = False
+    if source_agent == "claude":
+        holder = live_claude_sessions().get(thread_id)
+        if holder:
+            # Two writers on one session file would tangle it; branch instead.
+            fork_session = True
     child_request = StartRequest(
         prompt=request.prompt,
+        fork_session=fork_session,
         cwd=source_info.cwd,
         title=request.title or f"Resume: {source_info.title or session_id}",
         resume_from=session_id,
@@ -1674,6 +2178,78 @@ async def resume_session(session_id: str, request: ResumeRequest) -> SessionInfo
     sessions[child_id] = child
     await child.start(request.prompt)
     return child.info()
+
+
+@app.get("/external/sessions", response_model=list[ExternalSession])
+async def list_external_sessions(limit: int = 40) -> list[ExternalSession]:
+    return await asyncio.to_thread(discover_external_sessions, max(1, min(limit, 200)))
+
+
+@app.post("/external/adopt", response_model=SessionInfo)
+async def adopt_external_session(request: AdoptRequest) -> SessionInfo:
+    """Give an external session a Home Agent record so the normal resume path
+    (warm process, push, context meter) can continue it from its own cwd."""
+    agent = normalize_agent(request.agent)
+    existing = known_thread_sessions().get(request.thread_id)
+    if existing:
+        info = sessions[existing].info() if existing in sessions else find_session_info(existing)
+        if info:
+            return info
+    path = await asyncio.to_thread(find_external_transcript, agent, request.thread_id)
+    if not path:
+        raise HTTPException(status_code=404, detail="no such session on this machine")
+    described = await asyncio.to_thread(
+        describe_claude_transcript if agent == "claude" else describe_codex_rollout, path
+    )
+    if not described:
+        raise HTTPException(status_code=409, detail="session cannot be adopted (headless or empty)")
+    if not Path(described.cwd).is_dir():
+        raise HTTPException(status_code=409, detail=f"session directory no longer exists: {described.cwd}")
+    session_id = uuid.uuid4().hex[:12]
+    session_dir = DEFAULT_SESSION_ROOT / time.strftime("%Y-%m-%d") / session_id
+    session_dir.mkdir(parents=True, exist_ok=True)
+    live = live_claude_sessions().get(request.thread_id) if agent == "claude" else None
+    banner = f"[adopted {agent} session {request.thread_id} from {described.cwd}]\n"
+    if live:
+        banner += f"[still open in {live}: replies from here continue on a fork, the original stays untouched]\n"
+    history, last_reply = await asyncio.to_thread(render_external_history, agent, path)
+    (session_dir / "codex.log").write_text(banner + history, encoding="utf-8")
+    (session_dir / "prompt.txt").write_text(described.title, encoding="utf-8")
+    # Lets the phone's Listen button read the adopted session's latest answer
+    # before any turn has run here.
+    if last_reply:
+        (session_dir / "last_response.txt").write_text(last_reply, encoding="utf-8")
+    metadata = {
+        "session_id": session_id,
+        "agent": agent,
+        "title": described.title,
+        "cwd": described.cwd,
+        "started_at": time.time(),
+        "codex_thread_id": request.thread_id,
+        "codex_account": "machine",
+        "adopted_from": str(path),
+        "context_tokens": described.context_tokens,
+    }
+    (session_dir / "metadata.json").write_text(json.dumps(metadata, indent=2) + "\n", encoding="utf-8")
+    info = find_session_info(session_id)
+    assert info is not None
+    return info
+
+
+@app.post("/sessions/{session_id}/compact", response_model=SessionInfo)
+async def compact_session(session_id: str) -> SessionInfo:
+    source = sessions.get(session_id)
+    source_info = source.info() if source else find_session_info(session_id)
+    if not source_info:
+        raise HTTPException(status_code=404, detail="unknown session")
+    if normalize_agent(source_info.agent) != "claude":
+        # `codex exec` has no compact command; it only auto-compacts near its limit.
+        raise HTTPException(status_code=409, detail="compact is only available for Claude sessions")
+    if source is not None and source.status in {"running", "waiting"}:
+        raise HTTPException(status_code=409, detail="wait for the current turn to finish before compacting")
+    # The CLI runs slash commands sent as a user turn: warm process if there is
+    # one, otherwise a `--resume` child.
+    return await resume_session(session_id, ResumeRequest(prompt="/compact", title="Compact context"))
 
 
 @app.post("/sessions/{session_id}/stop")
