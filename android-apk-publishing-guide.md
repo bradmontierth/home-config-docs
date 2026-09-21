@@ -22,6 +22,7 @@ APK links are under the `APK Downloads` section.
 | Tempo | `http://192.168.10.217:3000/apk/tempo-latest.apk` | `/home/pi/apks/tempo-latest.apk` |
 | Voice Notes | `http://192.168.10.217:3000/apk/voice-notes-latest.apk` | `/home/pi/apks/voice-notes-latest.apk` |
 | STT Keyboard | `http://192.168.10.217:3000/apk/android-stt-latest.apk` | `/home/pi/apks/android-stt-latest.apk` |
+| EV Planner | `http://192.168.10.217:3000/apk/ev-planner-latest.apk` | `/home/pi/apks/ev-planner-latest.apk` |
 | Windows Transcribe | `http://192.168.10.217:3000/apk/windows-transcribe-latest.exe` | `/home/pi/apks/windows-transcribe-latest.exe` |
 
 Publish APKs with the F-Droid publish script (preferred — it also feeds the
@@ -373,6 +374,29 @@ sha256sum \
   /home/pi/android-stt/app/build/outputs/apk/debug/app-debug.apk \
   /home/pi/apks/android-stt-latest.apk
 ```
+
+## EV Planner Build And Publish
+
+EV Planner is a WebView shell around the trip planner on `:8799`. It finds the
+server (home Wi-Fi, then Tailscale), keeps a copy of the page so the last plan
+opens with no signal, and holds the page's state natively (`window.EVP`).
+It targets SDK 35 on purpose: targeting 37+ needs `ACCESS_LOCAL_NETWORK`.
+
+Repo: `/home/pi/ev-planner/android` (application ID `com.local.evplanner`, JDK 17,
+same environment block as STT Keyboard).
+
+```bash
+cd /home/pi/ev-planner/android
+systemd-run --user --scope -p MemoryMax=3G -p MemorySwapMax=1G \
+  ./gradlew --no-daemon --max-workers=1 :app:assembleDebug
+/home/pi/fdroid/publish.sh app/build/outputs/apk/debug/app-debug.apk ev-planner-latest.apk
+```
+
+Page changes need no rebuild: the app loads `planner/index.html` from the server.
+
+A brand-new app also needs `/home/pi/fdroid/metadata/<applicationId>.yml`
+(copy an existing one) before `publish.sh`; without it `fdroid update` logs
+"Ignoring package without metadata" and the app never reaches the index.
 
 ## Signing Keys
 
