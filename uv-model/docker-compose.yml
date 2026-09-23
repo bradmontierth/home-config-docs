@@ -1,0 +1,15 @@
+services:
+  uv-model:
+    build: .
+    container_name: uv-model
+    network_mode: host
+    environment:
+      TZ: America/Denver
+      MQTT_HOST: 192.168.10.217
+      UV_LAT: "40.76"
+      UV_LON: "-111.89"
+      # Salt Lake City clear-sky climatology fit: UVI = UV_A * sin(elevation)^UV_P
+      UV_A: "11.15"
+      UV_P: "2.32"
+      UV_INTERVAL: "300"
+    restart: unless-stopped
