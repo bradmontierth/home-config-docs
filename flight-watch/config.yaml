@@ -1,0 +1,20 @@
+# Flight watch: SLC + BOI -> OGG, Jan/Feb 2027. Per-adult round-trip economy fares from Google Flights.
+destination: OGG
+origins: [SLC, BOI]
+depart_from: 2027-01-15
+depart_to: 2027-02-15
+nights: [5, 6, 7, 8, 9]          # 7-night trip +/- 2
+max_leg_minutes: 540             # each direction, layovers included: 7h nonstop + 2h
+pace_seconds: 4                  # gap between Google queries
+scan_at: "02:30"                 # local time, nightly
+catch_up_hours: 26               # on start, scan immediately if the last finished run is older than this
+blocked_after_consecutive_errors: 5
+
+rules:
+  nonstop_max: 600               # Delta SLC-OGG nonstop at/below this
+  connecting_max: 450            # any in-cap connecting itinerary at/below this
+  new_low_pct: 10                # beats the trailing-window minimum by this much
+  new_low_window_days: 14
+  combined_max: 1100             # SLC best + BOI best for the SAME dates
+  realert_drop: 50               # re-notify the same rule/origin only if the price fell this much more...
+  realert_days: 7                # ...or this many days passed

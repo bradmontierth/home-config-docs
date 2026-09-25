@@ -1,0 +1,20 @@
+services:
+  flight-watch:
+    build: .
+    container_name: flight-watch
+    user: "1000:1000"
+    restart: unless-stopped
+    env_file:
+      - path: /home/pi/cecret_lake/pushover/.env   # PUSHOVER_API / PUSHOVER_USER / PUSHOVER_DEVICE
+        required: false
+    environment:
+      TZ: America/Denver
+      MQTT_HOST: 192.168.10.217
+      CONFIG_PATH: /app/config.yaml
+      DB_PATH: /data/flightwatch.db
+      PORT: "8783"
+    ports:
+      - "8783:8783"
+    volumes:
+      - ./config.yaml:/app/config.yaml:ro
+      - ./data:/data

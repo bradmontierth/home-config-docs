@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Flight Watch</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+:root{--bg:#fcfcfb;--panel:#ffffff;--ink:#1a1a19;--ink2:#5c5c58;--muted:#8a8a85;--line:#e6e6e2;--grid:#efefec;
+  --slc:#2a78d6;--boi:#eb6834;--good:#008300;--bad:#c9271d;--warn:#c98500;
+  --s100:#cde2fb;--s200:#9ec5f4;--s300:#6da7ec;--s400:#3987e5;--s500:#256abf;--s600:#184f95;--s700:#0d366b}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#1a1a19;--panel:#232322;--ink:#f2f2ee;--ink2:#b8b8b2;--muted:#82827c;--line:#33332f;--grid:#2c2c29;
+  --slc:#3987e5;--boi:#d95926;--s100:#0d366b;--s200:#184f95;--s300:#256abf;--s400:#3987e5;--s500:#6da7ec;--s600:#9ec5f4;--s700:#cde2fb}}
+:root[data-theme="dark"]{--bg:#1a1a19;--panel:#232322;--ink:#f2f2ee;--ink2:#b8b8b2;--muted:#82827c;--line:#33332f;--grid:#2c2c29;--slc:#3987e5;--boi:#d95926}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;padding:16px}
+h1{font-size:20px;margin:0 0 4px}h2{font-size:15px;margin:0 0 8px;color:var(--ink2);font-weight:600}
+.sub{color:var(--muted);margin-bottom:14px}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:16px}
+.tile{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+.tile .k{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+.tile .v{font-size:22px;font-weight:600;margin-top:2px}.tile .d{font-size:12px;color:var(--ink2)}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:16px}
+.row{display:flex;gap:16px;flex-wrap:wrap}.row>.panel{flex:1 1 420px;min-width:0}
+.status{display:inline-block;padding:1px 8px;border-radius:999px;font-size:12px;font-weight:600}
+.ok{background:color-mix(in srgb,var(--good) 15%,transparent);color:var(--good)}
+.partial{background:color-mix(in srgb,var(--warn) 18%,transparent);color:var(--warn)}
+.blocked,.failed{background:color-mix(in srgb,var(--bad) 15%,transparent);color:var(--bad)}
+.running{background:color-mix(in srgb,var(--slc) 15%,transparent);color:var(--slc)}
+.runs{display:flex;gap:3px;align-items:flex-end;height:36px}.runs div{flex:1;min-width:6px;max-width:22px;border-radius:3px 3px 0 0}
+table{border-collapse:separate;border-spacing:2px;width:100%}th{font-size:11px;color:var(--muted);font-weight:600;text-align:center;padding:2px}
+td.d{color:var(--ink2);font-size:12px;white-space:nowrap;text-align:right;padding-right:6px}
+td.c{text-align:center;border-radius:4px;padding:5px 2px;font-size:12px;cursor:pointer;color:#fff;font-variant-numeric:tabular-nums}
+td.c.light{color:var(--ink)}td.c.empty{background:var(--grid);color:var(--muted);cursor:default}
+td.c.ns::after{content:"●";font-size:7px;margin-left:3px;vertical-align:middle}
+.legend{display:flex;gap:10px;align-items:center;font-size:12px;color:var(--ink2);margin-top:8px;flex-wrap:wrap}
+.legend .sw{display:inline-block;width:14px;height:10px;border-radius:2px;vertical-align:middle;margin-right:3px}
+button{background:var(--slc);color:#fff;border:0;border-radius:8px;padding:6px 12px;font-weight:600;cursor:pointer}button:disabled{opacity:.5}
+#detail{font-size:13px}#detail table{border-spacing:0}#detail td,#detail th{text-align:left;padding:3px 8px 3px 0;color:var(--ink);font-size:13px}
+.alert{border-top:1px solid var(--line);padding:8px 0;white-space:pre-wrap;font-size:13px}.alert .t{color:var(--muted);font-size:12px}
+a{color:var(--slc)}
+.chartbox{position:relative;height:260px}
+</style>
+</head>
+<body>
+<h1>Flight Watch <span class="sub" id="route"></span></h1>
+<div class="sub" id="sub">loading…</div>
+
+<div class="tiles" id="tiles"></div>
+
+<div class="row">
+  <div class="panel">
+    <h2>Best price per night of polling <span style="font-weight:400;color:var(--muted)">(solid = nonstop, dashed = ≤2h-longer connection)</span></h2>
+    <div class="chartbox"><canvas id="trend"></canvas></div>
+  </div>
+  <div class="panel">
+    <h2>Scan health <span style="font-weight:400;color:var(--muted)">(one bar per run; height = queries answered)</span></h2>
+    <div class="runs" id="runs"></div>
+    <div id="runlist" style="font-size:12px;color:var(--ink2);margin-top:8px"></div>
+    <div style="margin-top:10px"><button id="scan">Scan now</button> <span id="scanmsg" style="color:var(--muted);font-size:12px"></span></div>
+  </div>
+</div>
+
+<div class="row" id="heatmaps"></div>
+
+<div class="row">
+  <div class="panel"><h2 id="detailh">Itineraries</h2><div id="detail" style="color:var(--muted)">Tap a cell in a heat map.</div></div>
+  <div class="panel"><h2>Alerts sent</h2><div id="alerts" style="color:var(--muted)">none yet</div></div>
+</div>
+
+<script>
+const $=s=>document.querySelector(s);
+const fmtT=s=>s?new Date(s).toLocaleString([], {month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}):'—';
+const hm=m=>`${Math.floor(m/60)}h${String(m%60).padStart(2,'0')}`;
+const md=d=>{const [y,m,dd]=d.split('-');return `${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][m-1]} ${+dd}`};
+const css=v=>getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const ORIGIN_COLOR={SLC:'--slc',BOI:'--boi'};
+let cfg, trendChart;
+
+async function j(u,o){const r=await fetch(u,o);if(!r.ok)throw new Error(u+' '+r.status);return r.json()}
+
+async function loadStatus(){
+  const s=await j('/api/status'); cfg=s.config;
+  $('#route').textContent=`${cfg.origins.join(' + ')} → ${cfg.destination}`;
+  const p=s.progress, last=s.last_completed;
+  $('#sub').textContent=`Departures ${cfg.depart_from} → ${cfg.depart_to}, ${cfg.nights.join('/')} nights, each leg ≤ ${hm(cfg.max_leg_minutes)} door to door. Nightly at ${cfg.scan_at}. Alerts: nonstop ≤ $${cfg.rules.nonstop_max}, connecting ≤ $${cfg.rules.connecting_max}, both families ≤ $${cfg.rules.combined_max}, or a ${cfg.rules.new_low_pct}% new ${cfg.rules.new_low_window_days}-day low.`;
+  const tiles=[];
+  tiles.push({k:'Last scan',v:last?fmtT(last.finished_at):'—',d:last?`${last.ok}/${last.queries} queries ok, ${last.rows} fares`:'no completed run'});
+  tiles.push({k:p.running?'Scanning now':'Next scan',v:p.running?`${p.done}/${p.total}`:fmtT(s.next_scan),d:p.running?'queries done':'local time'});
+  const run0=s.runs[0]; tiles.push({k:'Latest run',v:run0?`<span class="status ${run0.status}">${run0.status}</span>`:'—',d:run0?(run0.note||`${run0.errors} errors`):''});
+  $('#tiles').innerHTML=tiles.map(t=>`<div class="tile"><div class="k">${t.k}</div><div class="v">${t.v}</div><div class="d">${t.d}</div></div>`).join('');
+  // run health bars
+  const runs=[...s.runs].reverse();
+  $('#runs').innerHTML=runs.map(r=>{const h=r.queries?Math.max(6,36*r.ok/r.queries):6;const c={ok:'var(--good)',partial:'var(--warn)',blocked:'var(--bad)',failed:'var(--bad)',running:'var(--slc)'}[r.status];return `<div title="${r.started_at} ${r.status}: ${r.ok} ok / ${r.errors} err / ${r.rows} fares" style="height:${h}px;background:${c}"></div>`}).join('');
+  $('#runlist').innerHTML=runs.slice(-4).reverse().map(r=>`${fmtT(r.started_at)} <span class="status ${r.status}">${r.status}</span> ${r.ok} ok · ${r.errors} err · ${r.empty} empty · ${r.rows} fares`).join('<br>');
+  $('#scan').disabled=p.running;
+  return s;
+}
+
+async function loadTrend(){
+  const {points}=await j('/api/trend');
+  const runs=[...new Set(points.map(p=>p.run_id))];
+  const labels=runs.map(id=>{const p=points.find(x=>x.run_id===id);return fmtT(p.finished_at)});
+  const ds=[];
+  for(const o of cfg.origins){
+    const col=css(ORIGIN_COLOR[o]||'--slc');
+    for(const cls of ['nonstop','connecting']){
+      const data=runs.map(id=>{const p=points.find(x=>x.run_id===id&&x.origin===o);return p?p[cls]:null});
+      if(data.every(v=>v==null))continue;
+      ds.push({label:`${o} ${cls}`,data,borderColor:col,backgroundColor:col,borderWidth:2,pointRadius:4,pointHoverRadius:7,borderDash:cls==='connecting'?[6,4]:[],spanGaps:true,tension:.2});
+    }
+  }
+  // tiles for current bests
+  const lastId=runs[runs.length-1];
+  const bests=cfg.origins.flatMap(o=>{const p=points.find(x=>x.run_id===lastId&&x.origin===o);if(!p)return [];const t=[];if(p.nonstop)t.push({k:`${o} best nonstop`,v:'$'+p.nonstop,d:'per adult, round trip'});if(p.connecting)t.push({k:`${o} best ≤2h-longer`,v:'$'+p.connecting,d:'per adult, round trip'});return t});
+  $('#tiles').insertAdjacentHTML('beforeend',bests.map(t=>`<div class="tile"><div class="k">${t.k}</div><div class="v">${t.v}</div><div class="d">${t.d}</div></div>`).join(''));
+  const ink=css('--ink2'), grid=css('--grid');
+  if(trendChart)trendChart.destroy();
+  trendChart=new Chart($('#trend'),{type:'line',data:{labels,datasets:ds},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},
+    plugins:{legend:{position:'bottom',labels:{color:ink,usePointStyle:true,pointStyle:'line',boxWidth:36}},tooltip:{callbacks:{label:c=>` ${c.dataset.label}: $${c.parsed.y}`}}},
+    scales:{x:{ticks:{color:ink,maxRotation:0,autoSkip:true},grid:{color:grid}},y:{ticks:{color:ink,callback:v=>'$'+v},grid:{color:grid},beginAtZero:false}}}});
+}
+
+function ramp(price,min,max){ // darker = cheaper
+  const steps=['--s700','--s600','--s500','--s400','--s300','--s200','--s100'];
+  const t=max>min?(price-min)/(max-min):0; const i=Math.min(steps.length-1,Math.floor(t*steps.length));
+  return {bg:css(steps[i]),light:i>=4};
+}
+
+async function loadHeatmaps(){
+  const box=$('#heatmaps'); box.innerHTML='';
+  for(const o of cfg.origins){
+    let h; try{h=await j('/api/heatmap?origin='+o)}catch(e){box.insertAdjacentHTML('beforeend',`<div class="panel"><h2>${o} → ${cfg.destination}</h2><div style="color:var(--muted)">no completed run yet</div></div>`);continue}
+    const cells=h.cells, byKey={}; cells.forEach(c=>byKey[c.dep+'|'+c.nights]=c);
+    const deps=[...new Set(cells.map(c=>c.dep))].sort();
+    const prices=cells.map(c=>c.price), min=Math.min(...prices), max=Math.max(...prices);
+    let html=`<div class="panel"><h2>${o} → ${cfg.destination} <span style="font-weight:400;color:var(--muted)">cheapest per adult, departure × nights · run ${h.run_id}</span></h2><table><tr><th></th>${cfg.nights.map(n=>`<th>${n} nt</th>`).join('')}</tr>`;
+    for(const d of deps){
+      html+=`<tr><td class="d">${md(d)} ${['Su','Mo','Tu','We','Th','Fr','Sa'][new Date(d+'T12:00').getDay()]}</td>`;
+      for(const n of cfg.nights){const c=byKey[d+'|'+n];
+        if(!c){html+=`<td class="c empty">—</td>`;continue}
+        const r=ramp(c.price,min,max);
+        html+=`<td class="c ${r.light?'light':''} ${c.nonstop?'ns':''}" style="background:${r.bg}" data-o="${o}" data-dep="${c.dep}" data-ret="${c.ret}" title="${c.route} ${c.airlines} ${hm(c.elapsed_min)}${c.nonstop?' · nonstop $'+c.nonstop:''}">$${c.price}</td>`}
+      html+='</tr>';
+    }
+    html+=`</table><div class="legend"><span class="sw" style="background:${css('--s700')}"></span>$${min} <span style="color:var(--muted)">→</span> <span class="sw" style="background:${css('--s100')}"></span>$${max} (darker = cheaper) · ● = a nonstop exists for those dates</div></div>`;
+    box.insertAdjacentHTML('beforeend',html);
+  }
+  box.querySelectorAll('td.c:not(.empty)').forEach(td=>td.addEventListener('click',()=>showDetail(td.dataset.o,td.dataset.dep,td.dataset.ret)));
+}
+
+async function showDetail(o,dep,ret){
+  $('#detailh').textContent=`${o} ${md(dep)} → ${md(ret)} itineraries`;
+  const {fares}=await j(`/api/fares?origin=${o}&dep=${dep}&ret=${ret}`);
+  const {points}=await j(`/api/history?origin=${o}&dep=${dep}&ret=${ret}`);
+  const hist=points.map(p=>`${fmtT(p.ts)}: ${p.nonstop?'nonstop $'+p.nonstop:''}${p.nonstop&&p.connecting?' · ':''}${p.connecting?'connecting $'+p.connecting:''}`).join('<br>');
+  $('#detail').style.color='';
+  $('#detail').innerHTML=`<table><tr><th>Price</th><th>Stops</th><th>Route</th><th>Airline</th><th>Dep</th><th>Arr</th><th>Total</th></tr>`+
+    fares.map(f=>`<tr><td><b>$${f.price}</b></td><td>${f.stops}</td><td>${f.route}</td><td>${f.airlines}</td><td>${f.dep_time}</td><td>${f.arr_time}</td><td>${hm(f.elapsed_min)}</td></tr>`).join('')+
+    `</table><div style="margin-top:8px"><a href="${fares[0]?.url}" target="_blank" rel="noopener">Open these dates in Google Flights ↗</a></div><div style="margin-top:8px;color:var(--ink2)"><b>History</b><br>${hist}</div>`;
+}
+
+async function loadAlerts(){
+  const {alerts}=await j('/api/alerts');
+  if(!alerts.length)return;
+  $('#alerts').style.color='';
+  $('#alerts').innerHTML=alerts.map(a=>`<div class="alert"><div class="t">${fmtT(a.ts)} · ${a.rule} · ${a.sent?'pushed':'NOT sent'}</div>${a.message}</div>`).join('');
+}
+
+$('#scan').addEventListener('click',async()=>{const r=await j('/api/scan',{method:'POST'});$('#scanmsg').textContent=r.started?'started':r.reason;setTimeout(refresh,1500)});
+async function refresh(){try{await loadStatus();await loadTrend();await loadHeatmaps();await loadAlerts()}catch(e){$('#sub').textContent='error: '+e.message}}
+refresh(); setInterval(loadStatus,15000);
+</script>
+</body>
+</html>
