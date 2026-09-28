@@ -82,7 +82,7 @@ on every refresh; a second refresher would break the live proxy.
   job/lock, resumable. Gear (shoes) fetched once per id.
 - Labels (`run_labels`): race, stroller, treadmill, carbon, exclude, shoe, note. Seeded
   from Strava name/trainer/workout_type; a manual label always beats a re-seed.
-- UI: `http://192.168.10.217:8093/runs` (phone-checked). API: `GET /api/runs?athlete=`,
+- UI: `http://192.168.10.217:8093/runs`, `/fitness` and `/plan`, all in the main nav on every page (phone-checked); Homepage tile renamed "Trainer Max" 2026-09-27. API: `GET /api/runs?athlete=`,
   `GET /api/runs/{id}`, `PUT /api/runs/{id}/labels`, `POST /import/strava/runs?athlete=`
   (explicit backfill; never auto-started), `GET /import/strava/runs/status`. The hourly
   loop only runs a quick run sync once `meta.full_walk_done:<athlete>` exists.
@@ -95,11 +95,13 @@ on every refresh; a second refresher would break the live proxy.
   refit offline and paste. `GET /api/runs/review` = state, 7-vs-28 delta, last long-run drift,
   flags, predictions (SLC + Boise), current plan week; `POST /api/runs/metrics/recompute`.
   The review route must stay ABOVE `/api/runs/{run_id}`. Metrics recompute runs in a background
-  thread 90 s after start and after every import batch. Plan page `/static/plan.html` +
+  thread 90 s after start and after every import batch. Plan page `/plan` (in every page nav with Runs; old `/static/plan.html` still works) +
   `static/plan.json` (regenerate by hand; no route needed). Rollback image
   `trainermax-companion:pre-runmodel-20260927t135509z`. Tests: `test_runmodel.py` (run modules
   separately — they share one RUNS_DB per process). Image now includes numpy.
 - Plan and modelling design: `run-race-predictor-plan.md`.
+
+- Coach (2026-09-27): `coachfacts.py` in the container (facts + `coach_messages`/`coach_run_class` tables), host generator `trainer_max/companion/coach/coach.py` using the machine `claude` login; grading page `/coach`. Replay: `coach/coach.py replay --athlete brad --start 2025-01-01 --end 2025-05-10 --batch <tag>`. Rollback tag `strava-proxy-strava-proxy:pre-coach-20260928t013446z`. Tests: `test_coach.py` (run alone, temp RUNS_DB).
 
 ## Read-only troubleshooting
 
