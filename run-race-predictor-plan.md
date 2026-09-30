@@ -270,7 +270,7 @@ Open: Pushover delivery worker (link format above), per-athlete runmodel calibra
   (official distance, clock time); runs with Avery and pacing duties noted, not races. Boise River
   Marathon 2025 marked COMPROMISED (stomach trouble from before halfway).
 - `runmodel.CALIBRATION` holds each calibrated athlete's race_k, anchor half and distance curve.
-  Rachel: race_k 24700 from six halves (leave-one-out ~1.5 %), b_short 1.05 (Brad 1.097: her 5Ks
+  Rachel: race_k 24820 from six halves (leave-one-out ~1.9 %; Fit One at its measured 12.99 mi via label `course_mi` — model and training use it, records keep the official 13.1), b_short 1.05 (Brad 1.097: her 5Ks
   are relatively slower), generic marathon band 1.10–1.20. HR constants and the efficiency
   pipeline are shared; the per-athlete fit absorbs the difference.
 - Home altitude per athlete (`runmodel.HOME`, Rachel = Boise 2,730 ft, others Salt Lake 4,300 ft).
