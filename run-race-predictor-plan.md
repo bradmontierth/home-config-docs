@@ -263,3 +263,19 @@ Open: Pushover delivery worker (link format above), per-athlete runmodel calibra
 - **Team**: `GET /api/team` (connected athletes) + Team tab; teammate pages open as `/a/<them>?viewer=<me>` = read-only (no coach/profile/flags/race edit/rebuild). Note: Strava's Nov-2024 API terms say data shown to an athlete should be their own; Brad chose team visibility knowingly (friends/family, LAN, all follow each other on Strava).
 - **besteffort.py** replaces Strava best_efforts for PRs: per-run speed ceiling 1.6× median (4–7 m/s), 15-s rolling median; lone spikes smoothed, ≤30 s bursts (GPS catch-up) capped, longer = car/bike → windows disqualified; runs averaging >5.5 m/s skipped; label `nobest` (✕ in the PR table) excludes a run; race with `official_mi` counts at clock time. Cache table best_efforts (VERSION 3). Adrienne's 5:56 mile was her own phone-GPS run 2024-04-22 (+ a car/bike stretch in a 2026-06-07 "run"), not Brad's data.
 - **racefit** equivalents are now "worth a flat half": grade from run_metrics.flat_eq_m (runmodel blend: Brad's personal grade curve + Minetti) and altitude to 4,300 ft (K_ALT_KFT); aged value shown separately. UV half: GPS says 680 ft net drop → course worth 3:41 → flat 1:56:07; the 1:52→2:01 Brad saw earlier was the >1-yr aging, not elevation.
+
+## Rachel onboarded; per-athlete calibration and altitude (2026-09-30)
+
+- Rachel connected by one-time invite; 590 runs (2018→), HR from 2025-04. 15 races labelled
+  (official distance, clock time); runs with Avery and pacing duties noted, not races. Boise River
+  Marathon 2025 marked COMPROMISED (stomach trouble from before halfway).
+- `runmodel.CALIBRATION` holds each calibrated athlete's race_k, anchor half and distance curve.
+  Rachel: race_k 24700 from six halves (leave-one-out ~1.5 %), b_short 1.05 (Brad 1.097: her 5Ks
+  are relatively slower), generic marathon band 1.10–1.20. HR constants and the efficiency
+  pipeline are shared; the per-athlete fit absorbs the difference.
+- Home altitude per athlete (`runmodel.HOME`, Rachel = Boise 2,730 ft, others Salt Lake 4,300 ft).
+  Predictions, fitness chart and race equivalents are shown at home; races have a course
+  altitude (`races.alt_ft`) used for their range. Fitness and Team pages have a "Show times at"
+  toggle (home / Salt Lake / Boise). The altitude term is small (0.5 %/1000 ft ≈ 0.8 % SLC↔Boise).
+- Retro check, Boise 2025: model said ~4:05 on the course (3:55–4:16); she ran 9:05/mi to mile 12,
+  then slowed with stops, 4:18 moving / 4:33 clock.
