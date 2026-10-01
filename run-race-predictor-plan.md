@@ -279,3 +279,38 @@ Open: Pushover delivery worker (link format above), per-athlete runmodel calibra
   toggle (home / Salt Lake / Boise). The altitude term is small (0.5 %/1000 ft ≈ 0.8 % SLC↔Boise).
 - Retro check, Boise 2025: model said ~4:05 on the course (3:55–4:16); she ran 9:05/mi to mile 12,
   then slowed with stops, 4:18 moving / 4:33 clock.
+
+## Strava webhook → post-run coach note → Pushover (2026-09-30)
+
+Brad approved a permanent public path for the webhook (Tailscale Funnel, not the business domain), provided it goes to an isolated receiver.
+- **Receiver** `companion/strava-hook/hook.py`: container `trainermax-strava-hook`, 127.0.0.1:8096 (8094 is camera-audio-proxy). It is stdlib-only, runs as nobody with a read-only root, `cap_drop ALL`, 64 MB and 32 pids. It holds no tokens, no DB and no Claude. What it does:
+  - Answers the `hub.challenge` subscription check.
+  - Validates each event's shape and checks `owner_id` against `data/hookq/owners.json`, which the companion writes (athlete ids only).
+  - Drops accepted events as files into `data/hookq`.
+  - Limits: 60 events a minute, 200 queued. Every other path returns 404.
+- **Secrets:** `cecret_lake/trainer_max/strava_hook.env` holds `HOOK_PATH` (`/strava/wh-<random>`) and `STRAVA_VERIFY_TOKEN`. The companion also loads it, to (re)create the subscription.
+- **Gate:** `strava_gate.py` keeps `HOOK_PATH` funnelled to :8096 at all times; `/strava/callback` still opens only while an invite is open. Funnel can't be probed from the beelink itself (TLS EOF), so Strava's subscription check is the live test.
+- **Companion** `hooks.py`: the drain loop handles each event and runs every 3 s.
+  - Create → `run_import.import_activity`: 1 request if it isn't a run, 3 for a new run.
+  - Title update → rename; costs no request.
+  - Type update → import.
+  - Delete → label `exclude=1` plus the note "deleted on Strava".
+  - Fetches are capped at 30 per athlete per hour. The hourly sync stays as the backstop.
+  - `ensure_subscription` runs hourly: it creates the app's single subscription if none exists, and never deletes one pointing at a different callback.
+- **Notify queue** (`coach_notify` table):
+  - Covers every run ≥ 2 mi while the athlete's Profile switch "Coach messages" (meta `coach_push:<a>`, default on) is on.
+  - Only runs started after `notify_since:<a>` (set at first start and on re-enable) and within the last 48 h, so backfills never flood.
+  - States: pending → sending → noted → sent. `noted` means the note is saved but the push failed; the retry pushes the same note and never writes a second one.
+  - No quiet hours: Brad's call (phones have their own, and a note a minute after the run is the point).
+- **Host worker** `coach/notifyd.py` (user unit `trainermax-notifyd`):
+  - Polls `/api/coach/notify/pending` every 15 s (worker-only).
+  - Writes the note with `coach.coach_one`, prompt v4 (the vetted short message plus a breakdown for key workouts and races), batch `live`, model opus-5-5.
+  - Pushover message: the title is run name · miles; the URL `/a/<athlete>?run=<id>` ("Full breakdown") is included only for LINK_ATHLETES (brad, adrienne).
+  - Pushover app token: `cecret_lake/trainer_max/pushover_app.env` `TRAINERMAX_PUSHOVER_TOKEN`. **Brad to create the "Trainer Max" application**; until then it falls back to `PUSHOVER_API`.
+  - Recipients: brad and adrienne share the household Pushover account (`PUSHOVER_USER` from `pushover/.env`). Their device names come from Node-RED's Configuration Variables globals (`BradPhoneNM`, `AdriennePhoneNM`) via `GET :1880/pushover/device/<person>`, so a phone change is one edit there. If Node-RED can't say, the push is retried, never sent untargeted. Anyone else: `cecret_lake/trainer_max/pushover_recipients.json` `{athlete: {user}}` (their own account). An athlete without a recipient still gets the note on the portal.
+- **Status 2026-09-30:**
+  - Receiver, gate, companion and worker are deployed.
+  - End-to-end test on Brad's Aug 5 run: note written in 6 s and pushed.
+  - Subscription CREATED 2026-09-30 18:38 MT (id 374803; Strava's public challenge passed through Funnel). Earlier it waited because the daily read limit was exhausted (2010/2000 by Rachel's 590-run backfill plus Adrienne's ride walk overnight). The hourly `ensure_subscription` creates it after the reset at 18:00 MT; check the log line "strava webhook subscription: subscribed now".
+  - Adrienne is live: device from Node-RED, endpoint added to the Configuration Variables tab 2026-09-30. Rachel needs her own Pushover account and user key.
+  - Tests: test_portal HookTests, strava-hook/test_hook.py.

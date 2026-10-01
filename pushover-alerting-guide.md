@@ -39,6 +39,7 @@ copy the values into code, compose files, or logs — reference the path.
 | `podcast/bin/notify_pushover.sh` | shared `.env` | yes, if set | ✅ fixed 2026-07-30 |
 | `doorbell_tts/shim` | own compose env | yes, if set | ⚠️ separate env |
 | `scripts/homelab_backup` | own config dict | no | ⚠️ separate config |
+| `trainer_max` coach notes (`companion/coach/notifyd.py`) | shared `.env` user; own app token planned (`cecret_lake/trainer_max/pushover_app.env`) | yes: brad/adrienne device from Node-RED `GET :1880/pushover/device/<person>` (globals `BradPhoneNM`/`AdriennePhoneNM`); retries rather than sending untargeted | ✅ (Node-RED is the one edit) |
 | **Node-RED (105 `pushover api` nodes)** | own `pushover-keys` config node | no — `device: null` on all 105 | ⚠️ untargeted |
 
 So today **most alerts — including the nightly bedtime summary — go to every
