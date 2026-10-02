@@ -208,6 +208,8 @@ Outside/porch/garage motion helpers are triggered from person detections only.
 side_yard and backyard must be inside the property zone before alerts or light triggers are forwarded.
 ```
 
+**Garage phantom light (2026-09-23 → 09-26):** two static objects were being confirmed as `person` under IR and cycling the garage light every 5–10 min all evening: the disc golf bag hanging on the right-edge rack (`garage`, box x≈0.95 y≈0.57, 70–77%) and the 3D printer on the floor in front of the house door (`garage_2`, box x 0.60–0.66 y 0.30–0.44, 70–72%, worse while printing). Frigate only publishes `type: new` once the *median* of the last 10 frame scores clears the threshold — a static object returns the same score every frame, so it passes that check trivially, which is why raising `garage` to `threshold: 0.75` / `min_initialized: 3` on 09-23 only halved the rate. These confirmed-but-brief objects usually never get a snapshot, so they do not appear in Frigate's event history; watch `frigate_jetson/events` on MQTT instead. Fix 09-26: `objects.mask` on both cameras (rack corner `0.90,0.48,1.0,0.48,1.0,0.76,0.90,0.76`; printer footprint `0.58,0.36,0.68,0.36,0.68,0.46,0.58,0.46` — that one sits in the house doorway, acceptable because the door contact lights the garage on its own). Backups `config.yml.bak-garage-fp-20260923-223658` and `config.yml.bak-garage-masks-20260926-221654`. Cheaper still: move the bag, turn off `switch.3d_printer_led` when idle.
+
 ## Detection Model
 
 Detector:
@@ -353,6 +355,10 @@ audio:
 ```
 
 The doorbell input still lists the `audio` role because it was inherited from the prior config. If audio events are needed later, enable/configure audio explicitly and retest load.
+
+### Doorbell alert mute ("Disable doorbell alerts?")
+
+The phone-notification "Disable" action turns on `input_boolean.disable_doorbell_alerts` (auto-off after 1 hour, Blue Iris tab). Turning it on also sets BI profile 3 / global `cameraProfile=3`, but `cameraProfile` is NOT a reliable mute: the Day/Evening mode change, Away Presence, Bedtime Routine, the front-door 5-min revert and the 60-s BI profile poll all rewrite it. On 2026-10-01 the 19:00 Day→Evening change reset it to 1 mid-mute and three visitor alerts leaked. Since then the Doorbell tab (`44288ef567552e5a`) checks the boolean itself (`doorbell_alert_disable_flag_state_v1` → `doorbell_alert_disable_flag_switch_v1`, passes unless state is `on`, so HA-unavailable fails open) before the `cameraProfile` "1 and 2" switch. The package-at-door branch is not gated by it.
 
 ## Known Limits
 
