@@ -620,3 +620,66 @@ config; be careful with overlay/window-manager changes.
   known flip bug.
 - Do not restart or kill the kiosk browser unless the user expects the visible
   display to change.
+
+## Speaker announcement captions (2026-10-03)
+
+The text of anything said on the kitchen big speakers (MA player
+`e4:5f:01:67:1e:56`) can be mirrored onto the kiosk as a transient line at the
+top centre, under the masthead. Callers post:
+
+```text
+POST http://192.168.10.217:8777/api/announcement  {"text": "...", "source": "garage"}
+GET  http://192.168.10.217:8777/api/announcements?limit=10   (last 20 kept in memory)
+```
+
+The backend broadcasts `{"type":"announcement",...}` over `/api/live`;
+`announceShow()` in `app.js` renders it. A line stays for 10 s, plus 0.5 s per
+word past ten words, capped at 25 s. Tapping a line dismisses it. Text over 70
+characters drops from 40 px to 32 px. The same text within 30 s refreshes its
+line instead of stacking, and at most three lines show. The stack sits at
+z-index 12500, above every in-page overlay including the animal player, but a
+VLC camera window covers it because VLC is outside the browser. Voice
+assistant replies are NOT sent here; they already have captions.
+
+Node-RED feeds this from the five paths that can reach the kitchen speaker:
+
+- the Kitchen Message subflow `587e7ece8eaefef2`;
+- the Speaker Announcement subflow `cad921c2d0acb9ee`, only when the kitchen
+  squeezelite is in its final player list;
+- the Amp Speakers subflow `e711d48f74f78209`, likewise only when the kitchen
+  is targeted;
+- the Doorbell and Baby Monitor "Kitchen fast TTS" nodes.
+
+These taps are live since 2026-10-03, deployed with one full deploy. Each is a
+parallel branch ending in an `http request` node named "Dashboard: announcement
+caption", with `requestTimeout` 3000, so the audio never waits on the
+dashboard.
+
+- **Kitchen Message:** `km_caption_fn01` branches off "Build TTS request + mode
+  volume".
+- **Speaker Announcement:** its "Message announcement" function gained a second
+  output, which sends once and only when the kitchen squeezelite survives the
+  player filters.
+- **Amp Speakers:** "Prepare isolate + lease + TTS" uses its previously empty
+  third output the same way.
+- **Doorbell and Baby Monitor:** `db_caption_fn01` and `bm_caption_fn01`
+  branch off each "Kitchen fast TTS".
+
+The `source` field records which path fired. The catch nodes in Amp Speakers
+are scoped to specific nodes, so a failed caption post cannot trip the
+electrical amp fallback.
+
+Verified 2026-10-03 with the Air Quality tab's manual inject (Kitchen Message
+only). The caption POST and MA's "Playback announcement to player
+Kitchen-Big-Speakers" landed within 7 ms of each other, and the line showed on
+the real screen over an open jukebox popup.
+
+Pre-deploy backup:
+`/home/pi/nodered/nr_flows_backup_before_captions_20261003_112119.json`.
+Subflow edits need a full Node-RED deploy (see `kitchen-speaker-guide.md`).
+
+Preview without touching the live screen: run the freshly built image on a
+spare port (`docker run --rm --network host --env-file .env -e
+DASHBOARD_PORT=8810 ...`), then point `headless-shot.py` at it and post test
+announcements to that port. Only one headless-shot can run at a time, because
+both instances use CDP port 9223.
