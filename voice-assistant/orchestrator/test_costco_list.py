@@ -76,6 +76,10 @@ class DispatchTest(_SlotTestBase):
         self.assertEqual(result["response"],
                          "2 items on the Costco list: quinoa and diapers.")
         self.assertEqual([it["id"] for it in result["items"]], [1, 2])
+        # The kitchen display needs the section too: it pulls the full list
+        # behind the view so its tabs work, and re-applies this filter.
+        shown = [c for c in app.events.emit.await_args_list if c.args[0] == "show_list"]
+        self.assertEqual(shown[-1].kwargs["store"], "costco")
 
     def test_plain_read_is_unchanged(self):
         with patch.object(app.intent_mod, "parse",

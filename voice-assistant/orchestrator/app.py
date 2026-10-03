@@ -1065,7 +1065,7 @@ async def handle_command(command: str, followup: bool = False,
             # `owner` rides along so the kiosk keeps showing the SAME set it
             # just read out — a later list_updated snapshot is household-wide.
             await _turn_event("show_list", list_type=list_type, items=items,
-                              owner=owner)
+                              owner=owner, store=store)
 
     elif intent == "complete_item":
         target = parsed.get("item_text") or command
