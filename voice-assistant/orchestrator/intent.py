@@ -203,7 +203,8 @@ Rules:
   The knowledge service keeps the conversation history — pass the question through in "query"
   as spoken; never route a question to "unclear" just because its subject is a pronoun.
 - add_items = adding things to a shopping or todo list: "add eggs and milk to the shopping list",
-  "put paper towels on the list", "add a todo to call the plumber". Leave label/query/item_text null;
+  "put paper towels on the list", "add a todo to call the plumber", "add diapers to the Costco list"
+  (Costco is a section of the shopping list). Leave label/query/item_text null;
   the full command is forwarded to the list service, which figures out the items itself.
 - set_reminder = a time-based reminder: "remind me to take the roast out at 5", "remind me to call mom
   tomorrow morning". Also forwarded whole; leave item_text null. A reminder FOR ANOTHER PERSON is
@@ -216,7 +217,8 @@ Rules:
   on the shopping list". The assistant asks what to add itself. A command that DOES name something
   ("remind me to call mom", "add eggs to the list") has missing_content false.
 - show_todos = "show my todos", "what's on my to-do list". show_shopping = "show the shopping list",
-  "what do I need to buy". show_reminders = "show my reminders", "what reminders do I have", "what
+  "what do I need to buy", "what do we need at Costco", "what's on the Costco list", "what do we
+  still need besides Costco". show_reminders = "show my reminders", "what reminders do I have", "what
   am I being reminded about", "do I have any reminders", "what's my next reminder". No other fields.
   A request to SET one ("remind me to…") is set_reminder, never show_reminders.
 - complete_item = checking something off: "mark eggs as done", "I bought the milk", "cross off call
@@ -1146,6 +1148,10 @@ def fast_parse(command: str) -> dict | None:
     if clock_hit is not None:
         return clock_hit
 
+    store_list = fast_parse_store_list(text)
+    if store_list is not None:
+        return store_list
+
     when = None
     if text in _WEATHER_NOW:
         when = "now"
@@ -1161,6 +1167,48 @@ def fast_parse(command: str) -> dict | None:
     if remote_weather is not None:
         return remote_weather
     return None
+
+
+# The shopping list has two sections: Costco (shopped first) and everything
+# else. The section a list command means is read straight off the words —
+# the classifier only has to recognise show_shopping / add_items.
+_COSTCO_RE = re.compile(r"\bcostcos?\b")
+_NOT_COSTCO_RE = re.compile(
+    r"\b(?:not|besides|other\s+than|except|excluding|after|non)\b(?:\s+\w+){0,2}?\s+costcos?\b"
+    r"|\b(?:isn't|aren't|is\s+not|are\s+not)\s+(?:at\s+|from\s+|for\s+)?costcos?\b")
+_OTHER_STORE_RE = re.compile(r"\b(?:other|another)\s+stores?\b|\banywhere\s+else\b")
+
+
+def store_in(command: str) -> str | None:
+    """'costco', 'other' (everything that isn't Costco), or None (whole list)."""
+    text = (command or "").lower()
+    if _COSTCO_RE.search(text):
+        return "other" if _NOT_COSTCO_RE.search(text) else "costco"
+    if _OTHER_STORE_RE.search(text):
+        return "other"
+    return None
+
+
+# "what do we need at Costco" came back `unclear` from the classifier twice on
+# day one (2026-10-03). A question that names Costco and asks what's needed or
+# what's on the list can only be a shopping read. Needs a list/need word, so
+# "what time does Costco close" stays business_hours.
+_STORE_LIST_LEAD = re.compile(
+    r"^(?:what(?:'s| is| are| all| else)?|whats|anything|is there anything|do we need"
+    r"|read(?: me)?|show(?: me)?|tell me|give me)\b")
+_STORE_LIST_NEED = re.compile(r"\b(?:need|needs|buy|list|pick up|grab|shopping|left)\b")
+
+
+def fast_parse_store_list(command: str) -> dict | None:
+    text = _fast_clean(command)
+    if not _COSTCO_RE.search(text):
+        return None
+    if not (re.search(r"\bcostcos?\s+list\b", text)
+            or (_STORE_LIST_LEAD.match(text) and _STORE_LIST_NEED.search(text))):
+        return None
+    if re.match(r"^(?:add|put)\b", text):
+        return None
+    return _validate({"intent": "show_shopping"})
 
 
 def is_camera_back(command: str) -> bool:

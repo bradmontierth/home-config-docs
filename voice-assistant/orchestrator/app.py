@@ -993,6 +993,11 @@ async def handle_command(command: str, followup: bool = False,
         target, text = people.target_in(text)
         owner = target or owner or await _speaker_name(speaker_task)
         private = intent_mod.wants_private(text)
+        # "add diapers to the Costco list": file the shopping items under that
+        # section afterwards (which also teaches the companion for next time).
+        store = intent_mod.store_in(text) if intent == "add_items" else None
+        if store:
+            text = lists_mod.shopping_framed(text)
         try:
             added = await lists_mod.add_from_text(text, owner=owner, private=private)
         except Exception as exc:  # noqa: BLE001
@@ -1000,8 +1005,16 @@ async def handle_command(command: str, followup: bool = False,
             result["response"] = "Sorry, I couldn't reach the lists service."
             result["ok"] = False
         else:
+            if store:
+                ids = [it["id"] for it in added
+                       if it.get("type") == "shopping" and it.get("id")]
+                try:
+                    await lists_mod.set_store(ids, store, owner)
+                except Exception as exc:  # noqa: BLE001
+                    log.warning("store tag failed: %s", exc)
+                    store = None   # don't claim a section it didn't get
             result["added"] = added
-            result["response"] = fmt.summarize_added(added, for_name=target)
+            result["response"] = fmt.summarize_added(added, for_name=target, store=store)
             # Name the voice-resolved owner aloud (shopping is household-
             # shared, so attribution is only worth speaking for the rest):
             # cheap trust-building plus the audible correction path. A private
@@ -1040,9 +1053,14 @@ async def handle_command(command: str, followup: bool = False,
             result["response"] = "Sorry, I couldn't reach the lists service."
             result["ok"] = False
         else:
+            # "what do we need at Costco" reads one section of the shopping list.
+            store = intent_mod.store_in(command) if list_type == "shopping" else None
+            if store:
+                items = lists_mod.in_store(items, store)
             result["items"] = items
             result["owner"] = owner
-            result["response"] = fmt.summarize_list(list_type, items, owner=owner)
+            result["response"] = (fmt.summarize_store(store, items) if store
+                                  else fmt.summarize_list(list_type, items, owner=owner))
             result["ok"] = True
             # `owner` rides along so the kiosk keeps showing the SAME set it
             # just read out — a later list_updated snapshot is household-wide.

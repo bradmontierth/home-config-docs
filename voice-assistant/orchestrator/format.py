@@ -137,7 +137,8 @@ def _item_phrase(item: dict) -> str:
     return text
 
 
-def summarize_added(items: list[dict], for_name: str | None = None) -> str:
+def summarize_added(items: list[dict], for_name: str | None = None,
+                    store: str | None = None) -> str:
     """Confirmation for an add_items / set_reminder turn, grouped by type.
     `for_name` = the OTHER person the item was filed for ("remind brad to…"),
     spoken instead of "you" so the speaker hears where it went."""
@@ -152,7 +153,8 @@ def summarize_added(items: list[dict], for_name: str | None = None) -> str:
     if buckets["reminder"]:
         clauses.append(f"I'll remind {who} to " + join_natural(buckets["reminder"]))
     if buckets["shopping"]:
-        clauses.append("added " + join_natural(buckets["shopping"]) + " to the shopping list")
+        where = "the Costco list" if store == "costco" else "the shopping list"
+        clauses.append("added " + join_natural(buckets["shopping"]) + f" to {where}")
     if buckets["todo"]:
         clauses.append("added " + join_natural(buckets["todo"]) + f" to {whose} to-dos")
     if not clauses:
@@ -175,6 +177,22 @@ _LIST_EMPTY = {
 # the hands-busy case the kitchen actually has — so they stay spoken.
 _COUNT_ONLY_NOUN = {"todo": ("to-do", "to-dos"),
                     "reminder": ("reminder", "reminders")}
+
+
+_STORE_LABEL = {"costco": "the Costco list", "other": "the everything-else list"}
+
+
+def summarize_store(store: str, items: list[dict]) -> str:
+    """Spoken read of one shopping section ("what do we need at Costco")."""
+    label = _STORE_LABEL.get(store, "the shopping list")
+    if not items:
+        return f"Nothing on {label}."
+    names = [_item_phrase(it) for it in items]
+    spoken = join_natural(names[:6])
+    if len(names) > 6:
+        spoken += f", and {len(names) - 6} more"
+    noun = "item" if len(names) == 1 else "items"
+    return f"{len(names)} {noun} on {label}: {spoken}."
 
 
 def summarize_list(list_type: str, items: list[dict], owner: str | None = None) -> str:

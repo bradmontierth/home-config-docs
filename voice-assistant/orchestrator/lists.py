@@ -22,6 +22,7 @@ it, because the companion prompt keys off framing words ("shopping list",
 from __future__ import annotations
 
 import logging
+import re
 import time
 import uuid
 
@@ -142,6 +143,30 @@ async def add_shopping(texts: list[str], owner: str | None = None) -> dict:
         len(data.get("added") or []), len(data.get("duplicates") or []),
     )
     return data
+
+
+# "the Costco list" is how people say it, but the companion types items from
+# framing words ("shopping list") — say it the companion's way.
+_STORE_LIST_PHRASE = re.compile(r"\b(?:my|the|our)?\s*costcos?\s+(?:shopping\s+)?list\b", re.I)
+
+
+def shopping_framed(text: str) -> str:
+    return _STORE_LIST_PHRASE.sub("the shopping list", text)
+
+
+async def set_store(item_ids: list[int], store: str, user: str | None = None) -> None:
+    """File shopping items under a section ('costco' / 'other'). The companion
+    remembers each one, so the item lands there again next time."""
+    async with httpx.AsyncClient(timeout=15, base_url=config.COMPANION_URL) as client:
+        for item_id in item_ids:
+            r = await client.post(f"/api/items/{item_id}/store",
+                                  json={"store": store, "user": user})
+            r.raise_for_status()
+
+
+def in_store(items: list[dict], store: str) -> list[dict]:
+    want = "costco" if store == "costco" else None
+    return [it for it in items if (it.get("store") or None) == want]
 
 
 async def fetch(types: tuple[str, ...] | None = None, status: str = "active",
