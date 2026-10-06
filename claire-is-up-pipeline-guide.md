@@ -41,9 +41,29 @@ Qwen VLM endpoint: http://192.168.10.187:8095/v1/chat/completions
 Camera sources:
 
 ```text
-Audio:    http://192.168.10.49:81/audio/clairecam/temp.wav
-Snapshot: http://192.168.10.49:81/image/clairecam
+Audio:    rtsp://192.168.10.197:8554/claire_cam_master_detect   (Jetson go2rtc, sub-stream audio)
+Snapshot: rtsp://192.168.10.197:8554/claire_cam_master_record   (one full-res frame per check,
+          scaled to 960x720 by vlm.grab_frame so crop_box still fits)
+Pushover image (Node-RED): http://192.168.10.197:5000/api/claire_cam_master/latest.jpg?height=720
 ```
+
+### Moved off Blue Iris (2026-10-06)
+
+Until 2026-10-06 both sources were Blue Iris (`temp.wav` and `/image/clairecam`
+on 192.168.10.49:81). They now come from the Jetson go2rtc restreams, so the
+pipeline no longer depends on the Blue Iris box. Pre-change backups:
+`/home/pi/baby-monitor/app/config.yaml.bak-bi-20261006` and
+`app/vlm.py.bak-20261006` (that directory is not a git repo).
+
+Why a full-res RTSP grab rather than Frigate's `latest.jpg` for the VLM:
+`latest.jpg` is upscaled from the 640x480 detect stream. Comparing all three
+sources on the empty crib, every one (Blue Iris included) sometimes reports
+"lying, awake 0.1-0.2" — an existing model quirk, far below the 0.8/0.85
+alert thresholds — so the grab is about keeping Blue Iris-equivalent detail
+for the sitting/standing call, not a fix. A grab takes ~2-3 s.
+
+To test the Node-RED path without alerting everyone, publish `reason: "test"`
+(goes only to Brad's phone, no speakers); `awake`/`cry` are production-shaped.
 
 ## Home Assistant Arming
 
@@ -94,7 +114,7 @@ Alert payload shape:
   "reason": "cry",
   "detail": {},
   "ts": 1781376845,
-  "snapshot_url": "http://192.168.10.49:81/image/clairecam"
+  "snapshot_url": "rtsp://192.168.10.197:8554/claire_cam_master_record"
 }
 ```
 
@@ -176,7 +196,7 @@ const real = (a.reason === 'cry' || a.reason === 'awake');
 msg.topic = real ? 'Claire is up' : 'Baby monitor test';
 msg.priority = real ? 1 : 0;
 if (!real) { msg.device = global.get('BradPhoneNM'); }  // tests only ping Brad
-msg.image = 'http://192.168.10.49:81/image/clairecam';
+msg.image = 'http://192.168.10.197:5000/api/claire_cam_master/latest.jpg?height=720';
 ```
 
 This means:
@@ -250,7 +270,7 @@ will notify phones:
 ```bash
 docker exec mosquitto sh -lc 'mosquitto_pub -h 127.0.0.1 -p 1883 \
   -t babymonitor/alert -q 1 \
-  -m "{\"reason\":\"awake\",\"detail\":{\"manual_test\":true},\"ts\":$(date +%s),\"snapshot_url\":\"http://192.168.10.49:81/image/clairecam\"}"'
+  -m "{\"reason\":\"awake\",\"detail\":{\"manual_test\":true},\"ts\":$(date +%s),\"snapshot_url\":\"rtsp://192.168.10.197:8554/claire_cam_master_record\"}"'
 ```
 
 Then check Node-RED logs:
