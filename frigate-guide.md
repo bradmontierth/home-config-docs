@@ -374,6 +374,19 @@ succeeded. Pre-change tab copy:
 
 The phone-notification "Disable" action turns on `input_boolean.disable_doorbell_alerts` (auto-off after 1 hour, Blue Iris tab). Turning it on also sets BI profile 3 / global `cameraProfile=3`, but `cameraProfile` is NOT a reliable mute: the Day/Evening mode change, Away Presence, Bedtime Routine, the front-door 5-min revert and the 60-s BI profile poll all rewrite it. On 2026-10-01 the 19:00 Day→Evening change reset it to 1 mid-mute and three visitor alerts leaked. Since then the Doorbell tab (`44288ef567552e5a`) checks the boolean itself (`doorbell_alert_disable_flag_state_v1` → `doorbell_alert_disable_flag_switch_v1`, passes unless state is `on`, so HA-unavailable fails open) before the `cameraProfile` "1 and 2" switch. The package-at-door branch is not gated by it.
 
+**`cameraProfile` no longer involves Blue Iris (2026-10-06).** It is Node-RED's own
+flag: 1/2 = normal, 3 = doorbell and package alerts quiet. Writers: the Blue Iris tab
+(mode change → 1/2, front door opened → 3 with the 5-min revert, the disable-doorbell
+boolean → 3/1) and `GET /bi-profile-change?profile=N` (used by Away Presence, Bedtime
+Routine and the Blue Iris tab's "Profile N via central BI" nodes). That endpoint now
+sets the flag directly and answers at once; it used to ask Blue Iris to switch and copy
+Blue Iris's answer back, and a 60-s poll let Blue Iris overwrite the flag. The poll,
+`Call BI admin`, `Poll BI admin` and `Build BI status request` are disabled. Readers that
+matter are the two "1 and 2" switches on the Doorbell tab (visitor alert, also gated on
+the boolean; Package at Door, gated only on the flag); the seven on the Blue Iris tab
+have no live input. Pre-change tab copy:
+`/home/pi/nodered/data/projects/nodered_n100_mini/blueiris-tab-before-profile-decouple-20261006.json`.
+
 ## Known Limits
 
 1. NVR session limits
