@@ -11,7 +11,7 @@ Main app host:
 beelink / 192.168.10.217
 repo: /home/pi/dashboard_webapp
 dashboard: http://192.168.10.217:8777/
-slideshow source: http://192.168.10.217:9010
+slideshow source: http://192.168.10.217:9021
 ```
 
 Display host:
@@ -190,6 +190,24 @@ freezes while video/radar keep moving. Software decode of the pre-transcoded
 720p clips is fine and page paint stays healthy. (May also be aggravated by
 the display-pi low-voltage condition — power supply still needs attention.)
 
+### White slideshow recovery (2026-09-21)
+
+The slideshow frame went white and stopped answering tap messages while the
+rest of the dashboard remained live. Immich slideshow HTTP/feed/image serving
+was healthy, but the kiosk stopped requesting photos at 14:29. The Pi kernel
+logged `vc4-drm gpu: swiotlb buffer is full` at 14:13. Its Chromium process
+had been running for 17 days without `--disable-accelerated-video-decode`:
+the flag was documented above but missing from the persistent launcher.
+GPU resource exhaustion is the suspected trigger; no renderer crash report
+was available to establish the exact cause.
+
+Added the flag to `/usr/local/bin/kitchen-display-chromium` on display-pi and
+synced the launcher reference in `display-pi-monitoring/kitchen-display-chromium`.
+The previous launcher is backed up beside it as `.bak-20260921`. Relaunching
+Chromium restored photos; injected touchscreen taps verified fullscreen and
+return to the dashboard. Keep this flag in the persistent launcher when
+updating kiosk startup, not only in one-off launch commands.
+
 The app route `/` also cache-busts `app.js`, `styles.css`, and `editorial.css`
 using their mtimes. Still relaunch/reload Chromium after a deploy.
 
@@ -298,7 +316,7 @@ names and `.env` URLs are unchanged. `grim -t ppm -s 0.25` works over ssh with
 `WAYLAND_DISPLAY=wayland-0 XDG_RUNTIME_DIR=/run/user/1000` (~0.8 s per shot)
 for measuring what the screen actually shows.
 
-Old Blue Iris endpoints (working fallback, but lag-prone after stalls):
+Old Blue Iris endpoints (lag-prone after stalls; Blue Iris is being retired, see Lookout):
 
 ```text
 Simon:    http://192.168.10.49:81/h264/BabyCAMR/temp.ts
@@ -306,13 +324,21 @@ Claire:   http://192.168.10.49:81/mjpg/clairecam/video.mjpg
 Doorbell: http://192.168.10.49:81/h264/DoorbellReolink/temp.ts
 ```
 
-Current audio URLs use matching Blue Iris audio:
+Camera audio comes from the Jetson go2rtc restreams (since 2026-10-06; it was
+Blue Iris `temp.wav` before). Music Assistant plays RTSP URLs fine; it logs a
+harmless `Error while parsing radio URL` warning because it first tries to read
+the address as a playlist.
 
 ```text
-Simon:    http://192.168.10.49:81/audio/BabyCAMR/temp.wav
-Claire:   http://192.168.10.49:81/audio/clairecam/temp.wav
-Doorbell: http://192.168.10.49:81/audio/DoorbellReolink/temp.wav
+Simon:    rtsp://192.168.10.197:8554/simon_cam_detect        (sub stream, Frigate already holds it open)
+Claire:   rtsp://192.168.10.197:8554/claire_cam_master_detect
+Doorbell: rtsp://192.168.10.197:8554/doorbell_record         (main; doorbell_detect is unused, so it would
+                                                              open a new session on the Wi-Fi doorbell)
 ```
+
+These live in `display_helper/.env` (`AUDIO_*_URL`, gitignored) on both the
+Beelink copy and display-pi. Backup of the Blue Iris version on both:
+`display_helper/.env.bak-bi-audio-20261006`.
 
 Audio target:
 
@@ -607,7 +633,8 @@ config; be careful with overlay/window-manager changes.
   `HA_BASE_URL=http://127.0.0.1:8123`.
 - HA token is read from `/home/pi/cecret_lake/dashboard_webapp/ha_token`.
 - Blue Iris remains `192.168.10.49:81`.
-- The slideshow remains external at `http://192.168.10.217:9010`.
+- The Immich slideshow remains external at `http://192.168.10.217:9021`
+  (`:9010` is the separate legacy photo-app client).
 
 ## Avoid These Mistakes
 
@@ -620,6 +647,17 @@ config; be careful with overlay/window-manager changes.
   known flip bug.
 - Do not restart or kill the kiosk browser unless the user expects the visible
   display to change.
+
+## Animal sound videos (2026-09-29)
+
+The voice intent `animal_sound` now plays the selected lion, elephant and frog
+clips as a dashboard overlay, with audio on the kitchen satellite. Exact
+“what sound does a … make” phrases bypass classification. The assets are local
+under `/home/pi/dashboard_webapp/data/animals`; no YouTube access is needed during
+playback. See `/home/pi/dashboard_webapp/ANIMAL_VIDEOS.md` for sources, trim points,
+import tooling, the kiosk ownership/session protocol, checks, and limitations.
+The kitchen and family-room satellites end follow-up listening for successful
+animal playback. Replay and Close are on screen; a new wake or timer interrupts.
 
 ## Speaker announcement captions (2026-10-03)
 
@@ -683,3 +721,14 @@ spare port (`docker run --rm --network host --env-file .env -e
 DASHBOARD_PORT=8810 ...`), then point `headless-shot.py` at it and post test
 announcements to that port. Only one headless-shot can run at a time, because
 both instances use CDP port 9223.
+
+
+### Animal Library manager (2026-10-03)
+
+Homepage now links to `http://192.168.10.217:8777/animals`. It imports YouTube
+clips, edits aliases/timing, previews locally, and displays durable job progress
+and retryable failures. Successful imports publish atomically; the orchestrator
+reads the shared catalog from a read-only `/animal-library` mount, and the kiosk
+refreshes automatically. Future animal additions require no container rebuild,
+service restart, or browser reload. Full operational details and validation are
+in `/home/pi/dashboard_webapp/ANIMAL_VIDEOS.md`.
