@@ -276,7 +276,12 @@ These are global charging-mode selectors, not per-car commands.
 
 ## Camera And Audio Streams
 
-As of 2026-07-04 the display helper consumes RTSP from go2rtc on the Frigate
+Since 2026-10-06 the video comes from the Optiplex (Lookout's go2rtc,
+`rtsp://lookout:<pw>@192.168.10.49:8554/<camera>_kitchen_display`, Quick Sync
+1440-wide H.264 at the camera's 15 fps); `STREAM_*` in `display_helper/.env` on both
+the Beelink copy and display-pi (backup `.env.bak-jetson-video-20261006`). The audio
+URLs still use the Jetson restream, which relays from the Optiplex. Before that
+(2026-07-04 to 10-06) the display helper consumed RTSP from go2rtc on the Frigate
 Jetson (`192.168.10.197:8554`), NOT Blue Iris:
 
 ```text

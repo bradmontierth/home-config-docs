@@ -95,7 +95,26 @@ high-volume camera viewing
 
 Do not try to turn the Jetson Frigate instance into the main recorder for every camera unless dedicated media storage is added and the NVR/session limits are revisited.
 
+## Camera sources come from the Optiplex (since 2026-10-06)
+
+Frigate no longer connects to any camera. Every source in the go2rtc section is
+`rtsp://lookout:{FRIGATE_LOOKOUT_RTSP_PASSWORD}@192.168.10.49:8554/<same name>`:
+the Optiplex (Lookout's go2rtc, repo `/home/pi/lookout`, `go2rtc/sources-cameras.yaml`)
+is the one machine that opens each camera/NVR stream, and Frigate, Lookout's recorder
+and the kitchen display all read from it. The password is in Frigate's `.env`
+(`FRIGATE_LOOKOUT_RTSP_PASSWORD`, copy of `cecret_lake/lookout/rtsp.env` on the Beelink);
+`FRIGATE_CAMERA_PASSWORD` is now unused by the config but kept. If the Optiplex is down,
+Frigate has no video. Rollback (cameras direct again): restore
+`config/config.yml.bak-lookout-hub-*` and `docker compose up -d --force-recreate frigate`.
+The NVR carries 16 sessions this way (8 sub for Frigate, 8 main for Lookout) with no 503s.
+
 ## Kitchen Display Restreams
+
+**Moved to the Optiplex 2026-10-06:** the three `*_kitchen_display` streams were
+removed from this config (backup `config.yml.bak-kitchen-display-move-*`); the display
+helper now reads them from the Optiplex (Quick Sync, 1440 wide, real 15 fps). The
+history below explains why they exist.
+
 
 The go2rtc section defines three `*_kitchen_display` streams
 (`simon_kitchen_display`, `claire_kitchen_display`, `doorbell_kitchen_display`)
