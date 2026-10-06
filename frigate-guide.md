@@ -356,6 +356,20 @@ audio:
 
 The doorbell input still lists the `audio` role because it was inherited from the prior config. If audio events are needed later, enable/configure audio explicitly and retest load.
 
+### Doorbell LLM snapshot path
+
+The Doorbell tab (`44288ef567552e5a`) fetches the Frigate event snapshot
+(`/api/events/<id>/snapshot.jpg` on `:5000`), and `Validate snapshot image`
+(`doorbell_snapshot_image_guard_v1`) checks it is really a JPEG/PNG. A failure
+retries once after 1 s; a second failure goes to `Frigate Live Frame Fallback`
+(`/api/doorbell/latest.jpg`, full 2560x1920 since the doorbell detects on its
+record stream); if that fails too, output 4 "Snapshot Unavailable" logs it and
+suppresses TTS/LLM. The last step was a Blue Iris fallback until 2026-10-06 — it
+had been disabled since the BI webhook cleanup, so a double Frigate failure used
+to vanish silently. Over 2026-08-13..10-06 Frigate failed once and the retry
+succeeded. Pre-change tab copy:
+`/home/pi/nodered/data/projects/nodered_n100_mini/doorbell-tab-before-frigate-fallback-20261006.json`.
+
 ### Doorbell alert mute ("Disable doorbell alerts?")
 
 The phone-notification "Disable" action turns on `input_boolean.disable_doorbell_alerts` (auto-off after 1 hour, Blue Iris tab). Turning it on also sets BI profile 3 / global `cameraProfile=3`, but `cameraProfile` is NOT a reliable mute: the Day/Evening mode change, Away Presence, Bedtime Routine, the front-door 5-min revert and the 60-s BI profile poll all rewrite it. On 2026-10-01 the 19:00 Day→Evening change reset it to 1 mid-mute and three visitor alerts leaked. Since then the Doorbell tab (`44288ef567552e5a`) checks the boolean itself (`doorbell_alert_disable_flag_state_v1` → `doorbell_alert_disable_flag_switch_v1`, passes unless state is `on`, so HA-unavailable fails open) before the `cameraProfile` "1 and 2" switch. The package-at-door branch is not gated by it.
