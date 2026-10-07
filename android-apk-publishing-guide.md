@@ -23,6 +23,7 @@ APK links are under the `APK Downloads` section.
 | Voice Notes | `http://192.168.10.217:3000/apk/voice-notes-latest.apk` | `/home/pi/apks/voice-notes-latest.apk` |
 | STT Keyboard | `http://192.168.10.217:3000/apk/android-stt-latest.apk` | `/home/pi/apks/android-stt-latest.apk` |
 | EV Planner | `http://192.168.10.217:3000/apk/ev-planner-latest.apk` | `/home/pi/apks/ev-planner-latest.apk` |
+| Lookout | `http://192.168.10.217:3000/apk/lookout-latest.apk` | `/home/pi/apks/lookout-latest.apk` |
 | Windows Transcribe | `http://192.168.10.217:3000/apk/windows-transcribe-latest.exe` | `/home/pi/apks/windows-transcribe-latest.exe` |
 
 Publish APKs with the F-Droid publish script (preferred — it also feeds the
@@ -397,6 +398,26 @@ Page changes need no rebuild: the app loads `planner/index.html` from the server
 A brand-new app also needs `/home/pi/fdroid/metadata/<applicationId>.yml`
 (copy an existing one) before `publish.sh`; without it `fdroid update` logs
 "Ignoring package without metadata" and the app never reaches the index.
+
+## Lookout Build And Publish
+
+Lookout is a WebView shell around the camera viewer (`http://lookout.lan:8805`, the
+Optiplex). It tries `lookout.lan` then `192.168.10.49`, lets media play without a tap,
+keeps the screen on, drives Back through the page (`window.lookoutBack`), and runs a
+media foreground service ("Lookout is listening", Stop action) when the page's
+"Listen in background" setting is on. Targets SDK 35 like EV Planner.
+
+Repo: `/home/pi/lookout/android` (application ID `com.local.lookout`, JDK 17, same
+environment block as STT Keyboard). F-Droid metadata: `/home/pi/fdroid/metadata/com.local.lookout.yml`.
+
+```bash
+cd /home/pi/lookout/android
+systemd-run --user --scope -p MemoryMax=3G -p MemorySwapMax=1G \
+  ./gradlew --no-daemon --max-workers=1 :app:assembleDebug
+/home/pi/fdroid/publish.sh app/build/outputs/apk/debug/app-debug.apk lookout-latest.apk
+```
+
+Page changes need no rebuild: the app loads the live page from the server.
 
 ## Signing Keys
 
