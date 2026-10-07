@@ -89,9 +89,9 @@ def drive_temps(now):
 
 def lookout(now):
     out = {}
+    cams, only = [], None
     try:
         cams = json.load(open(CAMERAS))
-        only = None
         env = "/home/pi/lookout/.env"
         for line in open(env):
             if line.startswith("LOOKOUT_ONLY="):
@@ -99,9 +99,26 @@ def lookout(now):
         out["cams_total"] = len([c for c in cams if not only or c["id"] in only])
     except Exception:
         pass
+    # Recording = the camera's newest file grew in the last 3 min (straight from disk, so
+    # it doesn't depend on indexing). cams_down = no footage at all for 30 min.
+    try:
+        ids = [c["id"] for c in cams if not only or c["id"] in only]
+        names = {c["id"]: c["name"] for c in cams}
+        age = {}
+        for cid in ids:
+            files = glob.glob(f"/srv/lookout/hot/{cid}/*.mp4")
+            age[cid] = now - max(os.path.getmtime(f) for f in files) if files else 1e9
+        out["cams_recording"] = sum(1 for a in age.values() if a < 180)
+        down = [names[c] for c, a in age.items() if a >= 1800]
+        out["cams_down_count"] = len(down)
+        out["cams_down"] = ", ".join(down)            # text: used by the alert, not stored
+    except Exception:
+        pass
     try:
         db = sqlite3.connect(f"file:{INDEX}?mode=ro", uri=True, timeout=5)
-        out["cams_recording"] = db.execute("SELECT COUNT(DISTINCT cam) FROM segments WHERE start > ?", (now - 180,)).fetchone()[0]
+        configured = {c["id"] for c in cams if not only or c["id"] in only}
+        newest = [r[1] for r in db.execute("SELECT cam, MAX(start) FROM segments GROUP BY cam") if r[1] and r[0] in configured]
+        out["index_lag_s"] = int(now - min(newest)) if newest else 0   # the most-behind camera
         first = db.execute("SELECT MIN(start) FROM segments WHERE ok=1").fetchone()[0]
         out["retention_h"] = round((now - first) / 3600, 1) if first else 0
         for loc in ("hot", "archive"):

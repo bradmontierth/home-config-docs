@@ -18,14 +18,21 @@ health: `cams_total`, `cams_recording` (cameras with a minute indexed in the las
 3 min, so it also drops when indexing lags), `retention_h`, `hot_gb`/`archive_gb`,
 `lookout_containers` (of 3), `go2rtc_up`.
 
-Alerts (Pushover, Brad's phone via `BradPhoneNM`, node `Optiplex push`):
+Alerts (Pushover, Brad's phone via `BradPhoneNM`, node `Optiplex push`). Quiet by
+design: Wi-Fi cameras drop now and then and the recorder's stall watchdog restarts
+them, so only sustained problems alert, once each, with one recovery message.
 
-- **Optiplex OFFLINE** after 5 min without a sample; "back online" on the next one.
-  Priority 1: Frigate has no video while the Optiplex is down.
-- **Lookout service down**: go2rtc down or <3 Lookout containers for 3 samples.
-- **Lookout: cameras missing from recordings**: `cams_recording < cams_total` for
-  10 samples (a camera stopped, or the index is behind and the timeline is stale).
-  Each alert sends one recovery push.
+- **Optiplex OFFLINE** after 5 min without a sample (priority 1: Frigate has no video
+  while it's down); "back online" on the next sample.
+- **Camera down: <name>**: no footage written for 30 min (`cams_down`, from the files
+  on disk); "Camera back" when it records again.
+- **Lookout timeline behind**: index more than 30 min behind (`index_lag_s`); clears
+  under 10 min.
+- **Lookout service down**: go2rtc down or <3 Lookout containers for 5 samples.
+
+Fields added 2026-10-06 for this: `cams_recording` now counts cameras whose newest
+file grew in the last 3 min (was: indexed minutes), `cams_down_count` / `cams_down`
+(names, text, not stored) and `index_lag_s`.
 
 Install / update on the Optiplex:
 
