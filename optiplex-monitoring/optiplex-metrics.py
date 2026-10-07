@@ -106,8 +106,10 @@ def lookout(now):
         names = {c["id"]: c["name"] for c in cams}
         age = {}
         for cid in ids:
-            files = glob.glob(f"/srv/lookout/hot/{cid}/*.mp4")
-            age[cid] = now - max(os.path.getmtime(f) for f in files) if files else 1e9
+            # Either disk: RECORD_TIER=archive (2026-10-07) writes to the 6 TB disk.
+            # Names are timestamps, so the newest per folder is the max name.
+            newest = [max(fs) for d in ("/srv/lookout/hot", ARCHIVE) if (fs := glob.glob(f"{d}/{cid}/*.mp4"))]
+            age[cid] = now - max(os.path.getmtime(f) for f in newest) if newest else 1e9
         out["cams_recording"] = sum(1 for a in age.values() if a < 180)
         down = [names[c] for c, a in age.items() if a >= 1800]
         out["cams_down_count"] = len(down)
