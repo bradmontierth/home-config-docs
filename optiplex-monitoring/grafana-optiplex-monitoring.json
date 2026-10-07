@@ -1,0 +1,1264 @@
+{
+  "uid": "optiplex-monitoring",
+  "title": "Optiplex Monitoring",
+  "tags": [
+    "device-monitoring",
+    "lookout"
+  ],
+  "timezone": "browser",
+  "time": {
+    "from": "now-24h",
+    "to": "now"
+  },
+  "refresh": "1m",
+  "schemaVersion": 39,
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "CPU Temperature",
+      "datasource": {
+        "type": "mysql",
+        "uid": "eebnvy9j8hmgwb"
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 4,
+        "x": 0,
+        "y": 0
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "mysql",
+            "uid": "eebnvy9j8hmgwb"
+          },
+          "format": "time_series",
+          "rawQuery": true,
+          "editorMode": "code",
+          "rawSql": "SELECT UNIX_TIMESTAMP(Created) * 1000 AS time, CAST(StatNBR AS DECIMAL(18,2)) * 9 / 5 + 32 AS `Current` FROM DeviceMonitoring WHERE $__timeFilter(Created) AND DeviceNM = 'Optiplex' AND StatNM = 'Temp C' ORDER BY Created DESC LIMIT 1;"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "area",
+        "textMode": "value"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "fahrenheit",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 158
+              },
+              {
+                "color": "red",
+                "value": 185
+              }
+            ]
+          },
+          "decimals": 0
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "CPU Utilization",
+      "datasource": {
+        "type": "mysql",
+        "uid": "eebnvy9j8hmgwb"
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 4,
+        "x": 4,
+        "y": 0
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "mysql",
+            "uid": "eebnvy9j8hmgwb"
+          },
+          "format": "time_series",
+          "rawQuery": true,
+          "editorMode": "code",
+          "rawSql": "SELECT UNIX_TIMESTAMP(Created) * 1000 AS time, CAST(StatNBR AS DECIMAL(18,2)) AS `Current` FROM DeviceMonitoring WHERE $__timeFilter(Created) AND DeviceNM = 'Optiplex' AND StatNM = 'Cpu Pct' ORDER BY Created DESC LIMIT 1;"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "area",
+        "textMode": "value"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 80
+              },
+              {
+                "color": "red",
+                "value": 92
+              }
+            ]
+          },
+          "decimals": 0
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Memory Utilization",
+      "datasource": {
+        "type": "mysql",
+        "uid": "eebnvy9j8hmgwb"
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 4,
+        "x": 8,
+        "y": 0
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "mysql",
+            "uid": "eebnvy9j8hmgwb"
+          },
+          "format": "time_series",
+          "rawQuery": true,
+          "editorMode": "code",
+          "rawSql": "SELECT UNIX_TIMESTAMP(Created) * 1000 AS time, CAST(StatNBR AS DECIMAL(18,2)) AS `Current` FROM DeviceMonitoring WHERE $__timeFilter(Created) AND DeviceNM = 'Optiplex' AND StatNM = 'Mem Pct' ORDER BY Created DESC LIMIT 1;"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "area",
+        "textMode": "value"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 80
+              },
+              {
+                "color": "red",
+                "value": 92
+              }
+            ]
+          },
+          "decimals": 0
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "SSD (system + recent footage)",
+      "datasource": {
+        "type": "mysql",
+        "uid": "eebnvy9j8hmgwb"
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 4,
+        "x": 12,
+        "y": 0
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "mysql",
+            "uid": "eebnvy9j8hmgwb"
+          },
+          "format": "time_series",
+          "rawQuery": true,
+          "editorMode": "code",
+          "rawSql": "SELECT UNIX_TIMESTAMP(Created) * 1000 AS time, CAST(StatNBR AS DECIMAL(18,2)) AS `Current` FROM DeviceMonitoring WHERE $__timeFilter(Created) AND DeviceNM = 'Optiplex' AND StatNM = 'Disk Pct Root' ORDER BY Created DESC LIMIT 1;"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "area",
+        "textMode": "value"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 80
+              },
+              {
+                "color": "red",
+                "value": 92
+              }
+            ]
+          },
+          "decimals": 1
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "6 TB archive",
+      "datasource": {
+        "type": "mysql",
+        "uid": "eebnvy9j8hmgwb"
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 4,
+        "x": 16,
+        "y": 0
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "mysql",
+            "uid": "eebnvy9j8hmgwb"
+          },
+          "format": "time_series",
+          "rawQuery": true,
+          "editorMode": "code",
+          "rawSql": "SELECT UNIX_TIMESTAMP(Created) * 1000 AS time, CAST(StatNBR AS DECIMAL(18,2)) AS `Current` FROM DeviceMonitoring WHERE $__timeFilter(Created) AND DeviceNM = 'Optiplex' AND StatNM = 'Disk Pct Archive' ORDER BY Created DESC LIMIT 1;"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "area",
+        "textMode": "value"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 93
+              }
+            ]
+          },
+          "decimals": 1
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 6,
+      "type": "stat",
+      "title": "Cameras recording",
+      "datasource": {
+        "type": "mysql",
+        "uid": "eebnvy9j8hmgwb"
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 4,
+        "x": 20,
+        "y": 0
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "mysql",
+            "uid": "eebnvy9j8hmgwb"
+          },
+          "format": "table",
+          "rawQuery": true,
+          "editorMode": "code",
+          "rawSql": "SELECT UNIX_TIMESTAMP(r.Created) * 1000 AS time, CONCAT(CAST(r.StatNBR AS UNSIGNED), ' / ', CAST(t.StatNBR AS UNSIGNED)) AS `Recording` FROM DeviceMonitoring r JOIN DeviceMonitoring t ON t.DeviceNM = r.DeviceNM AND t.StatNM = 'Cams Total' AND t.Created = r.Created WHERE $__timeFilter(r.Created) AND r.DeviceNM = 'Optiplex' AND r.StatNM = 'Cams Recording' ORDER BY r.Created DESC LIMIT 1;"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "/^Recording$/",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 7,
+      "type": "stat",
+      "title": "History kept",
+      "datasource": {
+        "type": "mysql",
+        "uid": "eebnvy9j8hmgwb"
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 4,
+        "x": 0,
+        "y": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "mysql",
+            "uid": "eebnvy9j8hmgwb"
+          },
+          "format": "time_series",
+          "rawQuery": true,
+          "editorMode": "code",
+          "rawSql": "SELECT UNIX_TIMESTAMP(Created) * 1000 AS time, CAST(StatNBR AS DECIMAL(18,2)) * 3600 AS `Current` FROM DeviceMonitoring WHERE $__timeFilter(Created) AND DeviceNM = 'Optiplex' AND StatNM = 'Retention H' ORDER BY Created DESC LIMIT 1;"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "area",
+        "textMode": "value"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "decimals": 1
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 8,
+      "type": "stat",
+      "title": "Footage on SSD",
+      "datasource": {
+        "type": "mysql",
+        "uid": "eebnvy9j8hmgwb"
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 4,
+        "x": 4,
+        "y": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "mysql",
+            "uid": "eebnvy9j8hmgwb"
+          },
+          "format": "time_series",
+          "rawQuery": true,
+          "editorMode": "code",
+          "rawSql": "SELECT UNIX_TIMESTAMP(Created) * 1000 AS time, CAST(StatNBR AS DECIMAL(18,2)) * 1000000000 AS `Current` FROM DeviceMonitoring WHERE $__timeFilter(Created) AND DeviceNM = 'Optiplex' AND StatNM = 'Hot Gb' ORDER BY Created DESC LIMIT 1;"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "area",
+        "textMode": "value"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "decbytes",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "decimals": 0
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 9,
+      "type": "stat",
+      "title": "Footage on archive",
+      "datasource": {
+        "type": "mysql",
+        "uid": "eebnvy9j8hmgwb"
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 4,
+        "x": 8,
+        "y": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "mysql",
+            "uid": "eebnvy9j8hmgwb"
+          },
+          "format": "time_series",
+          "rawQuery": true,
+          "editorMode": "code",
+          "rawSql": "SELECT UNIX_TIMESTAMP(Created) * 1000 AS time, CAST(StatNBR AS DECIMAL(18,2)) * 1000000000 AS `Current` FROM DeviceMonitoring WHERE $__timeFilter(Created) AND DeviceNM = 'Optiplex' AND StatNM = 'Archive Gb' ORDER BY Created DESC LIMIT 1;"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "area",
+        "textMode": "value"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "decbytes",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "decimals": 0
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 10,
+      "type": "stat",
+      "title": "HDD temperature",
+      "datasource": {
+        "type": "mysql",
+        "uid": "eebnvy9j8hmgwb"
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 4,
+        "x": 12,
+        "y": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "mysql",
+            "uid": "eebnvy9j8hmgwb"
+          },
+          "format": "time_series",
+          "rawQuery": true,
+          "editorMode": "code",
+          "rawSql": "SELECT UNIX_TIMESTAMP(Created) * 1000 AS time, CAST(StatNBR AS DECIMAL(18,2)) * 9 / 5 + 32 AS `Current` FROM DeviceMonitoring WHERE $__timeFilter(Created) AND DeviceNM = 'Optiplex' AND StatNM = 'Hdd Temp C' ORDER BY Created DESC LIMIT 1;"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "area",
+        "textMode": "value"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "fahrenheit",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 113
+              },
+              {
+                "color": "red",
+                "value": 131
+              }
+            ]
+          },
+          "decimals": 0
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 11,
+      "type": "stat",
+      "title": "SSD temperature",
+      "datasource": {
+        "type": "mysql",
+        "uid": "eebnvy9j8hmgwb"
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 4,
+        "x": 16,
+        "y": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "mysql",
+            "uid": "eebnvy9j8hmgwb"
+          },
+          "format": "time_series",
+          "rawQuery": true,
+          "editorMode": "code",
+          "rawSql": "SELECT UNIX_TIMESTAMP(Created) * 1000 AS time, CAST(StatNBR AS DECIMAL(18,2)) * 9 / 5 + 32 AS `Current` FROM DeviceMonitoring WHERE $__timeFilter(Created) AND DeviceNM = 'Optiplex' AND StatNM = 'Ssd Temp C' ORDER BY Created DESC LIMIT 1;"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "area",
+        "textMode": "value"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "fahrenheit",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 113
+              },
+              {
+                "color": "red",
+                "value": 131
+              }
+            ]
+          },
+          "decimals": 0
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 12,
+      "type": "stat",
+      "title": "Network in (cameras)",
+      "datasource": {
+        "type": "mysql",
+        "uid": "eebnvy9j8hmgwb"
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 4,
+        "x": 20,
+        "y": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "mysql",
+            "uid": "eebnvy9j8hmgwb"
+          },
+          "format": "time_series",
+          "rawQuery": true,
+          "editorMode": "code",
+          "rawSql": "SELECT UNIX_TIMESTAMP(Created) * 1000 AS time, CAST(StatNBR AS DECIMAL(18,2)) * 1000000 AS `Current` FROM DeviceMonitoring WHERE $__timeFilter(Created) AND DeviceNM = 'Optiplex' AND StatNM = 'Rx Mbps' ORDER BY Created DESC LIMIT 1;"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "area",
+        "textMode": "value"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bps",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "decimals": 0
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 13,
+      "type": "timeseries",
+      "title": "Temperatures",
+      "datasource": {
+        "type": "mysql",
+        "uid": "eebnvy9j8hmgwb"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 10
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "mysql",
+            "uid": "eebnvy9j8hmgwb"
+          },
+          "format": "time_series",
+          "rawQuery": true,
+          "editorMode": "code",
+          "rawSql": "SELECT UNIX_TIMESTAMP(Created) * 1000 DIV GREATEST($__interval_ms, 60000) * GREATEST($__interval_ms, 60000) AS time, AVG(CAST(StatNBR AS DECIMAL(18,2)) * 9 / 5 + 32) AS `CPU package` FROM DeviceMonitoring WHERE $__timeFilter(Created) AND DeviceNM = 'Optiplex' AND StatNM = 'Temp C' GROUP BY 1 ORDER BY 1;"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "mysql",
+            "uid": "eebnvy9j8hmgwb"
+          },
+          "format": "time_series",
+          "rawQuery": true,
+          "editorMode": "code",
+          "rawSql": "SELECT UNIX_TIMESTAMP(Created) * 1000 DIV GREATEST($__interval_ms, 60000) * GREATEST($__interval_ms, 60000) AS time, AVG(CAST(StatNBR AS DECIMAL(18,2)) * 9 / 5 + 32) AS `6 TB HDD` FROM DeviceMonitoring WHERE $__timeFilter(Created) AND DeviceNM = 'Optiplex' AND StatNM = 'Hdd Temp C' GROUP BY 1 ORDER BY 1;"
+        },
+        {
+          "refId": "C",
+          "datasource": {
+            "type": "mysql",
+            "uid": "eebnvy9j8hmgwb"
+          },
+          "format": "time_series",
+          "rawQuery": true,
+          "editorMode": "code",
+          "rawSql": "SELECT UNIX_TIMESTAMP(Created) * 1000 DIV GREATEST($__interval_ms, 60000) * GREATEST($__interval_ms, 60000) AS time, AVG(CAST(StatNBR AS DECIMAL(18,2)) * 9 / 5 + 32) AS `SSD` FROM DeviceMonitoring WHERE $__timeFilter(Created) AND DeviceNM = 'Optiplex' AND StatNM = 'Ssd Temp C' GROUP BY 1 ORDER BY 1;"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "fahrenheit",
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "spanNulls": 180000
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 14,
+      "type": "timeseries",
+      "title": "CPU and memory",
+      "datasource": {
+        "type": "mysql",
+        "uid": "eebnvy9j8hmgwb"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 16,
+        "x": 0,
+        "y": 19
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "mysql",
+            "uid": "eebnvy9j8hmgwb"
+          },
+          "format": "time_series",
+          "rawQuery": true,
+          "editorMode": "code",
+          "rawSql": "SELECT UNIX_TIMESTAMP(Created) * 1000 DIV GREATEST($__interval_ms, 60000) * GREATEST($__interval_ms, 60000) AS time, AVG(CAST(StatNBR AS DECIMAL(18,2))) AS `CPU` FROM DeviceMonitoring WHERE $__timeFilter(Created) AND DeviceNM = 'Optiplex' AND StatNM = 'Cpu Pct' GROUP BY 1 ORDER BY 1;"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "mysql",
+            "uid": "eebnvy9j8hmgwb"
+          },
+          "format": "time_series",
+          "rawQuery": true,
+          "editorMode": "code",
+          "rawSql": "SELECT UNIX_TIMESTAMP(Created) * 1000 DIV GREATEST($__interval_ms, 60000) * GREATEST($__interval_ms, 60000) AS time, AVG(CAST(StatNBR AS DECIMAL(18,2))) AS `Memory` FROM DeviceMonitoring WHERE $__timeFilter(Created) AND DeviceNM = 'Optiplex' AND StatNM = 'Mem Pct' GROUP BY 1 ORDER BY 1;"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "spanNulls": 180000
+          },
+          "min": 0,
+          "max": 100
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 15,
+      "type": "timeseries",
+      "title": "System load (8 threads)",
+      "datasource": {
+        "type": "mysql",
+        "uid": "eebnvy9j8hmgwb"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 8,
+        "x": 16,
+        "y": 19
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "mysql",
+            "uid": "eebnvy9j8hmgwb"
+          },
+          "format": "time_series",
+          "rawQuery": true,
+          "editorMode": "code",
+          "rawSql": "SELECT UNIX_TIMESTAMP(Created) * 1000 DIV GREATEST($__interval_ms, 60000) * GREATEST($__interval_ms, 60000) AS time, AVG(CAST(StatNBR AS DECIMAL(18,2))) AS `1 min` FROM DeviceMonitoring WHERE $__timeFilter(Created) AND DeviceNM = 'Optiplex' AND StatNM = 'Load1' GROUP BY 1 ORDER BY 1;"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "mysql",
+            "uid": "eebnvy9j8hmgwb"
+          },
+          "format": "time_series",
+          "rawQuery": true,
+          "editorMode": "code",
+          "rawSql": "SELECT UNIX_TIMESTAMP(Created) * 1000 DIV GREATEST($__interval_ms, 60000) * GREATEST($__interval_ms, 60000) AS time, AVG(CAST(StatNBR AS DECIMAL(18,2))) AS `5 min` FROM DeviceMonitoring WHERE $__timeFilter(Created) AND DeviceNM = 'Optiplex' AND StatNM = 'Load5' GROUP BY 1 ORDER BY 1;"
+        },
+        {
+          "refId": "C",
+          "datasource": {
+            "type": "mysql",
+            "uid": "eebnvy9j8hmgwb"
+          },
+          "format": "time_series",
+          "rawQuery": true,
+          "editorMode": "code",
+          "rawSql": "SELECT UNIX_TIMESTAMP(Created) * 1000 DIV GREATEST($__interval_ms, 60000) * GREATEST($__interval_ms, 60000) AS time, AVG(CAST(StatNBR AS DECIMAL(18,2))) AS `15 min` FROM DeviceMonitoring WHERE $__timeFilter(Created) AND DeviceNM = 'Optiplex' AND StatNM = 'Load15' GROUP BY 1 ORDER BY 1;"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "spanNulls": 180000
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 16,
+      "type": "timeseries",
+      "title": "Network",
+      "datasource": {
+        "type": "mysql",
+        "uid": "eebnvy9j8hmgwb"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 28
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "mysql",
+            "uid": "eebnvy9j8hmgwb"
+          },
+          "format": "time_series",
+          "rawQuery": true,
+          "editorMode": "code",
+          "rawSql": "SELECT UNIX_TIMESTAMP(Created) * 1000 DIV GREATEST($__interval_ms, 60000) * GREATEST($__interval_ms, 60000) AS time, AVG(CAST(StatNBR AS DECIMAL(18,2)) * 1000000) AS `In (cameras)` FROM DeviceMonitoring WHERE $__timeFilter(Created) AND DeviceNM = 'Optiplex' AND StatNM = 'Rx Mbps' GROUP BY 1 ORDER BY 1;"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "mysql",
+            "uid": "eebnvy9j8hmgwb"
+          },
+          "format": "time_series",
+          "rawQuery": true,
+          "editorMode": "code",
+          "rawSql": "SELECT UNIX_TIMESTAMP(Created) * 1000 DIV GREATEST($__interval_ms, 60000) * GREATEST($__interval_ms, 60000) AS time, AVG(CAST(StatNBR AS DECIMAL(18,2)) * 1000000) AS `Out (Frigate, viewers)` FROM DeviceMonitoring WHERE $__timeFilter(Created) AND DeviceNM = 'Optiplex' AND StatNM = 'Tx Mbps' GROUP BY 1 ORDER BY 1;"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bps",
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "spanNulls": 180000
+          },
+          "min": 0
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 17,
+      "type": "timeseries",
+      "title": "Disk fill",
+      "datasource": {
+        "type": "mysql",
+        "uid": "eebnvy9j8hmgwb"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 28
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "mysql",
+            "uid": "eebnvy9j8hmgwb"
+          },
+          "format": "time_series",
+          "rawQuery": true,
+          "editorMode": "code",
+          "rawSql": "SELECT UNIX_TIMESTAMP(Created) * 1000 DIV GREATEST($__interval_ms, 60000) * GREATEST($__interval_ms, 60000) AS time, AVG(CAST(StatNBR AS DECIMAL(18,2))) AS `SSD` FROM DeviceMonitoring WHERE $__timeFilter(Created) AND DeviceNM = 'Optiplex' AND StatNM = 'Disk Pct Root' GROUP BY 1 ORDER BY 1;"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "mysql",
+            "uid": "eebnvy9j8hmgwb"
+          },
+          "format": "time_series",
+          "rawQuery": true,
+          "editorMode": "code",
+          "rawSql": "SELECT UNIX_TIMESTAMP(Created) * 1000 DIV GREATEST($__interval_ms, 60000) * GREATEST($__interval_ms, 60000) AS time, AVG(CAST(StatNBR AS DECIMAL(18,2))) AS `6 TB archive` FROM DeviceMonitoring WHERE $__timeFilter(Created) AND DeviceNM = 'Optiplex' AND StatNM = 'Disk Pct Archive' GROUP BY 1 ORDER BY 1;"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "spanNulls": 180000
+          },
+          "min": 0,
+          "max": 100
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 18,
+      "type": "timeseries",
+      "title": "Cameras recording (indexed in the last 3 min)",
+      "datasource": {
+        "type": "mysql",
+        "uid": "eebnvy9j8hmgwb"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 36
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "mysql",
+            "uid": "eebnvy9j8hmgwb"
+          },
+          "format": "time_series",
+          "rawQuery": true,
+          "editorMode": "code",
+          "rawSql": "SELECT UNIX_TIMESTAMP(Created) * 1000 DIV GREATEST($__interval_ms, 60000) * GREATEST($__interval_ms, 60000) AS time, AVG(CAST(StatNBR AS DECIMAL(18,2))) AS `Recording` FROM DeviceMonitoring WHERE $__timeFilter(Created) AND DeviceNM = 'Optiplex' AND StatNM = 'Cams Recording' GROUP BY 1 ORDER BY 1;"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "mysql",
+            "uid": "eebnvy9j8hmgwb"
+          },
+          "format": "time_series",
+          "rawQuery": true,
+          "editorMode": "code",
+          "rawSql": "SELECT UNIX_TIMESTAMP(Created) * 1000 DIV GREATEST($__interval_ms, 60000) * GREATEST($__interval_ms, 60000) AS time, AVG(CAST(StatNBR AS DECIMAL(18,2))) AS `Configured` FROM DeviceMonitoring WHERE $__timeFilter(Created) AND DeviceNM = 'Optiplex' AND StatNM = 'Cams Total' GROUP BY 1 ORDER BY 1;"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "spanNulls": 180000
+          },
+          "min": 0
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 19,
+      "type": "timeseries",
+      "title": "History kept (days)",
+      "datasource": {
+        "type": "mysql",
+        "uid": "eebnvy9j8hmgwb"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 36
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "mysql",
+            "uid": "eebnvy9j8hmgwb"
+          },
+          "format": "time_series",
+          "rawQuery": true,
+          "editorMode": "code",
+          "rawSql": "SELECT UNIX_TIMESTAMP(Created) * 1000 DIV GREATEST($__interval_ms, 60000) * GREATEST($__interval_ms, 60000) AS time, AVG(CAST(StatNBR AS DECIMAL(18,2)) / 24) AS `Retention` FROM DeviceMonitoring WHERE $__timeFilter(Created) AND DeviceNM = 'Optiplex' AND StatNM = 'Retention H' GROUP BY 1 ORDER BY 1;"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "spanNulls": 180000
+          },
+          "min": 0
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 20,
+      "type": "timeseries",
+      "title": "Footage size",
+      "datasource": {
+        "type": "mysql",
+        "uid": "eebnvy9j8hmgwb"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 36
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "mysql",
+            "uid": "eebnvy9j8hmgwb"
+          },
+          "format": "time_series",
+          "rawQuery": true,
+          "editorMode": "code",
+          "rawSql": "SELECT UNIX_TIMESTAMP(Created) * 1000 DIV GREATEST($__interval_ms, 60000) * GREATEST($__interval_ms, 60000) AS time, AVG(CAST(StatNBR AS DECIMAL(18,2)) * 1000000000) AS `SSD` FROM DeviceMonitoring WHERE $__timeFilter(Created) AND DeviceNM = 'Optiplex' AND StatNM = 'Hot Gb' GROUP BY 1 ORDER BY 1;"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "mysql",
+            "uid": "eebnvy9j8hmgwb"
+          },
+          "format": "time_series",
+          "rawQuery": true,
+          "editorMode": "code",
+          "rawSql": "SELECT UNIX_TIMESTAMP(Created) * 1000 DIV GREATEST($__interval_ms, 60000) * GREATEST($__interval_ms, 60000) AS time, AVG(CAST(StatNBR AS DECIMAL(18,2)) * 1000000000) AS `Archive` FROM DeviceMonitoring WHERE $__timeFilter(Created) AND DeviceNM = 'Optiplex' AND StatNM = 'Archive Gb' GROUP BY 1 ORDER BY 1;"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "decbytes",
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "spanNulls": 180000
+          },
+          "min": 0
+        },
+        "overrides": []
+      }
+    }
+  ],
+  "description": "Optiplex (192.168.10.49): Lookout recorder + camera hub for Frigate. Source: home_config/optiplex-monitoring."
+}

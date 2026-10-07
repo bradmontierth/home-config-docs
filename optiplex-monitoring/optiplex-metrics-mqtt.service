@@ -1,0 +1,15 @@
+[Unit]
+Description=Optiplex metrics publisher to MQTT (Beelink Device Monitoring)
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/bin/sh -c '/usr/local/bin/optiplex-metrics | mosquitto_pub -h 192.168.10.217 -p 1883 -t pi/metrics/optiplex -q 0 -l'
+Restart=always
+RestartSec=10
+MemoryMax=64M
+CPUQuota=5%
+
+[Install]
+WantedBy=multi-user.target
