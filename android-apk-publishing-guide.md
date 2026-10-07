@@ -24,6 +24,7 @@ APK links are under the `APK Downloads` section.
 | STT Keyboard | `http://192.168.10.217:3000/apk/android-stt-latest.apk` | `/home/pi/apks/android-stt-latest.apk` |
 | EV Planner | `http://192.168.10.217:3000/apk/ev-planner-latest.apk` | `/home/pi/apks/ev-planner-latest.apk` |
 | Lookout | `http://192.168.10.217:3000/apk/lookout-latest.apk` | `/home/pi/apks/lookout-latest.apk` |
+| Dashboards (Grafana Mobile) | `http://192.168.10.217:3000/apk/grafana-mobile-latest.apk` | `/home/pi/apks/grafana-mobile-latest.apk` |
 | Windows Transcribe | `http://192.168.10.217:3000/apk/windows-transcribe-latest.exe` | `/home/pi/apks/windows-transcribe-latest.exe` |
 
 Publish APKs with the F-Droid publish script (preferred — it also feeds the
@@ -415,6 +416,25 @@ cd /home/pi/lookout/android
 systemd-run --user --scope -p MemoryMax=3G -p MemorySwapMax=1G \
   ./gradlew --no-daemon --max-workers=1 :app:assembleDebug
 /home/pi/fdroid/publish.sh app/build/outputs/apk/debug/app-debug.apk lookout-latest.apk
+```
+
+Page changes need no rebuild: the app loads the live page from the server.
+
+## Dashboards (Grafana Mobile) Build And Publish
+
+Dashboards is a WebView shell around the Grafana Mobile viewer on `:8800`
+(`grafana-mobile-guide.md`). Back peels the page's layers via `window.gmBack()`
+then goes to the previous dashboard; pull-to-refresh calls `window.gmRefresh()`;
+WebView zoom is off so the charts' pinch-to-zoom works. Targets SDK 35.
+
+Repo: `/home/pi/grafana-mobile-android` (application ID `com.local.grafanamobile`, JDK 17,
+same environment block as STT Keyboard). F-Droid metadata: `/home/pi/fdroid/metadata/com.local.grafanamobile.yml`.
+
+```bash
+cd /home/pi/grafana-mobile-android
+systemd-run --user --scope -p MemoryMax=3G -p MemorySwapMax=1G \
+  ./gradlew --no-daemon --max-workers=1 :app:assembleDebug
+/home/pi/fdroid/publish.sh app/build/outputs/apk/debug/app-debug.apk grafana-mobile-latest.apk
 ```
 
 Page changes need no rebuild: the app loads the live page from the server.

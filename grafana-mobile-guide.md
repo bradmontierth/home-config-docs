@@ -6,6 +6,13 @@ Phone-first viewer over the existing Grafana dashboards.
 - Repo: `/home/pi/grafana-mobile` (local git, no GitHub remote yet)
 - Source of truth: Grafana at `http://192.168.10.217:3001` (container `grafana-grafana-1`)
 
+## Android app
+
+"Dashboards" (`com.local.grafanamobile`, repo `/home/pi/grafana-mobile-android`) is
+a full-screen WebView shell, installed from the F-Droid repo or
+`http://192.168.10.217:3000/apk/grafana-mobile-latest.apk`. Build/publish steps are
+in `android-apk-publishing-guide.md`. Page changes need no APK rebuild.
+
 ## How it works
 
 Read-only. It fetches dashboard JSON from Grafana and runs each panel's saved
