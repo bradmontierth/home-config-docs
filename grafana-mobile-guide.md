@@ -18,8 +18,10 @@ in `android-apk-publishing-guide.md`. Page changes need no APK rebuild.
 Read-only. It fetches dashboard JSON from Grafana and runs each panel's saved
 query through Grafana's `/api/ds/query`; it holds no database credentials and
 the browser never sends SQL. Edit dashboards in Grafana as usual; the phone
-view picks the change up within 60 s. Favorites / hidden dashboards:
-`/home/pi/grafana-mobile/config/config.json` (no rebuild).
+view picks the change up within 60 s. Favorites, hidden dashboards and
+viewer-only display names (`titles`, uid → name; Grafana's title is untouched):
+`/home/pi/grafana-mobile/config/config.json` (no rebuild). "Plex Server Info"
+(uid `aebnyj3gnzcaob`, host stats for 192.168.10.150) shows as "Media Server (Plex Pi)".
 
 Deploy: `cd /home/pi/grafana-mobile && docker compose up -d --build`.
 
