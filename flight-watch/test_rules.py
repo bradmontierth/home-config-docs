@@ -38,3 +38,11 @@ def test_combined_needs_same_dates():
     fares.append(fare("BOI", "2027-01-30", "2027-02-06", 1, 700))
     assert rules.combined_best(fares, O)[0] == 1200
     assert rules.evaluate(fares, {}, R, O, {}) == []  # 1200 > combined_max, no thresholds hit
+
+
+def test_date_pairs_return_window():
+    from app.scanner import date_pairs
+    cfg = {"depart_from": "2027-01-31", "depart_to": "2027-02-04", "return_from": "2027-02-07", "return_to": "2027-02-11"}
+    pairs = date_pairs(cfg)
+    assert len(pairs) == 25 and ("2027-02-02", "2027-02-09") in pairs
+    assert date_pairs({"depart_from": "2027-02-01", "depart_to": "2027-02-01", "nights": [7]}) == [("2027-02-01", "2027-02-08")]

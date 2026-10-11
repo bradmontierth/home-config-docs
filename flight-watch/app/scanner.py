@@ -39,6 +39,30 @@ def fmt_time(t) -> str:
     return f"{t.time[0]:02d}:{t.time[1]:02d}"
 
 
+def date_pairs(cfg: dict) -> list[tuple[str, str]]:
+    """(dep, ret) pairs to scan. With return_from/return_to set, every dep x ret in the two windows
+    (ret after dep); otherwise every dep x `nights`."""
+    deps = list(date_range(str(cfg["depart_from"]), str(cfg["depart_to"])))
+    if cfg.get("return_from") and cfg.get("return_to"):
+        rets = list(date_range(str(cfg["return_from"]), str(cfg["return_to"])))
+        return [(d.isoformat(), r.isoformat()) for d in deps for r in rets if r > d]
+    return [(d.isoformat(), (d + timedelta(days=int(n))).isoformat()) for d in deps for n in cfg["nights"]]
+
+
+def window_filter(cfg: dict, alias: str = "") -> tuple[str, list]:
+    """SQL clause limiting fares to the configured windows, so history from older, wider grids
+    compares like with like."""
+    p = f"{alias}." if alias else ""
+    clause = f" AND {p}dep BETWEEN ? AND ?"
+    params = [str(cfg["depart_from"]), str(cfg["depart_to"])]
+    if cfg.get("return_from") and cfg.get("return_to"):
+        clause += f" AND {p}ret BETWEEN ? AND ?"
+        params += [str(cfg["return_from"]), str(cfg["return_to"])]
+    clause += f" AND {p}origin IN ({','.join('?' * len(cfg['origins']))})"
+    params += list(cfg["origins"])
+    return clause, params
+
+
 def build_query(origin: str, dest: str, dep: str, ret: str, cap: int):
     return create_query(
         flights=[FlightQuery(date=dep, from_airport=origin, to_airport=dest, max_duration_minutes=cap),
@@ -63,24 +87,23 @@ def scan(cfg: dict) -> dict:
 
 def _scan(cfg: dict) -> dict:
     origins, dest = cfg["origins"], cfg["destination"]
-    nights_list = cfg["nights"]
     cap = int(cfg["max_leg_minutes"])
     pace = float(cfg.get("pace_seconds", 4))
     block_after = int(cfg.get("blocked_after_consecutive_errors", 5))
-    deps = [d.isoformat() for d in date_range(str(cfg["depart_from"]), str(cfg["depart_to"]))]
-    grid = [(o, dep, n) for o in origins for dep in deps for n in nights_list]
+    pairs = date_pairs(cfg)
+    grid = [(o, dep, ret) for o in origins for dep, ret in pairs]
 
     started = datetime.now().isoformat(timespec="seconds")
     run_id = db.write(lambda con: con.execute(
         "INSERT INTO runs(started_at, queries, status) VALUES (?,?,?)", (started, len(grid), "running")).lastrowid)
     progress.update(running=True, done=0, total=len(grid), run_id=run_id, started_at=started)
-    LOG.info("run %s: %d queries (%s -> %s, %s..%s, nights %s, cap %dm)",
-             run_id, len(grid), origins, dest, deps[0], deps[-1], nights_list, cap)
+    LOG.info("run %s: %d queries (%s -> %s, %d date pairs, cap %dm)",
+             run_id, len(grid), origins, dest, len(pairs), cap)
 
     ok = errors = empty = rows = consecutive = 0
     status, note = "ok", None
-    for origin, dep, nights in grid:
-        ret = (date.fromisoformat(dep) + timedelta(days=nights)).isoformat()
+    for origin, dep, ret in grid:
+        nights = (date.fromisoformat(ret) - date.fromisoformat(dep)).days
         q = build_query(origin, dest, dep, ret, cap)
         ts = datetime.now().isoformat(timespec="seconds")
         try:

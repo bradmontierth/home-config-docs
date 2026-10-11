@@ -28,7 +28,7 @@ def status():
     cfg = state["cfg"]
     return {"now": datetime.now().isoformat(timespec="seconds"), "next_scan": state["next_scan"],
             "progress": scanner.progress, "runs": runs, "last_completed": last_ok,
-            "config": {k: cfg.get(k) for k in ("destination", "origins", "depart_from", "depart_to", "nights",
+            "config": {k: cfg.get(k) for k in ("destination", "origins", "depart_from", "depart_to", "return_from", "return_to", "nights",
                                                "max_leg_minutes", "scan_at", "rules")}}
 
 
@@ -45,8 +45,9 @@ def _latest_run_id(run_id):
 @app.get("/api/heatmap")
 def heatmap(origin: str, run_id: int | None = None):
     rid = _latest_run_id(run_id)
+    wclause, wparams = scanner.window_filter(state["cfg"])
     fares = rows(lambda con: con.execute(
-        "SELECT * FROM fares WHERE run_id=? AND origin=?", (rid, origin)).fetchall())
+        "SELECT * FROM fares WHERE run_id=? AND origin=?" + wclause, (rid, origin, *wparams)).fetchall())
     per = rules.best_per_pair(fares)
     cells = []
     for (o, dep, ret), slots in per.items():
@@ -61,12 +62,13 @@ def heatmap(origin: str, run_id: int | None = None):
 @app.get("/api/trend")
 def trend():
     """Per completed run, per origin: best nonstop + best connecting price across the grid, plus run health."""
+    wclause, wparams = scanner.window_filter(state["cfg"], "f")
     data = rows(lambda con: con.execute("""
         SELECT r.id AS run_id, r.finished_at, r.status, r.ok, r.errors, r.queries, f.origin,
                MIN(CASE WHEN f.stops=0 THEN f.price END) AS nonstop,
                MIN(CASE WHEN f.stops>0 THEN f.price END) AS connecting
-        FROM runs r LEFT JOIN fares f ON f.run_id=r.id
-        WHERE r.status IN ('ok','partial') GROUP BY r.id, f.origin ORDER BY r.id""").fetchall())
+        FROM runs r JOIN fares f ON f.run_id=r.id""" + wclause + """
+        WHERE r.status IN ('ok','partial') GROUP BY r.id, f.origin ORDER BY r.id""", wparams).fetchall())
     return {"points": data}
 
 

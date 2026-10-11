@@ -21,18 +21,20 @@ def load_cfg() -> dict:
         return yaml.safe_load(fh)
 
 
-def prior_minimums(run_id: int, window_days: int, origins) -> dict:
+def prior_minimums(run_id: int, window_days: int, cfg: dict) -> dict:
+    origins = cfg["origins"]
     since = (datetime.now() - timedelta(days=window_days)).isoformat()
+    wclause, wparams = scanner.window_filter(cfg)
     out = {}
     for r in db.read(lambda con: con.execute("""
             SELECT origin, CASE WHEN stops=0 THEN 'nonstop' ELSE 'connecting' END AS cls, MIN(price) AS p
-            FROM fares WHERE run_id<? AND ts>=? GROUP BY origin, cls""", (run_id, since)).fetchall()):
+            FROM fares WHERE run_id<? AND ts>=?""" + wclause + " GROUP BY origin, cls", (run_id, since, *wparams)).fetchall()):
         out[(r["origin"], r["cls"])] = r["p"]
     # trailing best combined: cheapest same-dates total per prior run
     best = None
     for r in db.read(lambda con: con.execute(
             "SELECT id FROM runs WHERE id<? AND finished_at>=? AND status IN ('ok','partial')", (run_id, since)).fetchall()):
-        fares = [dict(x) for x in db.read(lambda con: con.execute("SELECT * FROM fares WHERE run_id=?", (r["id"],)).fetchall())]
+        fares = [dict(x) for x in db.read(lambda con: con.execute("SELECT * FROM fares WHERE run_id=?" + wclause, (r["id"], *wparams)).fetchall())]
         cb = rules.combined_best(fares, origins)
         if cb and (best is None or cb[0] < best):
             best = cb[0]
@@ -62,7 +64,7 @@ def after_run(cfg: dict, summary: dict) -> None:
     if not fares:
         notify.mqtt_publish(msgs)
         return
-    prior = prior_minimums(run_id, int(cfg["rules"].get("new_low_window_days", 14)), origins)
+    prior = prior_minimums(run_id, int(cfg["rules"].get("new_low_window_days", 14)), cfg)
     state = {r["key"]: (r["price"], r["ts"]) for r in db.read(lambda con: con.execute("SELECT * FROM alert_state").fetchall())}
     alerts = rules.evaluate(fares, prior, cfg["rules"], origins, state)
     now = datetime.now().isoformat(timespec="seconds")

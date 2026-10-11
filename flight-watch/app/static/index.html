@@ -82,7 +82,7 @@ async function loadStatus(){
   const s=await j('/api/status'); cfg=s.config;
   $('#route').textContent=`${cfg.origins.join(' + ')} → ${cfg.destination}`;
   const p=s.progress, last=s.last_completed;
-  $('#sub').textContent=`Departures ${cfg.depart_from} → ${cfg.depart_to}, ${cfg.nights.join('/')} nights, each leg ≤ ${hm(cfg.max_leg_minutes)} door to door. Nightly at ${cfg.scan_at}. Alerts: nonstop ≤ $${cfg.rules.nonstop_max}, connecting ≤ $${cfg.rules.connecting_max}, both families ≤ $${cfg.rules.combined_max}, or a ${cfg.rules.new_low_pct}% new ${cfg.rules.new_low_window_days}-day low.`;
+  $('#sub').textContent=`Departures ${cfg.depart_from} → ${cfg.depart_to}, ${cfg.return_from?`returns ${cfg.return_from} → ${cfg.return_to}`:cfg.nights.join('/')+' nights'}, each leg ≤ ${hm(cfg.max_leg_minutes)} door to door. Nightly at ${cfg.scan_at}. Alerts: nonstop ≤ $${cfg.rules.nonstop_max}, connecting ≤ $${cfg.rules.connecting_max}, ${cfg.origins.length>1?`both families ≤ $${cfg.rules.combined_max}, `:''}or a ${cfg.rules.new_low_pct}% new ${cfg.rules.new_low_window_days}-day low.`;
   const tiles=[];
   tiles.push({k:'Last scan',v:last?fmtT(last.finished_at):'—',d:last?`${last.ok}/${last.queries} queries ok, ${last.rows} fares`:'no completed run'});
   tiles.push({k:p.running?'Scanning now':'Next scan',v:p.running?`${p.done}/${p.total}`:fmtT(s.next_scan),d:p.running?'queries done':'local time'});
@@ -115,7 +115,7 @@ async function loadTrend(){
   $('#tiles').insertAdjacentHTML('beforeend',bests.map(t=>`<div class="tile"><div class="k">${t.k}</div><div class="v">${t.v}</div><div class="d">${t.d}</div></div>`).join(''));
   const ink=css('--ink2'), grid=css('--grid');
   if(trendChart)trendChart.destroy();
-  trendChart=new Chart($('#trend'),{type:'line',data:{labels,datasets:ds},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},
+  trendChart=new Chart($('#trend'),{type:'line',data:{labels,datasets:ds},options:{animation:false,responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},
     plugins:{legend:{position:'bottom',labels:{color:ink,usePointStyle:true,pointStyle:'line',boxWidth:36}},tooltip:{callbacks:{label:c=>` ${c.dataset.label}: $${c.parsed.y}`}}},
     scales:{x:{ticks:{color:ink,maxRotation:0,autoSkip:true},grid:{color:grid}},y:{ticks:{color:ink,callback:v=>'$'+v},grid:{color:grid},beginAtZero:false}}}});
 }
@@ -130,13 +130,14 @@ async function loadHeatmaps(){
   const box=$('#heatmaps'); box.innerHTML='';
   for(const o of cfg.origins){
     let h; try{h=await j('/api/heatmap?origin='+o)}catch(e){box.insertAdjacentHTML('beforeend',`<div class="panel"><h2>${o} → ${cfg.destination}</h2><div style="color:var(--muted)">no completed run yet</div></div>`);continue}
-    const cells=h.cells, byKey={}; cells.forEach(c=>byKey[c.dep+'|'+c.nights]=c);
+    const cells=h.cells, byKey={}; cells.forEach(c=>byKey[c.dep+'|'+c.ret]=c);
+    const rets=[...new Set(cells.map(c=>c.ret))].sort();
     const deps=[...new Set(cells.map(c=>c.dep))].sort();
     const prices=cells.map(c=>c.price), min=Math.min(...prices), max=Math.max(...prices);
-    let html=`<div class="panel"><h2>${o} → ${cfg.destination} <span style="font-weight:400;color:var(--muted)">cheapest per adult, departure × nights · run ${h.run_id}</span></h2><table><tr><th></th>${cfg.nights.map(n=>`<th>${n} nt</th>`).join('')}</tr>`;
+    let html=`<div class="panel"><h2>${o} → ${cfg.destination} <span style="font-weight:400;color:var(--muted)">cheapest per adult, departure (rows) × return (columns) · run ${h.run_id}</span></h2><table><tr><th></th>${rets.map(r=>`<th>${md(r)}</th>`).join('')}</tr>`;
     for(const d of deps){
       html+=`<tr><td class="d">${md(d)} ${['Su','Mo','Tu','We','Th','Fr','Sa'][new Date(d+'T12:00').getDay()]}</td>`;
-      for(const n of cfg.nights){const c=byKey[d+'|'+n];
+      for(const rt of rets){const c=byKey[d+'|'+rt];
         if(!c){html+=`<td class="c empty">—</td>`;continue}
         const r=ramp(c.price,min,max);
         html+=`<td class="c ${r.light?'light':''} ${c.nonstop?'ns':''}" style="background:${r.bg}" data-o="${o}" data-dep="${c.dep}" data-ret="${c.ret}" title="${c.route} ${c.airlines} ${hm(c.elapsed_min)}${c.nonstop?' · nonstop $'+c.nonstop:''}">$${c.price}</td>`}

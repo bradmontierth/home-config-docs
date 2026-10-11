@@ -52,6 +52,17 @@ heat map per origin (departure × nights, darker = cheaper, ● = a nonstop exis
 tap a cell for the itineraries + that pair's price history + Google Flights link,
 and the alert log. A page that stops gaining a bar per night = the scan is dead.
 
+## 2026-10-11: narrowed to the sister's dates
+
+Sister's family booked BOI Feb 2 → Feb 9, so BOI is dropped and SLC scans every
+departure Jan 31–Feb 4 × return Feb 7–11 (`return_from`/`return_to`; without
+them the grid falls back to departure × `nights`). 25 queries, ~2 min. The trend
+chart, heat map (now departure × return date) and the new-low baseline all filter
+stored fares to the current windows, so the 18 nights of wider-grid history stay
+comparable. Window floor history: connecting $630–660 most nights, $571 on Oct 7–8
+(the $580 Feb 1 → 9 Alaska fare in the Oct 7 combined alert); nonstop dropped from
+~$1,450 to $1,182 on Oct 4.
+
 ## Baseline (first pass 2026-09-24)
 
 Delta is the only SLC–OGG nonstop; BOI has none. Nonstop was $1,000–1,950 for
