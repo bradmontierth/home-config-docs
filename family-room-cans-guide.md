@@ -296,3 +296,17 @@ white/amber on the bottom channels and always turns the three top channels off.
 Brad's verdict: subtle but a nice touch at these scales.
 Artifacts: `diagnostics/chaos-hsbk-mixer/` (offline table `t.cjs`).
 Rollback: `PUT /flow/5521c5218d82b93c` with `chaos-tab-before.json`.
+
+## LIFX lamp: kelvin + real-light saturation — 2026-10-11
+
+Brad: after the gamma/mixer work every fixture matched except the LIFX family
+room lamp (`light.family_room_lifx`, d073d57084d3), worst on the new pastel
+names. Causes: (1) LIFX fills sat < 100 with white at its CURRENT kelvin, and
+chaos never set kelvin, so pastels inherited the stale circadian warm white;
+(2) the gamma-corrected fixtures show pastels at their linear-light saturation
+(electric blue 51 → 86, puce 33 → 67) while LIFX got the raw sRGB-style value.
+The original 10 colors are all sat 100, which is why LIFX looked right at first.
+`lifx format` (`2ac5bda46b860d23`) now sends `kelvin` from the mixer's hue
+formula and the gamma-2.8 linear saturation; hue unchanged (LIFX's wheel already
+matched). If pastels overshoot, revert only the `sat` line and keep kelvin.
+Artifacts/rollback: `diagnostics/chaos-lifx-kelvin/`.
