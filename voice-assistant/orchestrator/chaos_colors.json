@@ -1,0 +1,418 @@
+{
+ "amber": [
+  45,
+  100
+ ],
+ "amethyst": [
+  275,
+  70
+ ],
+ "aqua": [
+  180,
+  100
+ ],
+ "aquamarine": [
+  160,
+  50
+ ],
+ "baby blue": [
+  200,
+  35
+ ],
+ "bisque": [
+  33,
+  23
+ ],
+ "blanched almond": [
+  36,
+  20
+ ],
+ "blue": [
+  240,
+  100
+ ],
+ "blue violet": [
+  271,
+  81
+ ],
+ "cadet blue": [
+  182,
+  41
+ ],
+ "chartreuse": [
+  90,
+  100
+ ],
+ "coral": [
+  16,
+  69
+ ],
+ "cornflower blue": [
+  219,
+  58
+ ],
+ "crimson": [
+  348,
+  91
+ ],
+ "cyan": [
+  180,
+  100
+ ],
+ "dark goldenrod": [
+  43,
+  94
+ ],
+ "dark orange": [
+  33,
+  100
+ ],
+ "dark orchid": [
+  280,
+  75
+ ],
+ "dark salmon": [
+  15,
+  48
+ ],
+ "dark sea green": [
+  120,
+  24
+ ],
+ "dark turquoise": [
+  181,
+  100
+ ],
+ "dark violet": [
+  282,
+  100
+ ],
+ "deep pink": [
+  328,
+  92
+ ],
+ "deep sky blue": [
+  195,
+  100
+ ],
+ "dodger blue": [
+  210,
+  88
+ ],
+ "emerald": [
+  140,
+  100
+ ],
+ "fire brick": [
+  0,
+  81
+ ],
+ "fuchsia": [
+  300,
+  100
+ ],
+ "fuschia": [
+  300,
+  100
+ ],
+ "gold": [
+  51,
+  100
+ ],
+ "goldenrod": [
+  43,
+  85
+ ],
+ "green": [
+  120,
+  100
+ ],
+ "green yellow": [
+  84,
+  82
+ ],
+ "hot pink": [
+  330,
+  59
+ ],
+ "ice blue": [
+  195,
+  30
+ ],
+ "indian red": [
+  0,
+  55
+ ],
+ "indigo": [
+  260,
+  100
+ ],
+ "jade": [
+  155,
+  80
+ ],
+ "khaki": [
+  54,
+  42
+ ],
+ "lavender": [
+  270,
+  35
+ ],
+ "lawn green": [
+  90,
+  100
+ ],
+ "lemon chiffon": [
+  54,
+  20
+ ],
+ "light blue": [
+  195,
+  25
+ ],
+ "light coral": [
+  0,
+  47
+ ],
+ "light goldenrod yellow": [
+  60,
+  16
+ ],
+ "light green": [
+  120,
+  39
+ ],
+ "light pink": [
+  351,
+  29
+ ],
+ "light salmon": [
+  17,
+  52
+ ],
+ "light sea green": [
+  177,
+  82
+ ],
+ "light sky blue": [
+  203,
+  46
+ ],
+ "light steel blue": [
+  214,
+  21
+ ],
+ "lilac": [
+  285,
+  35
+ ],
+ "lime": [
+  120,
+  100
+ ],
+ "lime green": [
+  120,
+  76
+ ],
+ "magenta": [
+  300,
+  100
+ ],
+ "medium aquamarine": [
+  160,
+  50
+ ],
+ "medium blue": [
+  240,
+  100
+ ],
+ "medium orchid": [
+  288,
+  60
+ ],
+ "medium purple": [
+  260,
+  49
+ ],
+ "medium sea green": [
+  147,
+  66
+ ],
+ "medium slate blue": [
+  249,
+  56
+ ],
+ "medium spring green": [
+  157,
+  100
+ ],
+ "medium turquoise": [
+  178,
+  66
+ ],
+ "medium violet red": [
+  322,
+  89
+ ],
+ "mint": [
+  150,
+  45
+ ],
+ "moccasin": [
+  38,
+  29
+ ],
+ "navajo white": [
+  36,
+  32
+ ],
+ "orange": [
+  30,
+  100
+ ],
+ "orange red": [
+  16,
+  100
+ ],
+ "orchid": [
+  302,
+  49
+ ],
+ "pale goldenrod": [
+  55,
+  29
+ ],
+ "pale green": [
+  120,
+  39
+ ],
+ "pale turquoise": [
+  180,
+  26
+ ],
+ "pale violet red": [
+  340,
+  49
+ ],
+ "papaya whip": [
+  37,
+  16
+ ],
+ "peach": [
+  25,
+  45
+ ],
+ "peach puff": [
+  28,
+  27
+ ],
+ "periwinkle": [
+  230,
+  40
+ ],
+ "pink": [
+  330,
+  100
+ ],
+ "plum": [
+  300,
+  28
+ ],
+ "powder blue": [
+  187,
+  23
+ ],
+ "pumpkin": [
+  24,
+  100
+ ],
+ "purple": [
+  270,
+  100
+ ],
+ "red": [
+  0,
+  100
+ ],
+ "red orange": [
+  15,
+  100
+ ],
+ "rose": [
+  345,
+  80
+ ],
+ "royal blue": [
+  225,
+  71
+ ],
+ "ruby": [
+  350,
+  100
+ ],
+ "salmon": [
+  6,
+  54
+ ],
+ "sapphire": [
+  225,
+  100
+ ],
+ "seafoam": [
+  160,
+  50
+ ],
+ "sky blue": [
+  197,
+  43
+ ],
+ "slate blue": [
+  248,
+  56
+ ],
+ "spring green": [
+  150,
+  100
+ ],
+ "steel blue": [
+  207,
+  61
+ ],
+ "tangerine": [
+  25,
+  100
+ ],
+ "teal": [
+  178,
+  100
+ ],
+ "tomato": [
+  9,
+  72
+ ],
+ "turquoise": [
+  174,
+  71
+ ],
+ "violet": [
+  300,
+  45
+ ],
+ "wheat": [
+  39,
+  27
+ ],
+ "white": [
+  0,
+  0
+ ],
+ "yellow": [
+  60,
+  100
+ ],
+ "yellow green": [
+  80,
+  76
+ ]
+}
