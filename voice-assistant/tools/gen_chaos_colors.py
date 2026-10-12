@@ -32,7 +32,10 @@ EXTRAS = {'fuschia': [300, 100], 'pumpkin': [24, 100], 'tangerine': [25, 100],
           'puce': [345, 33], 'mauve': [276, 31], 'blush': [342, 58], 'cerise': [343, 78],
           'scarlet': [8, 100], 'vermilion': [5, 77], 'marigold': [39, 86],
           'saffron': [45, 80], 'cerulean': [196, 100], 'cobalt': [215, 100],
-          'ultramarine': [244, 93], 'electric blue': [183, 51], 'neon green': [111, 92]}
+          'ultramarine': [244, 93], 'electric blue': [183, 51], 'neon green': [111, 92],
+          # True maroon is dark red; at chaos's full brightness the closest is a deep,
+          # slightly blue-leaning red (Brad asked for it 2026-10-11).
+          'maroon': [355, 100]}
 
 DROP = {'brown', 'sienna', 'saddlebrown', 'chocolate', 'peru', 'rosybrown', 'tan',
         'burlywood', 'sandybrown', 'darkkhaki', 'rebeccapurple'}
