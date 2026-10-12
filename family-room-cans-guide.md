@@ -264,3 +264,28 @@ no change. Tests: `test_chaos.py` (5 pass); full suite 634 pass, the 3
 `test_animals` failures are pre-existing (need network, fail on the old image too).
 Rollback: image tag `voice-pipeline-voice-orchestrator:before-chaos-palette-20261011`;
 the Node-RED change is backward compatible. Artifacts: `diagnostics/chaos-named-palette/`.
+
+## HSBK white-channel mixer, entry light + pole — 2026-10-11
+
+Phase 1 of using real white LEDs in chaos colors. New Chaos-tab function
+`HSBK white mixer (entry + pole)` (`cc09130000000021`, hung off junction
+`ee0add0f45d6d021`) drives every channel directly: output 1 → `entry fixture
+channels` (9 `light.entry_fixture_simon_*` calls), output 2 → `pole rgb (gamma)`
+(`familyroompole_rgb` + `familyroompole_wwcw`). The old `building color commands`
+and `Lamp Pole Param` nodes are left disconnected for rollback.
+
+Model (LIFX-style hue/sat/brightness/kelvin): target color → linear light
+(gamma 2.8) → the common min(R,G,B) part goes to the high-CRI whites instead of
+RGB, at kelvin `4600 + 1900·cos(hue − 210°)` (6500 K for sky blue, ~2700 K for
+orange; entry splits 2700/6500 in mired space, pole uses cwww color temp).
+Saturated colors get no white. Orange–gold hues on the entry light move 60% of
+the possible red+green onto the 2000 K amber channels (2000 K ≈ linear RGB
+1/0.25/0). Tuning knobs at the top of the function: `ENTRY_WHITE_SCALE` 0.35,
+`POLE_WHITE_SCALE` 0.5, `AMBER_SHARE` 0.6, `AMBER_SCALE` 0.5 — first guesses,
+not calibrated. Calibrate by matching an RGB-made white against the real 2700 K
+channel on the same fixture.
+
+Kitchen fixture (WLED RGBW + ESPHome whites) and above-cabinet (WLED + Zigbee
+CCT, send only when sat < ~90) are phases 2–3, not built.
+Artifacts: `diagnostics/chaos-hsbk-mixer/` (offline table `t.cjs`).
+Rollback: `PUT /flow/5521c5218d82b93c` with `chaos-tab-before.json`.
