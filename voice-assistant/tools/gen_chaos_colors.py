@@ -1,12 +1,13 @@
-"""Regenerate orchestrator/chaos_colors.json (spoken name -> [hue 0-360, sat 0-100]).
+"""Regenerate orchestrator/chaos_colors.json (spoken name -> [hue 0-360, sat 0-100, bri 0-100]).
 
 Run once with webcolors in a throwaway venv:
     python3 -m venv /tmp/cv && /tmp/cv/bin/pip install webcolors
     /tmp/cv/bin/python voice-assistant/tools/gen_chaos_colors.py
 
-Chaos always drives lights at 100% brightness, so only hue + saturation
-survive. Dark shades (navy -> blue, maroon -> red), grays and browns
-(-> orange) would render as something else and are dropped.
+Each color keeps its HSV value as a brightness, so maroon is red at 50% and
+brown is orange at 65% (a light can't look dark, but it can look dim next to
+a brighter partner). Grays/black and anything below 35% value are dropped.
+Random chaos is separate and always full brightness.
 """
 import colorsys
 import json
@@ -20,25 +21,22 @@ OUT = Path(__file__).resolve().parents[1] / 'orchestrator' / 'chaos_colors.json'
 BASE = {'red': [0, 100], 'orange': [30, 100], 'yellow': [60, 100], 'green': [120, 100],
         'cyan': [180, 100], 'blue': [240, 100], 'purple': [270, 100],
         'magenta': [300, 100], 'pink': [330, 100], 'white': [0, 0]}
+MIN_VALUE = 0.35
 
-# Fun names CSS lacks, plus CSS names whose CSS value is too dark/pale to use.
+# Fun names CSS lacks, plus CSS names whose CSS value is too pale to use (full brightness).
 EXTRAS = {'fuschia': [300, 100], 'pumpkin': [24, 100], 'tangerine': [25, 100],
           'amber': [45, 100], 'mint': [150, 45], 'seafoam': [160, 50],
           'ice blue': [195, 30], 'baby blue': [200, 35], 'lavender': [270, 35],
           'lilac': [285, 35], 'periwinkle': [230, 40], 'peach': [25, 45],
           'rose': [345, 80], 'ruby': [350, 100], 'emerald': [140, 100],
           'jade': [155, 80], 'sapphire': [225, 100], 'amethyst': [275, 70],
-          'teal': [178, 100], 'indigo': [260, 100], 'red orange': [15, 100],
+          'red orange': [15, 100],
           'puce': [345, 33], 'mauve': [276, 31], 'blush': [342, 58], 'cerise': [343, 78],
           'scarlet': [8, 100], 'vermilion': [5, 77], 'marigold': [39, 86],
           'saffron': [45, 80], 'cerulean': [196, 100], 'cobalt': [215, 100],
-          'ultramarine': [244, 93], 'electric blue': [183, 51], 'neon green': [111, 92],
-          # True maroon is dark red; at chaos's full brightness the closest is a deep,
-          # slightly blue-leaning red (Brad asked for it 2026-10-11).
-          'maroon': [355, 100]}
+          'ultramarine': [244, 93], 'electric blue': [183, 51], 'neon green': [111, 92]}
 
-DROP = {'brown', 'sienna', 'saddlebrown', 'chocolate', 'peru', 'rosybrown', 'tan',
-        'burlywood', 'sandybrown', 'darkkhaki', 'rebeccapurple'}
+DROP = {'rebeccapurple'}
 
 # Words used to split CSS run-together names ("deepskyblue" -> "deep sky blue").
 WORDS = sorted('''light dark medium deep hot pale misty rosy royal steel cornflower dodger
@@ -48,9 +46,11 @@ WORDS = sorted('''light dark medium deep hot pale misty rosy royal steel cornflo
     lavender blush lemon chiffon cream mint misty rose moccasin navajo old lace
     orange red pale papaya whip peach puff pink plum powder purple salmon sea shell
     smoke snow tomato turquoise wheat gold magenta aquamarine goldenrod
-    chartreuse fuchsia fire brick'''.split(), key=len, reverse=True)
+    chartreuse fuchsia fire brick midnight saddle sandy burly wood olive navy brown'''.split(), key=len, reverse=True)
 SINGLE = {'aquamarine', 'chartreuse', 'goldenrod', 'fuchsia', 'turquoise', 'lavender',
-          'moccasin', 'crimson', 'tomato', 'salmon', 'orchid', 'thistle', 'bisque'}
+          'moccasin', 'crimson', 'tomato', 'salmon', 'orchid', 'thistle', 'bisque',
+          'navy', 'maroon', 'teal', 'indigo', 'brown', 'peru', 'tan', 'sienna', 'chocolate',
+          'olive'}
 
 
 def split_name(name):
@@ -73,14 +73,14 @@ def main():
             continue
         r, g, b = webcolors.name_to_rgb(name, 'css3')
         h, s, v = colorsys.rgb_to_hsv(r / 255, g / 255, b / 255)
-        if s < 0.15 or v < 0.6:
+        if s < 0.15 or v < MIN_VALUE:
             continue
         spoken = split_name(name)
         if spoken is None:
             raise SystemExit(f'cannot split CSS name {name!r}; add its words to WORDS')
-        colors[spoken] = [round(h * 360) % 360, round(s * 100)]
-    colors.update(EXTRAS)
-    colors.update(BASE)
+        colors[spoken] = [round(h * 360) % 360, round(s * 100), round(v * 100)]
+    colors.update({k: v + [100] for k, v in EXTRAS.items()})
+    colors.update({k: v + [100] for k, v in BASE.items()})
     OUT.write_text(json.dumps(dict(sorted(colors.items())), indent=1) + '\n')
     print(f'{len(colors)} colors -> {OUT}')
 

@@ -334,3 +334,22 @@ disable_main_floor_lights → switch `false`), node ids `cg1011000000000{1..4}0a
 Not gated: kitchen vacancy pole OFF (off isn't white; its main entry is already
 gated). Per-tab PUTs with readback wiring checks; snapshots + `build.py` in
 `diagnostics/chaos-hold-gates/`. Rollback: PUT each `<tab>-before.json`.
+
+## Per-color brightness for named chaos colors — 2026-10-11
+
+Chaos ran every light at 100% because random hue+sat gave unconvincing pastels;
+random chaos (`New Chaos Values`, sat 80–100, full brightness) is unchanged.
+Named colors now carry HSV value as brightness: `chaos_colors.json` entries are
+`[hue, sat, bri]` (141 names, bri 35–100; navy/maroon/olive/teal 50, brown 65,
+forest green 55; grays/black and value < 35% still dropped; the hand 10-color
+palette + extras stay at 100). The orchestrator publishes `hsv`; the validator
+also accepts the older `hs` [h, s] form, and stores `ChaosBriA/B` (missing =
+100, so random chaos and the dashboard picker are unaffected).
+
+Consumers: WLED presets get `RGBA/RGBB` scaled by bri (WLED gamma-corrects);
+cans `rgb A/B` send `brightness_pct` = bri (single-color group check includes
+bri); LIFX `bri`; the HSBK mixer multiplies linear light by (bri/100)^2.8
+(maroon's 50% ≈ 14% PWM, like WLED/LIFX). A dim color only reads "dark" next
+to a brighter partner — "maroon and gold" works better than maroon alone.
+Rollback: image `before-chaos-brightness-20261011` + `diagnostics/chaos-brightness/chaos-tab-before.json`
+(the new tab accepts both payload forms, so either side can roll back alone).

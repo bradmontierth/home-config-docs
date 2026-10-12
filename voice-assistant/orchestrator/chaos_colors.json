@@ -1,474 +1,707 @@
 {
  "amber": [
   45,
+  100,
   100
  ],
  "amethyst": [
   275,
-  70
+  70,
+  100
  ],
  "aqua": [
   180,
+  100,
   100
  ],
  "aquamarine": [
   160,
-  50
+  50,
+  100
  ],
  "baby blue": [
   200,
-  35
+  35,
+  100
  ],
  "bisque": [
   33,
-  23
+  23,
+  100
  ],
  "blanched almond": [
   36,
-  20
+  20,
+  100
  ],
  "blue": [
   240,
+  100,
   100
  ],
  "blue violet": [
   271,
-  81
+  81,
+  89
  ],
  "blush": [
   342,
-  58
+  58,
+  100
+ ],
+ "brown": [
+  0,
+  75,
+  65
+ ],
+ "burly wood": [
+  34,
+  39,
+  87
  ],
  "cadet blue": [
   182,
-  41
+  41,
+  63
  ],
  "cerise": [
   343,
-  78
+  78,
+  100
  ],
  "cerulean": [
   196,
+  100,
   100
  ],
  "chartreuse": [
   90,
+  100,
   100
+ ],
+ "chocolate": [
+  25,
+  86,
+  82
  ],
  "cobalt": [
   215,
+  100,
   100
  ],
  "coral": [
   16,
-  69
+  69,
+  100
  ],
  "cornflower blue": [
   219,
-  58
+  58,
+  93
  ],
  "crimson": [
   348,
-  91
+  91,
+  86
  ],
  "cyan": [
   180,
+  100,
   100
+ ],
+ "dark blue": [
+  240,
+  100,
+  55
+ ],
+ "dark cyan": [
+  180,
+  100,
+  55
  ],
  "dark goldenrod": [
   43,
-  94
+  94,
+  72
+ ],
+ "dark green": [
+  120,
+  100,
+  39
+ ],
+ "dark khaki": [
+  56,
+  43,
+  74
+ ],
+ "dark magenta": [
+  300,
+  100,
+  55
+ ],
+ "dark olive green": [
+  82,
+  56,
+  42
  ],
  "dark orange": [
   33,
+  100,
   100
  ],
  "dark orchid": [
   280,
-  75
+  75,
+  80
+ ],
+ "dark red": [
+  0,
+  100,
+  55
  ],
  "dark salmon": [
   15,
-  48
+  48,
+  91
  ],
  "dark sea green": [
   120,
-  24
+  24,
+  74
+ ],
+ "dark slate blue": [
+  248,
+  56,
+  55
  ],
  "dark turquoise": [
   181,
-  100
+  100,
+  82
  ],
  "dark violet": [
   282,
-  100
+  100,
+  83
  ],
  "deep pink": [
   328,
-  92
+  92,
+  100
  ],
  "deep sky blue": [
   195,
+  100,
   100
  ],
  "dodger blue": [
   210,
-  88
+  88,
+  100
  ],
  "electric blue": [
   183,
-  51
+  51,
+  100
  ],
  "emerald": [
   140,
+  100,
   100
  ],
  "fire brick": [
   0,
-  81
+  81,
+  70
+ ],
+ "forest green": [
+  120,
+  76,
+  55
  ],
  "fuchsia": [
   300,
+  100,
   100
  ],
  "fuschia": [
   300,
+  100,
   100
  ],
  "gold": [
   51,
+  100,
   100
  ],
  "goldenrod": [
   43,
+  85,
   85
  ],
  "green": [
   120,
+  100,
   100
  ],
  "green yellow": [
   84,
-  82
+  82,
+  100
  ],
  "hot pink": [
   330,
-  59
+  59,
+  100
  ],
  "ice blue": [
   195,
-  30
+  30,
+  100
  ],
  "indian red": [
   0,
-  55
+  55,
+  80
  ],
  "indigo": [
-  260,
-  100
+  275,
+  100,
+  51
  ],
  "jade": [
   155,
-  80
+  80,
+  100
  ],
  "khaki": [
   54,
-  42
+  42,
+  94
  ],
  "lavender": [
   270,
-  35
+  35,
+  100
  ],
  "lawn green": [
   90,
-  100
+  100,
+  99
  ],
  "lemon chiffon": [
   54,
-  20
+  20,
+  100
  ],
  "light blue": [
   195,
-  25
+  25,
+  90
  ],
  "light coral": [
   0,
-  47
+  47,
+  94
  ],
  "light goldenrod yellow": [
   60,
-  16
+  16,
+  98
  ],
  "light green": [
   120,
-  39
+  39,
+  93
  ],
  "light pink": [
   351,
-  29
+  29,
+  100
  ],
  "light salmon": [
   17,
-  52
+  52,
+  100
  ],
  "light sea green": [
   177,
-  82
+  82,
+  70
  ],
  "light sky blue": [
   203,
-  46
+  46,
+  98
  ],
  "light steel blue": [
   214,
-  21
+  21,
+  87
  ],
  "lilac": [
   285,
-  35
+  35,
+  100
  ],
  "lime": [
   120,
+  100,
   100
  ],
  "lime green": [
   120,
-  76
+  76,
+  80
  ],
  "magenta": [
   300,
+  100,
   100
  ],
  "marigold": [
   39,
-  86
+  86,
+  100
  ],
  "maroon": [
-  355,
-  100
+  0,
+  100,
+  50
  ],
  "mauve": [
   276,
-  31
+  31,
+  100
  ],
  "medium aquamarine": [
   160,
-  50
+  50,
+  80
  ],
  "medium blue": [
   240,
-  100
+  100,
+  80
  ],
  "medium orchid": [
   288,
-  60
+  60,
+  83
  ],
  "medium purple": [
   260,
-  49
+  49,
+  86
  ],
  "medium sea green": [
   147,
-  66
+  66,
+  70
  ],
  "medium slate blue": [
   249,
-  56
+  56,
+  93
  ],
  "medium spring green": [
   157,
-  100
+  100,
+  98
  ],
  "medium turquoise": [
   178,
-  66
+  66,
+  82
  ],
  "medium violet red": [
   322,
-  89
+  89,
+  78
+ ],
+ "midnight blue": [
+  240,
+  78,
+  44
  ],
  "mint": [
   150,
-  45
+  45,
+  100
  ],
  "moccasin": [
   38,
-  29
+  29,
+  100
  ],
  "navajo white": [
   36,
-  32
+  32,
+  100
+ ],
+ "navy": [
+  240,
+  100,
+  50
  ],
  "neon green": [
   111,
-  92
+  92,
+  100
+ ],
+ "olive": [
+  60,
+  100,
+  50
+ ],
+ "olive drab": [
+  80,
+  75,
+  56
  ],
  "orange": [
   30,
+  100,
   100
  ],
  "orange red": [
   16,
+  100,
   100
  ],
  "orchid": [
   302,
-  49
+  49,
+  85
  ],
  "pale goldenrod": [
   55,
-  29
+  29,
+  93
  ],
  "pale green": [
   120,
-  39
+  39,
+  98
  ],
  "pale turquoise": [
   180,
-  26
+  26,
+  93
  ],
  "pale violet red": [
   340,
-  49
+  49,
+  86
  ],
  "papaya whip": [
   37,
-  16
+  16,
+  100
  ],
  "peach": [
   25,
-  45
+  45,
+  100
  ],
  "peach puff": [
   28,
-  27
+  27,
+  100
  ],
  "periwinkle": [
   230,
-  40
+  40,
+  100
+ ],
+ "peru": [
+  30,
+  69,
+  80
  ],
  "pink": [
   330,
+  100,
   100
  ],
  "plum": [
   300,
-  28
+  28,
+  87
  ],
  "powder blue": [
   187,
-  23
+  23,
+  90
  ],
  "puce": [
   345,
-  33
+  33,
+  100
  ],
  "pumpkin": [
   24,
+  100,
   100
  ],
  "purple": [
   270,
+  100,
   100
  ],
  "red": [
   0,
+  100,
   100
  ],
  "red orange": [
   15,
+  100,
   100
  ],
  "rose": [
   345,
-  80
+  80,
+  100
+ ],
+ "rosy brown": [
+  0,
+  24,
+  74
  ],
  "royal blue": [
   225,
-  71
+  71,
+  88
  ],
  "ruby": [
   350,
+  100,
   100
+ ],
+ "saddle brown": [
+  25,
+  86,
+  55
  ],
  "saffron": [
   45,
-  80
+  80,
+  100
  ],
  "salmon": [
   6,
-  54
+  54,
+  98
+ ],
+ "sandy brown": [
+  28,
+  61,
+  96
  ],
  "sapphire": [
   225,
+  100,
   100
  ],
  "scarlet": [
   8,
+  100,
   100
+ ],
+ "sea green": [
+  146,
+  67,
+  55
  ],
  "seafoam": [
   160,
-  50
+  50,
+  100
+ ],
+ "sienna": [
+  19,
+  72,
+  63
  ],
  "sky blue": [
   197,
-  43
+  43,
+  92
  ],
  "slate blue": [
   248,
-  56
+  56,
+  80
  ],
  "spring green": [
   150,
+  100,
   100
  ],
  "steel blue": [
   207,
-  61
+  61,
+  71
+ ],
+ "tan": [
+  34,
+  33,
+  82
  ],
  "tangerine": [
   25,
+  100,
   100
  ],
  "teal": [
-  178,
-  100
+  180,
+  100,
+  50
  ],
  "tomato": [
   9,
-  72
+  72,
+  100
  ],
  "turquoise": [
   174,
-  71
+  71,
+  88
  ],
  "ultramarine": [
   244,
-  93
+  93,
+  100
  ],
  "vermilion": [
   5,
-  77
+  77,
+  100
  ],
  "violet": [
   300,
-  45
+  45,
+  93
  ],
  "wheat": [
   39,
-  27
+  27,
+  96
  ],
  "white": [
   0,
-  0
+  0,
+  100
  ],
  "yellow": [
   60,
+  100,
   100
  ],
  "yellow green": [
   80,
-  76
+  76,
+  80
  ]
 }

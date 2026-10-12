@@ -13,6 +13,7 @@ class ChaosColorTest(_SlotTestBase):
                               ('give me chaos in fuchsia', ['fuchsia']),
                               ('give me chaos in gold', ['gold']),
                               ('give me chaos in puce', ['puce']),
+                              ('give me chaos in maroon and gold', ['maroon','gold']),
                               ('give me chaos in hot pink', ['hot pink']),
                               ('give me chaos in Deep Sky Blue and gold.', ['deep sky blue','gold']),
                               ('give me chaos in hotpink and the sea-foam', ['hot pink','seafoam'])]:
@@ -31,11 +32,11 @@ class ChaosColorTest(_SlotTestBase):
                 parse.assert_not_awaited();self.assertEqual(len(calls),1)
                 self.assertEqual(calls[0]['topic'],'voice/chaos/colors')
                 self.assertEqual(json.loads(calls[0]['payload']),
-                                 {'colors':names,'hs':[chaos.COLORS[n] for n in names]})
+                                 {'colors':names,'hsv':[chaos.COLORS[n] for n in names]})
                 self.assertFalse(calls[0]['retain'])
 
     def test_invalid_color_requests_clarify_without_actuation(self):
-        for phrase in ['give me chaos in plaid','give me chaos in navy','give me chaos in gray','chaos in blue and red and green','chaos in']:
+        for phrase in ['give me chaos in plaid','give me chaos in black','give me chaos in gray','chaos in blue and red and green','chaos in']:
             with self.subTest(phrase=phrase),patch.object(chaos.httpx,'AsyncClient') as client, \
                  patch.object(app.broadcast_mod,'send',AsyncMock()),patch.object(app.intent_mod,'parse',AsyncMock()) as parse:
                 result=self._run(phrase)
@@ -49,7 +50,8 @@ class ChaosColorTest(_SlotTestBase):
 
     def test_palette_values_are_publishable_hue_saturation(self):
         self.assertGreater(len(chaos.COLORS), 90)
-        self.assertEqual(chaos.COLORS['purple'], [270, 100])  # hand palette beats CSS
-        for name, (hue, sat) in chaos.COLORS.items():
-            self.assertTrue(0 <= hue < 360 and 0 <= sat <= 100, name)
+        self.assertEqual(chaos.COLORS['purple'], [270, 100, 100])  # hand palette beats CSS
+        self.assertEqual(chaos.COLORS['maroon'], [0, 100, 50])  # dark colors keep their value
+        for name, (hue, sat, bri) in chaos.COLORS.items():
+            self.assertTrue(0 <= hue < 360 and 0 <= sat <= 100 and 35 <= bri <= 100, name)
             self.assertNotIn(' and ', f' {name} ')

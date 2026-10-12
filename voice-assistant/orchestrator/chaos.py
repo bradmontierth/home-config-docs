@@ -31,6 +31,6 @@ async def handle(names: list[str]) -> dict:
             config.HA_URL + '/api/services/mqtt/publish',
             headers={'Authorization': 'Bearer ' + _token()},
             json={'topic': 'voice/chaos/colors',
-                  'payload': json.dumps({'colors': names, 'hs': [COLORS[n] for n in names]}), 'qos': 0, 'retain': False})
+                  'payload': json.dumps({'colors': names, 'hsv': [COLORS[n] for n in names]}), 'qos': 0, 'retain': False})
         response.raise_for_status()
     return {'ok': True, 'response': 'Setting chaos to ' + ' and '.join(names) + '.'}
