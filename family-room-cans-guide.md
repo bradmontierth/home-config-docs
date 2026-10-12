@@ -310,3 +310,27 @@ The original 10 colors are all sat 100, which is why LIFX looked right at first.
 formula and the gamma-2.8 linear saturation; hue unchanged (LIFX's wheel already
 matched). If pastels overshoot, revert only the `sat` line and keep kelvin.
 Artifacts/rollback: `diagnostics/chaos-lifx-kelvin/`.
+
+## Chaos hold gates on pole / entry / sconce / LIFX — 2026-10-11
+
+Voice and dashboard color chaos set `input_boolean.disable_main_floor_lights`
+(the hold); the old random toggle `input_boolean.chaos_mode` stays off. Several
+white repaints only checked `chaos_mode`, or nothing, so they whitened chaos:
+the pole on the 5-minute Update CT tick, the entry light + sconce on Motion
+Lighting (front door / top-of-stairs / porch Z-Wave motion — the entry branch
+sends `color` state to its `else` = both sides white), and the pole + LIFX
+lamp on Kitchen Motion Lighting. The hold is only ever turned ON by Chaos and
+one Button Controllers 2 press, so gating on it doesn't affect normal lighting.
+
+Added the existing Kitchen Motion gate pattern (`api-current-state`
+disable_main_floor_lights → switch `false`), node ids `cg1011000000000{1..4}0a/0b`:
+| Tab | Inserted after | Now gated |
+| --- | --- | --- |
+| Update CT Values while On `55523c67b181dd7b` | `tvPicoPress` false | pole CT `set values` |
+| Motion Lighting `4ddac4f7be5df0a2` | `PackageatDoor` else | entry both/top/bottom + sconce chaos check |
+| Kitchen Motion Lighting `fb8d8707af18844f` | `9pm true` else | pole `Lamp Pole Param` |
+| Kitchen Motion Lighting | `sunrise` false | pole `Lamp Pole Param` + LIFX `Turn on at CT / 25` |
+
+Not gated: kitchen vacancy pole OFF (off isn't white; its main entry is already
+gated). Per-tab PUTs with readback wiring checks; snapshots + `build.py` in
+`diagnostics/chaos-hold-gates/`. Rollback: PUT each `<tab>-before.json`.
