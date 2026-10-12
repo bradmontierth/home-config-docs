@@ -12,6 +12,7 @@ class ChaosColorTest(_SlotTestBase):
                               ('set me chaos mode in purple and green please', ['purple','green']),
                               ('give me chaos in fuchsia', ['fuchsia']),
                               ('give me chaos in gold', ['gold']),
+                              ('give me chaos in puce', ['puce']),
                               ('give me chaos in hot pink', ['hot pink']),
                               ('give me chaos in Deep Sky Blue and gold.', ['deep sky blue','gold']),
                               ('give me chaos in hotpink and the sea-foam', ['hot pink','seafoam'])]:

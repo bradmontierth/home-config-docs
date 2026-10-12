@@ -35,12 +35,28 @@
   271,
   81
  ],
+ "blush": [
+  342,
+  58
+ ],
  "cadet blue": [
   182,
   41
  ],
+ "cerise": [
+  343,
+  78
+ ],
+ "cerulean": [
+  196,
+  100
+ ],
  "chartreuse": [
   90,
+  100
+ ],
+ "cobalt": [
+  215,
   100
  ],
  "coral": [
@@ -98,6 +114,10 @@
  "dodger blue": [
   210,
   88
+ ],
+ "electric blue": [
+  183,
+  51
  ],
  "emerald": [
   140,
@@ -219,6 +239,14 @@
   300,
   100
  ],
+ "marigold": [
+  39,
+  86
+ ],
+ "mauve": [
+  276,
+  31
+ ],
  "medium aquamarine": [
   160,
   50
@@ -266,6 +294,10 @@
  "navajo white": [
   36,
   32
+ ],
+ "neon green": [
+  111,
+  92
  ],
  "orange": [
   30,
@@ -323,6 +355,10 @@
   187,
   23
  ],
+ "puce": [
+  345,
+  33
+ ],
  "pumpkin": [
   24,
   100
@@ -351,12 +387,20 @@
   350,
   100
  ],
+ "saffron": [
+  45,
+  80
+ ],
  "salmon": [
   6,
   54
  ],
  "sapphire": [
   225,
+  100
+ ],
+ "scarlet": [
+  8,
   100
  ],
  "seafoam": [
@@ -394,6 +438,14 @@
  "turquoise": [
   174,
   71
+ ],
+ "ultramarine": [
+  244,
+  93
+ ],
+ "vermilion": [
+  5,
+  77
  ],
  "violet": [
   300,

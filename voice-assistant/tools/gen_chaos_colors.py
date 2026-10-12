@@ -28,7 +28,11 @@ EXTRAS = {'fuschia': [300, 100], 'pumpkin': [24, 100], 'tangerine': [25, 100],
           'lilac': [285, 35], 'periwinkle': [230, 40], 'peach': [25, 45],
           'rose': [345, 80], 'ruby': [350, 100], 'emerald': [140, 100],
           'jade': [155, 80], 'sapphire': [225, 100], 'amethyst': [275, 70],
-          'teal': [178, 100], 'indigo': [260, 100], 'red orange': [15, 100]}
+          'teal': [178, 100], 'indigo': [260, 100], 'red orange': [15, 100],
+          'puce': [345, 33], 'mauve': [276, 31], 'blush': [342, 58], 'cerise': [343, 78],
+          'scarlet': [8, 100], 'vermilion': [5, 77], 'marigold': [39, 86],
+          'saffron': [45, 80], 'cerulean': [196, 100], 'cobalt': [215, 100],
+          'ultramarine': [244, 93], 'electric blue': [183, 51], 'neon green': [111, 92]}
 
 DROP = {'brown', 'sienna', 'saddlebrown', 'chocolate', 'peru', 'rosybrown', 'tan',
         'burlywood', 'sandybrown', 'darkkhaki', 'rebeccapurple'}
