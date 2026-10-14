@@ -346,6 +346,11 @@ async def _loudness_handoff(sat: str, winner: str, wav: bytes,
 # six _finalize call sites. A ContextVar rather than a module global because
 # turns from different satellites can interleave on the event loop -- each
 # request coroutine gets its own copy.
+# A text turn that will be READ, not heard (the Voice Notes phone app relays
+# command-shaped recordings here and shows the reply as text): skip the TTS
+# render in _finalize. Context-scoped like _CUR_SAT so it never leaks into the
+# spoken turns running alongside it.
+_NO_TTS: contextvars.ContextVar[bool] = contextvars.ContextVar("no_tts", default=False)
 _CUR_SAT: contextvars.ContextVar[str | None] = contextvars.ContextVar(
     "current_sat", default=None)
 
@@ -565,7 +570,9 @@ async def _finalize(result: dict, intent: str) -> dict:
     own TTS entirely there — Node-RED re-renders from text — so this path is a
     render cheaper, not more expensive."""
     route = zones.route_for(_CUR_SAT.get())
-    if route and result.get("response"):
+    if _NO_TTS.get():
+        result["audio_url"] = None
+    elif route and result.get("response"):
         try:
             await broadcast_mod.send(route["rooms"], result["response"],
                                      route.get("volume"), route.get("voice"))
@@ -2019,22 +2026,38 @@ async def transcribe_audio(request: Request) -> dict:
 
 @app.post("/command")
 async def command(payload: dict = Body(...)) -> dict:
-    """Text bypass for testing and future text-driven paths. `followup: true`
+    """Text bypass for testing and text-driven paths. `followup: true`
     exercises the continued-conversation path (session context + silent none);
     `sat` names the satellite to answer as, which room-scoped home commands
-    and zone reply routing both key off."""
+    and zone reply routing both key off.
+
+    `owner` names the person the turn is for ("brad"/"adrienne"): the Voice
+    Notes companion relays command-shaped phone recordings here, and the phone
+    already knows whose it is. It stands in for voice identification, so every
+    person-dependent handler (list adds, "my to-dos", cross-person reminders)
+    sees it exactly as it would a recognised voice. `tts: false` skips the
+    speech render — the phone shows the reply as text. Use `sat: "phone"` (any
+    id with no zone entry) to keep the turn off the kitchen display."""
     text = str(payload.get("text", "")).strip()
     if not text:
         raise HTTPException(400, "missing 'text'")
     sat = payload.get("sat") or None
     _CUR_SAT.set(sat)
+    _NO_TTS.set(payload.get("tts") is False)
+    speaker_task = None
+    owner = payload.get("owner")
+    if owner:
+        # Same shape speaker.identify() resolves to, pre-resolved.
+        speaker_task = asyncio.get_running_loop().create_future()
+        speaker_task.set_result({"speaker": str(owner)})
     t0 = time.time()
     timing.start()
     # A text turn is a real turn — it just skips the wake and ASR stages. Kept
     # on the same table so "what did the house do today" is one query, with
     # kind='text' to keep it out of the wake-funnel arithmetic.
     turn_id = turns_mod.start(sat, "text", command=text)
-    result = await _dispatch(text, followup=bool(payload.get("followup")))
+    result = await _dispatch(text, followup=bool(payload.get("followup")),
+                             speaker_task=speaker_task)
     result["latency_ms"] = round((time.time() - t0) * 1000)
     turns_mod.finish(turn_id, result, timings=timing.snapshot(),
                      total_ms=result["latency_ms"])
