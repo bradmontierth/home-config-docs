@@ -57,6 +57,7 @@ On `plex`:
 /media/externalHDD/downloads/complete
 /media/externalHDD/downloads/incomplete
 /media/externalHDD/downloads/.quarantine
+/media/externalHDD/downloads/.manual-review
 /media/externalHDD/downloads/.pipeline-triggers
 /media/externalHDD/downloads/.pipeline-backups
 /media/externalHDD/media/music
@@ -76,6 +77,15 @@ Navidrome mounts it read-only as:
 /music
 ```
 
+## Transmission cannot see the library (since 2026-10-10)
+
+The Transmission container mounts only `/media/externalHDD/downloads` (as
+`/downloads`) and its config. Its old read-write mount of
+`/media/externalHDD/media` was removed so the internet-facing client cannot
+write into the published library and bypass this pipeline. The organizer runs
+on the host via `media-pipeline-trigger.path`, so it is unaffected. Do not
+re-add the mount. See `plex-replacement-plan.md` for the trust-zone model.
+
 ## Pipeline Policy
 
 The organizer is fail-closed.
@@ -93,6 +103,53 @@ Normal flow:
 9. Remove quarantine leftovers after successful release.
 
 This intentionally favors deletion over keeping suspicious files around.
+
+### TV episode merging and metadata review (2026-10-02)
+
+Security checks still apply to the entire bundle before any release. Infections,
+scanner errors, dangerous files, and invalid media retain the rejection policy
+above. Metadata uncertainty is preserved for manual review rather than deleted.
+
+For TV imports, the organizer reuses an existing show directory when its normalized
+title matches (including the year, ignoring case, extra whitespace, dots, and
+underscores). Ambiguous show or season directories hold the item for review.
+Existing `Season 1` directories are reused instead of creating `Season 01` beside
+them. Episode matching uses season/episode numbers inside the resolved show,
+independent of release-title suffixes and video extension; featurette directories
+are excluded from this matching.
+
+Missing episodes are released. Existing library videos are never overwritten;
+duplicate incoming videos are preserved in `.manual-review`. Unnumbered featurettes
+and TV extras with incomplete metadata are also held there without blocking valid
+episodes. Duplicate episode destinations within a bundle are held for review.
+Years remain part of show identity to avoid merging remakes.
+
+A partially released item has status `needs_review` and reason
+`partial_release_pending_review`. Its `manual_review_item` action lists released
+paths and the held-file count. Per-file reasons include
+`existing_episode_preserved`, `duplicate_episode_in_bundle`, and
+`video_tv_extra_metadata_missing`. Do not assume a `needs_review` item released
+nothing; inspect the file/action rows.
+
+The Veep recovery implementation, regression tests, original script backup, and
+recovery records are staged at:
+
+```text
+/home/pi/plex-workspace/media-pipeline/veep-recovery-20261002
+```
+
+On `plex`, the corresponding recovery directory is:
+
+```text
+/home/pi/transmission/organizer/veep-recovery-20261002
+```
+
+Veep recovery completed in pipeline run `72`, item `75`: all 111 files passed
+antivirus validation; 53 episodes were released, 12 duplicate episode downloads
+and 46 extras were preserved for review. The pre-existing library files were
+verified unchanged. Plex indexed 65 unique episodes across seasons 1–7, with
+episode counts `8, 10, 10, 10, 10, 10, 7`. Eleven regression tests passed.
+The recovery directory's `result.json` records the held-files location and counts.
 
 ## Transmission Hook
 
@@ -155,6 +212,13 @@ The runner:
 - uses `flock` to prevent overlapping organizer runs
 - runs `plex_organize.py`
 - deletes trigger files only after a successful organizer run
+- asks the Media Center server to rescan right away (`POST /api/v1/scan` on
+  `192.168.10.150:8790`), after both successful and failed runs, so new video
+  shows up with metadata within about a minute instead of the server's 30-minute
+  pass. It uses the scan-only key `MEDIA_CENTER_SCAN_TOKEN` from `pipeline.env`
+  (the same value as `MC_SCAN_TOKEN` in the server's `server.env`); that key is
+  refused on every other endpoint. A failed request is logged as
+  `media_center_scan_request_failed` and never fails the pipeline.
 
 ## Backup Policy
 
