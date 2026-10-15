@@ -519,9 +519,14 @@ SOUND_THEMES = (
     "steam_whistle",  # boiling / pasta / rice
     "bubbling",     # simmering / sauce
     "oven_ding",    # baking / roasting
-    "marimba",      # neutral fallback
+    "marimba",      # the old neutral default; still selectable by name
+    # Mixkit "Achievement bell" (sfx 600, Mixkit free license), chosen
+    # 2026-10-14: the stop model scores its bare ring 0.53 on the kitchen
+    # mic's ch1 residual vs marimba's 0.85, which was over the 0.80 fire bar
+    # and kept the ch1 stop leg in shadow for 70% of timers.
+    "achievement_bell",
 )
-DEFAULT_THEME = "marimba"
+DEFAULT_THEME = "achievement_bell"
 
 HTTP_PORT = int(os.getenv("ORCH_HTTP_PORT", "8785"))
 
