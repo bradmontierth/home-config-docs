@@ -284,6 +284,42 @@ every theme regardless. Note the dismiss chirp also scores ~0.5 on ch1 right
 after `ALARM end`; harmless (current_alarm is None by then) but don't read it
 as a ring score.
 
+### Default ring theme → achievement_bell (2026-10-14 21:27)
+
+Brad was not tied to marimba and finds bubbling/oven_ding unpleasant, so the
+ring sound was changed instead of retraining. Candidates were judged by the
+only number that matters — stop_v2's ch1 peak on a bare ring in the real
+kitchen (2 × 15 s silent rings each): synth dingdong 0.275, boop 0.404,
+tritone 0.549; Mixkit "Happy bells notification" (sfx 937) 0.530, Mixkit
+"Achievement bell" (sfx 600, 2.4 s) **0.526**; marimba 0.852. Offline scoring
+of the clean WAV does NOT predict this (oven_ding 0.16 offline vs 0.51 live).
+Brad picked Achievement bell by ear. Shipped: orchestrator `SOUND_THEMES` +
+`DEFAULT_THEME`, intent prompt, `zone_alarm.FALLBACK_THEME`, satellite
+`theme_sound()` fallback + request default, WAV in both `sounds/themes`
+dirs (loudnorm'd per the chimes README), kitchen `.env`
+`STOP_SIDE_THRESHOLDS=oven_ding:0.80,bubbling:0.80,achievement_bell:0.80`.
+Marimba stays selectable by name and its ch1 leg stays shadow. First real
+timer through the orchestrator rang `theme=achievement_bell`.
+
+Gotchas found on the way: (1) **the dismiss chirp scores 0.80–0.88 on ch1**
+(it is near-end-audible on the residual; ch0 cancels it) — harmless after
+`ALARM end`, but a QUEUED alarm starts 6 ms later with the chirp at the head
+of ch1's first window (0.41/0.51 seen), hence `STOP_SIDE_WARMUP_S=1.0`
+(commit e48dfcd). Offline timelines of a stereo capture peak at the chirp at
+the very end — don't read that as the ring ceiling. (2) Back-to-back
+`POST /alarm` calls queue, so one ring WAV can hold two alarms. (3) Running
+onnxruntime unthrottled on .251 for an offline screen pushed load to 10 on
+the live satellite — always `OMP_NUM_THREADS=1 nice -n 19` + ORT thread caps
+(see `~/wake-bench/candidates/score_rings.py`). (4) Open: on the 21:28 real
+timer ch0 fired 0.864 on a 1 s near-end burst (ch0 −35 dBFS, ch1 −46) that
+ch1 scores only 0.17 (0.26 at ×4 gain) and Parakeet decodes as nothing on
+either channel — whether that was a spoken stop (→ ch1 needs far more gain
+or the model needs ch1-level positives) or a ch0 false fire is unresolved;
+Brad to confirm. Protocol for the next real-world tests: ring, say "stop"
+once ON a ding and once in a gap, the stereo capture + `score=… side=…` log
+lines are the data; `~/wake-bench/candidates/gain_sweep.py` scores ch1 at
+×1/2/3/4.
+
 ## Interim-state service map (delete after cutover)
 
 - `/etc/modules-load.d/snd-aloop.conf`, `/etc/modprobe.d/snd-aloop.conf`
