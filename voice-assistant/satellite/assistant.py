@@ -640,7 +640,9 @@ def play_file(path: Path, is_alarm: bool = False) -> None:
 
 def theme_sound(theme: str) -> Path:
     p = SOUNDS_DIR / "themes" / f"{theme}.wav"
-    return p if p.exists() else SOUNDS_DIR / "themes" / "marimba.wav"
+    # Fallback = the house default (2026-10-14, was marimba): the stop model
+    # scores the bare marimba ding 0.85 on ch1, this bell 0.53.
+    return p if p.exists() else SOUNDS_DIR / "themes" / "achievement_bell.wav"
 
 
 # --- slideshow media audio ---------------------------------------------------
@@ -1509,7 +1511,7 @@ def alarm_playback(req: dict) -> None:
     Only the ring audio is suppressed — so the loop below is the timekeeper
     for a sound playing somewhere else."""
     tid = STATE.current_alarm
-    theme = req.get("sound_theme") or "marimba"
+    theme = req.get("sound_theme") or "achievement_bell"
     zone = req.get("playback") == "zone"
     log(f"ALARM start timer={tid} label={req.get('label')} theme={theme}"
         f"{' (zone playback)' if zone else ''}")
@@ -1575,7 +1577,7 @@ def start_next_alarm() -> None:
             return
         req = STATE.alarm_queue.pop(0)
         STATE.current_alarm = req.get("timer_id") or f"anon-{int(time.time())}"
-        STATE.current_theme = req.get("sound_theme") or "marimba"
+        STATE.current_theme = req.get("sound_theme") or "achievement_bell"
     STATE.dismiss.clear()
     if req.get("dismiss_armed") is False:
         STATE.dismiss_armed.clear()

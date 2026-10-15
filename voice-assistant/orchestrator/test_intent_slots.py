@@ -270,7 +270,7 @@ class DeterministicIntentTest(unittest.TestCase):
                 self.assertEqual(parsed["intent"], "set_timer")
                 self.assertEqual(parsed["duration_seconds"], seconds)
                 self.assertIsNone(parsed["label"])
-                self.assertEqual(parsed["sound_theme"], "marimba")
+                self.assertEqual(parsed["sound_theme"], "achievement_bell")
 
     def test_labelled_timer_forms(self):
         cases = {
@@ -278,12 +278,12 @@ class DeterministicIntentTest(unittest.TestCase):
             "set a chicken timer for 12 minutes": ("chicken", 720, "cluck"),
             "start the roasting timer for twenty minutes": (
                 "roasting", 1200, "oven_ding"),
-            "set a timer called tofu for ten minutes": ("tofu", 600, "marimba"),
+            "set a timer called tofu for ten minutes": ("tofu", 600, "achievement_bell"),
             "set our coffee timer for 90 seconds": ("coffee", 90, "steam_whistle"),
             # Not food, no table entry: still fast, just rings the default.
-            "set a dad work timer for 30 minutes": ("dad work", 1800, "marimba"),
+            "set a dad work timer for 30 minutes": ("dad work", 1800, "achievement_bell"),
             "please set a claire timer for five minutes": (
-                "claire", 300, "marimba"),
+                "claire", 300, "achievement_bell"),
         }
         for text, (label, seconds, theme) in cases.items():
             with self.subTest(text=text):

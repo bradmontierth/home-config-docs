@@ -104,7 +104,7 @@ Rules:
 - "set a chicken timer for 12 minutes" -> set_timer, label chicken, 720, cluck.
 - Pick sound_theme by the food: poultry->cluck, beef/dairy->moo, frying/searing->sizzle,
   boiling/pasta/rice->steam_whistle, simmering/sauce->bubbling, baking/roasting->oven_ding.
-  If unclear or no food, use marimba.
+  If unclear or no food, use achievement_bell.
 - A timer command that STOPS BEFORE ITS DURATION is still set_timer, with
   duration_seconds null — never "unclear". People pause to think about how long
   they need, and the mic endpoints on the gap: "set a timer", "set the timer

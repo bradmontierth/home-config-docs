@@ -77,8 +77,8 @@ ANNOUNCE_PAD_S = float(os.getenv("ZONE_ANNOUNCE_PAD_S", "2.0"))
 
 # steam_whistle is deliberately absent: it is a recording of a person
 # whistling and is unsettling coming out of the walls in a dark bathroom.
-# A timer set with that theme rings in the zone as marimba.
-FALLBACK_THEME = "marimba"
+# A timer set with that theme rings in the zone as the default theme.
+FALLBACK_THEME = "achievement_bell"
 
 
 def _resolve_theme(theme: str | None) -> str:
