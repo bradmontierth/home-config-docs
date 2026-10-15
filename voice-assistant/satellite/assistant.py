@@ -283,6 +283,26 @@ ALARM_SIDE_GAIN = float(os.getenv("ALARM_SIDE_GAIN", "1.0"))
 # stop_v2 scored it 0.30-0.58 on ch1 vs 0.01 on ch0 — too close to 0.80 to
 # arm blind. 2.0 = shadow (log only) until a silent-ring ceiling is measured.
 STOP_SIDE_THRESHOLD = float(os.getenv("STOP_SIDE_THRESHOLD", str(STOP_THRESHOLD)))
+# Per-theme override "theme:thr,theme:thr". Nine silent 15 s rings on
+# 2026-10-14 (3 per theme, empty kitchen) put stop_v2's ch1 ceiling at
+# marimba 0.852 (2-consec 0.778), oven_ding 0.512, bubbling 0.190: the
+# marimba ding itself clears 0.80 on the residual, the other two never come
+# close. Marimba is 70% of real alarms (and the fallback for the themes with
+# no WAV), so its leg stays in shadow until a retrain with ch1 backgrounds;
+# the others arm at the production bar with >=0.29 of margin.
+def _theme_thresholds() -> dict:
+    out = {}
+    for item in os.getenv("STOP_SIDE_THRESHOLDS", "").split(","):
+        k, _, v = item.strip().partition(":")
+        if k and v:
+            try:
+                out[k] = float(v)
+            except ValueError:
+                pass
+    return out
+
+
+STOP_SIDE_THRESHOLDS = _theme_thresholds()
 
 SAMPLE_RATE = 16000
 FRAME_SAMPLES = 512
@@ -332,6 +352,9 @@ class State:
             pass
         self.alarm_queue: list[dict] = []
         self.current_alarm: str | None = None
+        # theme of the ringing alarm; picks the ch1 stop threshold (see
+        # STOP_SIDE_THRESHOLDS). Set with current_alarm, cleared with it.
+        self.current_theme: str | None = None
         self.dismiss = threading.Event()
         # Cleared while our own announcement is still playing; see
         # DISMISS_ARM_CAP_S. Local alarms arm immediately.
@@ -1525,6 +1548,7 @@ def alarm_playback(req: dict) -> None:
         play_file(SOUNDS_DIR / "dismiss.wav")  # confirmation chirp: "it took"
     with STATE.lock:
         STATE.current_alarm = None
+        STATE.current_theme = None
     unduck_music()
     log(f"ALARM end timer={tid} ({'dismissed' if dismissed else 'timeout'})")
     try:
@@ -1551,6 +1575,7 @@ def start_next_alarm() -> None:
             return
         req = STATE.alarm_queue.pop(0)
         STATE.current_alarm = req.get("timer_id") or f"anon-{int(time.time())}"
+        STATE.current_theme = req.get("sound_theme") or "marimba"
     STATE.dismiss.clear()
     if req.get("dismiss_armed") is False:
         STATE.dismiss_armed.clear()
@@ -1975,7 +2000,8 @@ def main() -> int:
     stop_window_side = np.zeros(WINDOW_SAMPLES, dtype=np.int16)
     if alarm_side:
         log(f"alarm branch on ch1 (side gain {ALARM_SIDE_GAIN}): dismiss ASR + ring "
-            "capture from the linear residual, stop model scores ch0 and ch1")
+            "capture from the linear residual, stop model scores ch0 and ch1; "
+            f"ch1 fires at {STOP_SIDE_THRESHOLD} (per theme: {STOP_SIDE_THRESHOLDS or 'none'})")
 
     while True:
         # while an alarm is ringing (playback runs in its own thread), the main
@@ -2068,7 +2094,8 @@ def main() -> int:
                     s1 = (float(stop_model.predict(stop_window_side)[stop_key])
                           if alarm_side else None)
                     s = s0 if s1 is None else max(s0, s1)
-                    fire = s0 >= STOP_THRESHOLD or (s1 is not None and s1 >= STOP_SIDE_THRESHOLD)
+                    side_thr = STOP_SIDE_THRESHOLDS.get(STATE.current_theme or "", STOP_SIDE_THRESHOLD)
+                    fire = s0 >= STOP_THRESHOLD or (s1 is not None and s1 >= side_thr)
                     if s >= STOP_LOG_THRESHOLD:
                         log(f"stop-model score={round(s0, 3)}"
                             + (f" side={round(s1, 3)}" if s1 is not None else ""))
