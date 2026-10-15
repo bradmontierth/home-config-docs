@@ -261,6 +261,28 @@ STOP_LOG_THRESHOLD = float(os.getenv("STOP_LOG_THRESHOLD", "0.2"))
 # (2026-07-24, two self-dismissals). Train/eval on these, not synthetic.
 ALARM_RING_DIR = DATA_DIR / "alarm_rings"
 ALARM_RING_KEEP = int(os.getenv("ALARM_RING_KEEP", "40"))
+# Alarm-branch mic channel (2026-10-14). Since the 08-19 AEC cutover the ding
+# is far-end audio to the XVF3800, so ch0's residual-echo suppressor clamps
+# the near end during and ~1 s after every ding: a "stop" that overlaps a ding
+# reaches ch0 at about -40 dBFS (ring-20260826-180914.wav: three stops as
+# faint dots, the kid's laugh between dings at -13). Multi-attempt dismissals
+# went 0/14 before the cutover to 10/51 after; same detectors, same channel.
+# Command capture already reads ch1 (linear AEC residual: ding at -40 dBFS,
+# no hangover, no AGC). ALARM_CHANNEL=1 feeds the dismiss ASR and the ring
+# capture from that side channel, and the stop model scores BOTH channels and
+# fires on either (union: recall can only go up, both scores logged, so the
+# ch0 leg can be dropped once ch1 has a week of real rings). The ring WAV
+# becomes stereo (L=ch0, R=ch1) so offline evals can A/B the channels.
+# ALARM_SIDE_GAIN stacks on CMD_CHANNEL_GAIN (the residual is ~10 dB below
+# ch0) for the model's window only; the ASR copes with the level as-is.
+# Needs MIC_CHANNELS=2; ignored (old single-channel behaviour) otherwise.
+ALARM_CHANNEL = int(os.getenv("ALARM_CHANNEL", "0"))
+ALARM_SIDE_GAIN = float(os.getenv("ALARM_SIDE_GAIN", "1.0"))
+# The ch1 leg fires at its own threshold: the linear residual still carries
+# the ding, and on the first test ring (2026-10-14 20:43, nobody speaking)
+# stop_v2 scored it 0.30-0.58 on ch1 vs 0.01 on ch0 — too close to 0.80 to
+# arm blind. 2.0 = shadow (log only) until a silent-ring ceiling is measured.
+STOP_SIDE_THRESHOLD = float(os.getenv("STOP_SIDE_THRESHOLD", str(STOP_THRESHOLD)))
 
 SAMPLE_RATE = 16000
 FRAME_SAMPLES = 512
@@ -1947,6 +1969,13 @@ def main() -> int:
     # alarm-start reset, and the model must NOT be asked to score it — see the
     # startup-transient note at the scoring site below.
     stop_filled = 0
+    # ch1 leg of the alarm branch (see ALARM_CHANNEL). `mic` is only a
+    # StereoDemux (has last_side) when MIC_CHANNELS == 2.
+    alarm_side = ALARM_CHANNEL == 1 and hasattr(mic, "last_side")
+    stop_window_side = np.zeros(WINDOW_SAMPLES, dtype=np.int16)
+    if alarm_side:
+        log(f"alarm branch on ch1 (side gain {ALARM_SIDE_GAIN}): dismiss ASR + ring "
+            "capture from the linear residual, stop model scores ch0 and ch1")
 
     while True:
         # while an alarm is ringing (playback runs in its own thread), the main
@@ -1962,13 +1991,14 @@ def main() -> int:
                 alarm_window.clear()
                 alarm_frames = 0
                 stop_window = np.zeros(WINDOW_SAMPLES, dtype=np.int16)
+                stop_window_side = np.zeros(WINDOW_SAMPLES, dtype=np.int16)
                 stop_chunks = 0
                 stop_filled = 0
                 try:
                     ALARM_RING_DIR.mkdir(parents=True, exist_ok=True)
                     ring_wav = wave.open(str(
                         ALARM_RING_DIR / time.strftime("ring-%Y%m%d-%H%M%S.wav")), "wb")
-                    ring_wav.setnchannels(1)
+                    ring_wav.setnchannels(2 if alarm_side else 1)
                     ring_wav.setsampwidth(2)
                     ring_wav.setframerate(SAMPLE_RATE)
                 except Exception as exc:  # noqa: BLE001
@@ -1978,15 +2008,32 @@ def main() -> int:
             if not b or len(b) < SileroVad.CHUNK * 2:
                 log("arecord stream ended; exiting for restart")
                 return 1
+            # ch1 bytes for this same chunk (already CMD_CHANNEL_GAIN-scaled by
+            # the demuxer). A short/missing side frame falls back to ch0 for
+            # this chunk so the stereo WAV and the windows stay in step.
+            side = mic.last_side if alarm_side else None
+            if side is not None and len(side) != len(b):
+                side = None
             if ring_wav is not None:
-                ring_wav.writeframes(b)
+                if alarm_side:
+                    ring_wav.writeframes(np.stack(
+                        [np.frombuffer(b, dtype=np.int16),
+                         np.frombuffer(side if side is not None else b, dtype=np.int16)],
+                        axis=1).tobytes())
+                else:
+                    ring_wav.writeframes(b)
+            if side is not None and ALARM_SIDE_GAIN != 1.0:
+                side_model = np.clip(np.frombuffer(side, dtype=np.int16).astype(np.float32)
+                                     * ALARM_SIDE_GAIN, -32768, 32767).astype(np.int16)
+            else:
+                side_model = np.frombuffer(side if side is not None else b, dtype=np.int16)
             if STATE.flush_alarm_window.is_set():
                 # Drop everything heard before we were armed, so the first
                 # decode after arming cannot contain our own announcement.
                 STATE.flush_alarm_window.clear()
                 alarm_window.clear()
                 alarm_frames = 0
-            alarm_window.append(b)
+            alarm_window.append(side if side is not None else b)
             alarm_frames += 1
             if alarm_frames >= alarm_hop_frames and len(alarm_window) >= alarm_hop_frames:
                 alarm_frames = 0
@@ -1994,6 +2041,9 @@ def main() -> int:
             if stop_model is not None:
                 stop_window = np.concatenate(
                     [stop_window[SileroVad.CHUNK:], np.frombuffer(b, dtype=np.int16)])
+                if alarm_side:
+                    stop_window_side = np.concatenate(
+                        [stop_window_side[SileroVad.CHUNK:], side_model])
                 stop_filled += SileroVad.CHUNK
                 stop_chunks += 1
                 # STARTUP TRANSIENT GUARD (2026-07-25). stop_window is reset to
@@ -2014,13 +2064,21 @@ def main() -> int:
                 # See training/replay_stop_faithful.py.
                 if stop_chunks >= stop_hop_chunks and stop_filled >= WINDOW_SAMPLES:
                     stop_chunks = 0
-                    s = float(stop_model.predict(stop_window)[stop_key])
+                    s0 = float(stop_model.predict(stop_window)[stop_key])
+                    s1 = (float(stop_model.predict(stop_window_side)[stop_key])
+                          if alarm_side else None)
+                    s = s0 if s1 is None else max(s0, s1)
+                    fire = s0 >= STOP_THRESHOLD or (s1 is not None and s1 >= STOP_SIDE_THRESHOLD)
                     if s >= STOP_LOG_THRESHOLD:
-                        log(f"stop-model score={round(s, 3)}")
-                    if (s >= STOP_THRESHOLD and STATE.current_alarm is not None
+                        log(f"stop-model score={round(s0, 3)}"
+                            + (f" side={round(s1, 3)}" if s1 is not None else ""))
+                    if (fire and STATE.current_alarm is not None
                             and not STATE.dismiss.is_set()):
-                        log(f"stop model fired score={round(s, 3)} -> stopping alarm")
-                        append_event({"type": "alarm_stop_model", "score": round(s, 3)})
+                        ch = "ch1" if s0 < STOP_THRESHOLD else "ch0"
+                        log(f"stop model fired score={round(s, 3)} {ch} -> stopping alarm")
+                        append_event({"type": "alarm_stop_model", "score": round(s, 3),
+                                      "channel": ch, "score_ch0": round(s0, 3),
+                                      "score_ch1": None if s1 is None else round(s1, 3)})
                         STATE.dismiss.set()
             continue
         if in_alarm:
