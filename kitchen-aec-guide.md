@@ -240,6 +240,33 @@ by adding an onset-position window (`SPURIOUS_ONSET_WINDOW_MS`, 1000) with
 tiny blips (< `MIN_VOICED_MS`) still spurious anywhere; deployed to the
 kitchen and family room 2026-08-26 21:24.
 
+### Alarm branch on ch1 (SHIPPED 2026-10-14 20:44, kitchen only)
+
+Same clamp, third victim. The stop model, the dismiss ASR and the ring
+capture had stayed on ch0 when command capture moved to ch1, and the alarm
+ding is far-end audio too — so every "stop" that overlapped a ding (or came
+within ~1 s after one) was eaten by the residual-echo suppressor. Measured on
+a test ring in an empty kitchen: ch0 sits at −75..−80 dBFS for the whole ring
+(the ding cancelled AND the room clamped), ch1 shows each ding at −30..−40
+over a −64 floor with no hangover. `ring-20260826-180914.wav` is the human
+version: three stops as faint dots at −40, a kid's laugh between dings at
+−13. Journal: multi-attempt dismissals 0/14 in the armed-but-pre-AEC window
+(Aug 6–18) vs 10/51 after the cutover; alarms ringing ≥15 s 4/19 → 18/80.
+
+`.env` on .251: `ALARM_CHANNEL=1`, `ALARM_SIDE_GAIN=1.0`,
+`STOP_SIDE_THRESHOLD=2.0`. What that does (`satellite/assistant.py`,
+commit e4d694b): dismiss ASR windows and the ring WAV come from ch1 (WAVs
+are now **stereo, L=ch0 R=ch1** — offline tools that assume mono need a
+channel pick); the stop model scores both channels every hop and logs
+`stop-model score=<ch0> side=<ch1>`; ch0 fires at `STOP_THRESHOLD` as
+before, ch1 at `STOP_SIDE_THRESHOLD`. 2.0 = shadow: on the first test ring
+stop_v2 scored the bare ding 0.30–0.58 on ch1 (0.01 on ch0), too close to
+0.80 to arm without a ceiling. Next: 2–3 silent 40 s rings in daytime
+(`ring-labeler/stop_trial.py --silent`), take the ch1 max, arm the side leg
+at ceiling + 0.15 if that lands ≤0.85, else retrain with ch1 ring
+backgrounds (now the retrain has a real target). Rollback =
+`~/voice-pipeline/{assistant.py,.env}.before-stop-ch1-20261014`.
+
 ## Interim-state service map (delete after cutover)
 
 - `/etc/modules-load.d/snd-aloop.conf`, `/etc/modprobe.d/snd-aloop.conf`
