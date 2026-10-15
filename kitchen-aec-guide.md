@@ -267,6 +267,23 @@ at ceiling + 0.15 if that lands ≤0.85, else retrain with ch1 ring
 backgrounds (now the retrain has a real target). Rollback =
 `~/voice-pipeline/{assistant.py,.env}.before-stop-ch1-20261014`.
 
+**Ceiling measured the same night** (nine silent 15 s rings, 3 per theme,
+`stop-trials-20261014-2052*.log` + `-2054*`): stop_v2 on ch1 peaks at
+marimba **0.852** (2-consec 0.778; 0.744 and 0.640 on the other two rings),
+oven_ding 0.512, bubbling 0.190; ch0 ≤0.015 on all but one oven_ding ring
+(0.61, unexplained). Marimba is 140 of 203 real alarms and the fallback for
+cluck/moo/sizzle, and its ding alone clears 0.80 on the residual, so the ch1
+model leg cannot arm for it with this model. Shipped instead (commit after
+e4d694b): `STOP_SIDE_THRESHOLDS=oven_ding:0.80,bubbling:0.80` in the kitchen
+`.env` (per-theme override, `STATE.current_theme` set with `current_alarm`),
+marimba stays at the 2.0 shadow default. Two ways out for marimba: retrain
+stop with the stereo ring captures' ch1 as backgrounds (the nine silent rings
+are a clean negative set already), or move the default/fallback theme to
+bubbling, which the model essentially ignores. The ASR leg on ch1 is live for
+every theme regardless. Note the dismiss chirp also scores ~0.5 on ch1 right
+after `ALARM end`; harmless (current_alarm is None by then) but don't read it
+as a ring score.
+
 ## Interim-state service map (delete after cutover)
 
 - `/etc/modules-load.d/snd-aloop.conf`, `/etc/modprobe.d/snd-aloop.conf`
