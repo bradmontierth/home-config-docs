@@ -303,6 +303,13 @@ def _theme_thresholds() -> dict:
 
 
 STOP_SIDE_THRESHOLDS = _theme_thresholds()
+# ch1 scoring starts this much later than ch0 after an alarm begins. The
+# dismiss chirp of the PREVIOUS alarm is near-end-audible on the residual
+# (ch0 cancels it) and stop_v2 scores it 0.80-0.88 on ch1; when a queued
+# alarm starts 6 ms after the last one ended, that chirp sits at the head of
+# ch1's first full window (observed 0.41/0.51 on 2026-10-14). One extra
+# second pushes it out before the side leg is allowed to fire.
+STOP_SIDE_WARMUP_S = float(os.getenv("STOP_SIDE_WARMUP_S", "1.0"))
 
 SAMPLE_RATE = 16000
 FRAME_SAMPLES = 512
@@ -2094,7 +2101,8 @@ def main() -> int:
                     stop_chunks = 0
                     s0 = float(stop_model.predict(stop_window)[stop_key])
                     s1 = (float(stop_model.predict(stop_window_side)[stop_key])
-                          if alarm_side else None)
+                          if alarm_side and stop_filled >= WINDOW_SAMPLES + int(STOP_SIDE_WARMUP_S * SAMPLE_RATE)
+                          else None)
                     s = s0 if s1 is None else max(s0, s1)
                     side_thr = STOP_SIDE_THRESHOLDS.get(STATE.current_theme or "", STOP_SIDE_THRESHOLD)
                     fire = s0 >= STOP_THRESHOLD or (s1 is not None and s1 >= side_thr)
