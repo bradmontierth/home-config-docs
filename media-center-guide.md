@@ -52,6 +52,17 @@ Never copy token/key values into code, commits, logs or memory; reference the pa
   Bluey episode, ~40 s per half hour. `GET /api/v1/loudness` = progress + per-show
   averages. Input for the planned "even volume" player mode (target ~-16 LUFS,
   boost capped, limiter); not used by any player yet.
+- **Live TV guide** (step 1 of live TV, `app/livetv.py`): HDHomeRun FLEX DUO at
+  `192.168.40.34` (2 tuners, 126 channels, MPEG-2/AC3). Every 2 h it syncs
+  `/lineup.json` and SiliconDust's free guide (`api.hdhomerun.com/api/guide`, device
+  DeviceAuth read fresh from `/discover.json`, never stored), paging `Start` 6 h at a
+  time; the free guide reaches ~48-53 h ahead. Airings kept 60 days in `tv_airings`.
+  Endpoints: `/api/v1/livetv/status` (health, reach), `/channels`, `PUT /favorites`
+  (`{"numbers": [...]}`; seeded with the 18 HD main channels), `/guide?hours=48`
+  (favourites, ~16 KB gzipped), `/audit?title=Jeopardy` (raw First flag, original
+  air date, episode + the "new only" verdict and why), `POST /sync`. Gracenote's
+  tvlistings grid (what Jellyfin guides scrape) answers 403 now; not used.
+  Container runs TZ=America/Denver.
 - **Plex import** (done once, 2026-10-10): metadata, art, watch history.
 - **TMDB** after each scan: fills only empty fields for new arrivals. Exact title
   match wins, and episodes need a title match (numbering drifts).
