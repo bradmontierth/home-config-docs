@@ -88,8 +88,13 @@ Never copy token/key values into code, commits, logs or memory; reference the pa
   name, then a library scan runs. Watching a channel that is recording shares the
   tuner. More than two channels at once -> later rules marked `conflict`. A dead
   buffer mid-recording is re-tuned and the pieces joined. `tv_alerts` collects
-  failures/conflicts/missed/guide-short (`GET /api/v1/livetv/alerts`); NOT yet
-  delivered by Pushover. Endpoints: `GET/POST /api/v1/livetv/rules`,
+  failures/conflicts/missed/guide-short (`GET /api/v1/livetv/alerts`). Delivered
+  by `media-center/tools/alert_relay.py` on the BEELINK (user timer
+  `media-center-alerts.timer`, every minute): reads Pushover from
+  `cecret_lake/pushover/.env` (not copied to the Pi), talks to the server with the
+  alerts-only key `cecret_lake/media_center/alerts_token` = `MC_ALERTS_TOKEN` in
+  server.env (GET alerts + POST /alerts/ack only), acks only after Pushover accepts,
+  batches several alerts into one push. Guide alerts at most every 12 h. Endpoints: `GET/POST /api/v1/livetv/rules`,
   `DELETE /rules/{id}`, `GET /upcoming`, `POST /recordings/{id}/skip`.
   TV: hold OK on a Live TV channel -> record now/next once or as a series;
   Recordings > Upcoming / Rules show each decision and why.
