@@ -75,6 +75,27 @@ Never copy token/key values into code, commits, logs or memory; reference the pa
   Both tuners busy (incl. Plex) -> 503 "Both tuners are in use" after first
   stopping an idle buffer. A server restart closes all buffers (they stay resumable).
   `GET /api/v1/livetv/now` = favourites now/next + paused buffers.
+- **DVR** (step 3, `app/recorder.py`, TV app 0.19): rules in `tv_rules` (series by
+  title/series id on any or one channel, new-only or every airing; or one airing),
+  planned against the guide after every sync and every 5 min into `tv_recordings`
+  with a state + plain-English reason for every airing considered, skips included.
+  The HDHomeRun does NOT share a tuner between two streams of one channel (tested
+  2026-10-18), so a recording holds that channel's live buffer like a viewer does,
+  and at the end of its padded window (1 min before, 2 after, +60 min when both
+  teams are listed) the buffer's segments are concatenated into one `.ts` under
+  `/media/externalHDD/media/dvr` (mounted rw at `/dvr`, owner 1500; the only
+  writable media path), named like "tv shows" and reusing an existing show folder
+  name, then a library scan runs. Watching a channel that is recording shares the
+  tuner. More than two channels at once -> later rules marked `conflict`. A dead
+  buffer mid-recording is re-tuned and the pieces joined. `tv_alerts` collects
+  failures/conflicts/missed/guide-short (`GET /api/v1/livetv/alerts`); NOT yet
+  delivered by Pushover. Endpoints: `GET/POST /api/v1/livetv/rules`,
+  `DELETE /rules/{id}`, `GET /upcoming`, `POST /recordings/{id}/skip`.
+  TV: hold OK on a Live TV channel -> record now/next once or as a series;
+  Recordings > Upcoming / Rules show each decision and why.
+  Imported from Plex 2026-10-18: Jeopardy! (Plex had it on every airing; ours is
+  new-only). Live start fix in the same release: 2 s segments, the player waits for
+  4 s of video and sits 8 s behind live.
 - **Plex import** (done once, 2026-10-10): metadata, art, watch history.
 - **TMDB** after each scan: fills only empty fields for new arrivals. Exact title
   match wins, and episodes need a title match (numbering drifts).
