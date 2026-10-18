@@ -47,6 +47,11 @@ Never copy token/key values into code, commits, logs or memory; reference the pa
   ffprobe for new/changed files (fps, codecs, HDR, audio/subtitle tracks,
   sidecar `.srt`). Understands `SxxEyy`, multi-episode, `Season 03 Episode 01`,
   and Plex DVR date names. Missing files are flagged, never deleted.
+- **Loudness** (background, nice 19, yields to iPad copies): EBU R128 integrated
+  loudness, loudness range and sample peak per file into `file_loudness`, ~9 s per
+  Bluey episode, ~40 s per half hour. `GET /api/v1/loudness` = progress + per-show
+  averages. Input for the planned "even volume" player mode (target ~-16 LUFS,
+  boost capped, limiter); not used by any player yet.
 - **Plex import** (done once, 2026-10-10): metadata, art, watch history.
 - **TMDB** after each scan: fills only empty fields for new arrivals. Exact title
   match wins, and episodes need a title match (numbering drifts).
