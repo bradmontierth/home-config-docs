@@ -17,10 +17,16 @@ import android.os.Bundle
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -63,11 +69,14 @@ import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -129,8 +138,15 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        launchSessionId.value = intent.homeAgentSessionId()
+        // Only a fresh launch carries a request: a recreated activity gets its
+        // original launch intent back, which would replay an old notification
+        // tap and jump to that session.
+        if (savedInstanceState == null) launchSessionId.value = intent.homeAgentSessionId()
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        // Edge-to-edge so the keyboard reaches Compose as an inset only. Without
+        // it the window shrank for the keyboard AND imePadding() added the same
+        // height again, squeezing the terminal behind a blank band.
+        enableEdgeToEdge()
         setContent {
             MaterialTheme(
                 colorScheme = lightColorScheme(
@@ -152,7 +168,18 @@ class MainActivity : ComponentActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        setIntent(intent)
         launchSessionId.value = intent.homeAgentSessionId()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        InAppAlerts.foreground = true
+    }
+
+    override fun onPause() {
+        InAppAlerts.foreground = false
+        super.onPause()
     }
 }
 
@@ -248,7 +275,8 @@ fun HomeAgentApp(launchSessionId: MutableState<String?>) {
             .callTimeout(6, TimeUnit.MINUTES)
             .build()
     }
-    val recorderState = remember { RecorderState(context) }
+    // Process-scoped: survives activity recreation mid-dictation.
+    val recorderState = RecorderState
 
     var gatewayUrl by remember { mutableStateOf(prefs.getString("gateway_url", "http://192.168.10.217:8767") ?: "") }
     var token by remember { mutableStateOf(prefs.getString("token", "") ?: "") }
@@ -270,8 +298,8 @@ fun HomeAgentApp(launchSessionId: MutableState<String?>) {
     var codexAccounts by remember { mutableStateOf<List<CodexAccount>>(emptyList()) }
     var codexModels by remember { mutableStateOf<List<CodexModel>>(emptyList()) }
     var claudeModels by remember { mutableStateOf<List<CodexModel>>(emptyList()) }
-    var transcript by remember { mutableStateOf("") }
-    var replyText by remember { mutableStateOf("") }
+    // One composer for both a new task and a reply.
+    var draft by remember { mutableStateOf("") }
     var terminal by remember { mutableStateOf("") }
     var status by remember { mutableStateOf("Ready") }
     var sessionId by remember { mutableStateOf<String?>(null) }
@@ -281,15 +309,19 @@ fun HomeAgentApp(launchSessionId: MutableState<String?>) {
     var showSessions by remember { mutableStateOf(false) }
     var externalSessions by remember { mutableStateOf<List<ExternalSession>>(emptyList()) }
     var showSettings by remember { mutableStateOf(false) }
-    var terminalExpanded by remember { mutableStateOf(false) }
+    // Root of the conversation on screen; banners for it are dropped.
+    var activeRootId by remember { mutableStateOf<String?>(null) }
+    var showMenu by remember { mutableStateOf(false) }
     var selectedSessionId by remember { mutableStateOf<String?>(null) }
     var selectedSessionTitle by remember { mutableStateOf<String?>(null) }
     var selectedSessionAgent by remember { mutableStateOf<String?>(null) }
     var selectedSessionReasoning by remember { mutableStateOf<String?>(null) }
     var selectedSessionAccount by remember { mutableStateOf<String?>(null) }
     var selectedSessionModel by remember { mutableStateOf<String?>(null) }
+    // Oldest untranscribed file in recordings/ (what "Transcribe saved" sends next).
     var lastRecordingFile by remember { mutableStateOf<File?>(null) }
     var canRetryTranscription by remember { mutableStateOf(false) }
+    var pendingRecordingCount by remember { mutableStateOf(0) }
     var isTranscribing by remember { mutableStateOf(false) }
     var isSubmittingSession by remember { mutableStateOf(false) }
     var reconnectSessionId by remember { mutableStateOf<String?>(null) }
@@ -299,6 +331,10 @@ fun HomeAgentApp(launchSessionId: MutableState<String?>) {
     var authLoginSession by remember { mutableStateOf<CodexLoginSession?>(null) }
     var authPollTrigger by remember { mutableStateOf(0) }
     var pendingAuthAccount by remember { mutableStateOf<CodexAccount?>(null) }
+    // Bumped whenever the user moves to another session. Async loads and
+    // starts capture it and drop their result if it changed, so a slow
+    // response for the previous session can never re-attach it.
+    val switchGeneration = remember { intArrayOf(0) }
     val hasCurrentSession = selectedSessionId != null || sessionId != null
 
     fun activeSessionId(): String? = selectedSessionId ?: sessionId
@@ -332,7 +368,8 @@ fun HomeAgentApp(launchSessionId: MutableState<String?>) {
         selectedSessionAccount = codexAccount
         selectedSessionModel = modelForAgent(selectedSessionAgent ?: agent)
         sessionRunning = true
-        status = "Session $id"
+        status = "Running"
+        if (activeRootId == null) activeRootId = id
         socket = connectWebSocket(client, gatewayUrl, token, id) { ws, event ->
             if (ws !== socket) {
                 // Superseded connection: closing is async, so its events can still
@@ -343,11 +380,7 @@ fun HomeAgentApp(launchSessionId: MutableState<String?>) {
             }
             when (event.optString("type")) {
                 "output" -> {
-                    val data = event.optString("data")
-                    terminal += data
-                    if (data.contains("AWAITING_PHONE_APPROVAL:")) {
-                        status = "Waiting for approval"
-                    }
+                    terminal += event.optString("data")
                 }
                 "auth_required" -> {
                     val accountId = event.optString("account_id", selectedSessionAccount ?: codexAccount)
@@ -407,19 +440,23 @@ fun HomeAgentApp(launchSessionId: MutableState<String?>) {
         }
     }
 
-    fun loadSession(id: String, expandTerminal: Boolean) {
+    fun loadSession(id: String) {
         resetReconnect()
+        val generation = ++switchGeneration[0]
+        fun stale() = generation != switchGeneration[0] || activeSessionId() != id
+        if (selectedSessionId != id) activeRootId = null
         selectedSessionId = id
         sessionId = id
-        status = "Loading $id"
-        terminalExpanded = terminalExpanded || expandTerminal
+        status = "Loading"
         socket?.close(1000, "notification session")
         socket = null
         sessionRunning = false
         fun loadInfoAndMaybeReconnect() {
             fetchSessionInfo(client, gatewayUrl, token, id) { infoResult ->
+                if (stale()) return@fetchSessionInfo
                 infoResult.onSuccess { info ->
                     cancelSessionNotification(context, info.rootSessionId ?: id)
+                    activeRootId = info.rootSessionId ?: id
                     selectedSessionTitle = info.displayTitle.ifBlank { info.title }
                     selectedSessionAgent = info.agent
                     selectedSessionReasoning = info.reasoningEffort
@@ -430,7 +467,7 @@ fun HomeAgentApp(launchSessionId: MutableState<String?>) {
                     if (info.status == "running" || info.status == "waiting") {
                         attachSession(id, selectedSessionTitle ?: info.title)
                     } else {
-                        status = "Selected $id"
+                        status = "Done"
                     }
                 }.onFailure { error ->
                     terminal += "\n[session info error] ${error.message}\n"
@@ -438,9 +475,9 @@ fun HomeAgentApp(launchSessionId: MutableState<String?>) {
             }
         }
         fetchSessionLog(client, gatewayUrl, token, id) { result ->
+            if (stale()) return@fetchSessionLog
             result.onSuccess { history ->
                 terminal = history
-                status = "Selected $id"
                 loadInfoAndMaybeReconnect()
             }.onFailure { error ->
                 terminal += "\n[history error] ${error.message}\n"
@@ -455,7 +492,9 @@ fun HomeAgentApp(launchSessionId: MutableState<String?>) {
         // children by the time it is tapped. Join the conversation at its
         // latest session so the user lands on the current turn.
         status = "Finding latest session"
+        val generation = ++switchGeneration[0]
         listSessions(client, gatewayUrl, token) { result ->
+            if (generation != switchGeneration[0]) return@listSessions
             val target = result.getOrNull()?.let { latestSessionInConversation(it, id) }
             if (target != null) {
                 sessions = result.getOrDefault(sessions)
@@ -464,9 +503,9 @@ fun HomeAgentApp(launchSessionId: MutableState<String?>) {
                 selectedSessionReasoning = target.reasoningEffort.takeIf { value -> value.isNotBlank() }
                 selectedSessionAccount = target.codexAccount.takeIf { value -> value.isNotBlank() }
                 selectedSessionModel = target.codexModel.takeIf { value -> value.isNotBlank() }
-                loadSession(target.sessionId, expandTerminal = true)
+                loadSession(target.sessionId)
             } else {
-                loadSession(id, expandTerminal = true)
+                loadSession(id)
             }
         }
     }
@@ -620,6 +659,8 @@ fun HomeAgentApp(launchSessionId: MutableState<String?>) {
 
     fun startNewConversation() {
         resetReconnect()
+        switchGeneration[0]++
+        activeRootId = null
         socket?.close(1000, "new conversation")
         socket = null
         sessionId = null
@@ -632,12 +673,8 @@ fun HomeAgentApp(launchSessionId: MutableState<String?>) {
         contextTokens = null
         contextWindow = null
         sessionRunning = false
-        transcript = ""
-        replyText = ""
+        draft = ""
         terminal = ""
-        terminalExpanded = false
-        lastRecordingFile = null
-        canRetryTranscription = false
         status = "Ready"
     }
 
@@ -682,8 +719,10 @@ fun HomeAgentApp(launchSessionId: MutableState<String?>) {
 
     fun compactContext() {
         val target = selectedSessionId ?: sessionId ?: return
-        status = "Compacting $target"
+        status = "Compacting"
+        val generation = switchGeneration[0]
         compactSession(client, gatewayUrl, token, target) { result ->
+            if (generation != switchGeneration[0]) return@compactSession
             result.onSuccess { id ->
                 terminal += "\n[compact] Compacting context on $id\n"
                 attachSession(id)
@@ -696,7 +735,7 @@ fun HomeAgentApp(launchSessionId: MutableState<String?>) {
 
     fun resumeOrSend(text: String) {
         val liveSocket = socket
-        if (sessionRunning && liveSocket != null && status != "Waiting for approval") {
+        if (sessionRunning && liveSocket != null) {
             liveSocket.send(JSONObject(mapOf("type" to "input", "data" to text)).toString())
             return
         }
@@ -706,9 +745,11 @@ fun HomeAgentApp(launchSessionId: MutableState<String?>) {
             status = "No session selected"
             return
         }
-        status = "Resuming $target"
+        status = "Sending"
         val resumeAgent = activeAgent()
+        val generation = switchGeneration[0]
         resumeSession(client, gatewayUrl, token, target, text, resumeAgent, reasoningEffort, codexAccount, modelForAgent(resumeAgent), promptMode) { result ->
+            if (generation != switchGeneration[0]) return@resumeSession
             result.onSuccess { id ->
                 terminal += "\n[resume] Continuing $target as $id\n"
                 attachSession(id)
@@ -719,12 +760,22 @@ fun HomeAgentApp(launchSessionId: MutableState<String?>) {
         }
     }
 
+    // Every .m4a in recordings/ is audio that never produced a transcript (a
+    // delivered transcript deletes its file). Re-read from disk so the retry
+    // offer survives process death and activity recreation.
+    fun refreshPendingRecordings() {
+        val pending = pendingRecordings(context)
+        lastRecordingFile = pending.firstOrNull()
+        pendingRecordingCount = pending.size
+        canRetryTranscription = pending.isNotEmpty()
+    }
+
     fun transcribeRecording(file: File) {
         if (!file.exists()) {
             status = "Recording unavailable"
-            terminal += "\n[transcription error] The last recording is no longer available.\n"
-            lastRecordingFile = null
-            canRetryTranscription = false
+            terminal += "\n[transcription error] Recording file missing: ${file.absolutePath}" +
+                " (${pendingRecordings(context).size} other saved recording(s)).\n"
+            refreshPendingRecordings()
             return
         }
         isTranscribing = true
@@ -733,38 +784,39 @@ fun HomeAgentApp(launchSessionId: MutableState<String?>) {
         transcribe(client, gatewayUrl, token, file) { result ->
             isTranscribing = false
             result.onSuccess {
-                if (hasCurrentSession) {
-                    replyText = it
+                draft = if (draft.isBlank()) it else "${draft.trimEnd()} $it"
+                // Only a delivered transcript retires the audio.
+                file.delete()
+                refreshPendingRecordings()
+                status = if (pendingRecordingCount > 0) {
+                    "Transcript ready, $pendingRecordingCount saved recording(s) left"
                 } else {
-                    transcript = it
+                    "Transcript ready"
                 }
-                lastRecordingFile = file
-                canRetryTranscription = false
-                status = "Transcript ready"
             }.onFailure {
                 status = "Transcription failed"
-                lastRecordingFile = file
-                canRetryTranscription = true
-                terminal += "\n[transcription error] ${it.friendlyMessage()}\n"
+                refreshPendingRecordings()
+                terminal += "\n[transcription error] ${it.friendlyMessage()} Recording kept: " +
+                    "${describeRecording(file)}. Tap Retry transcribe.\n"
             }
         }
     }
 
     fun finishRecording() {
         try {
-            val file = recorderState.stop()
-            lastRecordingFile = file
+            val file = recorderState.stop(context)
             status = "Transcribing"
             transcribeRecording(file)
         } catch (error: Exception) {
             status = "Recorder failed"
             terminal += "\n[recorder error] ${error.message}\n"
+            refreshPendingRecordings()
         }
     }
 
     fun startRecording() {
         try {
-            recorderState.start()
+            recorderState.start(context)
             status = "Recording"
         } catch (error: Exception) {
             status = "Recorder failed"
@@ -772,30 +824,36 @@ fun HomeAgentApp(launchSessionId: MutableState<String?>) {
         }
     }
 
-    fun runAgent() {
+    fun startNewSession(text: String) {
         if (isSubmittingSession) return
-        val target = selectedSessionId
-        val runAgentId = if (target == null) agent else activeAgent()
+        val runAgentId = agent
+        val generation = ++switchGeneration[0]
         isSubmittingSession = true
-        status = if (target == null) "Starting ${agentLabel(runAgentId)}" else "Resuming $target"
-        terminalExpanded = true
-        if (target == null) {
-            terminal = ""
-        }
-        val callback: (Result<String>) -> Unit = { result ->
+        status = "Starting ${agentLabel(runAgentId)}"
+        terminal = ""
+        selectedSessionAgent = runAgentId
+        startSession(client, gatewayUrl, token, text, runAgentId, reasoningEffort, codexAccount, modelForAgent(runAgentId), promptMode) { result ->
             isSubmittingSession = false
+            if (generation != switchGeneration[0]) return@startSession
             result.onSuccess { id ->
-                attachSession(id)
+                draft = ""
+                selectedSessionTitle = text.lineSequence().firstOrNull().orEmpty().take(80)
+                attachSession(id, selectedSessionTitle ?: id)
             }.onFailure {
-                status = if (target == null) "Start failed" else "Resume failed"
+                status = "Start failed"
                 terminal += "\n[session error] ${it.message}\n"
             }
         }
-        if (target == null) {
-            selectedSessionAgent = runAgentId
-            startSession(client, gatewayUrl, token, transcript, runAgentId, reasoningEffort, codexAccount, modelForAgent(runAgentId), promptMode, callback)
+    }
+
+    fun sendDraft() {
+        val text = draft.trim()
+        if (text.isBlank()) return
+        if (hasCurrentSession) {
+            resumeOrSend(text)
+            draft = ""
         } else {
-            resumeSession(client, gatewayUrl, token, target, transcript, runAgentId, reasoningEffort, codexAccount, modelForAgent(runAgentId), promptMode, callback)
+            startNewSession(text)
         }
     }
 
@@ -810,6 +868,13 @@ fun HomeAgentApp(launchSessionId: MutableState<String?>) {
 
     LaunchedEffect(Unit) {
         ensureNotificationChannel(context)
+        pruneRecordings(context)
+        refreshPendingRecordings()
+        if (pendingRecordingCount > 0) {
+            terminal += "\n[recording] $pendingRecordingCount saved recording(s) never got a transcript " +
+                "(${pendingRecordings(context).joinToString { describeRecording(it) }}). " +
+                "Tap Transcribe saved to recover them, oldest first.\n"
+        }
         refreshCodexAccounts()
         refreshCodexModels()
         refreshClaudeModels()
@@ -849,7 +914,7 @@ fun HomeAgentApp(launchSessionId: MutableState<String?>) {
         }
         delay(delayMs)
         if (activeSessionId() != target || reconnectSessionId != target) return@LaunchedEffect
-        status = "Reconnecting $target"
+        status = "Reconnecting"
         fetchSessionInfo(client, gatewayUrl, token, target) { result ->
             result.onSuccess { info ->
                 if (activeSessionId() == target && reconnectSessionId == target) {
@@ -861,7 +926,7 @@ fun HomeAgentApp(launchSessionId: MutableState<String?>) {
                     } else {
                         reconnectSessionId = null
                         sessionRunning = false
-                        status = "Selected $target"
+                        status = "Done"
                     }
                 }
             }.onFailure { error ->
@@ -903,16 +968,26 @@ fun HomeAgentApp(launchSessionId: MutableState<String?>) {
         openCodexLogin(account)
     }
 
-    DisposableEffect(lifecycleOwner, selectedSessionId, sessionId, sessionRunning, status) {
+    // Registered once. A newly added observer immediately receives a catch-up
+    // ON_RESUME, so keying this on status re-ran loadSession on every status
+    // change (request storms, and a finished background session taking over).
+    val reloadOnResume = rememberUpdatedState {
+        val target = activeSessionId()
+        // Anything posted to the tray while away is already on screen now.
+        (activeRootId ?: target)?.let { cancelSessionNotification(context, it) }
+        if (target != null && (!sessionRunning || status == "Disconnected" || status == "closed")) {
+            loadSession(target)
+        }
+    }
+    DisposableEffect(lifecycleOwner) {
+        var catchUp = true
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
-                val target = activeSessionId()
-                if (target != null && (!sessionRunning || status == "Disconnected" || status == "closed")) {
-                    loadSession(target, expandTerminal = false)
-                }
+                if (catchUp) catchUp = false else reloadOnResume.value()
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
+        catchUp = false
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
         }
@@ -993,202 +1068,146 @@ fun HomeAgentApp(launchSessionId: MutableState<String?>) {
         )
     }
 
+    val approvalPending = remember(terminal) { approvalPendingIn(terminal) }
+    val allModels = codexModels + claudeModels
+    // A reply is sent with the Settings model and effort, not the ones the
+    // session last ran with, so describe what the next message will use.
+    val nextAgent = if (hasCurrentSession) activeAgent() else agent
+    val nextModel = modelForAgent(nextAgent).ifBlank { selectedSessionModel.orEmpty() }
+    val nextRunLabel = listOfNotNull(
+        agentLabel(nextAgent),
+        nextModel.takeIf { it.isNotBlank() }?.let { codexModelLabel(it, allModels) },
+        reasoningLabel(reasoningEffort)
+    ).joinToString(" · ")
+    val wasModel = selectedSessionModel
+        ?.takeIf { hasCurrentSession && it.isNotBlank() && nextModel.isNotBlank() && it != nextModel }
+        ?.let { codexModelLabel(it, allModels) }
+    val contextFraction = contextTokens?.let { tokens ->
+        contextWindow?.takeIf { it > 0L }?.let { (tokens.toFloat() / it).coerceIn(0f, 1f) }
+    }
+    val subtitle = when {
+        !hasCurrentSession -> if (status == "Ready") nextRunLabel else status
+        approvalPending && !sessionRunning -> "Waiting for your approval"
+        else -> status
+    } + (contextFraction?.let { " · context ${(it * 100).toInt()}%" } ?: "")
+    val visibleAlerts = InAppAlerts.alerts.filter { alert ->
+        alert.sessionId != activeSessionId() && alert.conversationId != activeRootId && alert.conversationId != activeSessionId()
+    }
+
+    LaunchedEffect(selectedSessionId, sessionId, activeRootId, InAppAlerts.alerts.size) {
+        // Opening a conversation clears its banner, and a push for the
+        // conversation already on screen is dropped as it arrives; otherwise it
+        // sat hidden and surfaced as stale "Ready for review" after switching.
+        InAppAlerts.alerts.removeAll { alert ->
+            alert.sessionId == activeSessionId() || alert.conversationId == activeRootId || alert.conversationId == activeSessionId()
+        }
+    }
+
     Box(modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .statusBarsPadding()
                 .navigationBarsPadding()
-                .padding(horizontal = 16.dp, vertical = 10.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+                .imePadding()
+                .padding(horizontal = 10.dp, vertical = 4.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-        if (terminalExpanded) {
-            TalkButton(
-                isRecording = recorderState.isRecording.value,
-                compact = true,
-                targetLabel = if (hasCurrentSession) "Reply" else "Task",
-                onClick = {
-                    if (!isTranscribing) {
-                        if (recorderState.isRecording.value) finishRecording() else startRecording()
+            TopBar(
+                title = if (hasCurrentSession) selectedSessionTitle ?: "Session" else "New chat",
+                subtitle = subtitle,
+                mode = promptMode,
+                contextFraction = contextFraction,
+                onModeChange = {
+                    promptMode = it
+                    prefs.edit().putString("prompt_mode", it).apply()
+                },
+                onSessions = {
+                    showSessions = !showSessions
+                    if (showSessions) {
+                        refreshSessions()
+                        refreshExternalSessions()
                     }
-                }
-            )
+                },
+                onNewChat = ::startNewConversation,
+                onMenu = { showMenu = true }
+            ) {
+                OverflowMenu(
+                    expanded = showMenu,
+                    nextRunLabel = nextRunLabel + (wasModel?.let { " (was $it)" } ?: ""),
+                    contextLabel = contextTokens?.let { tokens ->
+                        if (contextWindow != null && contextFraction != null) {
+                            "Context ${formatTokens(tokens)} / ${formatTokens(contextWindow!!)} (${(contextFraction * 100).toInt()}%)"
+                        } else {
+                            "Context ${formatTokens(tokens)}"
+                        }
+                    },
+                    canCompact = activeAgent() == "claude" && hasCurrentSession && !sessionRunning,
+                    onCompact = { showMenu = false; compactContext() },
+                    onSettings = { showMenu = false; showSettings = true },
+                    onDismiss = { showMenu = false }
+                )
+            }
 
-            RetryTranscribeButton(
-                visible = canRetryTranscription && lastRecordingFile != null && !recorderState.isRecording.value,
-                isTranscribing = isTranscribing,
-                enabled = gatewayUrl.isNotBlank(),
-                onRetry = { lastRecordingFile?.let(::transcribeRecording) }
-            )
+            visibleAlerts.lastOrNull()?.let { alert ->
+                AlertBanner(
+                    alert = alert,
+                    more = visibleAlerts.size - 1,
+                    onOpen = {
+                        InAppAlerts.alerts.removeAll { it.conversationId == alert.conversationId }
+                        showSessions = false
+                        loadSessionFromNotification(alert.sessionId)
+                    },
+                    onDismiss = { InAppAlerts.alerts.removeAll { it.conversationId == alert.conversationId } }
+                )
+            }
 
             Terminal(
                 text = terminal,
-                expanded = true,
-                onExpand = { terminalExpanded = true },
-                onCollapse = { terminalExpanded = false },
-                onNewConversation = ::startNewConversation,
                 modifier = Modifier.weight(1f)
             )
 
-            ListenBar(
-                state = audioState,
-                playing = audioPlaying,
-                positionMs = audioPositionMs,
-                durationMs = audioDurationMs,
-                enabled = hasCurrentSession && !sessionRunning && gatewayUrl.isNotBlank(),
+            ActionRow(
+                hasSession = hasCurrentSession,
+                running = sessionRunning,
+                approvalPending = approvalPending,
+                canRetryTranscription = canRetryTranscription && lastRecordingFile != null && !recorderState.isRecording.value,
+                pendingRecordings = pendingRecordingCount,
+                isTranscribing = isTranscribing,
+                audioState = audioState,
+                audioPlaying = audioPlaying,
+                audioPositionMs = audioPositionMs,
+                audioDurationMs = audioDurationMs,
+                canListen = hasCurrentSession && !sessionRunning && gatewayUrl.isNotBlank(),
+                onApprove = { resumeOrSend("Approved. Proceed with the proposed action.") },
+                onStop = ::stopAgent,
+                onRetry = { lastRecordingFile?.let(::transcribeRecording) },
                 onListen = ::listenToReply,
-                onToggle = { mediaController?.let { if (it.isPlaying) it.pause() else it.play() } },
+                onToggleAudio = { mediaController?.let { if (it.isPlaying) it.pause() else it.play() } },
                 onBack = { mediaController?.seekBack() },
                 onForward = { mediaController?.seekForward() }
             )
 
-            ContextMeter(
-                tokens = contextTokens,
-                window = contextWindow,
-                canCompact = activeAgent() == "claude" && hasCurrentSession && !sessionRunning,
-                onCompact = ::compactContext
-            )
-
-            StopAgentButton(onStop = ::stopAgent)
-
-            QuickActions(
-                replyText = replyText,
-                onReplyTextChange = { replyText = it },
-                onSend = ::resumeOrSend
-            )
-
-            return@Column
-        }
-
-        Header(
-            status = status,
-            onSessions = {
-                showSessions = !showSessions
-                if (showSessions) {
-                    refreshSessions()
-                    refreshExternalSessions()
-                }
-            },
-            onSettings = { showSettings = true }
-        )
-
-        selectedSessionTitle?.let {
-            val agentName = selectedSessionAgent?.let { value -> " - ${agentLabel(value)}" }.orEmpty()
-            // A reply is sent with the Settings model and effort, not the ones
-            // the session last ran with, so show what the next reply will use.
-            val effort = " - ${reasoningLabel(reasoningEffort)}"
-            val account = selectedSessionAccount
-                ?.takeIf { selectedSessionAgent != "claude" && codexAccounts.size > 1 }
-                ?.let { value -> " - ${codexAccountLabel(value, codexAccounts)}" }
-                .orEmpty()
-            val allModels = codexModels + claudeModels
-            val replyModel = modelForAgent(activeAgent()).ifBlank { selectedSessionModel.orEmpty() }
-            val model = replyModel.takeIf { value -> value.isNotBlank() }
-                ?.let { value -> " - ${codexModelLabel(value, allModels)}" }
-                .orEmpty()
-            val was = selectedSessionModel
-                ?.takeIf { value -> value.isNotBlank() && replyModel.isNotBlank() && value != replyModel }
-                ?.let { value -> " (was ${codexModelLabel(value, allModels)})" }
-                .orEmpty()
-            Text("Selected: $it$agentName$effort$account$model$was", color = Muted, style = MaterialTheme.typography.bodySmall)
-        }
-
-        TalkButton(
-            isRecording = recorderState.isRecording.value,
-            targetLabel = if (hasCurrentSession) "Reply" else "Task",
-            onClick = {
-                if (!isTranscribing) {
-                    if (recorderState.isRecording.value) finishRecording() else startRecording()
-                }
-            }
-        )
-
-        RetryTranscribeButton(
-            visible = canRetryTranscription && lastRecordingFile != null && !recorderState.isRecording.value,
-            isTranscribing = isTranscribing,
-            enabled = gatewayUrl.isNotBlank(),
-            onRetry = { lastRecordingFile?.let(::transcribeRecording) }
-        )
-
-        OutlinedTextField(
-            value = transcript,
-            onValueChange = { transcript = it },
-            label = { Text("Transcript") },
-            modifier = Modifier.fillMaxWidth(),
-            minLines = 3,
-            maxLines = 5
-        )
-
-        ModeToggle(
-            mode = promptMode,
-            onChange = {
-                promptMode = it
-                prefs.edit().putString("prompt_mode", it).apply()
-            }
-        )
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Button(
-                onClick = ::runAgent,
-                enabled = transcript.isNotBlank() && gatewayUrl.isNotBlank() && !isSubmittingSession,
-                modifier = Modifier.weight(1f),
-                colors = ButtonDefaults.buttonColors(containerColor = Primary)
-            ) {
-                Text(
-                    when {
-                        isSubmittingSession -> "Sending"
-                        selectedSessionId == null -> "Run ${agentLabel(agent)}"
-                        else -> "Resume ${agentLabel(activeAgent())}"
+            Composer(
+                text = draft,
+                onTextChange = { draft = it },
+                isRecording = recorderState.isRecording.value,
+                isTranscribing = isTranscribing,
+                hasSession = hasCurrentSession,
+                sendLabel = when {
+                    isSubmittingSession -> "Starting"
+                    hasCurrentSession -> "Send"
+                    else -> "Run ${agentLabel(agent)}"
+                },
+                sendEnabled = draft.isNotBlank() && gatewayUrl.isNotBlank() && !isSubmittingSession,
+                onMic = {
+                    if (!isTranscribing) {
+                        if (recorderState.isRecording.value) finishRecording() else startRecording()
                     }
-                )
-            }
-
-            OutlinedButton(
-                onClick = ::startNewConversation,
-                modifier = Modifier.weight(1f)
-            ) {
-                Text("New Chat")
-            }
+                },
+                onSend = ::sendDraft
+            )
         }
-
-        ListenBar(
-            state = audioState,
-            playing = audioPlaying,
-            positionMs = audioPositionMs,
-            durationMs = audioDurationMs,
-            enabled = hasCurrentSession && !sessionRunning && gatewayUrl.isNotBlank(),
-            onListen = ::listenToReply,
-            onToggle = { mediaController?.let { if (it.isPlaying) it.pause() else it.play() } },
-            onBack = { mediaController?.seekBack() },
-            onForward = { mediaController?.seekForward() }
-        )
-
-        ContextMeter(
-            tokens = contextTokens,
-            window = contextWindow,
-            canCompact = activeAgent() == "claude" && hasCurrentSession && !sessionRunning,
-            onCompact = ::compactContext
-        )
-
-        StopAgentButton(onStop = ::stopAgent)
-
-        Terminal(
-            text = terminal,
-            expanded = false,
-            onExpand = { terminalExpanded = true },
-            onCollapse = { terminalExpanded = false },
-            modifier = Modifier.weight(1f)
-        )
-
-        QuickActions(
-            replyText = replyText,
-            onReplyTextChange = { replyText = it },
-            onSend = ::resumeOrSend
-        )
-    }
 
         if (showSessions) {
             Box(
@@ -1208,7 +1227,7 @@ fun HomeAgentApp(launchSessionId: MutableState<String?>) {
                                 selectedSessionReasoning = null
                                 selectedSessionAccount = session.codexAccount.takeIf { value -> value.isNotBlank() }
                                 selectedSessionModel = null
-                                loadSession(session.sessionId, expandTerminal = true)
+                                loadSession(session.sessionId)
                                 showSessions = false
                             }.onFailure {
                                 status = "Open failed"
@@ -1228,7 +1247,7 @@ fun HomeAgentApp(launchSessionId: MutableState<String?>) {
                         selectedSessionReasoning = session.reasoningEffort.takeIf { value -> value.isNotBlank() }
                         selectedSessionAccount = session.codexAccount.takeIf { value -> value.isNotBlank() }
                         selectedSessionModel = session.codexModel.takeIf { value -> value.isNotBlank() }
-                        loadSession(session.sessionId, expandTerminal = true)
+                        loadSession(session.sessionId)
                         showSessions = false
                     }
                 )
@@ -1312,29 +1331,6 @@ fun codexAccountLabel(value: String, accounts: List<CodexAccount>): String {
 
 fun codexModelLabel(value: String, models: List<CodexModel>): String {
     return models.firstOrNull { it.modelId == value }?.label ?: value
-}
-
-
-@Composable
-fun Header(status: String, onSessions: () -> Unit, onSettings: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .heightIn(min = 44.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        IconButton(onClick = onSessions) {
-            Icon(painterResource(R.drawable.ic_menu_24), contentDescription = "Sessions", tint = PrimaryDark)
-        }
-        Column(modifier = Modifier.weight(1f)) {
-            Text("Home Agent", color = Ink, fontWeight = FontWeight.Bold)
-            Text(status, color = Muted, style = MaterialTheme.typography.bodySmall)
-        }
-        IconButton(onClick = onSettings) {
-            Icon(painterResource(R.drawable.ic_settings_24), contentDescription = "Settings", tint = PrimaryDark)
-        }
-    }
 }
 
 
@@ -2037,57 +2033,93 @@ fun formatSessionTime(startedAt: Double): String {
 
 
 @Composable
-fun TalkButton(
-    isRecording: Boolean,
-    targetLabel: String,
-    compact: Boolean = false,
-    onClick: () -> Unit
+fun TopBar(
+    title: String,
+    subtitle: String,
+    mode: String,
+    contextFraction: Float?,
+    onModeChange: (String) -> Unit,
+    onSessions: () -> Unit,
+    onNewChat: () -> Unit,
+    onMenu: () -> Unit,
+    menu: @Composable () -> Unit
 ) {
-    val borderColor = if (isRecording) Danger else Primary
-    val iconBackground = if (isRecording) DangerSoft else Accent
-    val text = if (isRecording) "Tap to Finish" else "Press to Talk"
-    val subtext = if (isRecording) "Recording $targetLabel" else "Tap once to dictate $targetLabel"
-    val controlHeight = if (compact) 82.dp else 126.dp
-    val iconSize = if (compact) 48.dp else 76.dp
-    val micSize = if (compact) 28.dp else 42.dp
-
-    Card(
-        onClick = onClick,
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(controlHeight),
-        shape = RoundedCornerShape(8.dp),
-        colors = CardDefaults.cardColors(containerColor = Panel),
-        border = BorderStroke(1.dp, borderColor)
-    ) {
+    Column {
         Row(
             modifier = Modifier
-                .fillMaxSize()
-                .padding(18.dp),
-            horizontalArrangement = Arrangement.spacedBy(18.dp),
+                .fillMaxWidth()
+                .heightIn(min = 48.dp),
+            horizontalArrangement = Arrangement.spacedBy(2.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Box(
-                modifier = Modifier
-                    .size(iconSize)
-                    .background(iconBackground, CircleShape),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    painterResource(R.drawable.ic_mic_24),
-                    contentDescription = null,
-                    tint = borderColor,
-                    modifier = Modifier.size(micSize)
+            IconButton(onClick = onSessions) {
+                Icon(painterResource(R.drawable.ic_menu_24), contentDescription = "Sessions", tint = PrimaryDark)
+            }
+            Column(modifier = Modifier.weight(1f)) {
+                Text(title, color = Ink, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(subtitle, color = Muted, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            ModeSwitch(mode = mode, onChange = onModeChange)
+            IconButton(onClick = onNewChat) {
+                Icon(painterResource(R.drawable.ic_add_24), contentDescription = "New chat", tint = PrimaryDark)
+            }
+            Box {
+                IconButton(onClick = onMenu) {
+                    Icon(painterResource(R.drawable.ic_more_vert_24), contentDescription = "More", tint = PrimaryDark)
+                }
+                menu()
+            }
+        }
+        // Context use as a hairline: glanceable, costs no row.
+        val fraction = contextFraction ?: 0f
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(3.dp)
+                .background(if (contextFraction == null) Color.Transparent else Color(0x1A000000), RoundedCornerShape(2.dp))
+        ) {
+            if (contextFraction != null) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth(fraction)
+                        .height(3.dp)
+                        .background(contextColor(fraction), RoundedCornerShape(2.dp))
                 )
             }
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        }
+    }
+}
+
+
+fun contextColor(fraction: Float): Color = when {
+    fraction >= 0.8f -> Danger
+    fraction >= 0.6f -> Color(0xFFB7791F)
+    else -> Primary
+}
+
+
+// A setting, not an action: a small two-segment switch.
+@Composable
+fun ModeSwitch(mode: String, onChange: (String) -> Unit) {
+    Row(
+        modifier = Modifier
+            .border(1.dp, Color(0xFFB9CCC5), RoundedCornerShape(50))
+            .padding(2.dp)
+    ) {
+        listOf("quick" to "Quick", "deep" to "Deep").forEach { (value, label) ->
+            val selected = mode == value
+            Box(
+                modifier = Modifier
+                    .background(if (selected) Accent else Color.Transparent, RoundedCornerShape(50))
+                    .clickable(enabled = !selected) { onChange(value) }
+                    .padding(horizontal = 10.dp, vertical = 5.dp)
+            ) {
                 Text(
-                    text,
-                    color = Ink,
-                    fontWeight = FontWeight.Bold,
-                    style = if (compact) MaterialTheme.typography.titleMedium else MaterialTheme.typography.titleLarge
+                    label,
+                    color = if (selected) PrimaryDark else Muted,
+                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                    style = MaterialTheme.typography.labelMedium
                 )
-                Text(subtext, color = Muted, style = MaterialTheme.typography.bodySmall)
             }
         }
     }
@@ -2095,21 +2127,225 @@ fun TalkButton(
 
 
 @Composable
-fun RetryTranscribeButton(
-    visible: Boolean,
-    isTranscribing: Boolean,
-    enabled: Boolean,
-    onRetry: () -> Unit
+fun OverflowMenu(
+    expanded: Boolean,
+    nextRunLabel: String,
+    contextLabel: String?,
+    canCompact: Boolean,
+    onCompact: () -> Unit,
+    onSettings: () -> Unit,
+    onDismiss: () -> Unit
 ) {
-    if (!visible) return
-    OutlinedButton(
-        onClick = onRetry,
-        enabled = enabled && !isTranscribing,
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Text(if (isTranscribing) "Transcribing" else "Retry Transcribe Last Recording")
+    DropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {
+        Text(
+            "Next message: $nextRunLabel",
+            color = Muted,
+            style = MaterialTheme.typography.bodySmall,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp).widthIn(max = 280.dp)
+        )
+        contextLabel?.let {
+            Text(it, color = Muted, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
+        }
+        DropdownMenuItem(text = { Text("Compact context") }, enabled = canCompact, onClick = onCompact)
+        DropdownMenuItem(text = { Text("Settings") }, onClick = onSettings)
     }
 }
+
+
+@Composable
+fun AlertBanner(alert: SessionAlert, more: Int, onOpen: () -> Unit, onDismiss: () -> Unit) {
+    val name = alert.sessionTitle.ifBlank { "A session" }.let { if (it.length > 60) it.take(57) + "..." else it }
+    val headline = when (alert.eventType) {
+        "approval_needed" -> "Needs approval: $name"
+        "failed" -> "Failed: $name"
+        else -> "Ready for review: $name"
+    }
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(8.dp),
+        colors = CardDefaults.cardColors(containerColor = Accent),
+        border = BorderStroke(1.dp, Color(0xFFB9CCC5))
+    ) {
+        Row(
+            modifier = Modifier.padding(start = 12.dp, top = 4.dp, bottom = 4.dp, end = 2.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(headline, color = Ink, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                val detail = listOfNotNull(
+                    alert.body.takeIf { alert.eventType == "approval_needed" && it.isNotBlank() },
+                    if (more > 0) "+$more more" else null
+                ).joinToString(" · ")
+                if (detail.isNotBlank()) {
+                    Text(detail, color = Muted, style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                }
+            }
+            TextButton(onClick = onOpen) { Text("Open", color = PrimaryDark, fontWeight = FontWeight.Bold) }
+            TextButton(onClick = onDismiss) { Text("✕", color = Muted) }
+        }
+    }
+}
+
+
+private val SmallButtonPadding = PaddingValues(horizontal = 14.dp, vertical = 0.dp)
+
+
+// Context actions above the composer; each appears only when it applies.
+@Composable
+fun ActionRow(
+    hasSession: Boolean,
+    running: Boolean,
+    approvalPending: Boolean,
+    canRetryTranscription: Boolean,
+    pendingRecordings: Int,
+    isTranscribing: Boolean,
+    audioState: String,
+    audioPlaying: Boolean,
+    audioPositionMs: Long,
+    audioDurationMs: Long,
+    canListen: Boolean,
+    onApprove: () -> Unit,
+    onStop: () -> Unit,
+    onRetry: () -> Unit,
+    onListen: () -> Unit,
+    onToggleAudio: () -> Unit,
+    onBack: () -> Unit,
+    onForward: () -> Unit
+) {
+    val showApprove = hasSession && !running
+    val showAudio = hasSession && (canListen || audioState != "idle")
+    if (!running && !showApprove && !canRetryTranscription && !showAudio) return
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(36.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        if (running) {
+            Button(
+                onClick = onStop,
+                contentPadding = SmallButtonPadding,
+                colors = ButtonDefaults.buttonColors(containerColor = Danger)
+            ) {
+                Icon(painterResource(R.drawable.ic_stop_24), contentDescription = null, modifier = Modifier.size(18.dp))
+                Text(" Stop", fontWeight = FontWeight.Bold)
+            }
+        }
+        if (showApprove) {
+            if (approvalPending) {
+                Button(onClick = onApprove, contentPadding = SmallButtonPadding, colors = ButtonDefaults.buttonColors(containerColor = Primary)) {
+                    Text("Approve", fontWeight = FontWeight.Bold)
+                }
+            } else {
+                OutlinedButton(onClick = onApprove, contentPadding = SmallButtonPadding) { Text("Approve") }
+            }
+        }
+        if (canRetryTranscription) {
+            OutlinedButton(onClick = onRetry, enabled = !isTranscribing, contentPadding = SmallButtonPadding) {
+                Text(
+                    when {
+                        isTranscribing -> "Transcribing"
+                        pendingRecordings > 1 -> "Transcribe saved ($pendingRecordings)"
+                        else -> "Retry transcribe"
+                    }
+                )
+            }
+        }
+        Spacer(modifier = Modifier.weight(1f))
+        if (showAudio) {
+            if (audioState == "loaded") {
+                TextButton(onClick = onBack, contentPadding = PaddingValues(horizontal = 6.dp)) { Text("-15", color = Primary) }
+                TextButton(onClick = onToggleAudio, contentPadding = PaddingValues(horizontal = 6.dp)) {
+                    Text(if (audioPlaying) "Pause" else "Play", color = Primary, fontWeight = FontWeight.Bold)
+                }
+                TextButton(onClick = onForward, contentPadding = PaddingValues(horizontal = 6.dp)) { Text("+30", color = Primary) }
+                Text(
+                    "${formatClock(audioPositionMs)}/${formatClock(audioDurationMs)}",
+                    color = Muted,
+                    style = MaterialTheme.typography.labelSmall
+                )
+            } else {
+                OutlinedButton(onClick = onListen, enabled = canListen && audioState != "preparing", contentPadding = SmallButtonPadding) {
+                    Text(if (audioState == "preparing") "Preparing..." else "Listen")
+                }
+            }
+        }
+    }
+}
+
+
+@Composable
+fun Composer(
+    text: String,
+    onTextChange: (String) -> Unit,
+    isRecording: Boolean,
+    isTranscribing: Boolean,
+    hasSession: Boolean,
+    sendLabel: String,
+    sendEnabled: Boolean,
+    onMic: () -> Unit,
+    onSend: () -> Unit
+) {
+    val focusManager = LocalFocusManager.current
+    val keyboard = LocalSoftwareKeyboardController.current
+    fun dismissKeyboard() {
+        keyboard?.hide()
+        focusManager.clearFocus()
+    }
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalAlignment = Alignment.Bottom
+    ) {
+        Box(
+            modifier = Modifier
+                .padding(bottom = 4.dp)
+                .size(48.dp)
+                .background(if (isRecording) Danger else Accent, CircleShape)
+                .clickable(enabled = !isTranscribing) { dismissKeyboard(); onMic() },
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                painterResource(if (isRecording) R.drawable.ic_stop_24 else R.drawable.ic_mic_24),
+                contentDescription = if (isRecording) "Finish recording" else "Dictate",
+                tint = if (isRecording) Color.White else PrimaryDark,
+                modifier = Modifier.size(26.dp)
+            )
+        }
+        OutlinedTextField(
+            value = text,
+            onValueChange = onTextChange,
+            placeholder = {
+                Text(
+                    when {
+                        isRecording -> "Recording... tap the square to finish"
+                        isTranscribing -> "Transcribing..."
+                        hasSession -> "Reply"
+                        else -> "Describe a task"
+                    },
+                    color = Muted
+                )
+            },
+            modifier = Modifier.weight(1f),
+            minLines = 1,
+            maxLines = 5
+        )
+        Button(
+            onClick = { dismissKeyboard(); onSend() },
+            enabled = sendEnabled,
+            modifier = Modifier
+                .padding(bottom = 4.dp)
+                .height(48.dp),
+            shape = RoundedCornerShape(24.dp),
+            contentPadding = PaddingValues(horizontal = 16.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = Primary)
+        ) {
+            Text(sendLabel, fontWeight = FontWeight.Bold)
+        }
+    }
+}
+
 
 fun formatClock(ms: Long): String {
     val seconds = ms / 1000L
@@ -2117,183 +2353,50 @@ fun formatClock(ms: Long): String {
 }
 
 
-@Composable
-fun ListenBar(
-    state: String,
-    playing: Boolean,
-    positionMs: Long,
-    durationMs: Long,
-    enabled: Boolean,
-    onListen: () -> Unit,
-    onToggle: () -> Unit,
-    onBack: () -> Unit,
-    onForward: () -> Unit
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        OutlinedButton(onClick = onListen, enabled = enabled && state != "preparing", modifier = Modifier.weight(1f)) {
-            Text(
-                when (state) {
-                    "preparing" -> "Preparing audio..."
-                    "loaded" -> "Listen to latest reply"
-                    else -> "Listen to reply"
-                }
-            )
-        }
-        if (state == "loaded") {
-            TextButton(onClick = onBack) { Text("-15", color = Primary) }
-            TextButton(onClick = onToggle) { Text(if (playing) "Pause" else "Play", color = Primary, fontWeight = FontWeight.Bold) }
-            TextButton(onClick = onForward) { Text("+30", color = Primary) }
-            Text("${formatClock(positionMs)} / ${formatClock(durationMs)}", color = Muted, style = MaterialTheme.typography.bodySmall)
-        }
-    }
-}
-
-
 fun formatTokens(value: Long): String =
     if (value >= 1_000_000L) String.format("%.1fM", value / 1_000_000.0) else "${value / 1000}k"
 
 
-@Composable
-fun ContextMeter(tokens: Long?, window: Long?, canCompact: Boolean, onCompact: () -> Unit) {
-    if (tokens == null) return
-    val fraction = if (window != null && window > 0L) (tokens.toFloat() / window).coerceIn(0f, 1f) else 0f
-    val barColor = when {
-        fraction >= 0.8f -> Danger
-        fraction >= 0.6f -> Color(0xFFB7791F)
-        else -> Primary
-    }
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-            val label = if (window != null) {
-                "Context ${formatTokens(tokens)} / ${formatTokens(window)} (${(fraction * 100).toInt()}%)"
-            } else {
-                "Context ${formatTokens(tokens)}"
-            }
-            Text(label, color = Muted, style = MaterialTheme.typography.bodySmall)
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(5.dp)
-                    .background(Color(0x22000000), RoundedCornerShape(3.dp))
-            ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth(fraction)
-                        .height(5.dp)
-                        .background(barColor, RoundedCornerShape(3.dp))
-                )
-            }
-        }
-        if (canCompact) {
-            TextButton(onClick = onCompact) { Text("Compact", color = Primary) }
-        }
-    }
+private val ApprovalMarker = Regex("""^[ \t>*_]*AWAITING_PHONE_APPROVAL:[ \t]*(?!<short action summary>)\S""", RegexOption.MULTILINE)
+private val UserEchoLine = Regex("""^> """, RegexOption.MULTILINE)
+
+
+// True when the newest real approval marker comes after the last echoed user
+// message. The prompt echo carries the marker with its placeholder, which the
+// pattern skips.
+fun approvalPendingIn(text: String): Boolean {
+    val marker = ApprovalMarker.findAll(text).lastOrNull() ?: return false
+    val lastEcho = UserEchoLine.findAll(text).lastOrNull()?.range?.first ?: -1
+    return marker.range.first > lastEcho
 }
 
 
 @Composable
-fun ModeToggle(mode: String, onChange: (String) -> Unit) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        listOf("quick" to "Quick fix", "deep" to "Deep / long-form").forEach { (value, label) ->
-            if (mode == value) {
-                Button(
-                    onClick = {},
-                    modifier = Modifier.weight(1f),
-                    colors = ButtonDefaults.buttonColors(containerColor = Primary)
-                ) { Text(label) }
-            } else {
-                OutlinedButton(onClick = { onChange(value) }, modifier = Modifier.weight(1f)) { Text(label) }
-            }
-        }
-    }
-}
-
-
-@Composable
-fun StopAgentButton(onStop: () -> Unit) {
-    Button(
-        onClick = onStop,
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(58.dp),
-        shape = RoundedCornerShape(8.dp),
-        colors = ButtonDefaults.buttonColors(containerColor = Danger)
-    ) {
-        Icon(painterResource(R.drawable.ic_stop_24), contentDescription = null, modifier = Modifier.size(24.dp))
-        Text(" Stop Agent Now", fontWeight = FontWeight.Bold)
-    }
-}
-
-
-@Composable
-fun Terminal(
-    text: String,
-    expanded: Boolean,
-    onExpand: () -> Unit,
-    onCollapse: () -> Unit,
-    onNewConversation: (() -> Unit)? = null,
-    modifier: Modifier = Modifier
-) {
+fun Terminal(text: String, modifier: Modifier = Modifier) {
     val scrollState = rememberScrollState()
-    val blocks = remember(text) { markdownBlocks(text.ifBlank { "Terminal output will appear here." }) }
+    val blocks = remember(text) { markdownBlocks(text.ifBlank { "Agent output will appear here." }) }
     LaunchedEffect(text.length) {
         scrollState.scrollTo(scrollState.maxValue)
     }
 
     Card(
-        onClick = onExpand,
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(8.dp),
         colors = CardDefaults.cardColors(containerColor = Color(0xFF22312D))
     ) {
-        Column(
+        SelectionContainer(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(10.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+                .padding(horizontal = 10.dp, vertical = 8.dp)
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text("Terminal", color = Color(0xFFDCE8E1), fontWeight = FontWeight.Bold)
-                Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
-                    if (expanded && onNewConversation != null) {
-                        TextButton(onClick = onNewConversation) {
-                            Text("New Chat", color = Color(0xFFB7E3D4))
-                        }
-                    }
-                    TextButton(onClick = if (expanded) onCollapse else onExpand) {
-                        Text(if (expanded) "Collapse" else "Expand", color = Color(0xFFB7E3D4))
-                    }
-                }
-            }
-            SelectionContainer(
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .weight(1f)
+                    .verticalScroll(scrollState),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .verticalScroll(scrollState),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    blocks.forEach { block ->
-                        MarkdownTerminalBlock(block)
-                    }
+                blocks.forEach { block ->
+                    MarkdownTerminalBlock(block)
                 }
             }
         }
@@ -2483,79 +2586,98 @@ fun terminalLineStyle(line: String): SpanStyle {
 }
 
 
-@Composable
-fun QuickActions(
-    replyText: String,
-    onReplyTextChange: (String) -> Unit,
-    onSend: (String) -> Unit
-) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = { onSend("Approved. Proceed with the proposed action.") }, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = Primary)) {
-                Text("Approve")
-            }
-            OutlinedButton(onClick = { onSend("Do not proceed with that action. Explain a safer alternative.") }, modifier = Modifier.weight(1f)) {
-                Text("Reject")
-            }
-            OutlinedButton(onClick = { onSend("Pause and summarize what you have found so far.") }, modifier = Modifier.weight(1f)) {
-                Text("Summary")
-            }
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            OutlinedTextField(
-                value = replyText,
-                onValueChange = onReplyTextChange,
-                label = { Text("Reply") },
-                singleLine = true,
-                modifier = Modifier.weight(1f)
-            )
-            Button(onClick = {
-                if (replyText.isNotBlank()) {
-                    onSend(replyText)
-                    onReplyTextChange("")
-                }
-            }, colors = ButtonDefaults.buttonColors(containerColor = Primary)) {
-                Text("Send")
-            }
-        }
-    }
-}
-
-
-class RecorderState(private val context: Context) {
+// Process-scoped (an `object`, not `remember`): an activity recreated mid-dictation
+// re-attaches to the live recorder instead of leaking it and showing the mic idle.
+object RecorderState {
     val isRecording: MutableState<Boolean> = mutableStateOf(false)
     private var recorder: MediaRecorder? = null
     private var outputFile: File? = null
 
-    fun start() {
+    fun currentFile(): File? = outputFile
+
+    fun start(context: Context) {
         if (isRecording.value) return
-        val file = File.createTempFile("home-agent-", ".m4a", context.cacheDir)
+        // filesDir, never cacheDir: Android wipes app caches when storage runs
+        // low (it did on 2026-10-18 with the phone at 100%) and took two long
+        // dictations with it.
+        val stamp = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(Date())
+        val file = File(recordingsDir(context), "dictation-$stamp.m4a")
         outputFile = file
-        @Suppress("DEPRECATION")
-        recorder = MediaRecorder().apply {
-            setAudioSource(MediaRecorder.AudioSource.MIC)
-            setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
-            setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
-            setAudioSamplingRate(16000)
-            setAudioChannels(1)
-            setOutputFile(file.absolutePath)
-            prepare()
-            start()
+        val service = Intent(context, RecordingService::class.java)
+        try {
+            ContextCompat.startForegroundService(context, service)
+        } catch (error: Exception) {
+            android.util.Log.w("HomeAgent", "Recording foreground service unavailable: ${error.message}")
+        }
+        try {
+            @Suppress("DEPRECATION")
+            recorder = MediaRecorder().apply {
+                setAudioSource(MediaRecorder.AudioSource.MIC)
+                setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
+                setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
+                setAudioSamplingRate(16000)
+                setAudioChannels(1)
+                setOutputFile(file.absolutePath)
+                prepare()
+                start()
+            }
+        } catch (error: Exception) {
+            recorder?.let { runCatching { it.release() } }
+            recorder = null
+            outputFile = null
+            file.delete()
+            context.stopService(service)
+            throw error
         }
         isRecording.value = true
     }
 
-    fun stop(): File {
-        val file = outputFile ?: error("No recording file")
-        recorder?.apply {
-            stop()
-            release()
-        }
+    // Always hands back (or keeps on disk) whatever was captured: a failing
+    // MediaRecorder.stop() surfaces as an exception that names the kept file.
+    fun stop(context: Context): File {
+        val file = outputFile ?: error("No recording in progress")
+        val live = recorder
         recorder = null
         outputFile = null
         isRecording.value = false
+        context.stopService(Intent(context, RecordingService::class.java))
+        var failure: RuntimeException? = null
+        try {
+            live?.stop()
+        } catch (error: RuntimeException) {
+            failure = error
+        }
+        runCatching { live?.release() }
+        if (failure != null) {
+            throw IllegalStateException(
+                "MediaRecorder.stop failed (${failure.message}); kept ${describeRecording(file)}",
+                failure
+            )
+        }
         return file
     }
+}
+
+
+fun recordingsDir(context: Context): File = File(context.filesDir, "recordings").apply { mkdirs() }
+
+fun describeRecording(file: File): String = "${file.name} (${file.length() / 1024} KB)"
+
+// Untranscribed recordings, oldest first (names are timestamps). The one being
+// recorded right now is excluded.
+fun pendingRecordings(context: Context): List<File> {
+    val current = RecorderState.currentFile()
+    return recordingsDir(context)
+        .listFiles { candidate -> candidate.isFile && candidate.name.endsWith(".m4a") }
+        .orEmpty()
+        .filter { it != current }
+        .sortedBy { it.name }
+}
+
+// Failed-transcript audio is kept for a week, then dropped.
+fun pruneRecordings(context: Context) {
+    val cutoff = System.currentTimeMillis() - 7L * 24 * 60 * 60 * 1000
+    pendingRecordings(context).filter { it.lastModified() < cutoff }.forEach { it.delete() }
 }
 
 

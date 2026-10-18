@@ -1,6 +1,9 @@
 package com.homeagent.phone
 
 import android.content.Context
+import android.os.Handler
+import android.os.Looper
+import androidx.compose.runtime.mutableStateListOf
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 import java.util.concurrent.TimeUnit
@@ -42,6 +45,13 @@ class HomeAgentMessagingService : FirebaseMessagingService() {
             "failed" -> "Tap to review the failed session."
             else -> "Tap to reopen the session."
         }
+        if (InAppAlerts.foreground) {
+            // The app is open: show a banner instead of a tray notification,
+            // and never switch the screen to the session on its own.
+            val alert = SessionAlert(sessionId, conversationId, eventType, data["title"].orEmpty(), body)
+            Handler(Looper.getMainLooper()).post { InAppAlerts.add(alert) }
+            return
+        }
         postSessionNotification(applicationContext, sessionId, conversationId, title, body)
     }
 
@@ -52,5 +62,27 @@ class HomeAgentMessagingService : FirebaseMessagingService() {
             .readTimeout(30, TimeUnit.SECONDS)
             .callTimeout(60, TimeUnit.SECONDS)
             .build()
+    }
+}
+
+
+data class SessionAlert(
+    val sessionId: String,
+    val conversationId: String,
+    val eventType: String,
+    val sessionTitle: String,
+    val body: String
+)
+
+
+// Session pushes that arrive while the app is on screen. Main thread only.
+object InAppAlerts {
+    @Volatile
+    var foreground = false
+    val alerts = mutableStateListOf<SessionAlert>()
+
+    fun add(alert: SessionAlert) {
+        alerts.removeAll { it.conversationId == alert.conversationId }
+        alerts.add(alert)
     }
 }
