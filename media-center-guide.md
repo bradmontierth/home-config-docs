@@ -63,6 +63,18 @@ Never copy token/key values into code, commits, logs or memory; reference the pa
   air date, episode + the "new only" verdict and why), `POST /sync`. Gracenote's
   tvlistings grid (what Jellyfin guides scrape) answers 403 now; not used.
   Container runs TZ=America/Denver.
+- **Live TV playback** (step 2, `app/livesessions.py`, TV app 0.18 `LivePlayerActivity`
+  + Live TV menu): players never read the tuner. `POST /api/v1/livetv/tune/{channel}`
+  starts one ffmpeg (`-c copy`, HLS EVENT, 4 s segments) into `data/live/<id>/` and
+  returns once the first segment exists (~5-6 s; KSL's keyframes are 2.4 s apart).
+  The app heartbeats every 10 s (also while paused, which keeps the buffer live);
+  Back sends `/leave`. Under 3 min watched = channel surfing, deleted at once.
+  Otherwise the buffer keeps recording until the programme being watched ends + 15
+  min (max 6 h unwatched, 8 h total), stays resumable 24 h, and shows first in
+  Continue Watching and under Live TV > Paused (long-press removes). 100 GB cap.
+  Both tuners busy (incl. Plex) -> 503 "Both tuners are in use" after first
+  stopping an idle buffer. A server restart closes all buffers (they stay resumable).
+  `GET /api/v1/livetv/now` = favourites now/next + paused buffers.
 - **Plex import** (done once, 2026-10-10): metadata, art, watch history.
 - **TMDB** after each scan: fills only empty fields for new arrivals. Exact title
   match wins, and episodes need a title match (numbering drifts).
