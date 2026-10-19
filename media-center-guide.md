@@ -98,6 +98,17 @@ Never copy token/key values into code, commits, logs or memory; reference the pa
   `DELETE /rules/{id}`, `GET /upcoming`, `POST /recordings/{id}/skip`.
   TV: hold OK on a Live TV channel -> record now/next once or as a series;
   Recordings > Upcoming / Rules show each decision and why.
+- **Guide grid + search** (TV app 0.20): Live TV has Now / Guide / Search tabs.
+  `GET /api/v1/livetv/grid?hours=&all=` (favourites 24 h ≈ 180 KB, all channels
+  12 h; with record flags + trimmed synopsis). The grid (`ui/LiveGuide.kt`) is ONE
+  focus target that moves its own selection (variable-width cells defeat Compose
+  focus search); 2.5 h across, OK = watch if on now else record dialog, long-press
+  = record, Left at the start of the guide reaches the menu.
+  `GET /api/v1/livetv/search?q=` searches every channel's title + team names by
+  WORD START ("nfl" must not match "Conflict"). Rule kind `keyword` uses the same
+  match, so "Record anything matching 'olympics'" waits for things beyond the
+  guide's ~2-day reach. Compose text fields swallow D-pad Up/Down on a remote; use
+  `Modifier.dpadLeavesField()`.
   Imported from Plex 2026-10-18: Jeopardy! (Plex had it on every airing; ours is
   new-only). Live start fix in the same release: 2 s segments, the player waits for
   4 s of video and sits 8 s behind live.
