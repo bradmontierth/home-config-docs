@@ -241,6 +241,28 @@ Open: kitchen party volume calibration by ear; the voice assistant does not
 duck party music (it ducks the squeezelite queue only) -> next; "TV is in
 use, play anyway?" prompt; TV latency stability re-check.
 
+## TV shows the house's music (2026-10-20)
+
+Music app (music-tv 0dd116d, installed on the Shield): `House.kt` polls the
+bridge's `/v1/sessions` every 2 s while the app is open and follows the
+newest playing/paused session on a TV route (the TV alone, Kitchen + TV,
+Whole House + TV). Now Playing then shows it ("Playing on Kitchen + TV",
+art via the gateway's `getSong` on `episode_id` = Navidrome song id,
+progress from `audible_position_ms` + elapsed, up next from the session
+queue); play/pause/next and the remote's media keys go to the bridge
+(`/v1/pause|resume|next`, previous = `/v1/seek 0`), so the whole group
+follows. Verified on screen with Brad's live Kitchen + TV session (paused).
+Bridge ae0b6a2 (NOT deployed yet: a redeploy drops in-memory sessions):
+TV routes launch the app with `--ez mt_house true` after waking the Shield,
+or if it is awake on the launcher / screensaver / Snapcast / Photos / Music,
+never over another app.
+
+Security finding: the bridge's `/v1/sessions` returns Tempo's queue
+`media_url`s, which embed the Navidrome admin password (`p=enc:<hex>`,
+trivially reversible), to any LAN client, including the IoT VLAN. The TV
+app ignores them. Fix candidates: redact in the bridge's response, or have
+Tempo send token auth (`t`/`s`) instead of `p=enc:`.
+
 ## Fallback
 
 If the Shield snapclient is unreliable, job 2 can use Cast: enable MA's
