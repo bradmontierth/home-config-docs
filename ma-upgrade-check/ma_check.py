@@ -330,6 +330,15 @@ def audio_checks(r):
     saved = c["config"]["volume"]["percent"]
     print(f"Simon Room snapclient volume {saved}% (restored at the end)")
     try:
+        # Make sure Simon Room is on its own: a leftover group (e.g. Whole House) would carry the
+        # test audio to every room in it. The bridge's isolate verifies it at the snapserver.
+        req = urllib.request.Request("http://127.0.0.1:8461/v1/isolate", data=json.dumps({"player_id": TEST_PLAYER}).encode(),
+                                     headers={"Content-Type": "application/json"})
+        urllib.request.urlopen(req, timeout=30).read()
+        grp, _ = snap_client(TEST_SNAP_CLIENT)
+        if len(grp["clients"]) != 1:
+            r.check("Simon Room alone in its snap group", lambda: (False, f"still grouped with {[c['id'] for c in grp['clients']]}; audio tests skipped"))
+            return
         if player(TEST_PLAYER).get("state") == "playing":
             r.check("Simon Room idle before audio tests", lambda: (False, "something is playing there; audio tests skipped"))
             return
@@ -350,9 +359,11 @@ def audio_checks(r):
             done = wait_for(lambda: not player(TEST_PLAYER).get("announcement_in_progress"), 60)
             grp = snap_client(TEST_SNAP_CLIENT)[0]["stream_id"]
             vol = snap_client(TEST_SNAP_CLIENT)[1]["config"]["volume"]["percent"]
-            ok = bool(done) and grp == "default" and vol == TEST_VOLUME
+            ok = bool(done) and grp == "default"
+            # Volume after is informational: MA 2.6.3 restores its CACHED volume, which goes stale
+            # (ma-volume-source-of-truth), so it can differ from what the snapclient had.
             return ok, (f"call returned after {started:.1f} s; announcement_in_progress cleared: {'yes' if done else 'NO (wedge)'}; "
-                        f"group back on '{grp}'; volume after {vol}%")
+                        f"group back on '{grp}'; volume after {vol}% (set {TEST_VOLUME}%{'' if vol == TEST_VOLUME else '; MA restored a stale cached value'})")
         r.check("announcement on Simon Room (the wedge this upgrade fixes)", announcement)
 
         def play_stop():
@@ -364,7 +375,8 @@ def audio_checks(r):
             ma("players/cmd/stop", player_id=TEST_PLAYER)
             idle = wait_for(lambda: player(TEST_PLAYER).get("state") in ("idle", "paused", "stopped"), 15)
             back = wait_for(lambda: snap_client(TEST_SNAP_CLIENT)[0]["stream_id"] == "default", 10)
-            return bool(playing and on_stream and idle and back), (
+            own = stream_id == "Music Assistant - simonroom"
+            return bool(playing and on_stream and own and idle and back), (
                 f"playing {'yes' if playing else 'NO'} on stream '{stream_id}'; stopped {'yes' if idle else 'NO'}; "
                 f"group back on default {'yes' if back else 'NO'}")
         r.check("play + stop on Simon Room", play_stop)

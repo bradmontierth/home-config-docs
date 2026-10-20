@@ -1,0 +1,112 @@
+{
+ "ma": "2.6.3",
+ "audio": true,
+ "rows": [
+  {
+   "check": "MA reachable",
+   "ok": true,
+   "detail": "server 2.6.3, schema 26",
+   "secs": 0.0
+  },
+  {
+   "check": "expected players present + available",
+   "ok": true,
+   "detail": "8 players; missing none; newly unavailable none",
+   "secs": 0.0
+  },
+  {
+   "check": "Node-RED announcement subflow player ids exist",
+   "ok": true,
+   "detail": "Amp Speakers subflow uses ['e4:5f:01:67:1e:56', 'ma_claire_room', 'ma_loft', 'ma_master_bedroom', 'ma_shower', 'ma_simon_room']; unknown to MA: none",
+   "secs": 0.2
+  },
+  {
+   "check": "queues",
+   "ok": true,
+   "detail": "8 queues; kitchen + Simon queues present",
+   "secs": 0.0
+  },
+  {
+   "check": "library search (Navidrome provider)",
+   "ok": true,
+   "detail": "search 'raffi' -> 5 tracks",
+   "secs": 0.1
+  },
+  {
+   "check": "providers loaded",
+   "ok": true,
+   "detail": {
+    "snapcast": true,
+    "squeezelite": true,
+    "opensubsonic": true
+   },
+   "secs": 0.0
+  },
+  {
+   "check": "snapserver zones connected",
+   "ok": true,
+   "detail": "snapserver 0.35.0; zone clients down: none; streams ['default']",
+   "secs": 0.0
+  },
+  {
+   "check": "Home Assistant MA entities",
+   "ok": true,
+   "detail": "16 MA entities in HA; newly unavailable: none",
+   "secs": 0.0
+  },
+  {
+   "check": "consumer: home-audio-adapter (Tempo bridge)",
+   "ok": true,
+   "detail": "http://127.0.0.1:8461/v1/devices",
+   "secs": 0.0
+  },
+  {
+   "check": "consumer: tts-router",
+   "ok": true,
+   "detail": "http://127.0.0.1:8890/api/ma/players",
+   "secs": 0.0
+  },
+  {
+   "check": "consumer: nfc-jukebox",
+   "ok": true,
+   "detail": "http://127.0.0.1:8769/api/now-playing",
+   "secs": 0.0
+  },
+  {
+   "check": "consumer: voice orchestrator",
+   "ok": true,
+   "detail": "http://127.0.0.1:8785/music/state",
+   "secs": 0.0
+  },
+  {
+   "check": "consumer: amp-lease-manager",
+   "ok": true,
+   "detail": "http://127.0.0.1:8462/healthz",
+   "secs": 0.0
+  },
+  {
+   "check": "volume set via MA lands on the snapclient",
+   "ok": true,
+   "detail": "MA volume_set reached the snapclient: 7% yes, 6% yes",
+   "secs": 0.2
+  },
+  {
+   "check": "announcement on Simon Room (the wedge this upgrade fixes)",
+   "ok": true,
+   "detail": "call returned after 2.3 s; announcement_in_progress cleared: yes; group back on 'default'; volume after 6%",
+   "secs": 2.4
+  },
+  {
+   "check": "play + stop on Simon Room",
+   "ok": true,
+   "detail": "playing yes on stream 'Music Assistant - loft'; stopped yes; group back on default yes",
+   "secs": 10.6
+  },
+  {
+   "check": "snapserver did not crash during the run",
+   "ok": true,
+   "detail": "up since Tue 2026-10-20 17:37:13 MDT; SEGV in 30 d 7 -> 7",
+   "secs": 0.0
+  }
+ ]
+}

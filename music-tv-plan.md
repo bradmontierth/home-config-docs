@@ -212,6 +212,35 @@ Repo `/home/pi/music-tv`, pushed to `github-illuminate:bradmontierth/music-tv.gi
    hardware, which may make the Jetson transcode unnecessary. The kitchen
    display stays the default target.
 
+## Party mode built (2026-10-20)
+
+In the Tempo bridge (`home-audio-adapter` cb4ace3), so it appears in Tempo
+with no app change:
+- Groups **Kitchen + TV** (Shield leads, so the kitchen can drop out),
+  **Whole House** (5 upstairs zones + kitchen), **Whole House + TV**.
+  Listed only while every member is available.
+- Kitchen = `snapclient-party.service` on the kitchen mini PC, now ENABLED
+  at boot, snapserver client `kitchen-party` named "Kitchen Party"
+  (latency 16 ms, volume 35 %), hidden as a single room in Tempo.
+- Per-member volumes: TV 100 (soundbar sets the level), kitchen party
+  `KITCHEN_PARTY_VOLUME` (35, needs a listening check against the jukebox's
+  usual 65 on squeezelite); upstairs zones 30 like "All Speakers".
+- Party routes stop the kitchen squeezelite player first (shared kitchenmix
+  dmix). A 2 s watch in the bridge takes the kitchen out of the group when
+  its own player starts (jukebox card, voice); the other rooms keep playing.
+- TV routes wake the Shield over adb from the bridge container (Beelink's
+  trusted key mounted read-only) and wait 6 s (`TV_WARMUP_S`) for the
+  soundbar: Kitchen + TV from a sleeping Shield took 16.7 s to start;
+  Whole House (no TV) 2.9 s.
+- Live check: `home_config/ma-upgrade-check/party_check.py [--target ...]
+  [--detach]`, all passing on the revised MA patch.
+- Groups persist after a session stops (existing bridge behaviour): a later
+  solo route or the Node-RED isolate call ungroups.
+
+Open: kitchen party volume calibration by ear; the voice assistant does not
+duck party music (it ducks the squeezelite queue only) -> next; "TV is in
+use, play anyway?" prompt; TV latency stability re-check.
+
 ## Fallback
 
 If the Shield snapclient is unreliable, job 2 can use Cast: enable MA's

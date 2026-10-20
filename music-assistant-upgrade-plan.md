@@ -101,15 +101,23 @@ on purpose. Order: HA upgrade (its own plan + checks), then MA 2.10.7.
 - `./patches/snapcast/__init__.py` bind-mounted read-only over the provider.
   Diff in `ma-upgrade-check/patches/snapcast-2.6.3-stop-order.patch`:
   `cmd_stop` cancels the ffmpeg feeder first, waits up to 2 s for the stream
-  to go idle, then switches the group to default and removes the stream;
+  to go idle, then switches the group to default and **no longer removes the
+  music stream** (revised 17:38: a Whole House stop crashed the snapserver at
+  17:37 even with the feeder already gone: "Accept failed: Operation canceled"
+  = removing a tcp source races its pending accept. 30-day log: 7 of 21
+  music-stream removals crashed, 0 of 364 announcement-stream removals). The
+  idle stream stays and `_get_or_create_stream` reuses it by name, as MA 2.10
+  does with persistent queue streams;
   the two unbounded `while stream.status != "idle"` loops (end of music, end
   of announcement = the announcement-lock wedge) are capped at 15 s.
 - Backups: `docker-compose.yml.bak-pre-snapcast-patch-20261020`,
   `data-backup-20261020.tgz` (55 MB).
 - Rollback: `cp docker-compose.yml.bak-pre-snapcast-patch-20261020
   docker-compose.yml && docker compose up -d --pull never`.
-- Verified: `ma_check.py smoke --audio` 17/17 three times in a row, SEGV
-  count unchanged (6); snapserver log now shows `playing => idle` BEFORE
+- Verified on the revised patch: `ma_check.py smoke --audio` 17/17 (twice)
+  and `party_check.py` Whole House x2 + Kitchen + TV with kitchen detach, 0
+  crashes (SEGV count stays 7; the 7th was the 17:37 run on the first
+  version). Earlier version: 17/17 three times, SEGV unchanged (6); snapserver log now shows `playing => idle` BEFORE
   `RemoveStream`. Before the patch the same play+stop crashed it on the
   first try.
 - `/home/pi/music-assistant` is not a git repo: the patch file and compose
