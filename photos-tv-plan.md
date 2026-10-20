@@ -137,6 +137,15 @@ Media Center, JDK 17, memory-capped Gradle):
      scrolls away. Year rail highlights the current year.
      Repo committed (c30b798, ad1d5a8), remote
      `github-illuminate:bradmontierth/photos-tv.git` set, not pushed.
+   - 0.2 installed + verified on the Shield 2026-10-19 ~20:55: first row
+     shows the full header; pinned month bar appears only once the month's
+     own heading is off screen; Right = newer confirmed (Aug 27 -> Aug 30,
+     counter rising); Back lands on the last viewed photo. Perf: a focus
+     read at the top of LibraryScreen had recomposed the whole grid per
+     press (55 % janky) - moved into leaf composables (173775d). Thumbnail
+     memory cache 20 -> 35 % and disk-only preview prefetch: revisited rows
+     2 % janky / p90 13 ms; a cold first pass down still 13.7 % / p90 19 ms
+     (first-time decodes). Bounce: needs Brad's eye on the TV.
 1. Service hardening (docker, systemd-free restart policy, delta sync) and
    adb provisioning.
 2. Real screens: Home, Library + jump rail, filters, People, viewer, video.
