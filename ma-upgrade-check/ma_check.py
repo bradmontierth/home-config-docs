@@ -243,7 +243,9 @@ def cmd_smoke(a):
     r.check("MA reachable", lambda: (True, f"server {info.get('server_version')}, schema {info.get('schema_version')}"))
 
     players = {p["player_id"]: p for p in ma("players/all")}
-    expected = set(base["players"]) if base else set()
+    # Only players that were available in the baseline: MA drops idle browser "This Device"
+    # players (builtin_player) on restart, which is not a regression.
+    expected = {p for p, v in base["players"].items() if v["available"]} if base else set()
     expected |= {"ma_loft", "ma_simon_room", "ma_claire_room", "ma_master_bedroom", "ma_shower", "e4:5f:01:67:1e:56"}
     def players_ok():
         missing = sorted(p for p in expected if p not in players)

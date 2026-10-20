@@ -39,3 +39,8 @@ Secrets are read from their files and never printed: MA token from
 Not automated (do by hand after the upgrade, in the plan's per-consumer list):
 a jukebox card scan, one voice music command, a doorbell announcement, the
 bedtime inject, kitchen volume.
+
+**On the patched 2.6.3 (2026-10-20 16:48):** `smoke --audio` 17/17 three
+times, no crash. The players check now only expects players that were
+available in the baseline (MA drops idle browser "This Device" players on
+restart).

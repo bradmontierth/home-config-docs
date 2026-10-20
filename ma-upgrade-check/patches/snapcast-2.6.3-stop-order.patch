@@ -1,0 +1,63 @@
+--- tmp/ma-compare/2.6.3/__init__.py	2026-10-20 09:39:48.164768743 -0600
++++ music-assistant/patches/snapcast/__init__.py	2026-10-20 16:47:09.905645583 -0600
+@@ -484,6 +484,21 @@
+         self._set_childs_state(player_id)
+         self.mass.players.update(player_id)
+ 
++        # LOCAL PATCH (home_config/ma-upgrade-check/patches): stop the ffmpeg feeder BEFORE
++        # removing its stream. snapserver 0.35.0 segfaults in Stream.RemoveStream when the
++        # stream's TCP source still has a connected writer (reproduced 2026-10-20). MA 2.8+
++        # does the same thing: request stop, wait for the streamer, then remove the source.
++        if stream_task := self._stream_tasks.pop(player_id, None):
++            if not stream_task.done():
++                stream_task.cancel()
++                with suppress(asyncio.CancelledError):
++                    await stream_task
++        music_stream = self._get_snapstream(self._get_stream_name(player_id, SnapCastStreamType.MUSIC))
++        for _ in range(8):  # up to 2 s for snapserver to notice the writer is gone
++            if music_stream is None or music_stream.status == "idle":
++                break
++            await asyncio.sleep(0.25)
++
+         # we change the active stream only if music was playing
+         if not player.announcement_in_progress:
+             await self._get_snapgroup(player_id).set_stream("default")
+@@ -491,12 +506,6 @@
+         # but we always delete the music stream (whether it was active or not)
+         await self._delete_stream(self._get_stream_name(player_id, SnapCastStreamType.MUSIC))
+ 
+-        if stream_task := self._stream_tasks.pop(player_id, None):
+-            if not stream_task.done():
+-                stream_task.cancel()
+-                with suppress(asyncio.CancelledError):
+-                    await stream_task
+-
+     async def cmd_volume_mute(self, player_id: str, muted: bool) -> None:
+         """Send MUTE command to given player."""
+         ma_player = self.mass.players.get(player_id, raise_unavailable=False)
+@@ -626,7 +635,10 @@
+             self.logger.debug("Finished streaming to %s", stream_path)
+             # we need to wait a bit for the stream status to become idle
+             # to ensure that all snapclients have consumed the audio
+-            while stream.status != "idle":
++            # LOCAL PATCH: bounded (was unbounded; a snapserver drop left it spinning forever)
++            for _ in range(60):
++                if stream.status == "idle":
++                    break
+                 await asyncio.sleep(0.25)
+             player.state = PlayerState.IDLE
+             player.elapsed_time = time.time() - player.elapsed_time_last_updated
+@@ -688,7 +700,12 @@
+         self.logger.debug("Finished announcement streaming to %s", stream_path)
+         # we need to wait a bit for the stream status to become idle
+         # to ensure that all snapclients have consumed the audio
+-        while stream.status != "idle":
++        # LOCAL PATCH: bounded wait. Unbounded, a snapserver drop mid-announcement orphaned
++        # this loop inside the announce lock (announcement_in_progress stuck True = every later
++        # announcement silently dropped; the ma-announce-watchdog wedge). 15 s >> the ~1 s buffer.
++        for _ in range(60):
++            if stream.status == "idle":
++                break
+             await asyncio.sleep(0.25)
+ 
+         # delete the announcement stream

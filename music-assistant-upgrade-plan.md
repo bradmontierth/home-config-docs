@@ -1,6 +1,6 @@
 # Music Assistant upgrade: 2.6.3 → 2.10.x
 
-**Status:** backlog, not scheduled. Opened 2026-07-29.
+**Status:** backlog, not scheduled. Opened 2026-07-29. **Interim local patch LIVE on 2.6.3 since 2026-10-20** (see below). **Blocked on a Home Assistant upgrade** (see below).
 **Why it matters:** MA is load-bearing for voice, announcements, the jukebox and
 whole-home audio. This is the fix for a real silent-failure bug, but the blast
 radius is wide enough that it needs a window and a rehearsed rollback — not a
@@ -79,6 +79,41 @@ smoke --audio`: a quiet play + stop on Simon Room crashed the snapserver
 feeder had finished, did not crash. So the trigger is removing a stream
 whose feeder is still connected, exactly what 2.10.7 no longer does.
 Pre-upgrade baseline: `ma-upgrade-check/snapshots/pre-upgrade.json`.
+
+### 2026-10-20: blocked on Home Assistant, interim patch applied instead
+
+**Why not upgrade now.** HA 2025.11.3 bundles `music-assistant-client`
+1.2.4 = API schema **26**. Every MA release after 2.6.x requires a client of
+at least schema **28** (`MIN_SCHEMA_VERSION = 28` from 2.7.0 through
+2.10.7), so any MA upgrade would disconnect HA's Music Assistant
+integration. That breaks Node-RED flows that use those HA entities:
+Doorbell (Kitchen fast TTS, "loft + fast kitchen", audio off, the "Kitchen
+speaker playing" trigger) and Baby Monitor (speaker alert to Loft, kitchen
+TTS). The voice orchestrator is fine (client 1.4.3 = schema 33). First HA
+with a schema-28 client: **2025.12.0** (client 1.3.2). HA runs the floating
+`:stable` tag, so a plain pull jumps to 2026.10.2 (11 months): pin a version
+on purpose. Order: HA upgrade (its own plan + checks), then MA 2.10.7.
+
+**Interim patch (live 2026-10-20 16:47).** `/home/pi/music-assistant`:
+- image pinned to the running 2.6.3 digest
+  `ghcr.io/music-assistant/server@sha256:0986d48f962c948d9023e7e1d5c8069ce4e312d90aa31fdfa6fb7656e969b132`
+  (was `:latest`);
+- `./patches/snapcast/__init__.py` bind-mounted read-only over the provider.
+  Diff in `ma-upgrade-check/patches/snapcast-2.6.3-stop-order.patch`:
+  `cmd_stop` cancels the ffmpeg feeder first, waits up to 2 s for the stream
+  to go idle, then switches the group to default and removes the stream;
+  the two unbounded `while stream.status != "idle"` loops (end of music, end
+  of announcement = the announcement-lock wedge) are capped at 15 s.
+- Backups: `docker-compose.yml.bak-pre-snapcast-patch-20261020`,
+  `data-backup-20261020.tgz` (55 MB).
+- Rollback: `cp docker-compose.yml.bak-pre-snapcast-patch-20261020
+  docker-compose.yml && docker compose up -d --pull never`.
+- Verified: `ma_check.py smoke --audio` 17/17 three times in a row, SEGV
+  count unchanged (6); snapserver log now shows `playing => idle` BEFORE
+  `RemoveStream`. Before the patch the same play+stop crashed it on the
+  first try.
+- `/home/pi/music-assistant` is not a git repo: the patch file and compose
+  there are backed up only by this diff + the notes here.
 
 **New compatibility notes for 2.10.7 (add to the test pathway):**
 - Stream names change: music = `Music Assistant - <queue id>` (not display
