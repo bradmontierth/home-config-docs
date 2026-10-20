@@ -1,4 +1,4 @@
-# Music Assistant upgrade: 2.6.3 → 2.9.x
+# Music Assistant upgrade: 2.6.3 → 2.10.x
 
 **Status:** backlog, not scheduled. Opened 2026-07-29.
 **Why it matters:** MA is load-bearing for voice, announcements, the jukebox and
@@ -31,6 +31,71 @@ Deliberately *not* patched locally: the container tracks `:latest`, so a
 hand-patch of a file upstream has already deleted would be silently discarded on
 the next pull. Interim safety net is `home_config/ma-announce-watchdog/`
 (detects the wedge, restarts MA, pushovers) — see its README.
+
+## 2026-10-20: second reason, the snapserver segfault, and target is now 2.10.7
+
+Latest stable is **2.10.7** (2026-10-17); 2.11 is in nightly betas. Retarget
+the upgrade at 2.10.7.
+
+**The crash.** snapserver 0.35.0 (latest Snapcast release, so no Snapcast
+update fixes it) SIGSEGVs inside `Stream.RemoveStream`: 5 times in 30 days,
+3 on 2026-10-19 (07:57 Simon Room, 21:20 and 21:37 Shield). Every zone drops
+~2 s and very recent client settings can be lost. Log sequence before each
+crash: `Stream.RemoveStream("Music Assistant - X")` -> `playing => idle` ->
+`AsioStream ... Operation canceled` -> `Stop X` twice -> SEGV. No matching
+upstream issue found.
+
+**Why 2.6.3 triggers it.** `cmd_stop` (snapcast `__init__.py`) does:
+1. `group.set_stream("default")`
+2. `_delete_stream(music stream)` = `Stream.RemoveStream` **while MA's
+   ffmpeg is still connected to the stream's TCP source and writing**
+3. only then cancels the stream task.
+Every stop and every "replace" (play_media cancels and re-creates) removes a
+live TCP source.
+
+**What 2.10.7 does instead** (`providers/snapcast/player.py`, `ma_stream.py`,
+`provider.py`, compared side by side, copies in /home/pi/tmp/ma-compare/):
+- `stop()` = `set_stream("default")` + `request_stop_stream()`, then returns.
+  **No RemoveStream on stop.**
+- Queue-backed music streams get a stable name (`Music Assistant -
+  <queue id>`) with `destroy_on_stop = False`: the Snapcast source persists
+  across plays and is reused; only the feeder stops and restarts.
+- A stream no group is using gets `request_stop_stream` after 3 s (the
+  feeder stops; the source stays).
+- Removal happens only in `destroy()`, which does `request_stop_stream()` ->
+  `wait_for_stopped()` -> then `_remove_snap_source()` (groups moved to
+  default first). Announcement/hashed streams self-destroy from
+  `_on_streamer_done`, i.e. after the feeder has finished. Provider unload
+  stops players first, then destroys.
+- The one remaining "remove without stopping" is adopting an orphaned stream
+  left from an earlier MA run (no feeder attached).
+So the remove-a-live-TCP-source pattern is gone from normal playback. That
+matches the crash signature; it is a strong inference, not a reproduced
+proof (reproducing it would mean deliberately crashing whole-home audio).
+
+**Reproduced 2026-10-20 09:47 on 2.6.3** with `ma-upgrade-check/ma_check.py
+smoke --audio`: a quiet play + stop on Simon Room crashed the snapserver
+(SEGV count 5 -> 6). Same run: the announcement stream, removed after its
+feeder had finished, did not crash. So the trigger is removing a stream
+whose feeder is still connected, exactly what 2.10.7 no longer does.
+Pre-upgrade baseline: `ma-upgrade-check/snapshots/pre-upgrade.json`.
+
+**New compatibility notes for 2.10.7 (add to the test pathway):**
+- Stream names change: music = `Music Assistant - <queue id>` (not display
+  name), announcements = `Music Assistant - <md5[:6]> (announcement)`.
+  home-audio-adapter `_remove_stale_snapcast_stream` is name-agnostic (takes
+  the id, only removes idle streams with no connected clients): fine.
+  `ma-announce-watchdog` README describes the old name; check its code keys
+  on `announcement_in_progress`, not names.
+- Idle music sources now stay on the snapserver between plays (one per
+  queue); expect them in `Server.GetStatus`.
+- Still no PAUSE feature on snapcast players (features: PLAY_MEDIA,
+  PLAY_ANNOUNCEMENT, SET_MEMBERS, VOLUME_SET, VOLUME_MUTE): zone-music F4
+  (pause = stop + resume_pos) is unchanged.
+- External snapserver still supported (`CONF_USE_EXTERNAL_SERVER`).
+- The provider was split into several modules (player.py, provider.py,
+  ma_stream.py, socket_server.py) - a rewrite, so retest grouping/ungrouping
+  (Tempo presets, party mode) and announcements over music, not just play.
 
 ## Blast radius: everything that talks to MA
 
