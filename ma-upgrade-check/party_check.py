@@ -66,19 +66,20 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--target", default="tempo_group_kitchen_tv")
     ap.add_argument("--detach", action="store_true")
+    ap.add_argument("--tv-ui", action="store_true", help="check the Music app opens and the remote pauses the group")
     a = ap.parse_args()
     r = m.Results()
     d = "/tmp/ma-check-tones"
     os.makedirs(d, exist_ok=True)
     hum(os.path.join(d, "party.wav"))
     srv = m.serve(d)
-    url = "http://192.168.10.217:%d/party.wav" % m.TONE_PORT
+    url = "http://192.168.10.217:%d/party.wav?u=admin&p=enc:deadbeefcafe" % m.TONE_PORT   # fake creds: must not show in /v1/sessions
     before = m.snap_server_health()
     saved = {cid: v[2] for cid, v in snap_view().items() if cid in QUIET}
     kitchen_vol = (m.player(KITCHEN_SQ) or {}).get("volume_level")
     print(f"saved snap volumes {saved}; kitchen squeezelite MA volume {kitchen_vol}; shield awake: {shield_awake()}")
     session_id = None
-    client_session = "party-check-" + uuid.uuid4().hex[:8]
+    client_session = "tempo-partycheck-" + uuid.uuid4().hex[:8]   # tempo- so it is listed in /v1/sessions
     try:
         t0 = time.time()
         res = post("/v1/play", {"episode_id": "party-check", "media_url": url, "title": "Party check hum",
@@ -102,6 +103,30 @@ def main():
         if "tv" in a.target:
             r.check("Shield awake (TV woken)", lambda: (shield_awake(), "adb mWakefulness"))
         time.sleep(4)
+
+        def sessions_redacted():
+            with urllib.request.urlopen(BRIDGE + "/v1/sessions", timeout=20) as resp:
+                body = resp.read().decode()
+            mine = [x for x in json.loads(body)["sessions"] if x["playback"]["session_id"] == session_id]
+            return bool(mine) and "deadbeefcafe" not in body, (
+                f"session listed: {bool(mine)}; fake password visible: {'deadbeefcafe' in body}")
+        r.check("/v1/sessions hides the stream password", sessions_redacted)
+
+        if a.tv_ui:
+            def music_up():
+                top = subprocess.run([ADB, "-s", "192.168.40.67:5555", "shell", "dumpsys activity activities | grep -m1 mResumedActivity"],
+                                     capture_output=True, text=True, timeout=10).stdout
+                return "com.local.musictv" in top, top.strip()[-70:]
+            r.check("TV shows the Music app", music_up)
+            time.sleep(2)
+            subprocess.run(["/home/pi/tmp/musictv-shots/shot.sh", "50-house-playing"], capture_output=True)
+            subprocess.run([ADB, "-s", "192.168.40.67:5555", "shell", "input keyevent KEYCODE_MEDIA_PLAY_PAUSE"], timeout=10)
+            def paused_by_remote():
+                st = m.wait_for(lambda: json.loads(urllib.request.urlopen(f"{BRIDGE}/v1/status?session_id={session_id}", timeout=20).read())["state"] == "paused", 10)
+                return bool(st), "bridge session paused after the remote's play/pause on the TV"
+            r.check("remote play/pause on the TV pauses the group", paused_by_remote)
+            time.sleep(1.5)
+            subprocess.run(["/home/pi/tmp/musictv-shots/shot.sh", "51-house-paused-by-remote"], capture_output=True)
 
         if a.detach:
             m.ma("players/cmd/volume_set", player_id=KITCHEN_SQ, volume_level=15)
