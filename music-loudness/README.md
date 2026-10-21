@@ -35,3 +35,28 @@ Music Assistant normalizes every player by default (EBU R128, -17 LUFS,
 limiter) but its opensubsonic provider ignores ReplayGain and it holds 0
 measurements for Navidrome songs, so every play falls back to live "dynamic"
 loudnorm. Tempo (phone) and the TV Music app apply nothing.
+
+## Whole library (2026-10-21 06:48-08:45, 2,350 songs, 0 errors, 117 min)
+
+- Median -18.1 LUFS (right at the ReplayGain 2.0 reference). 5th-95th
+  percentile -29.7 to -8.9; middle half -22.6 to -13.6 (9 dB).
+- Loudest artists (avg LUFS, 8+ songs): Bluey -10.3 (75 songs, -15.5..-4.9),
+  Charlie Hope -11.4, Elton John -11.4, Roxy Music -11.4, Raffi -14.0
+  (71 songs, -24.5..-9.4), John Denver -14.4.
+- Quietest: Chopin -24.4, Franz Liszt compilations -25.0, Brahms -23.4,
+  Garrick Ohlsson (Chopin complete works, 256 songs) -21.5, Lang Lang -20.5,
+  Various Artists (191 songs) -20.8.
+- Widest swing inside one album: "Study Focus 2022" (Various Artists, 86
+  songs) 28 dB; Brahms "A Concert of Pianists" 27 dB; Ohlsson Chopin disc 2
+  24 dB. Compilations need TRACK gain; album gain would keep their swings.
+- At a -18 target: 50 % of songs need a boost, 99 need more than +12 dB
+  (mostly soft classical; cap boosts), 402 get cut by more than 6 dB, 628
+  would go over 0 dBFS without a limiter. 207 songs already have sample
+  peaks above full scale (clipped masters).
+- Two files decode as pure digital silence (-70 LUFS, no peak), almost
+  certainly failed downloads: `Rewired88/Save Your Tears/01 - Save Your
+  Tears.flac` (193 s) and `Prefab Sprout/I Trawl the Megahertz/01 - I Trawl
+  the Megahertz.flac` (22 min). Exclude from tagging; re-download.
+
+Raw results: `library-results.jsonl` (one JSON per song: Navidrome id, path,
+lufs, lra, peak).
