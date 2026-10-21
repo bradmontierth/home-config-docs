@@ -83,3 +83,27 @@ lufs, lra, peak).
 
 Next: Music Assistant measurements (its opensubsonic provider ignores the
 tags), TV app gain, Tempo's ReplayGain setting, tag new downloads.
+
+## Players (2026-10-21)
+
+- **TV Music app** (music-tv): applies `replayGain.trackGain` as ExoPlayer
+  volume with 6 dB headroom (volume = 10^((gain-6)/20), max 1.0). Verified on
+  the Shield.
+- **Music Assistant**: `ma_import.py` wrote 4,696 rows into
+  `loudness_measurements` (each song under `opensubsonic--bHkR6yvQ` by
+  Navidrome id AND `filesystem_local--4Z5yRhf7` by path: MA streams library
+  tracks from filesystem_local, checked). Loudness floored at -29 LUFS =
+  boosts capped at +12 dB vs MA's -17 target. Done with MA stopped, as root
+  via a throwaway container (the DB is root-owned); backup after a WAL
+  checkpoint: `/home/pi/music-assistant/backups/library.db.pre-loudness-20261021`.
+  MA now reports `loudness` for Navidrome tracks (Bluey theme -10.2).
+  **BUT normalization is switched OFF on every original MA player** (Loft,
+  Simon, Claire, Master, Shower, Kitchen-Big-Speakers: `volume_normalization`
+  False, default True; only the new Kitchen Party + Shield players have it on),
+  so streamdetails say `volume_normalization_mode: disabled` and nothing is
+  applied yet. Turning it on is a per-player MA config change that also
+  affects announcements/TTS and the jukebox's tuned volumes: Brad's call.
+  Suggest pairing it with the core setting "Volume normalization method for
+  tracks" = measurement only, so unmeasured items (TTS, Tempo URL plays) are
+  never run through live loudnorm.
+- **Tempo (phone)**: Settings > ReplayGain > track (Brad's + Adrienne's phone).
