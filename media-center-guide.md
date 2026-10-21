@@ -179,6 +179,20 @@ $ADB -s 192.168.40.67:5555 install -r app/build/outputs/apk/release/app-release.
 - Any test playback over ~5 s writes progress: record the item's `progress` row
   first and restore it afterwards.
 - `run-as` doesn't work on release builds (not debuggable).
+- **The Shield is also a Snapcast speaker** (`de.badaix.snapcast`, music-tv
+  project). Its client keeps a PCM stream on HDMI even when idle, and with our
+  Dolby passthrough the two kill each other's AudioTrack (`dead IAudioTrack,
+  Offloaded or Direct`, `could not create track -38`); each rebuild left a
+  DIFFERENT lip-sync offset (Bluey, 2026-10-20). Since 0.21 both players send
+  `de.badaix.snapcast.STOP_SERVICE` on open and `START_SERVICE` 2 s after the
+  last one closes (`HouseSpeaker.kt`; explicit broadcast to
+  `de.badaix.snapcast/.BroadcastReceiver`). Check with
+  `ps -A | grep libsnapclient` (gone while playing).
+- Focus links (`focusProperties { down = … }`) to a card in a Lazy row crash the
+  whole app on the key press when that card is scrolled off ("FocusRequester is
+  not initialized"); scroll the row first, then `requestFocus()` (show page,
+  0.21).
+- Our player: the first Back only hides the overlay; the second leaves.
 
 ## iPad / browser web app
 
