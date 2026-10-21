@@ -60,3 +60,26 @@ loudnorm. Tempo (phone) and the TV Music app apply nothing.
 
 Raw results: `library-results.jsonl` (one JSON per song: Navidrome id, path,
 lufs, lra, peak).
+
+## ReplayGain tags written (2026-10-21 09:15)
+
+- Backup first: `/media/externalHDD/backups/music-pre-replaygain-20261021`
+  on the Plex Pi (`cp -a`, 20 min, 2,379 files, sizes match). Restore =
+  copy it back over `/media/externalHDD/media/music`.
+- `rsgain` is not packaged for Debian 12 (Pi), so `tag_replaygain.py` writes
+  the tags with mutagen from `library-results.jsonl` (no re-measuring):
+  REPLAYGAIN_TRACK_GAIN/PEAK, ALBUM_GAIN/PEAK, REFERENCE_LOUDNESS, reference
+  -18 LUFS. FLAC = Vorbis comments, MP3 = TXXX frames, M4A = iTunes freeform
+  atoms. Album loudness = duration-weighted energy mean of its tracks.
+  Gains unclamped in the tags (players cap boosts). Silent files skipped.
+- 2,348 tagged, 0 failed, 2 skipped (the silent pair) in 91 s at idle I/O.
+- Navidrome: a QUICK scan does not see in-place tag edits (folder mtimes
+  unchanged); a FULL scan (`startScan?fullScan=true`, ~110 s) does. After
+  it, 2,348 songs have rg_track_gain + rg_album_gain and OpenSubsonic
+  `replayGain` is served (checked one FLAC, one MP3, one M4A). Track gains
+  -13.3 to +25.6 dB, mean +0.4; Bluey avg -7.7, Chopin avg +4.1.
+- The only other song without gains is a stale Navidrome row
+  (`Charlie Hope/.../09 - Sun and Moon.flac`, missing=1, file gone).
+
+Next: Music Assistant measurements (its opensubsonic provider ignores the
+tags), TV app gain, Tempo's ReplayGain setting, tag new downloads.
