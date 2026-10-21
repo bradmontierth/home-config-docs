@@ -252,16 +252,26 @@ progress from `audible_position_ms` + elapsed, up next from the session
 queue); play/pause/next and the remote's media keys go to the bridge
 (`/v1/pause|resume|next`, previous = `/v1/seek 0`), so the whole group
 follows. Verified on screen with Brad's live Kitchen + TV session (paused).
-Bridge ae0b6a2 (NOT deployed yet: a redeploy drops in-memory sessions):
-TV routes launch the app with `--ez mt_house true` after waking the Shield,
-or if it is awake on the launcher / screensaver / Snapcast / Photos / Music,
-never over another app.
+Bridge ae0b6a2 + b650e08, DEPLOYED 2026-10-20 18:1x: TV routes launch the
+app with `--ez mt_house true` after waking the Shield, or if it is awake on
+the Shield's HOME app (resolved on the device: `com.local.tvhome`) /
+Google launcher / screensaver / Snapcast / Photos / Music; never over
+another app. adb is warmed at bridge startup (a cold adb server added ~13 s
+to the first TV route). Verified with `party_check.py --tv-ui` (9/9, twice
+in a row and from the home screen): Kitchen + TV starts in ~3.5 s with the
+TV awake, Music comes up by itself, the remote's play/pause pauses the
+group through the bridge.
+Found + fixed on the way: `_queue_is_playing_media` treated a STOPPED MA
+queue that still held the same first item as playing, so replaying the same
+song on the same target after a stop did nothing (would also hit Tempo).
 
-Security finding: the bridge's `/v1/sessions` returns Tempo's queue
-`media_url`s, which embed the Navidrome admin password (`p=enc:<hex>`,
-trivially reversible), to any LAN client, including the IoT VLAN. The TV
-app ignores them. Fix candidates: redact in the bridge's response, or have
-Tempo send token auth (`t`/`s`) instead of `p=enc:`.
+Security finding (FIXED in the open list, b650e08): `/v1/sessions` returned
+Tempo's queue `media_url`s with the Navidrome admin password (`p=enc:<hex>`,
+reversible) to any LAN client incl. the IoT VLAN. Now u/p/t/s/apiKey are
+redacted there; a redacted URL sent back is swapped for the real one held by
+the bridge. Still open: `/v1/status?session_id=` returns real URLs (Tempo
+needs them to send queue edits back); a full fix is Tempo sending only song
+ids and the bridge building stream URLs with its own credential.
 
 ## Fallback
 
