@@ -1,6 +1,6 @@
 # Safe Media Pipeline Guide
 
-This guide documents the media ingestion pipeline shared by Transmission, Plex, Navidrome, and Music Assistant.
+This guide documents the media ingestion pipeline shared by Transmission, the media-center server (Plex was removed 2026-10-22), Navidrome, and Music Assistant.
 
 The Plex/download Raspberry Pi is available as:
 

@@ -1,8 +1,11 @@
 # Media Center Guide (our Plex replacement)
 
 Home-built replacement for the Plex client experience: a library server on the
-media host plus an Android TV app on the Shield. Plex still runs alongside it
-(and still owns the antenna DVR until live TV is built). Design history,
+media host plus an Android TV app on the Shield. Plex was REMOVED from the
+media host on 2026-10-22 (container, compose block and image gone; the Plex
+config dir `/home/pi/transmission/plex-config` is kept because this server
+mounts its `Metadata/` and `Media/` read-only, plus the DB snapshot). Both
+antenna tuners are now ours. Design history,
 measurements and decisions live in `plex-replacement-plan.md`; this guide is the
 operational reference.
 

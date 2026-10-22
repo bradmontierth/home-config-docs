@@ -33,13 +33,9 @@ Transmission container
     network_mode: service:vpn
 ```
 
-Plex is separate from that VPN path:
-
-```text
-Plex container
-    network_mode: host
-    media mounted from /media/externalHDD/media
-```
+Plex was removed on 2026-10-22 (replaced by the media-center stack in
+`/home/pi/media-center/server`, which runs from its own compose file with host
+networking on :8790).
 
 ## Containers
 
@@ -48,7 +44,6 @@ Main active containers in the compose stack:
 ```text
 vpn           qmcgaw/gluetun
 transmission  linuxserver/transmission
-plex          linuxserver/plex
 aria2         wahyd4/aria2-ui
 ```
 
@@ -196,21 +191,19 @@ and runs:
 
 That script creates a trigger file if completed items exist and no trigger is already pending. This covers existing downloads and cases where Transmission's hook does not fire.
 
-## Plex
+## Plex (removed 2026-10-22)
 
-Plex uses host networking:
+The Plex container, its compose block and the `linuxserver/plex` image were
+removed on 2026-10-22 after the Plex2Shell RCE chain (CVE-2026-96652/54/55/56)
+landed on CISA's exploited list; the media-center server had already replaced
+it. Backup of the old block: `docker-compose.yml.bak-plex-removal-*`. The
+`./plex-config` directory (2.6 GB) stays on disk because media-center mounts
+its Metadata/ and Media/ folders read-only.
 
-```yaml
-plex:
-  image: linuxserver/plex
-  container_name: plex
-  network_mode: host
-```
-
-Plex media mount:
+Library layout (unchanged, now read by media-center):
 
 ```text
-/media/externalHDD/media -> /media
+/media/externalHDD/media
 ```
 
 The pipeline writes approved media to host paths under:
@@ -219,11 +212,7 @@ The pipeline writes approved media to host paths under:
 /media/externalHDD/media
 ```
 
-Plex sees those files inside the container under:
-
-```text
-/media
-```
+media-center mounts that path read-only inside its container.
 
 ## Safe Media Pipeline Boundary
 
