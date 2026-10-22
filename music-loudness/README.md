@@ -107,3 +107,18 @@ tags), TV app gain, Tempo's ReplayGain setting, tag new downloads.
   tracks" = measurement only, so unmeasured items (TTS, Tempo URL plays) are
   never run through live loudnorm.
 - **Tempo (phone)**: Settings > ReplayGain > track (Brad's + Adrienne's phone).
+
+## 2026-10-21 evening: party groups were quieter in the kitchen
+
+Kitchen + TV via Tempo: the kitchen was barely audible next to the TV. The
+volumes were NOT the cause: kitchen-party snapclient 35 % = -17.2 dB on
+snapclient's default curve ((10^v-1)/9) vs the kitchen squeezelite at the
+jukebox's 65 = -17.3 dB (aioslimproto/LMS curve). The cause: TV groups are
+led by the Shield player, which (new player) had MA normalization ON, and
+Tempo plays are anonymous URLs (`builtin` provider, no measurement), so MA ran
+live `dynamic` loudnorm to -17 LUFS: loud songs -5 to -7 dB. The kitchen's
+own squeezelite player has normalization OFF. Fixed by setting
+`volume_normalization` False on the Shield and Kitchen Party players (all
+players now OFF); next Kitchen + TV play showed mode `disabled`.
+The precomputed measurements only apply to MA library plays (jukebox,
+voice); Tempo plays need the bridge to send library URIs instead of URLs.
