@@ -197,6 +197,27 @@ $ADB -s 192.168.40.67:5555 install -r app/build/outputs/apk/release/app-release.
   0.21).
 - Our player: the first Back only hides the overlay; the second leaves.
 
+## Cameras row (Lookout)
+
+Since 0.23 (2026-10-25) Home has a **Cameras** row, Kids first, fed by Lookout on the
+Optiplex. It replaced the VLC shortcuts that pointed at Blue Iris (VLC's saved links
+can't be edited over adb; the Shield isn't rooted).
+
+- Server: `GET /api/v1/cameras` (`app/cameras.py`) reads Lookout's `/api/cameras` with
+  the `shield` token (`MC_LOOKOUT_TOKEN` in `server.env`; `MC_LOOKOUT_URL`, default
+  `http://192.168.10.49:8805`) and returns each camera's still and stream URLs with the
+  token embedded, cached 60 s. The TV talks to the Optiplex directly for video; nothing
+  Lookout-related is stored on the Shield. Revoke by removing `shield` from
+  `cecret_lake/lookout/auth.json` (both copies) and restarting `lookout-web`.
+- Streams: Lookout `/api/stream/{cam}.mp4` = go2rtc fragmented MP4 of the recording
+  stream (Claire 2560x1920 H.264 + AAC, Simon 4K HEVC + AAC); `?q=low` = sub-stream.
+  Played by `CameraPlayerActivity` (Media3 progressive source, ~1 s buffer).
+- Remote: OK/Up = name overlay, Left/Right = other cameras, Down = mute, Back = leave.
+  No seeking. Errors/stream end reconnect after 3 s.
+- Network: the Shield reaches the Optiplex because the UDM rule "Allow LAN to
+  Chromecast" is written Chromecast group -> Default LAN (misnamed). No change needed.
+- Not yet: a voice deep link ("show Claire on the TV"); Lookout's history/timeline.
+
 ## iPad / browser web app
 
 - URL: `https://media.illuminatehealthanalytics.com/app/` (LAN-only DNS ->
