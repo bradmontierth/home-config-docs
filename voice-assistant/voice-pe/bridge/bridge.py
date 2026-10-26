@@ -55,6 +55,11 @@ ORCH_BASE = os.getenv("ORCH_BASE", "http://127.0.0.1:8785").rstrip("/")
 HTTP_PORT = int(os.getenv("HTTP_PORT", "8793"))
 DATA_DIR = Path(os.getenv("DATA_DIR", "/data"))
 ACTIVE_ARM_FILE = Path(os.getenv("ACTIVE_ARM_FILE", "/data/routed-audio-armed"))
+# Short feedback sounds other services can ask this device to play (POST /chime),
+# e.g. the NFC jukebox when a card is tapped in this room: the Voice PE speaker is
+# always on, while the room's music amp needs ~4 s to wake.
+CHIME_BASE = os.getenv("CHIME_BASE", "http://192.168.10.217:8811/ui/chime-")
+CHIMES = {"start", "pause", "unknown"}
 START_MODE = os.getenv("MODE", "shadow").lower()
 AUDIO_CHANNEL = os.getenv("AUDIO_CHANNEL", "processed").lower()
 MODEL_PATHS = [p for p in os.getenv("MODEL_PATHS", "").split(",") if p]
@@ -367,6 +372,17 @@ class Bridge:
         self.mode = mode
         log.info("mode -> %s", mode)
         return True, mode
+
+    def chime(self, sound: str) -> tuple[bool, str]:
+        """Play a short feedback sound as an announcement (ducks nothing else on this device)."""
+        if sound not in CHIMES:
+            return False, f"sound must be one of {sorted(CHIMES)}"
+        key = getattr(self, "media_player_key", None)
+        if not (self.client and self.connected and key is not None):
+            return False, "device not connected"
+        self.client.media_player_command(key, media_url=f"{CHIME_BASE}{sound}.flac", announcement=True)
+        self.stats["chimes"] = self.stats.get("chimes", 0) + 1
+        return True, sound
 
     async def call_service(self, name: str) -> None:
         service = self.services.get(name)
@@ -848,6 +864,9 @@ class Bridge:
         self.connected = True
         entities, services = await client.list_entities_services()
         self.services = {service.name: service for service in services}
+        self.media_player_key = next(
+            (e.key for e in entities if type(e).__name__ == "MediaPlayerInfo"), None
+        )
         log.info(
             "connected to %s; %d entities; services=%s",
             DEVICE_NAME,
@@ -903,6 +922,14 @@ async def http_server(bridge: Bridge) -> aiohttp.web.AppRunner:
         )
         return web.json_response({"ok": True, "alarm_active": True})
 
+    async def chime(request):
+        try:
+            body = await request.json()
+        except Exception:  # noqa: BLE001
+            body = {}
+        ok, detail = bridge.chime(str(body.get("sound", "")))
+        return web.json_response({"ok": ok, "detail": detail}, status=200 if ok else 409)
+
     async def alarm_arm(_request):
         bridge.arm_alarm()
         return web.json_response({"ok": True, "alarm_armed": bridge.alarm_armed})
@@ -917,6 +944,7 @@ async def http_server(bridge: Bridge) -> aiohttp.web.AppRunner:
     app.router.add_post("/alarm", alarm)
     app.router.add_post("/alarm/arm", alarm_arm)
     app.router.add_post("/alarm/dismiss", alarm_dismiss)
+    app.router.add_post("/chime", chime)
     runner = web.AppRunner(app)
     await runner.setup()
     await web.TCPSite(runner, "0.0.0.0", HTTP_PORT).start()
