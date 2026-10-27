@@ -282,3 +282,8 @@ the **panel F1 first-crack press arrived** as `crack_mark=2` for one frame (roas
 | Every 30 kg | Clean impeller (H2 set screw, aluminum: mild soap only); vacuum under the drum, clear stuck beans. No compressed air at the front (mica tube) |
 | Annually | Inspect exhaust pipe (6 front-plate screws), bottle brush; never remove the pipe |
 | As needed | Clean IBTS lens when FC temps drift below 195 °C — the app can detect this from logged FC marks |
+
+**Built 2026-10-27 eve (roaster commit 460745d, Android `/home/pi/roaster-android` 94b0297):** everything in
+the table above except the "I'm here" nudge. Turning point moved to the probe (IBTS reads the cold beans
+at charge and only rises). The presence warning watches real panel presses counted by the bridge; a USB
+command as a nudge is still untested and deliberately not built. Details in the roaster README.
