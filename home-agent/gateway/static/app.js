@@ -22,7 +22,9 @@ function setStatus(text) {
 function appendTerminal(text) {
   terminalEl.textContent += text;
   terminalEl.scrollTop = terminalEl.scrollHeight;
-  if (text.includes("AWAITING_PHONE_APPROVAL:")) {
+  // The echoed prompt contains the marker with its <short action summary>
+  // placeholder; only a real line-start marker means the agent is asking.
+  if (/^[ \t>*_]*AWAITING_PHONE_APPROVAL:[ \t]*(?!<short action summary>)\S/m.test(text)) {
     terminalEl.classList.add("awaiting");
     setStatus("Waiting for approval");
   }

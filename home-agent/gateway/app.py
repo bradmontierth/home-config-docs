@@ -12,7 +12,7 @@ from pathlib import Path
 import httpx
 import websockets
 from fastapi import FastAPI, File, HTTPException, Request, UploadFile, WebSocket
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 import speech
@@ -744,13 +744,34 @@ async def fetch_runner_session_log_text(session_id: str) -> str:
     return str(response.json().get("text") or "")
 
 
-async def push_session_event(session_info: dict, event_type: str) -> bool:
+# The marker as the agent writes it: at the start of a line, with a real
+# summary. The prompt itself contains "AWAITING_PHONE_APPROVAL: <short action
+# summary>" and the runner echoes the prompt into the log, so a plain substring
+# check fires on every new session.
+APPROVAL_MARKER_RE = re.compile(r"^[ \t>*_]*AWAITING_PHONE_APPROVAL:[ \t]*(?!<short action summary>)(\S.*)$", re.MULTILINE)
+
+
+def approval_summary(reply: str) -> str | None:
+    match = None
+    for match in APPROVAL_MARKER_RE.finditer(reply):
+        pass
+    return match.group(1).strip().strip("*_`").strip() if match else None
+
+
+def session_reply_text(session_id: str) -> str:
+    directory = session_dir_for_id(session_id)
+    if not directory:
+        return ""
+    return speech.latest_reply(directory / "codex.log", directory / "last_response.txt")
+
+
+async def push_session_event(session_info: dict, event_type: str, summary: str | None = None) -> bool:
     session_id = str(session_info.get("session_id") or "")
     root_id = str(session_info.get("root_session_id") or session_id)
     title = str(session_info.get("display_title") or session_info.get("title") or session_id)
     if event_type == "approval_needed":
         notification_title = "Home Agent needs approval"
-        body = "Tap to reopen and reconnect this session."
+        body = f"Approve? {summary}"[:240] if summary else "Tap to reopen and reconnect this session."
     elif event_type == "finished":
         notification_title = "Home Agent finished"
         body = "Tap to review the latest response."
@@ -775,30 +796,31 @@ async def monitor_session_for_push(session_id: str) -> None:
             session_info = await fetch_runner_session_info(session_id)
             if not session_info:
                 return
-            sent_events = read_sent_push_events(session_id)
-            log_text = await fetch_runner_session_log_text(session_id)
-            if "approval_needed" not in sent_events and "AWAITING_PHONE_APPROVAL:" in log_text:
-                if await push_session_event(session_info, "approval_needed"):
-                    mark_push_event_sent(session_id, "approval_needed")
-
             status = str(session_info.get("status") or "")
             # A kept-alive Claude session serves many turns on one session id
-            # ("idle" = turn finished, process warm for a follow-up), so the
-            # finished push is keyed per turn, not once per session.
+            # ("idle" = turn finished, process warm for a follow-up), so pushes
+            # are keyed per turn, not once per session. An approval request ends
+            # the turn, so it is decided here from the final reply and replaces
+            # that turn's "finished" push.
             turn = int(session_info.get("turn") or 0)
             finished_key = f"finished:{turn}" if turn else "finished"
-            if status == "idle":
-                if finished_key not in read_sent_push_events(session_id):
-                    if await push_session_event(session_info, "finished"):
+            approval_key = f"approval:{turn}" if turn else "approval"
+            turn_done = status == "idle" or (status == "exited" and session_info.get("returncode") == 0)
+            if turn_done:
+                sent = read_sent_push_events(session_id)
+                if finished_key not in sent and approval_key not in sent:
+                    asyncio.create_task(prerender_speech(session_id))
+                    summary = approval_summary(session_reply_text(session_id))
+                    if summary:
+                        if await push_session_event(session_info, "approval_needed", summary):
+                            mark_push_event_sent(session_id, approval_key)
+                    elif await push_session_event(session_info, "finished"):
                         mark_push_event_sent(session_id, finished_key)
                 return
             if status == "exited":
-                returncode = session_info.get("returncode")
-                event_type = "finished" if returncode == 0 else "failed"
-                sent_key = finished_key if event_type == "finished" else event_type
-                if sent_key not in read_sent_push_events(session_id):
-                    if await push_session_event(session_info, event_type):
-                        mark_push_event_sent(session_id, sent_key)
+                if "failed" not in read_sent_push_events(session_id):
+                    if await push_session_event(session_info, "failed"):
+                        mark_push_event_sent(session_id, "failed")
                 return
             if status not in {"starting", "running", "waiting"}:
                 return
@@ -904,43 +926,175 @@ async def resume_session(request: Request, session_id: str) -> dict:
     return payload
 
 
-speech_locks: dict[str, asyncio.Lock] = {}
+speech_jobs: dict[str, speech.SpeechJob] = {}
+# The long-form voice renders slower than real time, so a render that starts at
+# the Listen tap can never get ahead. While Listen is in use, every finished reply
+# starts rendering at once; by the time the push is opened it has a head start.
+SPEECH_PRERENDER_WINDOW_S = 3 * 3600
+LAST_LISTEN_MARK = SESSION_ROOT / "_last_listen"  # its mtime, so the window survives a restart
+# ExoPlayer drops a progressive stream that is silent for 8 s, and rendering
+# delivers audio in paragraph-sized bursts, so a little is held back to drip.
+# The drip has to outlast the longest gap between pieces: a 900-character paragraph
+# takes about a minute to render. 12 KB at 256 B every 2 s lasts about 95 s, and
+# costs the listener only 1.5 s of buffer.
+SPEECH_STREAM_RESERVE = 12 * 1024
+SPEECH_STREAM_DRIP = 256
+SPEECH_STREAM_DRIP_EVERY_S = 2.0
+SPEECH_BYTES_PER_S = 8000  # 64 kbps CBR
+SPEECH_RESUME_OVERLAP_S = 3.0
+SPEECH_AUTO_WAIT_S = 15.0  # Auto waits this long at most for the long-form voice to get ahead
+
+
+async def reply_paragraphs(directory: Path) -> list[str]:
+    reply = speech.latest_reply(directory / "codex.log", directory / "last_response.txt")
+    return await speech.speakable_reply(reply, directory) if reply else []
+
+
+def ensure_speech_job(directory: Path, paragraphs: list[str], backend: speech.Backend, fast_start: bool) -> tuple[speech.SpeechJob | None, Path]:
+    """The finished file's path, plus the job rendering it when it is not there yet."""
+    out = speech.speech_path(directory, "\n".join(paragraphs), backend.voice)
+    if not paragraphs or out.exists():
+        return None, out
+    for name in [name for name, finished in speech_jobs.items() if finished.done and name != out.name]:
+        del speech_jobs[name]  # open streams keep their own reference
+    job = speech_jobs.get(out.name)
+    if job is None or job.done:
+        job = speech_jobs[out.name] = speech.SpeechJob(paragraphs, out, backend, fast_start)
+    return job, out
+
+
+async def prerender_speech(session_id: str) -> None:
+    if not LAST_LISTEN_MARK.exists() or time.time() - LAST_LISTEN_MARK.stat().st_mtime > SPEECH_PRERENDER_WINDOW_S:
+        return
+    try:
+        await asyncio.sleep(2)  # let the runner finish writing the reply
+        directory = session_dir_for_id(session_id)
+        if directory:
+            paragraphs = await reply_paragraphs(directory)
+            ensure_speech_job(directory, paragraphs, await speech.pick_backend(), fast_start=False)
+    except Exception as exc:
+        LOGGER.warning("speech pre-render failed for %s: %s", session_id, exc)
 
 
 @app.post("/api/sessions/{session_id}/speak")
-async def speak_session_reply(request: Request, session_id: str) -> dict:
-    """Render the session's latest reply as audio; cached per reply text."""
+async def speak_session_reply(request: Request, session_id: str, voice: str = "auto") -> dict:
+    """Render the session's latest reply as audio; cached per reply text and voice.
+
+    Returns as soon as there is something to play: the audio URL streams the
+    rest while it renders, and serves the finished file (seekable) afterwards.
+    voice: premium = the long-form voice, pauses and all; fast = the router's
+    voice; auto = the long-form voice only when its render is finished or far
+    enough ahead to play through, else the fast voice now while the long-form
+    render carries on for a later Listen.
+    """
     require_token(request)
     directory = session_dir_for_id(session_id)
     if not directory:
         raise HTTPException(status_code=404, detail="unknown session")
-    reply = speech.latest_reply(directory / "codex.log", directory / "last_response.txt")
-    paragraphs = await speech.speakable_reply(reply, directory) if reply else []
+    if voice not in ("auto", "premium", "fast"):
+        raise HTTPException(status_code=400, detail="voice must be auto, premium or fast")
+    LAST_LISTEN_MARK.touch()
+    paragraphs = await reply_paragraphs(directory)
     if not paragraphs:
         raise HTTPException(status_code=409, detail="this session has no finished reply to read yet")
-    out = speech.speech_path(directory, "\n".join(paragraphs))
-    lock = speech_locks.setdefault(out.name, asyncio.Lock())
-    async with lock:
-        if not out.exists():
-            try:
-                await speech.render_speech(paragraphs, out)
-            except Exception as exc:
-                raise HTTPException(status_code=502, detail=f"speech rendering failed: {exc}") from exc
+    backend = speech.fast_backend() if voice == "fast" else await speech.pick_backend()
+    reason = None
+    if voice == "auto" and backend.slow:
+        premium, _ = ensure_speech_job(directory, paragraphs, backend, fast_start=False)
+        if premium is not None:
+            premium.listened = True  # the reply on screen renders ahead of other sessions' pre-renders
+            await speech.BREEZE_TURNS.nudge()
+        eta = premium.group_eta_s() if premium is not None and not premium.can_play_through() else None
+        if eta is not None and eta <= SPEECH_AUTO_WAIT_S:
+            # The group being rendered lands soon and may put the long-form voice far
+            # enough ahead: worth a few seconds of "Preparing..." over a voice change.
+            deadline = time.monotonic() + SPEECH_AUTO_WAIT_S
+            while not premium.can_play_through() and not premium.done and time.monotonic() < deadline:
+                await asyncio.sleep(0.5)
+        if premium is not None and not premium.can_play_through():
+            reason = f"long-form voice {int(100 * premium.done_chars / max(premium.total_chars, 1))}% rendered, not far enough ahead"
+            backend = speech.fast_backend()
+    elif voice != "fast" and not backend.slow:
+        reason = "long-form voice unavailable"
+    job, out = ensure_speech_job(directory, paragraphs, backend, fast_start=True)
+    known = speech_jobs.get(out.name)
+    if known is not None:
+        known.stream_started, known.stream_sent = None, 0  # a Listen tap plays from the top
+        known.listened = True
+        await speech.BREEZE_TURNS.nudge()
+    if job is not None:
+        await job.first_audio.wait()
+        if job.error:
+            speech_jobs.pop(out.name, None)
+            raise HTTPException(status_code=502, detail=f"speech rendering failed: {job.error}")
+    if reason:
+        LOGGER.info("speak %s (%s): fast voice, %s", session_id, voice, reason)
     return {
         "session_id": session_id,
         "audio": f"/api/sessions/{session_id}/speech/{out.name}",
         "chars": sum(len(p) for p in paragraphs),
         "preview": paragraphs[0][:160],
+        "voice": backend.voice,
+        "premium": backend.slow,
+        "reason": reason,
+        "streaming": not out.exists(),
     }
 
 
+async def _stream_growing_speech(job: speech.SpeechJob, start: int):
+    with open(job.part if job.part.exists() else job.out, "rb") as handle:  # the handle survives the final rename
+        handle.seek(start)
+        sent = start
+        while True:
+            finished = job.done
+            available = os.fstat(handle.fileno()).st_size - sent
+            if finished:
+                sendable = available
+            else:
+                sendable = max(available - SPEECH_STREAM_RESERVE, 0) or min(available, SPEECH_STREAM_DRIP)
+            if sendable:
+                data = handle.read(min(sendable, 64 * 1024))
+                sent += len(data)
+                job.stream_sent = max(job.stream_sent, sent)
+                yield data
+                if finished or available - len(data) > SPEECH_STREAM_RESERVE:
+                    continue
+            if finished:
+                return
+            await asyncio.sleep(SPEECH_STREAM_DRIP_EVERY_S if available else 0.25)
+
+
 @app.get("/api/sessions/{session_id}/speech/{name}")
-async def get_session_speech(request: Request, session_id: str, name: str) -> FileResponse:
+async def get_session_speech(request: Request, session_id: str, name: str):
     require_token(request)
     directory = session_dir_for_id(session_id)
-    if not directory or not re.fullmatch(r"speech-[0-9a-f]{16}\.mp3", name) or not (directory / name).exists():
+    if not directory or not re.fullmatch(r"speech-[0-9a-f]{16}\.mp3", name):
         raise HTTPException(status_code=404, detail="no such audio")
-    return FileResponse(directory / name, media_type="audio/mpeg")
+    job = speech_jobs.get(name)
+    streaming = job is not None and job.stream_started is not None and not job.error
+    if (directory / name).exists() and not streaming:
+        return FileResponse(directory / name, media_type="audio/mpeg")
+    if job is None or job.error or not (job.part.exists() or job.out.exists()):
+        raise HTTPException(status_code=404, detail="no such audio")
+    start = 0
+    requested = re.fullmatch(r"bytes=(\d+)-", request.headers.get("range", ""))
+    source = job.part if job.part.exists() else job.out
+    if requested:
+        start = min(int(requested.group(1)), source.stat().st_size)
+    elif job.stream_started is not None:
+        # ExoPlayer cannot resume a stream of unknown length: after any network
+        # error it asks again from byte 0 and would replay the reply from the top.
+        # Hand it the audio from about where it was listening instead.
+        played = (time.monotonic() - job.stream_started - SPEECH_RESUME_OVERLAP_S) * SPEECH_BYTES_PER_S
+        start = speech.mp3_frame_offset(source, int(max(min(played, job.stream_sent), 0)))
+        LOGGER.warning("speech stream for %s reconnected; resuming at byte %d of %d sent", name, start, job.stream_sent)
+    if job.stream_started is None:
+        job.stream_started = time.monotonic()
+    headers = {"Cache-Control": "no-store", "Accept-Ranges": "bytes"}
+    if requested:
+        headers["Content-Range"] = f"bytes {start}-/*"
+    return StreamingResponse(_stream_growing_speech(job, start), status_code=206 if requested else 200,
+                             media_type="audio/mpeg", headers=headers)
 
 
 @app.get("/api/external/sessions")

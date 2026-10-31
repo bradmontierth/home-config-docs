@@ -287,11 +287,17 @@ fun HomeAgentApp(launchSessionId: MutableState<String?>) {
     var claudeModel by remember { mutableStateOf(prefs.getString("claude_model", "") ?: "") }
     // "quick" = terse phone replies; "deep" = full-length planning/design answers.
     var promptMode by remember { mutableStateOf(prefs.getString("prompt_mode", "quick") ?: "quick") }
+    var listenVoice by remember { mutableStateOf(prefs.getString("listen_voice", "auto") ?: "auto") }
     var contextTokens by remember { mutableStateOf<Long?>(null) }
     // Spoken-reply playback (PlaybackService owns the player; this is a remote).
     var mediaController by remember { mutableStateOf<MediaController?>(null) }
     var audioState by remember { mutableStateOf("idle") } // idle | preparing | loaded
     var audioPlaying by remember { mutableStateOf(false) }
+    // The player holds one reply: the session it belongs to, and whether that
+    // session has moved on to a newer turn since.
+    var audioSessionId by remember { mutableStateOf<String?>(null) }
+    var audioStale by remember { mutableStateOf(false) }
+    val listenRequest = remember { intArrayOf(0) }
     var audioPositionMs by remember { mutableStateOf(0L) }
     var audioDurationMs by remember { mutableStateOf(0L) }
     var contextWindow by remember { mutableStateOf<Long?>(null) }
@@ -706,9 +712,15 @@ fun HomeAgentApp(launchSessionId: MutableState<String?>) {
 
     fun listenToReply() {
         val target = selectedSessionId ?: sessionId ?: return
+        val request = ++listenRequest[0]
+        mediaController?.pause()
+        audioSessionId = target
+        audioStale = false
         audioState = "preparing"
-        speakSession(client, gatewayUrl, token, target) { result ->
-            result.onSuccess { path ->
+        speakSession(client, gatewayUrl, token, target, listenVoice) { result ->
+            if (request != listenRequest[0]) return@speakSession  // a later Listen tap won
+            result.onSuccess { (path, reason) ->
+                if (reason.isNotBlank()) terminal += "\n[audio] Fast voice: $reason\n"
                 playAudio("${gatewayUrl.trimEnd('/')}$path${tokenQuery(token)}", selectedSessionTitle ?: "Agent reply")
             }.onFailure {
                 audioState = "idle"
@@ -940,6 +952,11 @@ fun HomeAgentApp(launchSessionId: MutableState<String?>) {
         }
     }
 
+    LaunchedEffect(sessionRunning) {
+        // A new turn in the session whose reply is loaded: that audio is now the old answer.
+        if (sessionRunning && audioSessionId != null && audioSessionId == activeSessionId()) audioStale = true
+    }
+
     LaunchedEffect(mediaController) {
         val controller = mediaController ?: return@LaunchedEffect
         while (true) {
@@ -1144,6 +1161,12 @@ fun HomeAgentApp(launchSessionId: MutableState<String?>) {
                     },
                     canCompact = activeAgent() == "claude" && hasCurrentSession && !sessionRunning,
                     onCompact = { showMenu = false; compactContext() },
+                    listenVoice = listenVoice,
+                    onListenVoice = {
+                        listenVoice = it
+                        prefs.edit().putString("listen_voice", it).apply()
+                        showMenu = false
+                    },
                     onSettings = { showMenu = false; showSettings = true },
                     onDismiss = { showMenu = false }
                 )
@@ -1174,8 +1197,9 @@ fun HomeAgentApp(launchSessionId: MutableState<String?>) {
                 canRetryTranscription = canRetryTranscription && lastRecordingFile != null && !recorderState.isRecording.value,
                 pendingRecordings = pendingRecordingCount,
                 isTranscribing = isTranscribing,
-                audioState = audioState,
+                audioState = if (audioSessionId == activeSessionId() && !audioStale) audioState else "idle",
                 audioPlaying = audioPlaying,
+                otherAudioPlaying = audioPlaying && (audioSessionId != activeSessionId() || audioStale),
                 audioPositionMs = audioPositionMs,
                 audioDurationMs = audioDurationMs,
                 canListen = hasCurrentSession && !sessionRunning && gatewayUrl.isNotBlank(),
@@ -2133,6 +2157,8 @@ fun OverflowMenu(
     contextLabel: String?,
     canCompact: Boolean,
     onCompact: () -> Unit,
+    listenVoice: String,
+    onListenVoice: (String) -> Unit,
     onSettings: () -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -2147,6 +2173,17 @@ fun OverflowMenu(
             Text(it, color = Muted, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
         }
         DropdownMenuItem(text = { Text("Compact context") }, enabled = canCompact, onClick = onCompact)
+        Text("Listen voice", color = Muted, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
+        listOf(
+            "auto" to "Auto (Breeze when ready)",
+            "premium" to "Breeze (may pause)",
+            "fast" to "Fast (Kokoro)"
+        ).forEach { (value, label) ->
+            DropdownMenuItem(
+                text = { Text((if (listenVoice == value) "✓ " else "    ") + label) },
+                onClick = { onListenVoice(value) }
+            )
+        }
         DropdownMenuItem(text = { Text("Settings") }, onClick = onSettings)
     }
 }
@@ -2201,6 +2238,7 @@ fun ActionRow(
     isTranscribing: Boolean,
     audioState: String,
     audioPlaying: Boolean,
+    otherAudioPlaying: Boolean,
     audioPositionMs: Long,
     audioDurationMs: Long,
     canListen: Boolean,
@@ -2213,7 +2251,7 @@ fun ActionRow(
     onForward: () -> Unit
 ) {
     val showApprove = hasSession && !running
-    val showAudio = hasSession && (canListen || audioState != "idle")
+    val showAudio = hasSession && (canListen || audioState != "idle" || otherAudioPlaying)
     if (!running && !showApprove && !canRetryTranscription && !showAudio) return
     Row(
         modifier = Modifier
@@ -2266,6 +2304,12 @@ fun ActionRow(
                     style = MaterialTheme.typography.labelSmall
                 )
             } else {
+                if (otherAudioPlaying) {
+                    // Still playing another reply (another session, or this one's previous turn).
+                    TextButton(onClick = onToggleAudio, contentPadding = PaddingValues(horizontal = 6.dp)) {
+                        Text("Pause other", color = Primary)
+                    }
+                }
                 OutlinedButton(onClick = onListen, enabled = canListen && audioState != "preparing", contentPadding = SmallButtonPadding) {
                     Text(if (audioState == "preparing") "Preparing..." else "Listen")
                 }
@@ -3085,16 +3129,20 @@ fun speakSession(
     gatewayUrl: String,
     token: String,
     sessionId: String,
-    callback: (Result<String>) -> Unit
+    voice: String,
+    callback: (Result<Pair<String, String>>) -> Unit
 ) {
     // Rendering a long reply takes a while; don't inherit the short API timeout.
     val patient = client.newBuilder().readTimeout(300, java.util.concurrent.TimeUnit.SECONDS).build()
     val request = Request.Builder()
-        .url("${gatewayUrl.trimEnd('/')}/api/sessions/$sessionId/speak${tokenQuery(token)}")
+        .url("${gatewayUrl.trimEnd('/')}/api/sessions/$sessionId/speak${tokenQuery(token)}".let {
+            it + (if ('?' in it) "&" else "?") + "voice=$voice"
+        })
         .post(ByteArray(0).toRequestBody(null))
         .build()
     patient.newCall(request).enqueue(resultCallback(callback) { response ->
-        JSONObject(response.body?.string().orEmpty()).getString("audio")
+        val body = JSONObject(response.body?.string().orEmpty())
+        body.getString("audio") to (if (body.isNull("reason")) "" else body.optString("reason"))
     })
 }
 
