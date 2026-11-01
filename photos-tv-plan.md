@@ -152,6 +152,25 @@ Media Center, JDK 17, memory-capped Gradle):
 3. Smart search (voice + keyboard), On this day, screensaver (DreamService).
 4. Polish after family review on the TV; QR pairing; projector Google TV.
 
+## Screensaver (2026-11-01)
+
+`PhotoDream` (DreamService, label "Photos", photos-tv c81073a, app 0.3) replaced
+Google's Backdrop/Ambient mode as the Shield screensaver. Pool = photos (no
+videos) taken >= 2023-02-03 with at least one NAMED person: 3,279 (1,023
+landscape). Shuffled deck, 12 s dwell, 1.5 s crossfade; >= 1.6:1 photos fill +
+slow drift, two portraits pair side by side, others fit over their thumbhash
+blur; date · place caption + small clock. Uses the cached catalog. Timers
+unchanged (dream after 5 min, sleep 20 min). The Music app keeps the screen on,
+so no dream while music plays there.
+
+    settings put secure screensaver_components com.local.photostv/.PhotoDream
+    # rollback:
+    settings put secure screensaver_components com.google.android.backdrop/.Backdrop
+
+The Beelink's own adb key is NOT authorized on the Shield (2026-11-01); the
+music bridge container's is: `docker exec home-audio-adapter adb -s
+192.168.40.67:5555 ...` (docker cp the APK in first).
+
 ## Backlog
 
 - Trips (consecutive days away from home, named by most common place).
