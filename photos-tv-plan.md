@@ -157,9 +157,12 @@ Media Center, JDK 17, memory-capped Gradle):
 `PhotoDream` (DreamService, label "Photos", photos-tv c81073a, app 0.3) replaced
 Google's Backdrop/Ambient mode as the Shield screensaver. Pool = photos (no
 videos) taken >= 2023-02-03 with at least one NAMED person: 3,279 (1,023
-landscape). Shuffled deck, 12 s dwell, 1.5 s crossfade; >= 1.6:1 photos fill +
-slow drift, two portraits pair side by side, others fit over their thumbhash
-blur; date · place caption + small clock. Uses the cached catalog. Timers
+landscape). Shuffled deck. Revised same day after Brad's review (app 0.4.1):
+30 s dwell, 2 s crossfade; EVERY photo fills its frame (no bars) using a
+face-aware crop from the service's `fb` column (union of Immich face boxes,
+thousandths; all 3,279 have one): faces kept in view at ~40 % height, slow
+1.04 zoom pivots on the faces; two portraits pair side by side; 26sp date ·
+place caption over a bottom shade, clock over a radial shade. Uses the cached catalog. Timers
 unchanged (dream after 5 min, sleep 20 min). The Music app keeps the screen on,
 so no dream while music plays there.
 
