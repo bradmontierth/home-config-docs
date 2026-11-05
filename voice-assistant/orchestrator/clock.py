@@ -16,9 +16,9 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
-from . import config
+from . import config, moon, sun
 
-KINDS = ("time", "date", "weekday", "month", "year")
+KINDS = ("time", "date", "weekday", "month", "year") + sun.KINDS + moon.KINDS
 DAYS = ("today", "tomorrow", "yesterday")
 
 _OFFSETS = {"today": 0, "tomorrow": 1, "yesterday": -1}
@@ -55,6 +55,13 @@ def answer(parsed: dict, now: datetime | None = None) -> str:
         # A clock reading is always about right now: nobody asking "what time
         # is it tomorrow" means it literally, so time_day is ignored here.
         return f"It's {spoken_time(now)}."
+    if kind in sun.KINDS:
+        return _sun_answer(kind, day, now)
+    if kind in moon.KINDS:
+        try:
+            return moon.answer(kind, day, now)
+        except Exception:  # noqa: BLE001 — a calc bug must not kill the turn
+            return "Sorry, I couldn't work out the moon right now."
     if kind == "month":
         return f"It's {now:%B}."
     if kind == "year":
@@ -62,6 +69,25 @@ def answer(parsed: dict, now: datetime | None = None) -> str:
     target = now + timedelta(days=_OFFSETS.get(day, 0))
     text = f"{target:%A}" if kind == "weekday" else spoken_date(target)
     return _FRAMES.get(day, _FRAMES["today"]).format(text)
+
+
+def _sun_answer(kind: str, day: str, now: datetime) -> str:
+    """"Sunset is at 6:33 PM." Today's event already over gets past tense plus
+    tomorrow's, since that's the one they can still go and see."""
+    name = "Sunrise" if kind == "sunrise" else "Sunset"
+    target = (now + timedelta(days=_OFFSETS.get(day, 0))).date()
+    at = sun.event(target, kind, now.tzinfo)
+    if at is None:
+        return f"Sorry, I couldn't work out {kind}."
+    if day == "tomorrow":
+        return f"{name} tomorrow is at {spoken_time(at)}."
+    if day == "yesterday":
+        return f"{name} yesterday was at {spoken_time(at)}."
+    if at > now:
+        return f"{name} is at {spoken_time(at)}."
+    nxt = sun.event(target + timedelta(days=1), kind, now.tzinfo)
+    return (f"{name} was at {spoken_time(at)} today. "
+            f"Tomorrow it's at {spoken_time(nxt)}.")
 
 
 def handle(parsed: dict) -> dict:

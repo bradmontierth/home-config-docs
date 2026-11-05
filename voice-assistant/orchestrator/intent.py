@@ -10,7 +10,7 @@ from __future__ import annotations
 import logging
 import re
 
-from . import camera, clients, climate, clock, config, covers, zones
+from . import camera, clients, climate, clock, config, covers, moon, sun, zones
 
 log = logging.getLogger("orchestrator.intent")
 
@@ -143,6 +143,11 @@ Rules:
   it", "what's today" (time_kind "date" — people say "day" when they want the whole date, so both
   get "date"); "what month is it" ("month"); "what year is it" ("year"). Use "weekday" ONLY when
   they say "of the week" ("what day of the week is it") — every other "what day" is "date".
+  Sunrise/sunset HERE is time_query too: "when is sunset", "what time does the sun go down tonight"
+  (time_kind "sunset"); "what time is sunrise tomorrow" ("sunrise", time_day "tomorrow"). The moon
+  HERE is time_query too: "when does the moon rise" ("moonrise"), "when does the moon set tomorrow"
+  ("moonset", "tomorrow"), "what phase is the moon" / "is it a full moon" ("moon_phase"), "when is
+  the next full moon" ("full_moon"). Sunset or moonrise in a NAMED other place is "ask".
   Set time_day only when they name tomorrow or yesterday: "what's tomorrow's date" ->
   date/"tomorrow", "what day was yesterday" -> date/"yesterday"; otherwise "today". Any OTHER day
   they name ("what's the date on friday", "what day is the 4th", "what's the day after tomorrow")
@@ -1050,8 +1055,10 @@ def fast_parse_clock(command: str) -> dict | None:
     would otherwise need to be listed twice.
     """
     text = _fast_clean(command).replace("'", "")
-    text = _CLOCK_TAIL.sub("", _CLOCK_LEAD.sub("", text)).strip()
-    hit = _CLOCK_PHRASES.get(text)
+    hit = sun.fast_parse(text) or moon.fast_parse(text)
+    if hit is None:
+        text = _CLOCK_TAIL.sub("", _CLOCK_LEAD.sub("", text)).strip()
+        hit = _CLOCK_PHRASES.get(text)
     if hit is None:
         return None
     return _validate({
