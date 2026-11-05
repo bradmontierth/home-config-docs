@@ -1,0 +1,18 @@
+[Unit]
+Description=Pixel phone performance logger (adb -> MariaDB hubitat_logging, lag marks on :8814)
+After=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/pi/home_config/pixel-monitor
+Environment="DEVICE_NAME=Brad Pixel 8 Pro"
+Environment=MDNS_NAME=adb-38241FDJG0097U
+Environment=MODEL=Pixel_8_Pro
+Environment=FALLBACK_ADDRS=192.168.3.2:34225
+Environment=HTTP_PORT=8814
+ExecStart=/usr/bin/python3 -u /home/pi/home_config/pixel-monitor/collector.py
+Restart=always
+RestartSec=30
+
+[Install]
+WantedBy=default.target
