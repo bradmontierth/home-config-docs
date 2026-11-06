@@ -154,7 +154,8 @@ echo @@PS; ps -A -o PID,NAME
 echo @@TOP; top -b -n 2 -d 2 -o PID,%CPU,NAME
 """
 
-PROC_SCRIPT = r"""grep -E '^(VmRSS|VmSwap):' /proc/[0-9]*/status 2>/dev/null"""
+PROC_SCRIPT = r"""grep -E '^(VmRSS|VmSwap):' /proc/[0-9]*/status 2>/dev/null
+echo @@HOSTS; dumpsys activity processes 2>/dev/null | grep -E 'APP. UID|packageList='"""
 
 
 def sections(text):
@@ -277,19 +278,32 @@ def parse_proc_mem(text, pids):
         mm = re.match(r"/proc/(\d+)/status:(VmRSS|VmSwap):\s+(\d+)", l)
         if mm:
             agg.setdefault(mm.group(1), {})[mm.group(2)] = int(mm.group(3))
+    # sandboxed (isolated) processes such as WebView renderers all share one name;
+    # label them by the app that hosts them: "webview renderer: com.strava"
+    hosts, cur = {}, None
+    for l in text.split("@@HOSTS", 1)[-1].splitlines() if "@@HOSTS" in text else []:
+        if "APP* UID" in l:
+            mm = re.search(r"ProcessRecord\{\w+ (\d+):([^ /}]+)", l)
+            cur = (mm.group(1), mm.group(2)) if mm and "sandboxed" in mm.group(2) else None
+            continue
+        mm = re.search(r"packageList=\{([^}]*)\}", l)
+        if mm and cur:
+            kind = "webview renderer" if "webview" in cur[1] else cur[1].split(":")[0] + " sandbox"
+            hosts[cur[0]] = f"{kind}: {mm.group(1)}"
+            cur = None
     rows = []
     for pid, d in agg.items():
-        name = pids.get(pid)
+        name = hosts.get(pid) or pids.get(pid)
         if not name:
             continue
         rows.append((name, d.get("VmRSS", 0), d.get("VmSwap", 0)))
-    # merge same-named processes (e.g. several webview sandboxes)
+    # merge any remaining same-named processes
     merged = {}
     for n, r, sw in rows:
         a = merged.setdefault(n, [0, 0])
         a[0] += r
         a[1] += sw
-    return sorted(((n, r, sw) for n, (r, sw) in merged.items()), key=lambda x: -(x[1] + x[2]))[:30]
+    return sorted(((n, r, sw) for n, (r, sw) in merged.items()), key=lambda x: -(x[1] + x[2]))[:40]
 
 
 # ---------------------------------------------------------------- logcat events
