@@ -55,7 +55,7 @@ log "wifi unhealthy failures=${failures} iface=${IFACE} target=${TARGET_HOST}; a
 
 nmcli radio wifi on >>"$LOG_FILE" 2>&1 || true
 nmcli device set "$IFACE" managed yes >>"$LOG_FILE" 2>&1 || true
-nmcli connection up "$CONNECTION" ifname "$IFACE" --wait 20 >>"$LOG_FILE" 2>&1 || true
+nmcli --wait 20 connection up "$CONNECTION" ifname "$IFACE" >>"$LOG_FILE" 2>&1 || true
 
 sleep 5
 
