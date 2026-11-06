@@ -168,8 +168,11 @@ Montierth smartpanel specifics (`montierth-display` / `100.121.83.104`):
 - SSH as `root` (`tailscale ssh root@100.121.83.104`); the session user is
   `admin`, so browser relaunches need
   `runuser -u admin -- env WAYLAND_DISPLAY=wayland-0 DISPLAY=:0 XDG_RUNTIME_DIR=/run/user/1000 ...`.
-- It displays an HA dashboard from the N100 LAN endpoint
-  (`http://192.168.123.47:8123/kitchen-dasher/0`), not the slideshow client.
+- Since `2026-09-19` it displays the custom panel dashboard
+  `http://192.168.123.47:8777/` (see "Montierth Panel Dashboard" below), not
+  the HA Lovelace kiosk (`/kitchen-dasher/0`) it ran before, and not the
+  slideshow client directly. The `--force-device-scale-factor=1.25` flag is
+  gone: the dashboard is laid out for 1920x1080 at scale 1.
 - Chromium is wrapped in `/usr/bin/lwrespawn` from
   `/home/admin/.config/labwc/autostart`, so it auto-respawns if killed. To
   run a temporary debug instance, kill the wrapper first with
@@ -196,6 +199,76 @@ Notes specific to Steinhorst:
 The Montierth N100 itself has no touchscreen input device (mouse/keyboard
 only); it is the server. The touch display on that side is the smartpanel
 above.
+
+## Montierth Panel Dashboard (2026-09-19)
+
+The smartpanel kiosk was cut over from the HA Lovelace dashboard to a small
+custom dashboard, a sibling of the Beelink kitchen `dashboard_webapp` (same
+HA-websocket skeleton and slideshow postMessage protocol, none of the
+Beelink-specific features).
+
+```text
+source of truth:  /home/pi/montierth_panel            (Beelink, git)
+deployed copy:    /home/markmontierth/panel_dashboard (N100, container panel_dashboard, :8777)
+full docs:        README.md in that repo (layout, config, test hooks, rollback)
+```
+
+Deploy from the Beelink (no git remote on the N100 side):
+
+```bash
+cd /home/pi/montierth_panel
+tar cf - --exclude=.git --exclude=__pycache__ --exclude=.env . | \
+  tailscale ssh root@100.88.96.43 'cd /home/markmontierth/panel_dashboard && tar xf - --no-same-owner && chown -R markmontierth:markmontierth . && docker compose up -d --build'
+```
+
+The page reloads itself when it sees a new build, so the Pi does not need
+touching for dashboard changes.
+
+What changed on the N100 that day:
+
+- `rpi_client` finally got the Editorial Pro viewer (it is NOT a git repo
+  there: the four changed files were copied over; old source kept as
+  `src.backup_before_editorial_20260919`). `viewer.html` gained
+  `?widgetW=&widgetH=` so a large embedding tile stays in chrome-free widget
+  mode until it goes fullscreen, and widget captions scale with tile width.
+- Frigate config gained a `go2rtc` section: `frontdoor_main`/`driveway_main`
+  (camera HEVC 2592x1944 main streams) and `frontdoor_display`/
+  `driveway_display` (on-demand VAAPI transcode to H.264 1440x1080@15).
+  Backup: `config.yml.backup_before_display_streams_20260919`. Frigate itself
+  still detects/records from the 704x480 substream.
+- Fullscreen camera = in-page WebRTC from go2rtc, NOT VLC. Measured on the
+  Pi 4: ~38% total CPU while live, ~6% idle (the HA kiosk idled at load ~3.5).
+  The VLC helper from the Beelink kitchen was not needed for a 60 s pop-up.
+- Pop-up trigger moved from the HA automation `Front Door Person Display
+  Popup` (browser_mod) into the dashboard backend, same entity
+  (`binary_sensor.entry_person_occupancy`).
+- Kiosk launch line: `/home/admin/.config/labwc/autostart`, previous version
+  `autostart.bak-ha-dashboard-20260919`.
+
+### Panel Pi Wi-Fi (2026-11-06)
+
+The "frozen panel" incidents (2026-10-18, 2026-11-01) were the Pi 4's Wi-Fi
+dropping and never rejoining, leaving the last page on screen. Brad's
+display-pi drops about daily too and survives because of its reconnect
+watchdog, so the panel Pi now has the same thing:
+
+- Wi-Fi power save OFF: `nmcli c modify pinnacle 802-11-wireless.powersave 2`
+  (was default/on).
+- `/usr/local/sbin/panel-wifi-watchdog` + `panel-wifi-watchdog.{service,timer}`
+  (every 60 s). Copy of display-pi's `kitchen-display-wifi-watchdog`
+  (`display-pi-monitoring/`) with: connection `pinnacle`, target the N100
+  `192.168.123.47`, healthy if the router OR the N100 answers (an N100 outage
+  must not bounce the Wi-Fi), and `nmcli --wait 20 connection up …` (the
+  display-pi original puts `--wait` after the args, which nmcli rejects).
+  Reconnect, then NetworkManager restart after 5 failed checks. No reboot.
+- Log: `/var/log/panel-wifi-watchdog/wifi-watchdog.log`.
+- Tested 2026-11-06 with `nmcli device disconnect wlan0`: caught on the next
+  tick, reconnected in 8 s.
+- Dad's own `panel-watchdog` (reboot on no network / stale page, his
+  `home_config/monitoring/`) sits on top as the last resort.
+- N100 → Pi SSH: `markmontierth` on the N100 has `ssh smartpanel`
+  (admin, key `~/.ssh/id_ed25519_smartpanel`). The N100 cannot see the Pi on
+  Tailscale; LAN only.
 
 ## Steinhorst Incident: 2026-05-31
 
@@ -321,9 +394,8 @@ birthday edit in Immich: `POST /api/admin/seed-people` then
 `POST /api/frame/republish` on the Beelink, then let clients sync.
 
 Deployed 2026-07-10: Beelink server + Steinhorst client (commit
-`73e789c`). The Montierth N100 client still runs the old page until its
-display rework lands (its HA dashboard iframes the viewer; the new API is
-backward-compatible with the old page).
+`73e789c`). The Montierth N100 client got it on 2026-09-19 with the panel
+dashboard cutover (see "Montierth Panel Dashboard").
 
 ## Deploying A Client From Git
 
