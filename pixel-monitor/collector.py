@@ -155,7 +155,8 @@ echo @@TOP; top -b -n 2 -d 2 -o PID,%CPU,NAME
 """
 
 PROC_SCRIPT = r"""grep -E '^(VmRSS|VmSwap):' /proc/[0-9]*/status 2>/dev/null
-echo @@HOSTS; dumpsys activity processes 2>/dev/null | grep -E 'APP. UID|packageList='"""
+echo @@HOSTS; dumpsys activity processes 2>/dev/null | grep -E 'APP. UID|packageList='
+echo @@IMMICH; p=$(pidof app.alextran.immich); [ -n "$p" ] && { echo "pid $p"; cat /proc/$p/task/*/comm 2>/dev/null | grep -E '^[0-9]+[.]io$'; }"""
 
 
 def sections(text):
@@ -482,7 +483,19 @@ def tick(db, state, cache):
 
     minute = int(now // 60)
     if minute % PROC_EVERY == 0 or not cache.get("proc_done"):
-        rows = parse_proc_mem(sh(serial, PROC_SCRIPT), pids)
+        ptxt = sh(serial, PROC_SCRIPT)
+        rows = parse_proc_mem(ptxt.split("@@IMMICH")[0], pids)
+        # Immich Flutter engine index (immich #33090): log when pid or highest engine number changes
+        itxt = ptxt.split("@@IMMICH", 1)[1] if "@@IMMICH" in ptxt else ""
+        ipid = re.search(r"pid (\d+)", itxt)
+        engines = [int(x) for x in re.findall(r"^(\d+)\.io$", itxt, re.M)]
+        if ipid and engines:
+            key = f"{ipid.group(1)}:{max(engines)}"
+            if key != state.get("immich_engine"):
+                state["immich_engine"] = key
+                db.run("INSERT INTO pixel_events (ts, device, kind, app, value, detail) VALUES (%s,%s,%s,%s,%s,%s)",
+                       (ts, DEVICE, "immich_engine", "app.alextran.immich", max(engines),
+                        f"pid {ipid.group(1)} engines alive {sorted(engines)}"))
         db.run("INSERT INTO pixel_proc_mem (ts, device, proc, rss_kb, swap_kb) VALUES (%s,%s,%s,%s,%s)",
                [(ts, DEVICE, n[:160], r, sw) for n, r, sw in rows], many=True)
         cache["proc_done"] = True
