@@ -9,10 +9,11 @@ What it adds over the raw Breeze API:
     clause or dropped passage is re-rendered with a new seed before anyone hears it
   * POST /v1/audio/speech/batch renders up to four inputs together through the Breeze
     batch endpoint (pure-clone voices only): ~2.2x real time for four against 1.0x for one
-  * every piece's median pitch is compared with the voice's own (`pitch_hz` +-
-    `pitch_tol_hz` in <voice>.json): each generation picks its energy afresh, and
-    one that comes out peppy next to calm neighbours is heard as a different
-    narrator, so it is re-rendered too
+  * every piece's median pitch is logged next to the voice's own (`pitch_hz` +-
+    `pitch_tol_hz` in <voice>.json). LOG ONLY since 2026-11-12: pitch was half of
+    all re-renders (17 of 33 since 10-31) and a re-render stalls real-time playback
+  * callers can pass `deadline_s`: a re-render that would land after it is skipped
+    and the first take is used (a repeated phrase beats 30 s of silence)
 """
 import array
 import asyncio
@@ -182,13 +183,19 @@ def check(text, pcm, meta):
     except Exception as exc:  # verification is a safety net, never a reason to fail the render
         print(f"verify skipped: {exc}", flush=True)
         return None, None
-    pitch = median_pitch(pcm)
-    if pitch and meta.get("pitch_hz") and abs(pitch - meta["pitch_hz"]) > meta.get("pitch_tol_hz", 15):
-        found.append(f"pitch {pitch:.0f} Hz vs {meta['pitch_hz']:.0f}")
+    pitch = median_pitch(pcm)  # logged only, see the module docstring
     return found, pitch
 
 
-def render_piece(text, voice, first_attempt=0, best=None, pitches=None):
+def retry_fits(pcm, deadline):
+    """Would one more take of this piece land before `deadline` (time.time())? None = no deadline."""
+    if deadline is None:
+        return True
+    # a batch of one renders at ~1.0-1.1x real time, plus Parakeet; measured retries ran longer
+    return time.time() + 1.5 * len(pcm) / 2 / RATE + 5 <= deadline
+
+
+def render_piece(text, voice, first_attempt=0, best=None, pitches=None, deadline=None):
     """One generation, verified; retried with a new seed while it has problems. Returns (pcm, log).
 
     A batch take that failed its check comes in as `best` with first_attempt=1.
@@ -198,6 +205,8 @@ def render_piece(text, voice, first_attempt=0, best=None, pitches=None):
     pitches = pitches or []
     attempt = first_attempt
     for attempt in range(first_attempt, MAX_ATTEMPTS):
+        if best is not None and not retry_fits(best[0], deadline):
+            return best[0], {"attempts": attempt, "problems": best[1], "pitch_hz": pitches, "retry": "skipped, deadline"}
         for _ in range(60):  # Breeze answers 409 while another request is decoding
             try:
                 if meta.get("instruction"):
@@ -222,7 +231,7 @@ def render_piece(text, voice, first_attempt=0, best=None, pitches=None):
     return best[0], {"attempts": attempt + 1, "problems": best[1], "pitch_hz": pitches}
 
 
-def render_batch(texts, voice):
+def render_batch(texts, voice, deadline=None):
     """Several pieces in one Breeze batch, each verified; a failed take is redone on its own."""
     _, ref_wav, ref_text, meta = voice
     takes = [trim(pcm) for pcm in _breeze_batch(texts, ref_wav, ref_text, int(meta.get("seed", 21)))]
@@ -235,7 +244,7 @@ def render_batch(texts, voice):
             results.append((pcm, {"attempts": 1, "batch": len(texts), "problems": [], "pitch_hz": [round(pitch) if pitch else None]}))
         else:
             pcm, log = render_piece(text, voice, first_attempt=1, best=(pcm, found),
-                                    pitches=[round(pitch) if pitch else None])
+                                    pitches=[round(pitch) if pitch else None], deadline=deadline)
             results.append((pcm, log | {"batch": len(texts)}))
     return results
 
@@ -262,11 +271,12 @@ async def speech(request: Request):
         raise HTTPException(status_code=400, detail="only response_format=wav is supported")
     voice = load_voice(str(body.get("voice") or ""))
     t0 = time.time()
+    deadline = t0 + float(body["deadline_s"]) if body.get("deadline_s") is not None else None
     audio, logs = bytearray(), []
     async with breeze_lock:
         for i, piece in enumerate(chunks(text, MAX_CHARS)):
             try:
-                pcm, log = await asyncio.to_thread(render_piece, piece, voice)
+                pcm, log = await asyncio.to_thread(render_piece, piece, voice, deadline=deadline)
             except Exception as exc:
                 raise HTTPException(status_code=502, detail=f"render failed: {exc}") from exc
             if i:
@@ -294,17 +304,18 @@ async def speech_batch(request: Request):
         raise HTTPException(status_code=400, detail="inputs must be 1-4 non-empty strings")
     voice = load_voice(str(body.get("voice") or ""))
     t0 = time.time()
+    deadline = t0 + float(body["deadline_s"]) if body.get("deadline_s") is not None else None
     batchable = not voice[3].get("instruction") and all(len(chunks(t, MAX_CHARS)) == 1 for t in inputs)
     async with breeze_lock:
         try:
             if batchable:
-                results = await asyncio.to_thread(render_batch, inputs, voice)
+                results = await asyncio.to_thread(render_batch, inputs, voice, deadline)
             else:
                 results = []
                 for text in inputs:
                     audio, logs = bytearray(), []
                     for i, piece in enumerate(chunks(text, MAX_CHARS)):
-                        pcm, log = await asyncio.to_thread(render_piece, piece, voice)
+                        pcm, log = await asyncio.to_thread(render_piece, piece, voice, deadline=deadline)
                         if i:
                             audio += b"\x00" * (int(SPLICE_PAUSE_S * RATE) * 2)
                         audio += pcm
@@ -313,7 +324,7 @@ async def speech_batch(request: Request):
         except Exception as exc:
             raise HTTPException(status_code=502, detail=f"render failed: {exc}") from exc
     seconds = [len(pcm) / 2 / RATE for pcm, _ in results]
-    print(json.dumps({"voice": voice[0], "batch": len(inputs), "chars": [len(t) for t in inputs],
+    print(json.dumps({"voice": voice[0], "batch": len(inputs), "deadline_s": body.get("deadline_s"), "chars": [len(t) for t in inputs],
                       "audio_s": [round(s, 1) for s in seconds], "wall_s": round(time.time() - t0, 1),
                       "pieces": [log for _, log in results]}), flush=True)
     return {"sample_rate": RATE, "audio_s": [round(s, 2) for s in seconds],

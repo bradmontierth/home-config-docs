@@ -333,26 +333,44 @@ async def transcribe_wav(wav_path: Path) -> dict:
 
 
 def extract_text(payload: dict) -> str:
-    for key in ("text", "transcript", "transcript_text", "result"):
-        value = payload.get(key)
-        if isinstance(value, str) and value.strip():
-            return normalize_transcript_text(value)
+    # Segments first: Parakeet sometimes returns a raw NeMo Hypothesis repr for one
+    # chunk (seen 2026-11-02 on a 4 s silent tail after 600 s), and it ends up inside
+    # the joined text fields too. Cleaning each segment separately keeps the others.
     if isinstance(payload.get("segments"), list):
         parts = []
         for segment in payload["segments"]:
             if isinstance(segment, dict) and isinstance(segment.get("text"), str):
-                parts.append(segment["text"].strip())
+                part = normalize_transcript_text(segment["text"])
+                if part:
+                    parts.append(part)
         if parts:
             return " ".join(parts).strip()
+    for key in ("text", "transcript", "transcript_text", "result"):
+        value = payload.get(key)
+        if isinstance(value, str) and value.strip():
+            cleaned = normalize_transcript_text(value)
+            if cleaned:
+                return cleaned
+    if "segments" in payload or any(k in payload for k in ("text", "transcript", "transcript_text", "result")):
+        return ""  # recognised response, just no speech
     return json.dumps(payload, indent=2)
 
 
+HYPOTHESIS_TEXT_RE = re.compile(r"\btext='([^']*)'")
+
+
 def normalize_transcript_text(value: str) -> str:
+    """Replace a leaked `Hypothesis(...)` repr with its text field, keeping any
+    real transcript before it. The repr has no reliable end marker, so anything
+    after it in the same string is dropped (segment-wise cleaning avoids that)."""
     value = value.strip()
-    match = re.search(r"\btext='([^']*)'", value)
-    if match:
-        return match.group(1).strip()
-    return value
+    start = value.find("Hypothesis(")
+    if start < 0:
+        return value
+    before = value[:start].strip()
+    match = HYPOTHESIS_TEXT_RE.search(value, start)
+    inner = match.group(1).strip() if match else ""
+    return " ".join(part for part in (before, inner) if part)
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -942,7 +960,15 @@ SPEECH_STREAM_DRIP = 256
 SPEECH_STREAM_DRIP_EVERY_S = 2.0
 SPEECH_BYTES_PER_S = 8000  # 64 kbps CBR
 SPEECH_RESUME_OVERLAP_S = 3.0
+SPEECH_RESUME_MIN_S = 15.0  # a rewind to the start this early is honoured
 SPEECH_AUTO_WAIT_S = 15.0  # Auto waits this long at most for the long-form voice to get ahead
+SPEECH_PREMIUM_WAIT_S = 120.0  # forced long-form voice: wait to play through without a pause, this long at most
+# Each group must land this far ahead of the listener: the stream's held-back reserve
+# (1.5 s), ExoPlayer's re-buffer before it resumes, and some GPU jitter. 1 s cut it to
+# a ~1 s blip in the 2026-11-12 test. Verification re-renders (2-6x the audio length)
+# are skipped by the long-form service once playback is under way (retry_deadline_s),
+# so they no longer need slack here; before playback starts the wait absorbs them.
+SPEECH_PREMIUM_SLACK_S = 8.0
 
 
 async def reply_paragraphs(directory: Path) -> list[str]:
@@ -1014,12 +1040,27 @@ async def speak_session_reply(request: Request, session_id: str, voice: str = "a
         if premium is not None and not premium.can_play_through():
             reason = f"long-form voice {int(100 * premium.done_chars / max(premium.total_chars, 1))}% rendered, not far enough ahead"
             backend = speech.fast_backend()
+    elif voice == "premium" and backend.slow:
+        # Forced long-form voice: start only once playback will not catch up with
+        # rendering (a stall mid-reply is worse than a longer "Preparing..."), and
+        # render in batches from the start since a fast first piece is no use here.
+        premium, _ = ensure_speech_job(directory, paragraphs, backend, fast_start=False)
+        if premium is not None:
+            premium.listened = True
+            await speech.BREEZE_TURNS.nudge()
+            deadline = time.monotonic() + SPEECH_PREMIUM_WAIT_S
+            while not premium.done and not premium.can_play_through(SPEECH_PREMIUM_SLACK_S) and time.monotonic() < deadline:
+                await asyncio.sleep(0.5)
+            LOGGER.warning("speak %s (premium): starting at %d%% rendered, play-through %s",
+                        session_id, int(100 * premium.done_chars / max(premium.total_chars, 1)),
+                        premium.done or premium.can_play_through(SPEECH_PREMIUM_SLACK_S))
     elif voice != "fast" and not backend.slow:
         reason = "long-form voice unavailable"
     job, out = ensure_speech_job(directory, paragraphs, backend, fast_start=True)
     known = speech_jobs.get(out.name)
     if known is not None:
         known.stream_started, known.stream_sent = None, 0  # a Listen tap plays from the top
+        known.stream_anchor_byte, known.stream_anchor_t = 0, time.monotonic()
         known.listened = True
         await speech.BREEZE_TURNS.nudge()
     if job is not None:
@@ -1079,17 +1120,26 @@ async def get_session_speech(request: Request, session_id: str, name: str):
     start = 0
     requested = re.fullmatch(r"bytes=(\d+)-", request.headers.get("range", ""))
     source = job.part if job.part.exists() else job.out
+    now = time.monotonic()
     if requested:
         start = min(int(requested.group(1)), source.stat().st_size)
-    elif job.stream_started is not None:
-        # ExoPlayer cannot resume a stream of unknown length: after any network
-        # error it asks again from byte 0 and would replay the reply from the top.
-        # Hand it the audio from about where it was listening instead.
-        played = (time.monotonic() - job.stream_started - SPEECH_RESUME_OVERLAP_S) * SPEECH_BYTES_PER_S
-        start = speech.mp3_frame_offset(source, int(max(min(played, job.stream_sent), 0)))
-        LOGGER.warning("speech stream for %s reconnected; resuming at byte %d of %d sent", name, start, job.stream_sent)
+    if job.stream_started is not None and start <= speech.mp3_first_frame(source):
+        # ExoPlayer cannot resume a stream of unknown length: after a stall or a
+        # network error, and for any seek it cannot map to a byte, it asks again
+        # from the first audio frame (with or without a Range header) and would
+        # replay the reply from the top (2026-11-12: intro heard three times).
+        # Hand it the audio from about where it was listening instead, unless it
+        # is still near the start, where a rewind is plausibly meant.
+        played = job.stream_anchor_byte + (now - job.stream_anchor_t - SPEECH_RESUME_OVERLAP_S) * SPEECH_BYTES_PER_S
+        played = int(max(min(played, job.stream_sent), 0))
+        if played > SPEECH_RESUME_MIN_S * SPEECH_BYTES_PER_S:
+            start = speech.mp3_frame_offset(source, played)
+            LOGGER.warning("speech stream for %s rewound to the start; resuming at byte %d of %d sent", name, start, job.stream_sent)
+    elif requested:
+        LOGGER.info("speech stream for %s: range from byte %d of %d", name, start, source.stat().st_size)
     if job.stream_started is None:
-        job.stream_started = time.monotonic()
+        job.stream_started = now
+    job.stream_anchor_byte, job.stream_anchor_t = start, now
     headers = {"Cache-Control": "no-store", "Accept-Ranges": "bytes"}
     if requested:
         headers["Content-Range"] = f"bytes {start}-/*"

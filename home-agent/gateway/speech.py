@@ -329,6 +329,8 @@ def _pieces(paragraphs: list[str], backend: Backend, fast_start: bool) -> list[t
 # audio length times this factor (measured 2026-10-30 incl. verification; 3 pads to 4).
 GROUP_FACTOR = {1: 1.1, 2: 1.3, 3: 1.7, 4: 1.7}
 ESTIMATE_MARGIN = 1.2  # a busy GPU or a retried take
+STREAM_BYTES_PER_S = 8000  # the 64 kbps CBR the stream is encoded at
+RETRY_DEADLINE_MARGIN_S = 5.0  # re-renders must land this far ahead of the listener
 AUDIO_S_PER_CHAR = 0.068  # the long-form voice, until a job has measured its own
 
 
@@ -394,6 +396,8 @@ class SpeechJob:
         # For a player that reconnects mid-stream (see app.get_session_speech).
         self.stream_started: float | None = None
         self.stream_sent = 0
+        # where the listener's current request started, and when: estimates the play position
+        self.stream_anchor_byte, self.stream_anchor_t = 0, 0.0
         self.part = out.with_name(out.stem + ".part.mp3")
         # Progress, for judging whether playback started now would catch up with rendering.
         self.started = time.monotonic()
@@ -410,18 +414,33 @@ class SpeechJob:
         self.error: str | None = None
         self.task = asyncio.create_task(self._run())
 
+    def retry_deadline_s(self) -> float | None:
+        """Seconds until the listener reaches the audio not rendered yet, less a margin.
+
+        The long-form service skips a verification re-render that would land later
+        (2026-11-12: re-renders took 2-6x the audio length and caused 20-30 s stalls).
+        A job someone is waiting to hear counts as playing from now, because the group
+        in flight when playback starts is the one a re-render stalls (same test). A
+        pre-render nobody is listening to can take all the re-renders it wants.
+        """
+        if self.stream_started is None:
+            return max(self.audio_s - RETRY_DEADLINE_MARGIN_S, 0.0) if self.listened else None
+        playing_s = self.stream_anchor_byte / STREAM_BYTES_PER_S + (time.monotonic() - self.stream_anchor_t)
+        return max(self.audio_s - playing_s - RETRY_DEADLINE_MARGIN_S, 0.0)
+
     async def _render(self, client: httpx.AsyncClient, group: list[tuple[str, float]]) -> list[tuple[bytes, int, int, int]]:
         """(pcm frames, rate, bytes per frame, channels) for each piece of a group."""
+        deadline = {"deadline_s": round(d, 1)} if self.backend.slow and (d := self.retry_deadline_s()) is not None else {}
         if len(group) > 1:
             response = await client.post(
                 self.backend.url.rstrip("/") + "/batch",
-                json={"inputs": [text for text, _ in group], "voice": self.backend.voice},
+                json={"inputs": [text for text, _ in group], "voice": self.backend.voice} | deadline,
             )
             response.raise_for_status()
             body = response.json()
             return [(base64.b64decode(pcm), body["sample_rate"], 2, 1) for pcm in body["pcm16_b64"]]
         response = await client.post(
-            self.backend.url, json={"input": group[0][0], "voice": self.backend.voice, "response_format": "wav"}
+            self.backend.url, json={"input": group[0][0], "voice": self.backend.voice, "response_format": "wav"} | deadline
         )
         response.raise_for_status()
         with wave.open(io.BytesIO(response.content)) as chunk:
@@ -495,7 +514,7 @@ class SpeechJob:
             return None
         return self.group_started + self._group_render_s(self.groups[self.group_index]) - time.monotonic()
 
-    def can_play_through(self) -> bool:
+    def can_play_through(self, slack_s: float = 1.0) -> bool:
         """Would playback started now reach the end without catching up with rendering?
 
         Walks the remaining groups: each must land, by estimate (GROUP_FACTOR, with
@@ -511,19 +530,25 @@ class SpeechJob:
         landed = self.group_started
         for group in self.groups[self.group_index:]:
             landed += self._group_render_s(group)
-            if landed > playable_until - 1.0:
+            if landed > playable_until - slack_s:
                 return False
             playable_until = max(playable_until, landed) + sum(len(text) * per_char + pause for text, pause in group)
         return True
 
 
-def mp3_frame_offset(path: Path, approx: int) -> int:
-    """The first MP3 frame boundary at or after `approx`, so a stream can start mid-file."""
+def mp3_first_frame(path: Path) -> int:
+    """Byte offset of the first audio frame: after the ID3 tag ffmpeg writes, if any."""
     with open(path, "rb") as handle:
         head = handle.read(10)
-        first = 0
-        if head[:3] == b"ID3":  # tag size is four 7-bit bytes
-            first = 10 + ((head[6] & 0x7F) << 21 | (head[7] & 0x7F) << 14 | (head[8] & 0x7F) << 7 | (head[9] & 0x7F))
+    if len(head) == 10 and head[:3] == b"ID3":  # tag size is four 7-bit bytes
+        return 10 + ((head[6] & 0x7F) << 21 | (head[7] & 0x7F) << 14 | (head[8] & 0x7F) << 7 | (head[9] & 0x7F))
+    return 0
+
+
+def mp3_frame_offset(path: Path, approx: int) -> int:
+    """The first MP3 frame boundary at or after `approx`, so a stream can start mid-file."""
+    first = mp3_first_frame(path)
+    with open(path, "rb") as handle:
         if approx <= first:
             return 0
         handle.seek(first)
