@@ -21,6 +21,24 @@ Neither container has a restart policy. After a GX10 reboot run
 Graph warmup takes about 4 minutes. Never run a second Breeze copy next to these: a
 side-by-side test dropped the GX10 to 11 GB available.
 
+## On demand (since 2026-11-14)
+
+Home Agent Listen moved to Ming on 2026-11-12 (see `../ming-tts-gx10/README.md`), so both
+Breeze containers are normally STOPPED and `breeze-longform` must stay stopped (Ming's
+long-form service owns :7861). Storybook renders still need `breeze-tts-eval`, so
+`ondemand.py` (live copy `/home/pi/breeze-tts/ondemand.py`, systemd --user unit
+`breeze-ondemand.service`, port 7862) starts it for them:
+
+- `POST :7862/ensure`: returns at once if Breeze is healthy, otherwise starts the
+  container and blocks until `/health` answers (about 80-100 s). `render_book.py` calls it
+  before every line, which also keeps Breeze from idling out mid-book.
+- It stops Breeze after 20 minutes without an `/ensure`, but only if the helper started it.
+  A Breeze you start by hand is left running.
+- It refuses to start (503) below 34 GB MemAvailable: Breeze takes about 14 GB and the
+  GX10 needs 20 GB left over.
+- `GET :7862/status` shows running/healthy/owned/idle seconds/MemAvailable.
+- Logs: `journalctl --user -u breeze-ondemand` (only starts and stops).
+
 Container setup (image `breeze-tts-eval:gb10`, built from `/home/pi/breeze-tts/Dockerfile.gb10`):
 
 ```bash

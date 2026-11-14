@@ -1,0 +1,12 @@
+[Unit]
+Description=Breeze on demand (:7862): start breeze-tts-eval for storybook renders, stop it after 20 min idle
+After=default.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 -u /home/pi/breeze-tts/ondemand.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target
