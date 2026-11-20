@@ -1,0 +1,14 @@
+{
+"intervals": [
+{
+"start": 0.8,
+"end": 66.48,
+"reason": "T-Mobile advertisement with legal disclaimers."
+},
+{
+"start": 66.56,
+"end": 115.2,
+"reason": "Naked Beauty podcast promotion."
+}
+]
+}

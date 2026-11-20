@@ -1,0 +1,23 @@
+[
+  "sensor.emporia_vue3_range_oven_power_live",
+  "sensor.emporia_vue3_dryer_power_live",
+  "sensor.emporia_vue3_dishwasher_power_live",
+  "sensor.emporia_vue3_ev_charger_power_live",
+  "sensor.emporia_vue3_ac_power_live",
+  "sensor.emporia_vue3_furnace_power_live",
+  "sensor.emporia_vue3_mains_a_power_live",
+  "sensor.emporia_vue3_mains_b_power_live",
+  "sensor.iotawattsolar_total_heat_pump_power",
+  "sensor.tesla_powerwall_3_pw3_total_solar",
+  "sensor.tesla_powerwall_3_pw3_total_power_out",
+  "sensor.tesla_powerwall_3_pw3_total_power_out",
+  "sensor.powerwalls_average",
+  "binary_sensor.powerwall_grid_outage",
+  "input_boolean.tesla_charge_asap",
+  "input_boolean.tesla_charge_tonight",
+  "input_boolean.tesla_charge_automation_disable",
+  "binary_sensor.dryer_contact_contact",
+  "input_select.dishwasher_status",
+  "input_select.dishwasher_new",
+  "input_boolean.oven_status"
+]

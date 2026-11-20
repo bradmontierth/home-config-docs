@@ -1,0 +1,85 @@
+{
+  "rows": 25850,
+  "transitions": [
+    {
+      "kind": "transition",
+      "appliance": "range",
+      "key": "range",
+      "value": false,
+      "at": 1790525266144,
+      "local": "10:07:46"
+    },
+    {
+      "kind": "transition",
+      "appliance": "range",
+      "key": "indicator",
+      "value": false,
+      "at": 1790525266144,
+      "local": "10:07:46"
+    },
+    {
+      "kind": "transition",
+      "appliance": "range",
+      "key": "ovenOn",
+      "value": false,
+      "at": 1790525506510,
+      "local": "10:11:46"
+    },
+    {
+      "kind": "transition",
+      "appliance": "range",
+      "key": "range",
+      "value": true,
+      "at": 1790525639662,
+      "local": "10:13:59"
+    },
+    {
+      "kind": "transition",
+      "appliance": "range",
+      "key": "indicator",
+      "value": true,
+      "at": 1790525639662,
+      "local": "10:13:59"
+    },
+    {
+      "kind": "transition",
+      "appliance": "range",
+      "key": "range",
+      "value": false,
+      "at": 1790525704735,
+      "local": "10:15:04"
+    },
+    {
+      "kind": "transition",
+      "appliance": "range",
+      "key": "indicator",
+      "value": false,
+      "at": 1790525704735,
+      "local": "10:15:04"
+    },
+    {
+      "kind": "transition",
+      "appliance": "dishwasher",
+      "key": "status",
+      "value": "running",
+      "at": 1790546793778,
+      "local": "16:06:33"
+    },
+    {
+      "kind": "transition",
+      "appliance": "dryer",
+      "key": "status",
+      "value": "running",
+      "at": 1790547428584,
+      "local": "16:17:08"
+    }
+  ],
+  "healthGaps": {
+    "range": 2,
+    "dryer": 2,
+    "dishwasher": 1
+  },
+  "note": "Offline simulation from signed raw samples; not live automation output. Door/contact/temperature and notification dispatch are not replayed.",
+  "firstLocal": "10:06:45",
+  "lastLocal": "17:18:07"
+}

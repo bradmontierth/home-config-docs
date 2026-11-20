@@ -1,0 +1,10 @@
+{
+  "review_status":"approved",
+  "reviewed_at":"2026-08-19T02:55:00Z",
+  "reviewed_by":"Codex GPT-5 manual adjudication",
+  "annotation_policy":"../ANNOTATION_POLICY.md",
+  "source_basis":"frozen timestamped transcript; RSS audio is dynamically ad-inserted",
+  "duration_seconds":6045.288,
+  "ad_intervals":[[0.0,113.68],[227.36,254.08],[1339.44,1499.68],[2860.24,3028.96],[4339.44,4498.96],[5936.56,6045.288]],
+  "review_notes":"Approved from full transcript review. Paid house subscriptions/products count as ads. Several old starts included editorial material; the two adjacent 4339-4499 promos are one continuous block."
+}

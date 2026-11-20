@@ -1,0 +1,1 @@
+{"intervals":[{"start": 1544.08, "end": 1597.52, "reason": "ACAS sponsor read and Naked Beauty podcast promotion."}]}

@@ -1,0 +1,10 @@
+{
+  "review_status":"approved",
+  "reviewed_at":"2026-08-19T02:55:00Z",
+  "reviewed_by":"Codex GPT-5 manual adjudication",
+  "annotation_policy":"../ANNOTATION_POLICY.md",
+  "source_basis":"frozen timestamped transcript; RSS audio is dynamically ad-inserted",
+  "duration_seconds":2381.74,
+  "ad_intervals":[[0.0,86.0],[633.76,747.04],[1544.08,1597.52],[2284.56,2381.74]],
+  "review_notes":"Approved from full transcript review. The opening Lead Human promo is advertising; 1526.48-1544.08 is editorial and was removed from the old seed."
+}

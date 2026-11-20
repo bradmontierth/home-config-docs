@@ -1,0 +1,50 @@
+TAP version 13
+# Subtest: all deployed candidate function bodies compile and all wires resolve
+ok 1 - all deployed candidate function bodies compile and all wires resolve
+  ---
+  duration_ms: 56.180598
+  ...
+# Subtest: production core handles 1Hz appliance states and mixed 1/10-second EV reports
+ok 2 - production core handles 1Hz appliance states and mixed 1/10-second EV reports
+  ---
+  duration_ms: 23.940637
+  ...
+# Subtest: production action gate acknowledges, deduplicates, supersedes and bounds retries
+ok 3 - production action gate acknowledges, deduplicates, supersedes and bounds retries
+  ---
+  duration_ms: 3.587878
+  ...
+# Subtest: production EV dispatcher changed-only, serial urgent stop, response reconciliation and manual yield
+ok 4 - production EV dispatcher changed-only, serial urgent stop, response reconciliation and manual yield
+  ---
+  duration_ms: 1.417412
+  ...
+# Subtest: production charging policy honors overrides, outage, TOU with stale power and solar qualification
+ok 5 - production charging policy honors overrides, outage, TOU with stale power and solar qualification
+  ---
+  duration_ms: 2.83019
+  ...
+# Subtest: production stale solar stop waits 30s; unknown grid never starts charging
+ok 6 - production stale solar stop waits 30s; unknown grid never starts charging
+  ---
+  duration_ms: 1.424144
+  ...
+# Subtest: production rich classifier uses elapsed time and suppresses idle-to-clean at startup
+ok 7 - production rich classifier uses elapsed time and suppresses idle-to-clean at startup
+  ---
+  duration_ms: 13.775998
+  ...
+# Subtest: low-SOC recovery can start without solar balance while missing SOC cannot invent recovery
+ok 8 - low-SOC recovery can start without solar balance while missing SOC cannot invent recovery
+  ---
+  duration_ms: 2.52378
+  ...
+1..8
+# tests 8
+# suites 0
+# pass 8
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 211.121719

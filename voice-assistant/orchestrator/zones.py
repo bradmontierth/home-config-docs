@@ -200,6 +200,56 @@ def host_for(sat: str | None) -> str | None:
     return None
 
 
+def speak_url_for(sat: str | None) -> str | None:
+    """Local `/speak` endpoint for this satellite, if explicitly known.
+
+    The old process-wide URL belongs to the kitchen and is safe only for the
+    default satellite. Unknown non-kitchen ids fail silent: sending their
+    filler to the kitchen is a cross-room audio leak, not a useful fallback.
+    """
+    entry = _entry(sat)
+    host = (entry or {}).get("host")
+    if host:
+        return host.rstrip("/") + "/speak"
+    if not sat or sat == config.DEFAULT_SAT:
+        return config.SATELLITE_SPEAK_URL
+    return None
+
+
+def display_for(sat: str | None) -> str:
+    """Return the display domain a satellite belongs to.
+
+    Usually a satellite is its own room, so its id is also its display domain.
+    The family-room box is deliberately different: it is a second microphone
+    for the open kitchen/family space and relays all playback to the kitchen.
+    ``display_sat`` records that relationship without merging wake arbitration,
+    per-microphone health, or conversation session state.
+    """
+    sat = sat or config.DEFAULT_SAT
+    entry = _entry(sat) or {}
+    return str(entry.get("display_sat") or sat)
+
+
+def display_members(sat: str | None) -> tuple[str, ...]:
+    """Satellite ids whose timers belong on the same display as ``sat``.
+
+    This is used by restore-on-reload timer queries. Live events only need
+    :func:`display_for`, but a database query for the kitchen board must also
+    retrieve rows whose origin microphone was ``familyroom``.
+    """
+    domain = display_for(sat)
+    members = {sat or config.DEFAULT_SAT, domain}
+    try:
+        table = _table()
+    except Exception as exc:  # noqa: BLE001 — bad JSON degrades to exact scope
+        log.warning("satellite table unreadable: %s", exc)
+        return tuple(sorted(members))
+    for member, entry in table.items():
+        if str((entry or {}).get("display_sat") or member) == domain:
+            members.add(member)
+    return tuple(sorted(members))
+
+
 def music_target(sat: str | None) -> dict:
     """Where music this satellite asks for should play, and how loud.
 

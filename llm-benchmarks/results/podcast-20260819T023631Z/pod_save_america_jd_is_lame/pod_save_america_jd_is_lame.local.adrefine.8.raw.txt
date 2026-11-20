@@ -1,0 +1,1 @@
+{"intervals":[{"start": 2969.04, "end": 3028.88, "reason": "Ad read for Minky Couture and MessageBox Pro, including host intro and product details."}]}

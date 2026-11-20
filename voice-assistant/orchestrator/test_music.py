@@ -33,7 +33,8 @@ def _isolate_music_log(test: unittest.TestCase) -> str:
 
 
 def _entry(kind: str, name: str, artist: str | None, local: bool, uri: str,
-           version: str = "", owned: bool | None = None) -> dict:
+           version: str = "", owned: bool | None = None,
+           album_uri: str | None = None) -> dict:
     """One library-index row, built exactly the way _refresh_index does.
 
     owned defaults to local; pass it explicitly for the two interesting cases —
@@ -47,7 +48,8 @@ def _entry(kind: str, name: str, artist: str | None, local: bool, uri: str,
             "skel": music._skeleton(norm),
             "full": full, "fullc": music._collapse(full),
             "ftoks": frozenset(full.split()),
-            "artist": artist, "local": local,
+            "artist": artist, "version": version, "album_uri": album_uri,
+            "local": local,
             "owned": local if owned is None else owned}
 
 
@@ -180,6 +182,134 @@ class MusicLogTest(unittest.TestCase):
         with patch.object(music_log, "_conn", side_effect=RuntimeError("locked")):
             sel = asyncio.run(music.play("jupiter by holst"))
         self.assertEqual(sel["uri"], "library://track/711")
+
+
+# The Skeletons shelf as it stood on 2026-10-14: one title, eight recordings,
+# the variant mostly in MA's version field — plus the one-track album that is
+# really the SharaX remix but is named plain "Spooky, Scary Skeletons".
+REMIXES = [
+    _entry("track", "Spooky, Scary Skeletons", "Andrew Gold", True,
+           "library://track/2431", album_uri="library://album/1335"),
+    _entry("album", "Halloween Howls: Fun & Scary Music", "Andrew Gold", True,
+           "library://album/1335"),
+    _entry("track", "Halloween Party", "Andrew Gold", True,
+           "library://track/3272", album_uri="library://album/1335"),
+    _entry("album", "Spooky, Scary Skeletons", "Andrew Gold", True,
+           "library://album/1337"),
+    _entry("track", "Spooky, Scary Skeletons", "Andrew Gold, SharaX", True,
+           "library://track/2442", version="SharaX Remix",
+           album_uri="library://album/1337"),
+    _entry("track", "Spooky Scary Skeletons", "EDM Bot", True,
+           "library://track/3284", version="Voldo Remix",
+           album_uri="library://album/1670"),
+    _entry("track", "Spooky Scary Skeletons", "EDM Bot", True,
+           "library://track/3285", version="DRYPAPER Remix",
+           album_uri="library://album/1670"),
+    _entry("track", "Spooky Scary Skeletons  - Extended Mix",
+           "The Living Tombstone", True, "library://track/3283",
+           version="Remix", album_uri="library://album/1669"),
+    _entry("track", "Spooky Scary Skeletons  (Music Video)", "Wubbaduck", True,
+           "library://track/3282", version="Dubstep Remix",
+           album_uri="library://album/1668"),
+    # A real multi-track album that shares a track's title must keep winning.
+    _entry("album", "Owl Singalong", "Raffi", True, "library://album/1159"),
+    _entry("track", "Owl Singalong", "Raffi", True, "library://track/2124",
+           album_uri="library://album/9"),
+    _entry("track", "Robin in the Rain", "Raffi", True, "library://track/2125",
+           album_uri="library://album/1159"),
+    _entry("track", "Bluey Theme Tune", "Bluey", True, "library://track/934",
+           album_uri="library://album/80"),
+    _entry("track", "Bluey Theme Tune", "Bluey", True, "library://track/152",
+           version="Vocal Version", album_uri="library://album/81"),
+]
+music._count_album_tracks(REMIXES)
+REMIXES += [_entry("track", f"Owl Song {i}", "Raffi", True,
+                   f"library://track/{3000 + i}", album_uri="library://album/1159")
+            for i in range(3)]
+music._count_album_tracks(REMIXES)
+
+
+class RemixPickTest(unittest.TestCase):
+    """Live 2026-10-13/14: asking for a specific Skeletons remix by voice."""
+
+    def setUp(self):
+        patcher = patch.object(music, "_ensure_index",
+                               new=AsyncMock(return_value=REMIXES))
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def _uri(self, query: str) -> str:
+        return asyncio.run(music._resolve_library(query, None))["uri"]
+
+    def test_a_misheard_dj_name_still_picks_the_remix(self):
+        for query, uri in (
+                ("spooky scary skeletons foldo mix", "library://track/3284"),
+                ("spooky scary foldo remix", "library://track/3284"),
+                ("spooky scary skeletons dry paper mix", "library://track/3285"),
+                ("spooky scary skeletons whabaduck", "library://track/3282")):
+            with self.subTest(query=query):
+                self.assertEqual(self._uri(query), uri)
+
+    def test_exact_spellings_still_win(self):
+        for query, uri in (
+                ("spooky scary skeletons voldo mix", "library://track/3284"),
+                ("spooky scary skeletons drypaper remix", "library://track/3285"),
+                ("spooky scary skeletons extended mix", "library://track/3283")):
+            with self.subTest(query=query):
+                self.assertEqual(self._uri(query), uri)
+
+    def test_a_plain_request_plays_the_original_not_the_one_track_album(self):
+        self.assertEqual(self._uri("spooky scary skeletons"),
+                         "library://track/2431")
+
+    def test_a_real_album_still_beats_a_same_named_track(self):
+        self.assertEqual(self._uri("owl singalong"), "library://album/1159")
+
+    def test_a_spoken_version_breaks_a_subset_tie(self):
+        self.assertEqual(self._uri("bluey theme tune vocal version"),
+                         "library://track/152")
+        self.assertEqual(self._uri("bluey theme tune"), "library://track/934")
+
+
+class KeepVersionWordsTest(unittest.TestCase):
+    def test_dropped_version_words_are_put_back(self):
+        self.assertEqual(
+            music.keep_version_words(
+                "spooky scary skeletons",
+                "play spooky scary skeletons voldo mix voldo mix"),
+            "spooky scary skeletons voldo mix voldo mix")
+
+    def test_a_query_that_kept_them_is_untouched(self):
+        self.assertEqual(
+            music.keep_version_words("spooky scary skeletons voldo mix",
+                                     "play spooky scary skeletons voldo mix"),
+            "spooky scary skeletons voldo mix")
+
+    def test_a_tail_without_version_words_is_left_alone(self):
+        self.assertEqual(
+            music.keep_version_words("baby beluga",
+                                     "play baby beluga in the kitchen please"),
+            "baby beluga")
+
+    def test_no_query_stays_none(self):
+        self.assertIsNone(music.keep_version_words(None, "play some music"))
+
+
+class ConfirmPlayVersionTest(unittest.TestCase):
+    def test_the_version_is_spoken_when_the_title_lacks_it(self):
+        from . import format as fmt
+        self.assertEqual(
+            fmt.confirm_play({"kind": "track", "name": "Spooky Scary Skeletons",
+                              "artist": "EDM Bot", "version": "Voldo Remix"}),
+            "Playing Spooky Scary Skeletons, Voldo Remix, by EDM Bot.")
+        self.assertEqual(
+            fmt.confirm_play({"kind": "track", "name": "Spooky Scary Skeletons",
+                              "version": "Voldo Remix"}),
+            "Playing Spooky Scary Skeletons, Voldo Remix.")
+        self.assertEqual(
+            fmt.confirm_play({"kind": "track", "name": "Day O",
+                              "artist": "Raffi", "version": ""}),
+            "Playing Day O by Raffi.")
 
 
 class ResolveLibraryTest(unittest.TestCase):

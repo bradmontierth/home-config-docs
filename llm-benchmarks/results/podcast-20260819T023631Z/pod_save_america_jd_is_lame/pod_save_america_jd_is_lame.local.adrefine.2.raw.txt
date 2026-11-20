@@ -1,0 +1,1 @@
+{"intervals":[{"start": 48.24, "end": 141.6, "reason": "Ad reads for SimplySafe, Minky Couture, and Smiths/Nabisco."}]}

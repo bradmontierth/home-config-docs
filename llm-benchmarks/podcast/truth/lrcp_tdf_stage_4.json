@@ -1,0 +1,10 @@
+{
+  "review_status":"approved",
+  "reviewed_at":"2026-08-19T02:55:00Z",
+  "reviewed_by":"Codex GPT-5 manual adjudication",
+  "annotation_policy":"../ANNOTATION_POLICY.md",
+  "source_basis":"frozen timestamped transcript; RSS audio is dynamically ad-inserted",
+  "duration_seconds":2210.978,
+  "ad_intervals":[[0.0,115.2],[246.08,253.84],[600.24,663.44],[1449.68,1552.0],[2120.72,2210.978]],
+  "review_notes":"Approved from full transcript review. Five sponsor/cross-promo blocks; normal show outro before 2120.72 is excluded."
+}

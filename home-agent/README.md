@@ -200,6 +200,30 @@ logged in, so account identity must be labeled manually.
 
 Only use danger bypass when the host account and network boundary are intentionally constrained.
 
+## Resuming A Phone Conversation In A Terminal
+
+Phone sessions run on this host, so a laptop can pick one up over SSH:
+
+```bash
+ha-resume            # list recent phone conversations, pick a number
+ha-resume 2          # resume entry 2 directly
+ha-resume -p 2       # just print the claude/codex command
+```
+
+`ha-resume` (symlinked into `~/.local/bin`) reads the runner's `/sessions`,
+takes the latest session of each conversation, stops the runner's copy if it is
+still alive (asks first when it is mid-turn; a warm `idle` Claude is stopped
+silently), and opens `claude --resume <id>` / `codex resume <id>` with the same
+cwd, model and effort in tmux session `ha-<session id>`.
+
+To hand back to the phone, exit the CLI on the laptop and reply in the same
+conversation in the app; the runner resumes the same agent session, so the
+laptop turns are in context. The runner reads them from the agent's own
+transcript and shows them in the app's history under `[on the computer]`
+(appended when you open the conversation, then at the top of the next phone
+session's log). If the terminal is still open, the runner sees the live owner
+and forks instead.
+
 ## Parakeet
 
 The gateway converts browser audio to:

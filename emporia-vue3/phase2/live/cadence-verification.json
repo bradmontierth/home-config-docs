@@ -1,0 +1,2574 @@
+[
+  {
+    "at": 1790553272.9463425,
+    "uptime_s": 16.205,
+    "tuple": {
+      "ok": false,
+      "reason": "aligned window warming",
+      "source": "mainsA"
+    },
+    "history": {
+      "ev": {
+        "count": 17,
+        "last": 1790553272779,
+        "maxGapMs": 1018
+      },
+      "mainsB": {
+        "count": 17,
+        "last": 1790553272778,
+        "maxGapMs": 1022
+      },
+      "mainsA": {
+        "count": 17,
+        "last": 1790553272778,
+        "maxGapMs": 1018
+      },
+      "outdoor": {
+        "count": 2,
+        "last": 1790553271113,
+        "maxGapMs": 10164
+      },
+      "solar": {
+        "count": 1,
+        "last": 1790553259806,
+        "maxGapMs": 0
+      }
+    },
+    "ev": {
+      "now": 1790553272945,
+      "sent": 1,
+      "acks": 1,
+      "errors": 0,
+      "pending": false,
+      "yielded": false,
+      "desired": null,
+      "mode": null,
+      "reason": null,
+      "lastRead": 1790553271055,
+      "readback": {
+        "state": "disabled",
+        "auto_release": true
+      }
+    }
+  },
+  {
+    "at": 1790553278.080038,
+    "uptime_s": 21.224,
+    "tuple": {
+      "ok": true,
+      "totalHome": 6429.471550683595,
+      "nonEv": 6425.976025938035,
+      "availableWatts": -6409.976025938035,
+      "samples": {
+        "mainsA": {
+          "watts": 2645.9716239257823,
+          "reportedAt": 1790553271113,
+          "available": true
+        },
+        "mainsB": {
+          "watts": 3769.8999267578124,
+          "reportedAt": 1790553271113,
+          "available": true
+        },
+        "ev": {
+          "watts": 3.495524745559692,
+          "reportedAt": 1790553271113,
+          "available": true
+        },
+        "solar": {
+          "watts": 16,
+          "reportedAt": 1790553271113,
+          "available": true
+        },
+        "outdoor": {
+          "watts": 13.6,
+          "reportedAt": 1790553271113,
+          "available": true
+        }
+      },
+      "windowEnd": 1790553271113,
+      "windowMs": 5000
+    },
+    "history": {
+      "ev": {
+        "count": 22,
+        "last": 1790553277806,
+        "maxGapMs": 1022
+      },
+      "mainsB": {
+        "count": 22,
+        "last": 1790553277817,
+        "maxGapMs": 1022
+      },
+      "mainsA": {
+        "count": 22,
+        "last": 1790553277817,
+        "maxGapMs": 1018
+      },
+      "outdoor": {
+        "count": 2,
+        "last": 1790553271113,
+        "maxGapMs": 10164
+      },
+      "solar": {
+        "count": 2,
+        "last": 1790553274784,
+        "maxGapMs": 14978
+      }
+    },
+    "ev": {
+      "now": 1790553278079,
+      "sent": 1,
+      "acks": 1,
+      "errors": 0,
+      "pending": false,
+      "yielded": false,
+      "desired": {
+        "state": "disabled"
+      },
+      "mode": "idle",
+      "reason": "No charging condition met",
+      "lastRead": 1790553271055,
+      "readback": {
+        "state": "disabled",
+        "auto_release": true
+      }
+    }
+  },
+  {
+    "at": 1790553283.098936,
+    "uptime_s": 26.354,
+    "tuple": {
+      "ok": true,
+      "totalHome": 6357.143532050784,
+      "nonEv": 6353.8433673341115,
+      "availableWatts": -6337.8433673341115,
+      "samples": {
+        "mainsA": {
+          "watts": 2650.081242919923,
+          "reportedAt": 1790553274784,
+          "available": true
+        },
+        "mainsB": {
+          "watts": 3693.9028091308614,
+          "reportedAt": 1790553274784,
+          "available": true
+        },
+        "ev": {
+          "watts": 3.300164716672897,
+          "reportedAt": 1790553274784,
+          "available": true
+        },
+        "solar": {
+          "watts": 16,
+          "reportedAt": 1790553274784,
+          "available": true
+        },
+        "outdoor": {
+          "watts": 13.159479999999999,
+          "reportedAt": 1790553274784,
+          "available": true
+        }
+      },
+      "windowEnd": 1790553274784,
+      "windowMs": 5000
+    },
+    "history": {
+      "ev": {
+        "count": 27,
+        "last": 1790553282844,
+        "maxGapMs": 1022
+      },
+      "mainsB": {
+        "count": 27,
+        "last": 1790553282843,
+        "maxGapMs": 1022
+      },
+      "mainsA": {
+        "count": 27,
+        "last": 1790553282833,
+        "maxGapMs": 1018
+      },
+      "outdoor": {
+        "count": 3,
+        "last": 1790553281052,
+        "maxGapMs": 10164
+      },
+      "solar": {
+        "count": 2,
+        "last": 1790553274784,
+        "maxGapMs": 14978
+      }
+    },
+    "ev": {
+      "now": 1790553283097,
+      "sent": 1,
+      "acks": 1,
+      "errors": 0,
+      "pending": false,
+      "yielded": false,
+      "desired": {
+        "state": "disabled"
+      },
+      "mode": "idle",
+      "reason": "No charging condition met",
+      "lastRead": 1790553271055,
+      "readback": {
+        "state": "disabled",
+        "auto_release": true
+      }
+    }
+  },
+  {
+    "at": 1790553288.1127937,
+    "uptime_s": 31.372,
+    "tuple": {
+      "ok": true,
+      "totalHome": 6357.143532050784,
+      "nonEv": 6353.8433673341115,
+      "availableWatts": -6337.8433673341115,
+      "samples": {
+        "mainsA": {
+          "watts": 2650.081242919923,
+          "reportedAt": 1790553274784,
+          "available": true
+        },
+        "mainsB": {
+          "watts": 3693.9028091308614,
+          "reportedAt": 1790553274784,
+          "available": true
+        },
+        "ev": {
+          "watts": 3.300164716672897,
+          "reportedAt": 1790553274784,
+          "available": true
+        },
+        "solar": {
+          "watts": 16,
+          "reportedAt": 1790553274784,
+          "available": true
+        },
+        "outdoor": {
+          "watts": 13.159479999999999,
+          "reportedAt": 1790553274784,
+          "available": true
+        }
+      },
+      "windowEnd": 1790553274784,
+      "windowMs": 5000
+    },
+    "history": {
+      "ev": {
+        "count": 32,
+        "last": 1790553287872,
+        "maxGapMs": 1022
+      },
+      "mainsB": {
+        "count": 32,
+        "last": 1790553287872,
+        "maxGapMs": 1022
+      },
+      "mainsA": {
+        "count": 32,
+        "last": 1790553287866,
+        "maxGapMs": 1018
+      },
+      "outdoor": {
+        "count": 3,
+        "last": 1790553281052,
+        "maxGapMs": 10164
+      },
+      "solar": {
+        "count": 2,
+        "last": 1790553274784,
+        "maxGapMs": 14978
+      }
+    },
+    "ev": {
+      "now": 1790553288112,
+      "sent": 1,
+      "acks": 1,
+      "errors": 0,
+      "pending": false,
+      "yielded": false,
+      "desired": {
+        "state": "disabled"
+      },
+      "mode": "idle",
+      "reason": "No charging condition met",
+      "lastRead": 1790553271055,
+      "readback": {
+        "state": "disabled",
+        "auto_release": true
+      }
+    }
+  },
+  {
+    "at": 1790553293.1382248,
+    "uptime_s": 36.39,
+    "tuple": {
+      "ok": true,
+      "totalHome": 6030.852238232419,
+      "nonEv": 6028.144036212728,
+      "availableWatts": -6012.144036212728,
+      "samples": {
+        "mainsA": {
+          "watts": 2652.0017088867176,
+          "reportedAt": 1790553289840,
+          "available": true
+        },
+        "mainsB": {
+          "watts": 3365.9505293457023,
+          "reportedAt": 1790553289840,
+          "available": true
+        },
+        "ev": {
+          "watts": 2.7082020196914676,
+          "reportedAt": 1790553289840,
+          "available": true
+        },
+        "solar": {
+          "watts": 16,
+          "reportedAt": 1790553289840,
+          "available": true
+        },
+        "outdoor": {
+          "watts": 12.9,
+          "reportedAt": 1790553289840,
+          "available": true
+        }
+      },
+      "windowEnd": 1790553289840,
+      "windowMs": 5000
+    },
+    "history": {
+      "ev": {
+        "count": 37,
+        "last": 1790553292901,
+        "maxGapMs": 1022
+      },
+      "mainsB": {
+        "count": 37,
+        "last": 1790553292893,
+        "maxGapMs": 1022
+      },
+      "mainsA": {
+        "count": 37,
+        "last": 1790553292892,
+        "maxGapMs": 1018
+      },
+      "outdoor": {
+        "count": 4,
+        "last": 1790553291012,
+        "maxGapMs": 10164
+      },
+      "solar": {
+        "count": 3,
+        "last": 1790553289840,
+        "maxGapMs": 15056
+      }
+    },
+    "ev": {
+      "now": 1790553293137,
+      "sent": 1,
+      "acks": 1,
+      "errors": 0,
+      "pending": false,
+      "yielded": false,
+      "desired": {
+        "state": "disabled"
+      },
+      "mode": "idle",
+      "reason": "No charging condition met",
+      "lastRead": 1790553271055,
+      "readback": {
+        "state": "disabled",
+        "auto_release": true
+      }
+    }
+  },
+  {
+    "at": 1790553298.1930034,
+    "uptime_s": 41.416,
+    "tuple": {
+      "ok": true,
+      "totalHome": 6030.852238232419,
+      "nonEv": 6028.144036212728,
+      "availableWatts": -6012.144036212728,
+      "samples": {
+        "mainsA": {
+          "watts": 2652.0017088867176,
+          "reportedAt": 1790553289840,
+          "available": true
+        },
+        "mainsB": {
+          "watts": 3365.9505293457023,
+          "reportedAt": 1790553289840,
+          "available": true
+        },
+        "ev": {
+          "watts": 2.7082020196914676,
+          "reportedAt": 1790553289840,
+          "available": true
+        },
+        "solar": {
+          "watts": 16,
+          "reportedAt": 1790553289840,
+          "available": true
+        },
+        "outdoor": {
+          "watts": 12.9,
+          "reportedAt": 1790553289840,
+          "available": true
+        }
+      },
+      "windowEnd": 1790553289840,
+      "windowMs": 5000
+    },
+    "history": {
+      "ev": {
+        "count": 42,
+        "last": 1790553297922,
+        "maxGapMs": 1022
+      },
+      "mainsB": {
+        "count": 42,
+        "last": 1790553297921,
+        "maxGapMs": 1022
+      },
+      "mainsA": {
+        "count": 42,
+        "last": 1790553297925,
+        "maxGapMs": 1018
+      },
+      "outdoor": {
+        "count": 4,
+        "last": 1790553291012,
+        "maxGapMs": 10164
+      },
+      "solar": {
+        "count": 3,
+        "last": 1790553289840,
+        "maxGapMs": 15056
+      }
+    },
+    "ev": {
+      "now": 1790553298192,
+      "sent": 1,
+      "acks": 1,
+      "errors": 0,
+      "pending": false,
+      "yielded": false,
+      "desired": {
+        "state": "disabled"
+      },
+      "mode": "idle",
+      "reason": "No charging condition met",
+      "lastRead": 1790553271055,
+      "readback": {
+        "state": "disabled",
+        "auto_release": true
+      }
+    }
+  },
+  {
+    "at": 1790553303.2063785,
+    "uptime_s": 46.466,
+    "tuple": {
+      "ok": true,
+      "totalHome": 6030.852238232419,
+      "nonEv": 6028.144036212728,
+      "availableWatts": -6012.144036212728,
+      "samples": {
+        "mainsA": {
+          "watts": 2652.0017088867176,
+          "reportedAt": 1790553289840,
+          "available": true
+        },
+        "mainsB": {
+          "watts": 3365.9505293457023,
+          "reportedAt": 1790553289840,
+          "available": true
+        },
+        "ev": {
+          "watts": 2.7082020196914676,
+          "reportedAt": 1790553289840,
+          "available": true
+        },
+        "solar": {
+          "watts": 16,
+          "reportedAt": 1790553289840,
+          "available": true
+        },
+        "outdoor": {
+          "watts": 12.9,
+          "reportedAt": 1790553289840,
+          "available": true
+        }
+      },
+      "windowEnd": 1790553289840,
+      "windowMs": 5000
+    },
+    "history": {
+      "ev": {
+        "count": 47,
+        "last": 1790553302944,
+        "maxGapMs": 1022
+      },
+      "mainsB": {
+        "count": 47,
+        "last": 1790553302954,
+        "maxGapMs": 1022
+      },
+      "mainsA": {
+        "count": 47,
+        "last": 1790553302943,
+        "maxGapMs": 1019
+      },
+      "outdoor": {
+        "count": 5,
+        "last": 1790553301130,
+        "maxGapMs": 10164
+      },
+      "solar": {
+        "count": 3,
+        "last": 1790553289840,
+        "maxGapMs": 15056
+      }
+    },
+    "ev": {
+      "now": 1790553303205,
+      "sent": 1,
+      "acks": 1,
+      "errors": 0,
+      "pending": false,
+      "yielded": false,
+      "desired": {
+        "state": "disabled"
+      },
+      "mode": "idle",
+      "reason": "No charging condition met",
+      "lastRead": 1790553301126,
+      "readback": {
+        "state": "disabled",
+        "auto_release": true
+      }
+    }
+  },
+  {
+    "at": 1790553308.232467,
+    "uptime_s": 51.485,
+    "tuple": {
+      "ok": true,
+      "totalHome": 6045.7473585937505,
+      "nonEv": 6043.039238380146,
+      "availableWatts": -6029.039238380146,
+      "samples": {
+        "mainsA": {
+          "watts": 2658.349956201171,
+          "reportedAt": 1790553301130,
+          "available": true
+        },
+        "mainsB": {
+          "watts": 3371.6974023925795,
+          "reportedAt": 1790553301130,
+          "available": true
+        },
+        "ev": {
+          "watts": 2.708120213603975,
+          "reportedAt": 1790553301130,
+          "available": true
+        },
+        "solar": {
+          "watts": 14,
+          "reportedAt": 1790553301130,
+          "available": true
+        },
+        "outdoor": {
+          "watts": 15.7,
+          "reportedAt": 1790553301130,
+          "available": true
+        }
+      },
+      "windowEnd": 1790553301130,
+      "windowMs": 5000
+    },
+    "history": {
+      "ev": {
+        "count": 52,
+        "last": 1790553307997,
+        "maxGapMs": 1092
+      },
+      "mainsB": {
+        "count": 52,
+        "last": 1790553307986,
+        "maxGapMs": 1090
+      },
+      "mainsA": {
+        "count": 52,
+        "last": 1790553307996,
+        "maxGapMs": 1093
+      },
+      "outdoor": {
+        "count": 5,
+        "last": 1790553301130,
+        "maxGapMs": 10164
+      },
+      "solar": {
+        "count": 4,
+        "last": 1790553304880,
+        "maxGapMs": 15056
+      }
+    },
+    "ev": {
+      "now": 1790553308231,
+      "sent": 1,
+      "acks": 1,
+      "errors": 0,
+      "pending": false,
+      "yielded": false,
+      "desired": {
+        "state": "disabled"
+      },
+      "mode": "idle",
+      "reason": "No charging condition met",
+      "lastRead": 1790553301126,
+      "readback": {
+        "state": "disabled",
+        "auto_release": true
+      }
+    }
+  },
+  {
+    "at": 1790553313.269461,
+    "uptime_s": 56.528,
+    "tuple": {
+      "ok": true,
+      "totalHome": 6067.826037890628,
+      "nonEv": 6065.204052822163,
+      "availableWatts": -6051.204052822163,
+      "samples": {
+        "mainsA": {
+          "watts": 2656.087778955079,
+          "reportedAt": 1790553304880,
+          "available": true
+        },
+        "mainsB": {
+          "watts": 3373.313258935548,
+          "reportedAt": 1790553304880,
+          "available": true
+        },
+        "ev": {
+          "watts": 2.6219850684642783,
+          "reportedAt": 1790553304880,
+          "available": true
+        },
+        "solar": {
+          "watts": 14,
+          "reportedAt": 1790553304880,
+          "available": true
+        },
+        "outdoor": {
+          "watts": 38.425,
+          "reportedAt": 1790553304880,
+          "available": true
+        }
+      },
+      "windowEnd": 1790553304880,
+      "windowMs": 5000
+    },
+    "history": {
+      "ev": {
+        "count": 57,
+        "last": 1790553313024,
+        "maxGapMs": 1092
+      },
+      "mainsB": {
+        "count": 57,
+        "last": 1790553313014,
+        "maxGapMs": 1090
+      },
+      "mainsA": {
+        "count": 57,
+        "last": 1790553313013,
+        "maxGapMs": 1093
+      },
+      "outdoor": {
+        "count": 6,
+        "last": 1790553311097,
+        "maxGapMs": 10164
+      },
+      "solar": {
+        "count": 4,
+        "last": 1790553304880,
+        "maxGapMs": 15056
+      }
+    },
+    "ev": {
+      "now": 1790553313268,
+      "sent": 1,
+      "acks": 1,
+      "errors": 0,
+      "pending": false,
+      "yielded": false,
+      "desired": {
+        "state": "disabled"
+      },
+      "mode": "idle",
+      "reason": "No charging condition met",
+      "lastRead": 1790553301126,
+      "readback": {
+        "state": "disabled",
+        "auto_release": true
+      }
+    }
+  },
+  {
+    "at": 1790553318.2946515,
+    "uptime_s": 61.549,
+    "tuple": {
+      "ok": true,
+      "totalHome": 6067.826037890628,
+      "nonEv": 6065.204052822163,
+      "availableWatts": -6051.204052822163,
+      "samples": {
+        "mainsA": {
+          "watts": 2656.087778955079,
+          "reportedAt": 1790553304880,
+          "available": true
+        },
+        "mainsB": {
+          "watts": 3373.313258935548,
+          "reportedAt": 1790553304880,
+          "available": true
+        },
+        "ev": {
+          "watts": 2.6219850684642783,
+          "reportedAt": 1790553304880,
+          "available": true
+        },
+        "solar": {
+          "watts": 14,
+          "reportedAt": 1790553304880,
+          "available": true
+        },
+        "outdoor": {
+          "watts": 38.425,
+          "reportedAt": 1790553304880,
+          "available": true
+        }
+      },
+      "windowEnd": 1790553304880,
+      "windowMs": 5000
+    },
+    "history": {
+      "ev": {
+        "count": 61,
+        "last": 1790553318049,
+        "maxGapMs": 1092
+      },
+      "mainsB": {
+        "count": 61,
+        "last": 1790553318040,
+        "maxGapMs": 1090
+      },
+      "mainsA": {
+        "count": 61,
+        "last": 1790553318048,
+        "maxGapMs": 1093
+      },
+      "outdoor": {
+        "count": 6,
+        "last": 1790553311097,
+        "maxGapMs": 10164
+      },
+      "solar": {
+        "count": 4,
+        "last": 1790553304880,
+        "maxGapMs": 15056
+      }
+    },
+    "ev": {
+      "now": 1790553318293,
+      "sent": 1,
+      "acks": 1,
+      "errors": 0,
+      "pending": false,
+      "yielded": false,
+      "desired": {
+        "state": "disabled"
+      },
+      "mode": "idle",
+      "reason": "No charging condition met",
+      "lastRead": 1790553301126,
+      "readback": {
+        "state": "disabled",
+        "auto_release": true
+      }
+    }
+  },
+  {
+    "at": 1790553323.3102279,
+    "uptime_s": 66.568,
+    "tuple": {
+      "ok": true,
+      "totalHome": 6067.826037890628,
+      "nonEv": 6065.204052822163,
+      "availableWatts": -6051.204052822163,
+      "samples": {
+        "mainsA": {
+          "watts": 2656.087778955079,
+          "reportedAt": 1790553304880,
+          "available": true
+        },
+        "mainsB": {
+          "watts": 3373.313258935548,
+          "reportedAt": 1790553304880,
+          "available": true
+        },
+        "ev": {
+          "watts": 2.6219850684642783,
+          "reportedAt": 1790553304880,
+          "available": true
+        },
+        "solar": {
+          "watts": 14,
+          "reportedAt": 1790553304880,
+          "available": true
+        },
+        "outdoor": {
+          "watts": 38.425,
+          "reportedAt": 1790553304880,
+          "available": true
+        }
+      },
+      "windowEnd": 1790553304880,
+      "windowMs": 5000
+    },
+    "history": {
+      "ev": {
+        "count": 61,
+        "last": 1790553323081,
+        "maxGapMs": 1092
+      },
+      "mainsB": {
+        "count": 61,
+        "last": 1790553323069,
+        "maxGapMs": 1090
+      },
+      "mainsA": {
+        "count": 61,
+        "last": 1790553323082,
+        "maxGapMs": 1095
+      },
+      "outdoor": {
+        "count": 7,
+        "last": 1790553321252,
+        "maxGapMs": 10164
+      },
+      "solar": {
+        "count": 5,
+        "last": 1790553319684,
+        "maxGapMs": 15056
+      }
+    },
+    "ev": {
+      "now": 1790553323309,
+      "sent": 1,
+      "acks": 1,
+      "errors": 0,
+      "pending": false,
+      "yielded": false,
+      "desired": {
+        "state": "disabled"
+      },
+      "mode": "idle",
+      "reason": "No charging condition met",
+      "lastRead": 1790553301126,
+      "readback": {
+        "state": "disabled",
+        "auto_release": true
+      }
+    }
+  },
+  {
+    "at": 1790553328.334124,
+    "uptime_s": 71.59,
+    "tuple": {
+      "ok": true,
+      "totalHome": 5660.830354199216,
+      "nonEv": 5658.757120124171,
+      "availableWatts": -5642.757120124171,
+      "samples": {
+        "mainsA": {
+          "watts": 2193.189857324218,
+          "reportedAt": 1790553319684,
+          "available": true
+        },
+        "mainsB": {
+          "watts": 3389.4404968749986,
+          "reportedAt": 1790553319684,
+          "available": true
+        },
+        "ev": {
+          "watts": 2.073234075045586,
+          "reportedAt": 1790553319684,
+          "available": true
+        },
+        "solar": {
+          "watts": 16,
+          "reportedAt": 1790553319684,
+          "available": true
+        },
+        "outdoor": {
+          "watts": 78.2,
+          "reportedAt": 1790553319684,
+          "available": true
+        }
+      },
+      "windowEnd": 1790553319684,
+      "windowMs": 5000
+    },
+    "history": {
+      "ev": {
+        "count": 61,
+        "last": 1790553328093,
+        "maxGapMs": 1092
+      },
+      "mainsB": {
+        "count": 61,
+        "last": 1790553328092,
+        "maxGapMs": 1090
+      },
+      "mainsA": {
+        "count": 61,
+        "last": 1790553328102,
+        "maxGapMs": 1095
+      },
+      "outdoor": {
+        "count": 7,
+        "last": 1790553321252,
+        "maxGapMs": 10164
+      },
+      "solar": {
+        "count": 5,
+        "last": 1790553319684,
+        "maxGapMs": 15056
+      }
+    },
+    "ev": {
+      "now": 1790553328333,
+      "sent": 1,
+      "acks": 1,
+      "errors": 0,
+      "pending": false,
+      "yielded": false,
+      "desired": {
+        "state": "disabled"
+      },
+      "mode": "idle",
+      "reason": "No charging condition met",
+      "lastRead": 1790553301126,
+      "readback": {
+        "state": "disabled",
+        "auto_release": true
+      }
+    }
+  },
+  {
+    "at": 1790553333.3592095,
+    "uptime_s": 76.613,
+    "tuple": {
+      "ok": true,
+      "totalHome": 5660.830354199216,
+      "nonEv": 5658.757120124171,
+      "availableWatts": -5642.757120124171,
+      "samples": {
+        "mainsA": {
+          "watts": 2193.189857324218,
+          "reportedAt": 1790553319684,
+          "available": true
+        },
+        "mainsB": {
+          "watts": 3389.4404968749986,
+          "reportedAt": 1790553319684,
+          "available": true
+        },
+        "ev": {
+          "watts": 2.073234075045586,
+          "reportedAt": 1790553319684,
+          "available": true
+        },
+        "solar": {
+          "watts": 16,
+          "reportedAt": 1790553319684,
+          "available": true
+        },
+        "outdoor": {
+          "watts": 78.2,
+          "reportedAt": 1790553319684,
+          "available": true
+        }
+      },
+      "windowEnd": 1790553319684,
+      "windowMs": 5000
+    },
+    "history": {
+      "ev": {
+        "count": 61,
+        "last": 1790553333130,
+        "maxGapMs": 1116
+      },
+      "mainsB": {
+        "count": 61,
+        "last": 1790553333120,
+        "maxGapMs": 1090
+      },
+      "mainsA": {
+        "count": 61,
+        "last": 1790553333130,
+        "maxGapMs": 1103
+      },
+      "outdoor": {
+        "count": 7,
+        "last": 1790553331211,
+        "maxGapMs": 10155
+      },
+      "solar": {
+        "count": 5,
+        "last": 1790553319684,
+        "maxGapMs": 15056
+      }
+    },
+    "ev": {
+      "now": 1790553333358,
+      "sent": 1,
+      "acks": 1,
+      "errors": 0,
+      "pending": false,
+      "yielded": false,
+      "desired": {
+        "state": "disabled"
+      },
+      "mode": "idle",
+      "reason": "No charging condition met",
+      "lastRead": 1790553331423,
+      "readback": {
+        "state": "disabled",
+        "auto_release": true
+      }
+    }
+  },
+  {
+    "at": 1790553338.3846712,
+    "uptime_s": 81.639,
+    "tuple": {
+      "ok": true,
+      "totalHome": 5660.830354199216,
+      "nonEv": 5658.757120124171,
+      "availableWatts": -5642.757120124171,
+      "samples": {
+        "mainsA": {
+          "watts": 2193.189857324218,
+          "reportedAt": 1790553319684,
+          "available": true
+        },
+        "mainsB": {
+          "watts": 3389.4404968749986,
+          "reportedAt": 1790553319684,
+          "available": true
+        },
+        "ev": {
+          "watts": 2.073234075045586,
+          "reportedAt": 1790553319684,
+          "available": true
+        },
+        "solar": {
+          "watts": 16,
+          "reportedAt": 1790553319684,
+          "available": true
+        },
+        "outdoor": {
+          "watts": 78.2,
+          "reportedAt": 1790553319684,
+          "available": true
+        }
+      },
+      "windowEnd": 1790553319684,
+      "windowMs": 5000
+    },
+    "history": {
+      "ev": {
+        "count": 61,
+        "last": 1790553338147,
+        "maxGapMs": 1116
+      },
+      "mainsB": {
+        "count": 61,
+        "last": 1790553338158,
+        "maxGapMs": 1090
+      },
+      "mainsA": {
+        "count": 61,
+        "last": 1790553338146,
+        "maxGapMs": 1103
+      },
+      "outdoor": {
+        "count": 7,
+        "last": 1790553331211,
+        "maxGapMs": 10155
+      },
+      "solar": {
+        "count": 6,
+        "last": 1790553334690,
+        "maxGapMs": 15056
+      }
+    },
+    "ev": {
+      "now": 1790553338383,
+      "sent": 1,
+      "acks": 1,
+      "errors": 0,
+      "pending": false,
+      "yielded": false,
+      "desired": {
+        "state": "disabled"
+      },
+      "mode": "idle",
+      "reason": "No charging condition met",
+      "lastRead": 1790553331423,
+      "readback": {
+        "state": "disabled",
+        "auto_release": true
+      }
+    }
+  },
+  {
+    "at": 1790553343.4246864,
+    "uptime_s": 86.665,
+    "tuple": {
+      "ok": true,
+      "totalHome": 5722.328990820312,
+      "nonEv": 5720.430660149002,
+      "availableWatts": -5698.430660149002,
+      "samples": {
+        "mainsA": {
+          "watts": 2194.5503183593755,
+          "reportedAt": 1790553331211,
+          "available": true
+        },
+        "mainsB": {
+          "watts": 3388.5786724609375,
+          "reportedAt": 1790553331211,
+          "available": true
+        },
+        "ev": {
+          "watts": 1.898330671310427,
+          "reportedAt": 1790553331211,
+          "available": true
+        },
+        "solar": {
+          "watts": 22,
+          "reportedAt": 1790553331211,
+          "available": true
+        },
+        "outdoor": {
+          "watts": 139.2,
+          "reportedAt": 1790553331211,
+          "available": true
+        }
+      },
+      "windowEnd": 1790553331211,
+      "windowMs": 5000
+    },
+    "history": {
+      "ev": {
+        "count": 61,
+        "last": 1790553343173,
+        "maxGapMs": 1116
+      },
+      "mainsB": {
+        "count": 61,
+        "last": 1790553343174,
+        "maxGapMs": 1090
+      },
+      "mainsA": {
+        "count": 61,
+        "last": 1790553343183,
+        "maxGapMs": 1103
+      },
+      "outdoor": {
+        "count": 7,
+        "last": 1790553340996,
+        "maxGapMs": 10155
+      },
+      "solar": {
+        "count": 6,
+        "last": 1790553334690,
+        "maxGapMs": 15056
+      }
+    },
+    "ev": {
+      "now": 1790553343423,
+      "sent": 1,
+      "acks": 1,
+      "errors": 0,
+      "pending": false,
+      "yielded": false,
+      "desired": {
+        "state": "disabled"
+      },
+      "mode": "idle",
+      "reason": "No charging condition met",
+      "lastRead": 1790553331423,
+      "readback": {
+        "state": "disabled",
+        "auto_release": true
+      }
+    }
+  },
+  {
+    "at": 1790553348.4415817,
+    "uptime_s": 91.699,
+    "tuple": {
+      "ok": true,
+      "totalHome": 5841.595943681641,
+      "nonEv": 5839.547587579985,
+      "availableWatts": -5817.547587579985,
+      "samples": {
+        "mainsA": {
+          "watts": 2198.18490854492,
+          "reportedAt": 1790553334690,
+          "available": true
+        },
+        "mainsB": {
+          "watts": 3392.2568151367204,
+          "reportedAt": 1790553334690,
+          "available": true
+        },
+        "ev": {
+          "watts": 2.048356101655961,
+          "reportedAt": 1790553334690,
+          "available": true
+        },
+        "solar": {
+          "watts": 22,
+          "reportedAt": 1790553334690,
+          "available": true
+        },
+        "outdoor": {
+          "watts": 251.15422,
+          "reportedAt": 1790553334690,
+          "available": true
+        }
+      },
+      "windowEnd": 1790553334690,
+      "windowMs": 5000
+    },
+    "history": {
+      "ev": {
+        "count": 61,
+        "last": 1790553348206,
+        "maxGapMs": 1116
+      },
+      "mainsB": {
+        "count": 61,
+        "last": 1790553348205,
+        "maxGapMs": 1090
+      },
+      "mainsA": {
+        "count": 61,
+        "last": 1790553348225,
+        "maxGapMs": 1103
+      },
+      "outdoor": {
+        "count": 7,
+        "last": 1790553340996,
+        "maxGapMs": 10155
+      },
+      "solar": {
+        "count": 6,
+        "last": 1790553334690,
+        "maxGapMs": 15056
+      }
+    },
+    "ev": {
+      "now": 1790553348440,
+      "sent": 1,
+      "acks": 1,
+      "errors": 0,
+      "pending": false,
+      "yielded": false,
+      "desired": {
+        "state": "disabled"
+      },
+      "mode": "idle",
+      "reason": "No charging condition met",
+      "lastRead": 1790553331423,
+      "readback": {
+        "state": "disabled",
+        "auto_release": true
+      }
+    }
+  },
+  {
+    "at": 1790553353.462705,
+    "uptime_s": 96.716,
+    "tuple": {
+      "ok": true,
+      "totalHome": 5841.595943681641,
+      "nonEv": 5839.547587579985,
+      "availableWatts": -5817.547587579985,
+      "samples": {
+        "mainsA": {
+          "watts": 2198.18490854492,
+          "reportedAt": 1790553334690,
+          "available": true
+        },
+        "mainsB": {
+          "watts": 3392.2568151367204,
+          "reportedAt": 1790553334690,
+          "available": true
+        },
+        "ev": {
+          "watts": 2.048356101655961,
+          "reportedAt": 1790553334690,
+          "available": true
+        },
+        "solar": {
+          "watts": 22,
+          "reportedAt": 1790553334690,
+          "available": true
+        },
+        "outdoor": {
+          "watts": 251.15422,
+          "reportedAt": 1790553334690,
+          "available": true
+        }
+      },
+      "windowEnd": 1790553334690,
+      "windowMs": 5000
+    },
+    "history": {
+      "ev": {
+        "count": 61,
+        "last": 1790553353245,
+        "maxGapMs": 1116
+      },
+      "mainsB": {
+        "count": 61,
+        "last": 1790553353235,
+        "maxGapMs": 1090
+      },
+      "mainsA": {
+        "count": 61,
+        "last": 1790553353232,
+        "maxGapMs": 1103
+      },
+      "outdoor": {
+        "count": 7,
+        "last": 1790553351011,
+        "maxGapMs": 10155
+      },
+      "solar": {
+        "count": 5,
+        "last": 1790553349739,
+        "maxGapMs": 15049
+      }
+    },
+    "ev": {
+      "now": 1790553353461,
+      "sent": 1,
+      "acks": 1,
+      "errors": 0,
+      "pending": false,
+      "yielded": false,
+      "desired": {
+        "state": "disabled"
+      },
+      "mode": "idle",
+      "reason": "No charging condition met",
+      "lastRead": 1790553331423,
+      "readback": {
+        "state": "disabled",
+        "auto_release": true
+      }
+    }
+  },
+  {
+    "at": 1790553358.4975939,
+    "uptime_s": 101.746,
+    "tuple": {
+      "ok": true,
+      "totalHome": 5972.133016406248,
+      "nonEv": 5970.07054060192,
+      "availableWatts": -5943.07054060192,
+      "samples": {
+        "mainsA": {
+          "watts": 2216.7281188964853,
+          "reportedAt": 1790553349739,
+          "available": true
+        },
+        "mainsB": {
+          "watts": 3417.2048975097628,
+          "reportedAt": 1790553349739,
+          "available": true
+        },
+        "ev": {
+          "watts": 2.0624758043289173,
+          "reportedAt": 1790553349739,
+          "available": true
+        },
+        "solar": {
+          "watts": 27,
+          "reportedAt": 1790553349739,
+          "available": true
+        },
+        "outdoor": {
+          "watts": 338.2,
+          "reportedAt": 1790553349739,
+          "available": true
+        }
+      },
+      "windowEnd": 1790553349739,
+      "windowMs": 5000
+    },
+    "history": {
+      "ev": {
+        "count": 61,
+        "last": 1790553358272,
+        "maxGapMs": 1116
+      },
+      "mainsB": {
+        "count": 61,
+        "last": 1790553358260,
+        "maxGapMs": 1090
+      },
+      "mainsA": {
+        "count": 61,
+        "last": 1790553358273,
+        "maxGapMs": 1103
+      },
+      "outdoor": {
+        "count": 7,
+        "last": 1790553351011,
+        "maxGapMs": 10155
+      },
+      "solar": {
+        "count": 5,
+        "last": 1790553349739,
+        "maxGapMs": 15049
+      }
+    },
+    "ev": {
+      "now": 1790553358496,
+      "sent": 1,
+      "acks": 1,
+      "errors": 0,
+      "pending": false,
+      "yielded": false,
+      "desired": {
+        "state": "disabled"
+      },
+      "mode": "idle",
+      "reason": "No charging condition met",
+      "lastRead": 1790553331423,
+      "readback": {
+        "state": "disabled",
+        "auto_release": true
+      }
+    }
+  },
+  {
+    "at": 1790553363.5125563,
+    "uptime_s": 106.77,
+    "tuple": {
+      "ok": true,
+      "totalHome": 5972.133016406248,
+      "nonEv": 5970.07054060192,
+      "availableWatts": -5943.07054060192,
+      "samples": {
+        "mainsA": {
+          "watts": 2216.7281188964853,
+          "reportedAt": 1790553349739,
+          "available": true
+        },
+        "mainsB": {
+          "watts": 3417.2048975097628,
+          "reportedAt": 1790553349739,
+          "available": true
+        },
+        "ev": {
+          "watts": 2.0624758043289173,
+          "reportedAt": 1790553349739,
+          "available": true
+        },
+        "solar": {
+          "watts": 27,
+          "reportedAt": 1790553349739,
+          "available": true
+        },
+        "outdoor": {
+          "watts": 338.2,
+          "reportedAt": 1790553349739,
+          "available": true
+        }
+      },
+      "windowEnd": 1790553349739,
+      "windowMs": 5000
+    },
+    "history": {
+      "ev": {
+        "count": 61,
+        "last": 1790553363294,
+        "maxGapMs": 1116
+      },
+      "mainsB": {
+        "count": 61,
+        "last": 1790553363302,
+        "maxGapMs": 1090
+      },
+      "mainsA": {
+        "count": 61,
+        "last": 1790553363302,
+        "maxGapMs": 1103
+      },
+      "outdoor": {
+        "count": 7,
+        "last": 1790553361176,
+        "maxGapMs": 10165
+      },
+      "solar": {
+        "count": 5,
+        "last": 1790553349739,
+        "maxGapMs": 15049
+      }
+    },
+    "ev": {
+      "now": 1790553363511,
+      "sent": 1,
+      "acks": 1,
+      "errors": 0,
+      "pending": false,
+      "yielded": false,
+      "desired": {
+        "state": "disabled"
+      },
+      "mode": "idle",
+      "reason": "No charging condition met",
+      "lastRead": 1790553361501,
+      "readback": {
+        "state": "disabled",
+        "auto_release": true
+      }
+    }
+  },
+  {
+    "at": 1790553368.526442,
+    "uptime_s": 111.785,
+    "tuple": {
+      "ok": true,
+      "totalHome": 5972.133016406248,
+      "nonEv": 5970.07054060192,
+      "availableWatts": -5943.07054060192,
+      "samples": {
+        "mainsA": {
+          "watts": 2216.7281188964853,
+          "reportedAt": 1790553349739,
+          "available": true
+        },
+        "mainsB": {
+          "watts": 3417.2048975097628,
+          "reportedAt": 1790553349739,
+          "available": true
+        },
+        "ev": {
+          "watts": 2.0624758043289173,
+          "reportedAt": 1790553349739,
+          "available": true
+        },
+        "solar": {
+          "watts": 27,
+          "reportedAt": 1790553349739,
+          "available": true
+        },
+        "outdoor": {
+          "watts": 338.2,
+          "reportedAt": 1790553349739,
+          "available": true
+        }
+      },
+      "windowEnd": 1790553349739,
+      "windowMs": 5000
+    },
+    "history": {
+      "ev": {
+        "count": 61,
+        "last": 1790553368338,
+        "maxGapMs": 1116
+      },
+      "mainsB": {
+        "count": 61,
+        "last": 1790553368328,
+        "maxGapMs": 1092
+      },
+      "mainsA": {
+        "count": 61,
+        "last": 1790553368327,
+        "maxGapMs": 1113
+      },
+      "outdoor": {
+        "count": 7,
+        "last": 1790553361176,
+        "maxGapMs": 10165
+      },
+      "solar": {
+        "count": 5,
+        "last": 1790553365011,
+        "maxGapMs": 15272
+      }
+    },
+    "ev": {
+      "now": 1790553368525,
+      "sent": 1,
+      "acks": 1,
+      "errors": 0,
+      "pending": false,
+      "yielded": false,
+      "desired": {
+        "state": "disabled"
+      },
+      "mode": "idle",
+      "reason": "No charging condition met",
+      "lastRead": 1790553361501,
+      "readback": {
+        "state": "disabled",
+        "auto_release": true
+      }
+    }
+  },
+  {
+    "at": 1790553373.5486512,
+    "uptime_s": 116.802,
+    "tuple": {
+      "ok": true,
+      "totalHome": 5978.503237548825,
+      "nonEv": 5976.516349999663,
+      "availableWatts": -5949.516349999663,
+      "samples": {
+        "mainsA": {
+          "watts": 2202.4054958496085,
+          "reportedAt": 1790553361176,
+          "available": true
+        },
+        "mainsB": {
+          "watts": 3402.197741699217,
+          "reportedAt": 1790553361176,
+          "available": true
+        },
+        "ev": {
+          "watts": 1.9868875491619096,
+          "reportedAt": 1790553361176,
+          "available": true
+        },
+        "solar": {
+          "watts": 27,
+          "reportedAt": 1790553361176,
+          "available": true
+        },
+        "outdoor": {
+          "watts": 373.9,
+          "reportedAt": 1790553361176,
+          "available": true
+        }
+      },
+      "windowEnd": 1790553361176,
+      "windowMs": 5000
+    },
+    "history": {
+      "ev": {
+        "count": 61,
+        "last": 1790553373367,
+        "maxGapMs": 1116
+      },
+      "mainsB": {
+        "count": 61,
+        "last": 1790553373355,
+        "maxGapMs": 1092
+      },
+      "mainsA": {
+        "count": 61,
+        "last": 1790553373366,
+        "maxGapMs": 1113
+      },
+      "outdoor": {
+        "count": 7,
+        "last": 1790553371091,
+        "maxGapMs": 10165
+      },
+      "solar": {
+        "count": 5,
+        "last": 1790553365011,
+        "maxGapMs": 15272
+      }
+    },
+    "ev": {
+      "now": 1790553373547,
+      "sent": 1,
+      "acks": 1,
+      "errors": 0,
+      "pending": false,
+      "yielded": false,
+      "desired": {
+        "state": "disabled"
+      },
+      "mode": "idle",
+      "reason": "No charging condition met",
+      "lastRead": 1790553361501,
+      "readback": {
+        "state": "disabled",
+        "auto_release": true
+      }
+    }
+  },
+  {
+    "at": 1790553381.2006462,
+    "uptime_s": 123.731,
+    "tuple": {
+      "ok": true,
+      "totalHome": 6034.657830566404,
+      "nonEv": 6032.769579843948,
+      "availableWatts": -6005.769579843948,
+      "samples": {
+        "mainsA": {
+          "watts": 2205.128391210935,
+          "reportedAt": 1790553365011,
+          "available": true
+        },
+        "mainsB": {
+          "watts": 3408.5356393554694,
+          "reportedAt": 1790553365011,
+          "available": true
+        },
+        "ev": {
+          "watts": 1.8882507224559781,
+          "reportedAt": 1790553365011,
+          "available": true
+        },
+        "solar": {
+          "watts": 27,
+          "reportedAt": 1790553365011,
+          "available": true
+        },
+        "outdoor": {
+          "watts": 420.9938,
+          "reportedAt": 1790553365011,
+          "available": true
+        }
+      },
+      "windowEnd": 1790553365011,
+      "windowMs": 5000
+    },
+    "history": {
+      "ev": {
+        "count": 61,
+        "last": 1790553376372,
+        "maxGapMs": 1116
+      },
+      "mainsB": {
+        "count": 61,
+        "last": 1790553376386,
+        "maxGapMs": 1092
+      },
+      "mainsA": {
+        "count": 61,
+        "last": 1790553376386,
+        "maxGapMs": 1113
+      },
+      "outdoor": {
+        "count": 7,
+        "last": 1790553371091,
+        "maxGapMs": 10165
+      },
+      "solar": {
+        "count": 5,
+        "last": 1790553365011,
+        "maxGapMs": 15272
+      }
+    },
+    "ev": {
+      "now": 1790553380775,
+      "sent": 1,
+      "acks": 1,
+      "errors": 0,
+      "pending": false,
+      "yielded": false,
+      "desired": {
+        "state": "disabled"
+      },
+      "mode": "idle",
+      "reason": "No charging condition met",
+      "lastRead": 1790553361501,
+      "readback": {
+        "state": "disabled",
+        "auto_release": true
+      }
+    }
+  },
+  {
+    "at": 1790553386.2616303,
+    "uptime_s": 129.495,
+    "tuple": {
+      "ok": true,
+      "totalHome": 6038.039376904297,
+      "nonEv": 6036.002817720318,
+      "availableWatts": -6002.002817720318,
+      "samples": {
+        "mainsA": {
+          "watts": 2188.288506591796,
+          "reportedAt": 1790553380720,
+          "available": true
+        },
+        "mainsB": {
+          "watts": 3398.1508703125,
+          "reportedAt": 1790553380720,
+          "available": true
+        },
+        "ev": {
+          "watts": 2.0365591839790356,
+          "reportedAt": 1790553380720,
+          "available": true
+        },
+        "solar": {
+          "watts": 34,
+          "reportedAt": 1790553380720,
+          "available": true
+        },
+        "outdoor": {
+          "watts": 451.6,
+          "reportedAt": 1790553380720,
+          "available": true
+        }
+      },
+      "windowEnd": 1790553380720,
+      "windowMs": 5000
+    },
+    "history": {
+      "ev": {
+        "count": 61,
+        "last": 1790553385425,
+        "maxGapMs": 1116
+      },
+      "mainsB": {
+        "count": 61,
+        "last": 1790553385414,
+        "maxGapMs": 1092
+      },
+      "mainsA": {
+        "count": 61,
+        "last": 1790553385414,
+        "maxGapMs": 1113
+      },
+      "outdoor": {
+        "count": 7,
+        "last": 1790553381636,
+        "maxGapMs": 10545
+      },
+      "solar": {
+        "count": 5,
+        "last": 1790553380720,
+        "maxGapMs": 15709
+      }
+    },
+    "ev": {
+      "now": 1790553386260,
+      "sent": 1,
+      "acks": 1,
+      "errors": 0,
+      "pending": false,
+      "yielded": false,
+      "desired": {
+        "state": "disabled"
+      },
+      "mode": "idle",
+      "reason": "No charging condition met",
+      "lastRead": 1790553361501,
+      "readback": {
+        "state": "disabled",
+        "auto_release": true
+      }
+    }
+  },
+  {
+    "at": 1790553391.2841396,
+    "uptime_s": 134.542,
+    "tuple": {
+      "ok": true,
+      "totalHome": 6038.039376904297,
+      "nonEv": 6036.002817720318,
+      "availableWatts": -6002.002817720318,
+      "samples": {
+        "mainsA": {
+          "watts": 2188.288506591796,
+          "reportedAt": 1790553380720,
+          "available": true
+        },
+        "mainsB": {
+          "watts": 3398.1508703125,
+          "reportedAt": 1790553380720,
+          "available": true
+        },
+        "ev": {
+          "watts": 2.0365591839790356,
+          "reportedAt": 1790553380720,
+          "available": true
+        },
+        "solar": {
+          "watts": 34,
+          "reportedAt": 1790553380720,
+          "available": true
+        },
+        "outdoor": {
+          "watts": 451.6,
+          "reportedAt": 1790553380720,
+          "available": true
+        }
+      },
+      "windowEnd": 1790553380720,
+      "windowMs": 5000
+    },
+    "history": {
+      "ev": {
+        "count": 61,
+        "last": 1790553390459,
+        "maxGapMs": 1116
+      },
+      "mainsB": {
+        "count": 61,
+        "last": 1790553390454,
+        "maxGapMs": 1092
+      },
+      "mainsA": {
+        "count": 61,
+        "last": 1790553390455,
+        "maxGapMs": 1113
+      },
+      "outdoor": {
+        "count": 7,
+        "last": 1790553381636,
+        "maxGapMs": 10545
+      },
+      "solar": {
+        "count": 5,
+        "last": 1790553380720,
+        "maxGapMs": 15709
+      }
+    },
+    "ev": {
+      "now": 1790553391283,
+      "sent": 1,
+      "acks": 1,
+      "errors": 0,
+      "pending": false,
+      "yielded": false,
+      "desired": {
+        "state": "disabled"
+      },
+      "mode": "idle",
+      "reason": "No charging condition met",
+      "lastRead": 1790553361501,
+      "readback": {
+        "state": "disabled",
+        "auto_release": true
+      }
+    }
+  },
+  {
+    "at": 1790553396.3660266,
+    "uptime_s": 139.622,
+    "tuple": {
+      "ok": true,
+      "totalHome": 6038.039376904297,
+      "nonEv": 6036.002817720318,
+      "availableWatts": -6002.002817720318,
+      "samples": {
+        "mainsA": {
+          "watts": 2188.288506591796,
+          "reportedAt": 1790553380720,
+          "available": true
+        },
+        "mainsB": {
+          "watts": 3398.1508703125,
+          "reportedAt": 1790553380720,
+          "available": true
+        },
+        "ev": {
+          "watts": 2.0365591839790356,
+          "reportedAt": 1790553380720,
+          "available": true
+        },
+        "solar": {
+          "watts": 34,
+          "reportedAt": 1790553380720,
+          "available": true
+        },
+        "outdoor": {
+          "watts": 451.6,
+          "reportedAt": 1790553380720,
+          "available": true
+        }
+      },
+      "windowEnd": 1790553380720,
+      "windowMs": 5000
+    },
+    "history": {
+      "ev": {
+        "count": 61,
+        "last": 1790553395475,
+        "maxGapMs": 1103
+      },
+      "mainsB": {
+        "count": 61,
+        "last": 1790553395475,
+        "maxGapMs": 1092
+      },
+      "mainsA": {
+        "count": 61,
+        "last": 1790553395485,
+        "maxGapMs": 1113
+      },
+      "outdoor": {
+        "count": 7,
+        "last": 1790553391341,
+        "maxGapMs": 10545
+      },
+      "solar": {
+        "count": 5,
+        "last": 1790553394892,
+        "maxGapMs": 15709
+      }
+    },
+    "ev": {
+      "now": 1790553396365,
+      "sent": 1,
+      "acks": 1,
+      "errors": 0,
+      "pending": false,
+      "yielded": false,
+      "desired": {
+        "state": "disabled"
+      },
+      "mode": "idle",
+      "reason": "No charging condition met",
+      "lastRead": 1790553391594,
+      "readback": {
+        "state": "disabled",
+        "auto_release": true
+      }
+    }
+  },
+  {
+    "at": 1790553401.382594,
+    "uptime_s": 144.639,
+    "tuple": {
+      "ok": true,
+      "totalHome": 6028.161057568361,
+      "nonEv": 6026.1921951758395,
+      "availableWatts": -5899.1921951758395,
+      "samples": {
+        "mainsA": {
+          "watts": 2188.859116894531,
+          "reportedAt": 1790553391341,
+          "available": true
+        },
+        "mainsB": {
+          "watts": 3388.0019406738297,
+          "reportedAt": 1790553391341,
+          "available": true
+        },
+        "ev": {
+          "watts": 1.9688623925209063,
+          "reportedAt": 1790553391341,
+          "available": true
+        },
+        "solar": {
+          "watts": 127,
+          "reportedAt": 1790553391341,
+          "available": true
+        },
+        "outdoor": {
+          "watts": 451.3,
+          "reportedAt": 1790553391341,
+          "available": true
+        }
+      },
+      "windowEnd": 1790553391341,
+      "windowMs": 5000
+    },
+    "history": {
+      "ev": {
+        "count": 61,
+        "last": 1790553400515,
+        "maxGapMs": 1103
+      },
+      "mainsB": {
+        "count": 61,
+        "last": 1790553400504,
+        "maxGapMs": 1092
+      },
+      "mainsA": {
+        "count": 61,
+        "last": 1790553400515,
+        "maxGapMs": 1113
+      },
+      "outdoor": {
+        "count": 7,
+        "last": 1790553391341,
+        "maxGapMs": 10545
+      },
+      "solar": {
+        "count": 5,
+        "last": 1790553394892,
+        "maxGapMs": 15709
+      }
+    },
+    "ev": {
+      "now": 1790553401381,
+      "sent": 1,
+      "acks": 1,
+      "errors": 0,
+      "pending": false,
+      "yielded": false,
+      "desired": {
+        "state": "disabled"
+      },
+      "mode": "idle",
+      "reason": "No charging condition met",
+      "lastRead": 1790553391594,
+      "readback": {
+        "state": "disabled",
+        "auto_release": true
+      }
+    }
+  },
+  {
+    "at": 1790553406.407412,
+    "uptime_s": 149.665,
+    "tuple": {
+      "ok": true,
+      "totalHome": 6019.762130693361,
+      "nonEv": 6017.973522735235,
+      "availableWatts": -5890.973522735235,
+      "samples": {
+        "mainsA": {
+          "watts": 2181.0933963378934,
+          "reportedAt": 1790553394892,
+          "available": true
+        },
+        "mainsB": {
+          "watts": 3383.3916143554675,
+          "reportedAt": 1790553394892,
+          "available": true
+        },
+        "ev": {
+          "watts": 1.7886079581260677,
+          "reportedAt": 1790553394892,
+          "available": true
+        },
+        "solar": {
+          "watts": 127,
+          "reportedAt": 1790553394892,
+          "available": true
+        },
+        "outdoor": {
+          "watts": 455.27712,
+          "reportedAt": 1790553394892,
+          "available": true
+        }
+      },
+      "windowEnd": 1790553394892,
+      "windowMs": 5000
+    },
+    "history": {
+      "ev": {
+        "count": 61,
+        "last": 1790553405529,
+        "maxGapMs": 1103
+      },
+      "mainsB": {
+        "count": 61,
+        "last": 1790553405532,
+        "maxGapMs": 1092
+      },
+      "mainsA": {
+        "count": 61,
+        "last": 1790553405532,
+        "maxGapMs": 1113
+      },
+      "outdoor": {
+        "count": 7,
+        "last": 1790553401401,
+        "maxGapMs": 10545
+      },
+      "solar": {
+        "count": 5,
+        "last": 1790553394892,
+        "maxGapMs": 15709
+      }
+    },
+    "ev": {
+      "now": 1790553406406,
+      "sent": 1,
+      "acks": 1,
+      "errors": 0,
+      "pending": false,
+      "yielded": false,
+      "desired": {
+        "state": "disabled"
+      },
+      "mode": "idle",
+      "reason": "No charging condition met",
+      "lastRead": 1790553391594,
+      "readback": {
+        "state": "disabled",
+        "auto_release": true
+      }
+    }
+  },
+  {
+    "at": 1790553411.4216354,
+    "uptime_s": 154.68,
+    "tuple": {
+      "ok": true,
+      "totalHome": 6019.762130693361,
+      "nonEv": 6017.973522735235,
+      "availableWatts": -5890.973522735235,
+      "samples": {
+        "mainsA": {
+          "watts": 2181.0933963378934,
+          "reportedAt": 1790553394892,
+          "available": true
+        },
+        "mainsB": {
+          "watts": 3383.3916143554675,
+          "reportedAt": 1790553394892,
+          "available": true
+        },
+        "ev": {
+          "watts": 1.7886079581260677,
+          "reportedAt": 1790553394892,
+          "available": true
+        },
+        "solar": {
+          "watts": 127,
+          "reportedAt": 1790553394892,
+          "available": true
+        },
+        "outdoor": {
+          "watts": 455.27712,
+          "reportedAt": 1790553394892,
+          "available": true
+        }
+      },
+      "windowEnd": 1790553394892,
+      "windowMs": 5000
+    },
+    "history": {
+      "ev": {
+        "count": 61,
+        "last": 1790553410560,
+        "maxGapMs": 1103
+      },
+      "mainsB": {
+        "count": 61,
+        "last": 1790553410559,
+        "maxGapMs": 1092
+      },
+      "mainsA": {
+        "count": 61,
+        "last": 1790553410559,
+        "maxGapMs": 1113
+      },
+      "outdoor": {
+        "count": 7,
+        "last": 1790553401401,
+        "maxGapMs": 10545
+      },
+      "solar": {
+        "count": 5,
+        "last": 1790553410563,
+        "maxGapMs": 15709
+      }
+    },
+    "ev": {
+      "now": 1790553411420,
+      "sent": 1,
+      "acks": 1,
+      "errors": 0,
+      "pending": false,
+      "yielded": false,
+      "desired": {
+        "state": "disabled"
+      },
+      "mode": "idle",
+      "reason": "No charging condition met",
+      "lastRead": 1790553391594,
+      "readback": {
+        "state": "disabled",
+        "auto_release": true
+      }
+    }
+  },
+  {
+    "at": 1790553416.4453568,
+    "uptime_s": 159.697,
+    "tuple": {
+      "ok": true,
+      "totalHome": 5975.6363727050775,
+      "nonEv": 5973.5626087340825,
+      "availableWatts": -5826.5626087340825,
+      "samples": {
+        "mainsA": {
+          "watts": 2166.6153788574215,
+          "reportedAt": 1790553410563,
+          "available": true
+        },
+        "mainsB": {
+          "watts": 3373.820993847656,
+          "reportedAt": 1790553410563,
+          "available": true
+        },
+        "ev": {
+          "watts": 2.073763970994949,
+          "reportedAt": 1790553410563,
+          "available": true
+        },
+        "solar": {
+          "watts": 147,
+          "reportedAt": 1790553410563,
+          "available": true
+        },
+        "outdoor": {
+          "watts": 435.2,
+          "reportedAt": 1790553410563,
+          "available": true
+        }
+      },
+      "windowEnd": 1790553410563,
+      "windowMs": 5000
+    },
+    "history": {
+      "ev": {
+        "count": 61,
+        "last": 1790553415596,
+        "maxGapMs": 1103
+      },
+      "mainsB": {
+        "count": 61,
+        "last": 1790553415597,
+        "maxGapMs": 1092
+      },
+      "mainsA": {
+        "count": 61,
+        "last": 1790553415603,
+        "maxGapMs": 1113
+      },
+      "outdoor": {
+        "count": 7,
+        "last": 1790553411458,
+        "maxGapMs": 10545
+      },
+      "solar": {
+        "count": 5,
+        "last": 1790553410563,
+        "maxGapMs": 15709
+      }
+    },
+    "ev": {
+      "now": 1790553416441,
+      "sent": 1,
+      "acks": 1,
+      "errors": 0,
+      "pending": false,
+      "yielded": false,
+      "desired": {
+        "state": "disabled"
+      },
+      "mode": "idle",
+      "reason": "No charging condition met",
+      "lastRead": 1790553391594,
+      "readback": {
+        "state": "disabled",
+        "auto_release": true
+      }
+    }
+  },
+  {
+    "at": 1790553421.5008874,
+    "uptime_s": 164.759,
+    "tuple": {
+      "ok": true,
+      "totalHome": 5975.6363727050775,
+      "nonEv": 5973.5626087340825,
+      "availableWatts": -5826.5626087340825,
+      "samples": {
+        "mainsA": {
+          "watts": 2166.6153788574215,
+          "reportedAt": 1790553410563,
+          "available": true
+        },
+        "mainsB": {
+          "watts": 3373.820993847656,
+          "reportedAt": 1790553410563,
+          "available": true
+        },
+        "ev": {
+          "watts": 2.073763970994949,
+          "reportedAt": 1790553410563,
+          "available": true
+        },
+        "solar": {
+          "watts": 147,
+          "reportedAt": 1790553410563,
+          "available": true
+        },
+        "outdoor": {
+          "watts": 435.2,
+          "reportedAt": 1790553410563,
+          "available": true
+        }
+      },
+      "windowEnd": 1790553410563,
+      "windowMs": 5000
+    },
+    "history": {
+      "ev": {
+        "count": 61,
+        "last": 1790553420624,
+        "maxGapMs": 1103
+      },
+      "mainsB": {
+        "count": 61,
+        "last": 1790553420623,
+        "maxGapMs": 1092
+      },
+      "mainsA": {
+        "count": 61,
+        "last": 1790553420632,
+        "maxGapMs": 1113
+      },
+      "outdoor": {
+        "count": 7,
+        "last": 1790553411458,
+        "maxGapMs": 10545
+      },
+      "solar": {
+        "count": 5,
+        "last": 1790553410563,
+        "maxGapMs": 15709
+      }
+    },
+    "ev": {
+      "now": 1790553421499,
+      "sent": 1,
+      "acks": 1,
+      "errors": 0,
+      "pending": false,
+      "yielded": false,
+      "desired": {
+        "state": "disabled"
+      },
+      "mode": "idle",
+      "reason": "No charging condition met",
+      "lastRead": 1790553391594,
+      "readback": {
+        "state": "disabled",
+        "auto_release": true
+      }
+    }
+  },
+  {
+    "at": 1790553426.5194628,
+    "uptime_s": 169.778,
+    "tuple": {
+      "ok": true,
+      "totalHome": 5975.6363727050775,
+      "nonEv": 5973.5626087340825,
+      "availableWatts": -5826.5626087340825,
+      "samples": {
+        "mainsA": {
+          "watts": 2166.6153788574215,
+          "reportedAt": 1790553410563,
+          "available": true
+        },
+        "mainsB": {
+          "watts": 3373.820993847656,
+          "reportedAt": 1790553410563,
+          "available": true
+        },
+        "ev": {
+          "watts": 2.073763970994949,
+          "reportedAt": 1790553410563,
+          "available": true
+        },
+        "solar": {
+          "watts": 147,
+          "reportedAt": 1790553410563,
+          "available": true
+        },
+        "outdoor": {
+          "watts": 435.2,
+          "reportedAt": 1790553410563,
+          "available": true
+        }
+      },
+      "windowEnd": 1790553410563,
+      "windowMs": 5000
+    },
+    "history": {
+      "ev": {
+        "count": 61,
+        "last": 1790553425596,
+        "maxGapMs": 1103
+      },
+      "mainsB": {
+        "count": 61,
+        "last": 1790553425607,
+        "maxGapMs": 1092
+      },
+      "mainsA": {
+        "count": 61,
+        "last": 1790553425607,
+        "maxGapMs": 1113
+      },
+      "outdoor": {
+        "count": 7,
+        "last": 1790553423941,
+        "maxGapMs": 12483
+      },
+      "solar": {
+        "count": 6,
+        "last": 1790553424912,
+        "maxGapMs": 15709
+      }
+    },
+    "ev": {
+      "now": 1790553426518,
+      "sent": 1,
+      "acks": 1,
+      "errors": 0,
+      "pending": false,
+      "yielded": false,
+      "desired": {
+        "state": "disabled"
+      },
+      "mode": "idle",
+      "reason": "No charging condition met",
+      "lastRead": 1790553421891,
+      "readback": {
+        "state": "disabled",
+        "auto_release": true
+      }
+    }
+  }
+]

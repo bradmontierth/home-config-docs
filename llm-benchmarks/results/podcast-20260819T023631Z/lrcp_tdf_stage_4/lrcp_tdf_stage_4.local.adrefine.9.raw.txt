@@ -1,0 +1,1 @@
+{"intervals":[{"start":2120.72,"end":2180.96,"reason":"T-Mobile ad read with setup, offer, and legal disclaimers."},{"start":2180.96,"end":2210.978,"reason":"Zyn ad read with setup, product pitch, and legal warnings."}]}

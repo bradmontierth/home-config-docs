@@ -1,0 +1,796 @@
+--- before/emporia-vue3.yaml
++++ after/emporia-vue3.yaml
+@@ -1,5 +1,6 @@
+ # All 16 branches + mains A/B enabled for circuit identification.
+-# IotaWatt CTs removed. User confirms input 1 remains Fridge; 2-16 unmapped.
++# All branch identities mapped by manual tests; corrected labeled copies added.
++# Raw numbered diagnostics retained for commissioning and time-qualified history.
+ # Physical phase assignments remain provisional.
+ # See /home/pi/home_config/emporia-vue3-guide.md.
+ # Vue 3 pin reference: https://emporia-vue-local.github.io/docs/tutorial/configuration/
+@@ -86,7 +87,8 @@
+     # Branches use the L1 reference provisionally; retain signed power.
+     # Mains A=L1 / B=L2 is provisional until physical mapping is confirmed.
+     # Numbered entities are port identities; input 1 retains confirmed Fridge alias.
+-    # Other appliance labels/energy totals await mapping. No doubling.
++    # Raw readings stay unscaled. Labeled copies below apply observed sign and
++    # 2x for single-leg 240 V power; physical phase references remain provisional.
+     ct_clamps:
+       - input: "A"
+         phase_id: phase_a
+@@ -273,10 +275,14 @@
+   - platform: copy
+     source_id: mains_a_power_raw
+     name: Mains A Signed Power Live
++    entity_category: diagnostic
++    disabled_by_default: true
+     filters: [{throttle_average: 1s}]
+   - platform: copy
+     source_id: mains_a_power_raw
+     name: Mains A Signed Power 1m Average
++    entity_category: diagnostic
++    disabled_by_default: true
+     filters: [{throttle_average: 60s}]
+   - platform: copy
+     source_id: mains_a_current_raw
+@@ -289,10 +295,14 @@
+   - platform: copy
+     source_id: mains_b_power_raw
+     name: Mains B Signed Power Live
++    entity_category: diagnostic
++    disabled_by_default: true
+     filters: [{throttle_average: 1s}]
+   - platform: copy
+     source_id: mains_b_power_raw
+     name: Mains B Signed Power 1m Average
++    entity_category: diagnostic
++    disabled_by_default: true
+     filters: [{throttle_average: 60s}]
+   - platform: copy
+     source_id: mains_b_current_raw
+@@ -305,258 +315,745 @@
+   - platform: copy
+     source_id: input_1_power
+     name: Circuit 01 Signed Power Live
++    entity_category: diagnostic
++    disabled_by_default: true
+     filters: [{throttle_average: 1s}]
+   - platform: copy
+     source_id: input_1_power
+     name: Circuit 01 Signed Power 1m Average
++    entity_category: diagnostic
++    disabled_by_default: true
+     filters: [{throttle_average: 60s}]
+   - platform: copy
+     source_id: fridge_current_raw
+     name: Circuit 01 Current Live
++    entity_category: diagnostic
++    disabled_by_default: true
+     filters: [{throttle_average: 1s}]
+   - platform: copy
+     source_id: fridge_current_raw
+     name: Circuit 01 Current 1m Average
++    entity_category: diagnostic
++    disabled_by_default: true
+     filters: [{throttle_average: 60s}]
+   - platform: copy
+     source_id: circuit_02_power_raw
+     name: Circuit 02 Signed Power Live
++    entity_category: diagnostic
++    disabled_by_default: true
+     filters: [{throttle_average: 1s}]
+   - platform: copy
+     source_id: circuit_02_power_raw
+     name: Circuit 02 Signed Power 1m Average
++    entity_category: diagnostic
++    disabled_by_default: true
+     filters: [{throttle_average: 60s}]
+   - platform: copy
+     source_id: circuit_02_current_raw
+     name: Circuit 02 Current Live
++    entity_category: diagnostic
++    disabled_by_default: true
+     filters: [{throttle_average: 1s}]
+   - platform: copy
+     source_id: circuit_02_current_raw
+     name: Circuit 02 Current 1m Average
++    entity_category: diagnostic
++    disabled_by_default: true
+     filters: [{throttle_average: 60s}]
+   - platform: copy
+     source_id: circuit_03_power_raw
+     name: Circuit 03 Signed Power Live
++    entity_category: diagnostic
++    disabled_by_default: true
+     filters: [{throttle_average: 1s}]
+   - platform: copy
+     source_id: circuit_03_power_raw
+     name: Circuit 03 Signed Power 1m Average
++    entity_category: diagnostic
++    disabled_by_default: true
+     filters: [{throttle_average: 60s}]
+   - platform: copy
+     source_id: circuit_03_current_raw
+     name: Circuit 03 Current Live
++    entity_category: diagnostic
++    disabled_by_default: true
+     filters: [{throttle_average: 1s}]
+   - platform: copy
+     source_id: circuit_03_current_raw
+     name: Circuit 03 Current 1m Average
++    entity_category: diagnostic
++    disabled_by_default: true
+     filters: [{throttle_average: 60s}]
+   - platform: copy
+     source_id: circuit_04_power_raw
+     name: Circuit 04 Signed Power Live
++    entity_category: diagnostic
++    disabled_by_default: true
+     filters: [{throttle_average: 1s}]
+   - platform: copy
+     source_id: circuit_04_power_raw
+     name: Circuit 04 Signed Power 1m Average
++    entity_category: diagnostic
++    disabled_by_default: true
+     filters: [{throttle_average: 60s}]
+   - platform: copy
+     source_id: circuit_04_current_raw
+     name: Circuit 04 Current Live
++    entity_category: diagnostic
++    disabled_by_default: true
+     filters: [{throttle_average: 1s}]
+   - platform: copy
+     source_id: circuit_04_current_raw
+     name: Circuit 04 Current 1m Average
++    entity_category: diagnostic
++    disabled_by_default: true
+     filters: [{throttle_average: 60s}]
+   - platform: copy
+     source_id: circuit_05_power_raw
+     name: Circuit 05 Signed Power Live
++    entity_category: diagnostic
++    disabled_by_default: true
+     filters: [{throttle_average: 1s}]
+   - platform: copy
+     source_id: circuit_05_power_raw
+     name: Circuit 05 Signed Power 1m Average
++    entity_category: diagnostic
++    disabled_by_default: true
+     filters: [{throttle_average: 60s}]
+   - platform: copy
+     source_id: circuit_05_current_raw
+     name: Circuit 05 Current Live
++    entity_category: diagnostic
++    disabled_by_default: true
+     filters: [{throttle_average: 1s}]
+   - platform: copy
+     source_id: circuit_05_current_raw
+     name: Circuit 05 Current 1m Average
++    entity_category: diagnostic
++    disabled_by_default: true
+     filters: [{throttle_average: 60s}]
+   - platform: copy
+     source_id: circuit_06_power_raw
+     name: Circuit 06 Signed Power Live
++    entity_category: diagnostic
++    disabled_by_default: true
+     filters: [{throttle_average: 1s}]
+   - platform: copy
+     source_id: circuit_06_power_raw
+     name: Circuit 06 Signed Power 1m Average
++    entity_category: diagnostic
++    disabled_by_default: true
+     filters: [{throttle_average: 60s}]
+   - platform: copy
+     source_id: circuit_06_current_raw
+     name: Circuit 06 Current Live
++    entity_category: diagnostic
++    disabled_by_default: true
+     filters: [{throttle_average: 1s}]
+   - platform: copy
+     source_id: circuit_06_current_raw
+     name: Circuit 06 Current 1m Average
++    entity_category: diagnostic
++    disabled_by_default: true
+     filters: [{throttle_average: 60s}]
+   - platform: copy
+     source_id: circuit_07_power_raw
+     name: Circuit 07 Signed Power Live
++    entity_category: diagnostic
++    disabled_by_default: true
+     filters: [{throttle_average: 1s}]
+   - platform: copy
+     source_id: circuit_07_power_raw
+     name: Circuit 07 Signed Power 1m Average
++    entity_category: diagnostic
++    disabled_by_default: true
+     filters: [{throttle_average: 60s}]
+   - platform: copy
+     source_id: circuit_07_current_raw
+     name: Circuit 07 Current Live
++    entity_category: diagnostic
++    disabled_by_default: true
+     filters: [{throttle_average: 1s}]
+   - platform: copy
+     source_id: circuit_07_current_raw
+     name: Circuit 07 Current 1m Average
++    entity_category: diagnostic
++    disabled_by_default: true
+     filters: [{throttle_average: 60s}]
+   - platform: copy
+     source_id: circuit_08_power_raw
+     name: Circuit 08 Signed Power Live
++    entity_category: diagnostic
++    disabled_by_default: true
+     filters: [{throttle_average: 1s}]
+   - platform: copy
+     source_id: circuit_08_power_raw
+     name: Circuit 08 Signed Power 1m Average
++    entity_category: diagnostic
++    disabled_by_default: true
+     filters: [{throttle_average: 60s}]
+   - platform: copy
+     source_id: circuit_08_current_raw
+     name: Circuit 08 Current Live
++    entity_category: diagnostic
++    disabled_by_default: true
+     filters: [{throttle_average: 1s}]
+   - platform: copy
+     source_id: circuit_08_current_raw
+     name: Circuit 08 Current 1m Average
++    entity_category: diagnostic
++    disabled_by_default: true
+     filters: [{throttle_average: 60s}]
+   - platform: copy
+     source_id: circuit_09_power_raw
+     name: Circuit 09 Signed Power Live
++    entity_category: diagnostic
++    disabled_by_default: true
+     filters: [{throttle_average: 1s}]
+   - platform: copy
+     source_id: circuit_09_power_raw
+     name: Circuit 09 Signed Power 1m Average
++    entity_category: diagnostic
++    disabled_by_default: true
+     filters: [{throttle_average: 60s}]
+   - platform: copy
+     source_id: circuit_09_current_raw
+     name: Circuit 09 Current Live
++    entity_category: diagnostic
++    disabled_by_default: true
+     filters: [{throttle_average: 1s}]
+   - platform: copy
+     source_id: circuit_09_current_raw
+     name: Circuit 09 Current 1m Average
++    entity_category: diagnostic
++    disabled_by_default: true
+     filters: [{throttle_average: 60s}]
+   - platform: copy
+     source_id: circuit_10_power_raw
+     name: Circuit 10 Signed Power Live
++    entity_category: diagnostic
++    disabled_by_default: true
+     filters: [{throttle_average: 1s}]
+   - platform: copy
+     source_id: circuit_10_power_raw
+     name: Circuit 10 Signed Power 1m Average
++    entity_category: diagnostic
++    disabled_by_default: true
+     filters: [{throttle_average: 60s}]
+   - platform: copy
+     source_id: circuit_10_current_raw
+     name: Circuit 10 Current Live
++    entity_category: diagnostic
++    disabled_by_default: true
+     filters: [{throttle_average: 1s}]
+   - platform: copy
+     source_id: circuit_10_current_raw
+     name: Circuit 10 Current 1m Average
++    entity_category: diagnostic
++    disabled_by_default: true
+     filters: [{throttle_average: 60s}]
+   - platform: copy
+     source_id: circuit_11_power_raw
+     name: Circuit 11 Signed Power Live
++    entity_category: diagnostic
++    disabled_by_default: true
+     filters: [{throttle_average: 1s}]
+   - platform: copy
+     source_id: circuit_11_power_raw
+     name: Circuit 11 Signed Power 1m Average
++    entity_category: diagnostic
++    disabled_by_default: true
+     filters: [{throttle_average: 60s}]
+   - platform: copy
+     source_id: circuit_11_current_raw
+     name: Circuit 11 Current Live
++    entity_category: diagnostic
++    disabled_by_default: true
+     filters: [{throttle_average: 1s}]
+   - platform: copy
+     source_id: circuit_11_current_raw
+     name: Circuit 11 Current 1m Average
++    entity_category: diagnostic
++    disabled_by_default: true
+     filters: [{throttle_average: 60s}]
+   - platform: copy
+     source_id: circuit_12_power_raw
+     name: Circuit 12 Signed Power Live
++    entity_category: diagnostic
++    disabled_by_default: true
+     filters: [{throttle_average: 1s}]
+   - platform: copy
+     source_id: circuit_12_power_raw
+     name: Circuit 12 Signed Power 1m Average
++    entity_category: diagnostic
++    disabled_by_default: true
+     filters: [{throttle_average: 60s}]
+   - platform: copy
+     source_id: circuit_12_current_raw
+     name: Circuit 12 Current Live
++    entity_category: diagnostic
++    disabled_by_default: true
+     filters: [{throttle_average: 1s}]
+   - platform: copy
+     source_id: circuit_12_current_raw
+     name: Circuit 12 Current 1m Average
++    entity_category: diagnostic
++    disabled_by_default: true
+     filters: [{throttle_average: 60s}]
+   - platform: copy
+     source_id: circuit_13_power_raw
+     name: Circuit 13 Signed Power Live
++    entity_category: diagnostic
++    disabled_by_default: true
+     filters: [{throttle_average: 1s}]
+   - platform: copy
+     source_id: circuit_13_power_raw
+     name: Circuit 13 Signed Power 1m Average
++    entity_category: diagnostic
++    disabled_by_default: true
+     filters: [{throttle_average: 60s}]
+   - platform: copy
+     source_id: circuit_13_current_raw
+     name: Circuit 13 Current Live
++    entity_category: diagnostic
++    disabled_by_default: true
+     filters: [{throttle_average: 1s}]
+   - platform: copy
+     source_id: circuit_13_current_raw
+     name: Circuit 13 Current 1m Average
++    entity_category: diagnostic
++    disabled_by_default: true
+     filters: [{throttle_average: 60s}]
+   - platform: copy
+     source_id: circuit_14_power_raw
+     name: Circuit 14 Signed Power Live
++    entity_category: diagnostic
++    disabled_by_default: true
+     filters: [{throttle_average: 1s}]
+   - platform: copy
+     source_id: circuit_14_power_raw
+     name: Circuit 14 Signed Power 1m Average
++    entity_category: diagnostic
++    disabled_by_default: true
+     filters: [{throttle_average: 60s}]
+   - platform: copy
+     source_id: circuit_14_current_raw
+     name: Circuit 14 Current Live
++    entity_category: diagnostic
++    disabled_by_default: true
+     filters: [{throttle_average: 1s}]
+   - platform: copy
+     source_id: circuit_14_current_raw
+     name: Circuit 14 Current 1m Average
++    entity_category: diagnostic
++    disabled_by_default: true
+     filters: [{throttle_average: 60s}]
+   - platform: copy
+     source_id: circuit_15_power_raw
+     name: Circuit 15 Signed Power Live
++    entity_category: diagnostic
++    disabled_by_default: true
+     filters: [{throttle_average: 1s}]
+   - platform: copy
+     source_id: circuit_15_power_raw
+     name: Circuit 15 Signed Power 1m Average
++    entity_category: diagnostic
++    disabled_by_default: true
+     filters: [{throttle_average: 60s}]
+   - platform: copy
+     source_id: circuit_15_current_raw
+     name: Circuit 15 Current Live
++    entity_category: diagnostic
++    disabled_by_default: true
+     filters: [{throttle_average: 1s}]
+   - platform: copy
+     source_id: circuit_15_current_raw
+     name: Circuit 15 Current 1m Average
++    entity_category: diagnostic
++    disabled_by_default: true
+     filters: [{throttle_average: 60s}]
+   - platform: copy
+     source_id: circuit_16_power_raw
+     name: Circuit 16 Signed Power Live
++    entity_category: diagnostic
++    disabled_by_default: true
+     filters: [{throttle_average: 1s}]
+   - platform: copy
+     source_id: circuit_16_power_raw
+     name: Circuit 16 Signed Power 1m Average
++    entity_category: diagnostic
++    disabled_by_default: true
+     filters: [{throttle_average: 60s}]
+   - platform: copy
+     source_id: circuit_16_current_raw
+     name: Circuit 16 Current Live
++    entity_category: diagnostic
++    disabled_by_default: true
+     filters: [{throttle_average: 1s}]
+   - platform: copy
+     source_id: circuit_16_current_raw
+     name: Circuit 16 Current 1m Average
++    entity_category: diagnostic
++    disabled_by_default: true
++    filters: [{throttle_average: 60s}]
++  # Labeled consumption streams. No changes to the raw metering reference.
++  - platform: copy
++    source_id: circuit_02_power_raw
++    id: circuit_02_power_corrected
++    internal: true
++    filters:
++      - lambda: return max(-x, 0.0f) * 2.0f;
++  - platform: copy
++    source_id: circuit_02_power_corrected
++    name: Dryer Power Live
++    filters: [{throttle_average: 1s}]
++  - platform: copy
++    source_id: circuit_02_power_corrected
++    name: Dryer Power 1m Average
++    filters: [{throttle_average: 60s}]
++  - platform: copy
++    source_id: circuit_02_current_raw
++    name: Dryer Current Live
++    filters: [{throttle_average: 1s}]
++  - platform: copy
++    source_id: circuit_02_current_raw
++    name: Dryer Current 1m Average
++    filters: [{throttle_average: 60s}]
++  - platform: copy
++    source_id: circuit_03_power_raw
++    id: circuit_03_power_corrected
++    internal: true
++    filters:
++      - lambda: return max(x, 0.0f) * 2.0f;
++  - platform: copy
++    source_id: circuit_03_power_corrected
++    name: AC Power Live
++    filters: [{throttle_average: 1s}]
++  - platform: copy
++    source_id: circuit_03_power_corrected
++    name: AC Power 1m Average
++    filters: [{throttle_average: 60s}]
++  - platform: copy
++    source_id: circuit_03_current_raw
++    name: AC Current Live
++    filters: [{throttle_average: 1s}]
++  - platform: copy
++    source_id: circuit_03_current_raw
++    name: AC Current 1m Average
++    filters: [{throttle_average: 60s}]
++  - platform: copy
++    source_id: circuit_04_power_raw
++    id: circuit_04_power_corrected
++    internal: true
++    filters:
++      - lambda: return max(x, 0.0f) * 2.0f;
++  - platform: copy
++    source_id: circuit_04_power_corrected
++    name: Range Oven Power Live
++    filters: [{throttle_average: 1s}]
++  - platform: copy
++    source_id: circuit_04_power_corrected
++    name: Range Oven Power 1m Average
++    filters: [{throttle_average: 60s}]
++  - platform: copy
++    source_id: circuit_04_current_raw
++    name: Range Oven Current Live
++    filters: [{throttle_average: 1s}]
++  - platform: copy
++    source_id: circuit_04_current_raw
++    name: Range Oven Current 1m Average
++    filters: [{throttle_average: 60s}]
++  - platform: copy
++    source_id: circuit_05_power_raw
++    id: circuit_05_power_corrected
++    internal: true
++    filters:
++      - lambda: return max(-x, 0.0f) * 1.0f;
++  - platform: copy
++    source_id: circuit_05_power_corrected
++    name: Microwave Power Live
++    filters: [{throttle_average: 1s}]
++  - platform: copy
++    source_id: circuit_05_power_corrected
++    name: Microwave Power 1m Average
++    filters: [{throttle_average: 60s}]
++  - platform: copy
++    source_id: circuit_05_current_raw
++    name: Microwave Current Live
++    filters: [{throttle_average: 1s}]
++  - platform: copy
++    source_id: circuit_05_current_raw
++    name: Microwave Current 1m Average
++    filters: [{throttle_average: 60s}]
++  - platform: copy
++    source_id: circuit_06_power_raw
++    id: circuit_06_power_corrected
++    internal: true
++    filters:
++      - lambda: return max(x, 0.0f) * 1.0f;
++  - platform: copy
++    source_id: circuit_06_power_corrected
++    name: Washer Bidet Laundry Power Live
++    filters: [{throttle_average: 1s}]
++  - platform: copy
++    source_id: circuit_06_power_corrected
++    name: Washer Bidet Laundry Power 1m Average
++    filters: [{throttle_average: 60s}]
++  - platform: copy
++    source_id: circuit_06_current_raw
++    name: Washer Bidet Laundry Current Live
++    filters: [{throttle_average: 1s}]
++  - platform: copy
++    source_id: circuit_06_current_raw
++    name: Washer Bidet Laundry Current 1m Average
++    filters: [{throttle_average: 60s}]
++  - platform: copy
++    source_id: circuit_07_power_raw
++    id: circuit_07_power_corrected
++    internal: true
++    filters:
++      - lambda: return max(-x, 0.0f) * 1.0f;
++  - platform: copy
++    source_id: circuit_07_power_corrected
++    name: Furnace Power Live
++    filters: [{throttle_average: 1s}]
++  - platform: copy
++    source_id: circuit_07_power_corrected
++    name: Furnace Power 1m Average
++    filters: [{throttle_average: 60s}]
++  - platform: copy
++    source_id: circuit_07_current_raw
++    name: Furnace Current Live
++    filters: [{throttle_average: 1s}]
++  - platform: copy
++    source_id: circuit_07_current_raw
++    name: Furnace Current 1m Average
++    filters: [{throttle_average: 60s}]
++  - platform: copy
++    source_id: circuit_08_power_raw
++    id: circuit_08_power_corrected
++    internal: true
++    filters:
++      - lambda: return max(x, 0.0f) * 1.0f;
++  - platform: copy
++    source_id: circuit_08_power_corrected
++    name: Water Heater Power Live
++    filters: [{throttle_average: 1s}]
++  - platform: copy
++    source_id: circuit_08_power_corrected
++    name: Water Heater Power 1m Average
++    filters: [{throttle_average: 60s}]
++  - platform: copy
++    source_id: circuit_08_current_raw
++    name: Water Heater Current Live
++    filters: [{throttle_average: 1s}]
++  - platform: copy
++    source_id: circuit_08_current_raw
++    name: Water Heater Current 1m Average
++    filters: [{throttle_average: 60s}]
++  - platform: copy
++    source_id: circuit_09_power_raw
++    id: circuit_09_power_corrected
++    internal: true
++    filters:
++      - lambda: return max(-x, 0.0f) * 1.0f;
++  - platform: copy
++    source_id: circuit_09_power_corrected
++    name: Garage Power Live
++    filters: [{throttle_average: 1s}]
++  - platform: copy
++    source_id: circuit_09_power_corrected
++    name: Garage Power 1m Average
++    filters: [{throttle_average: 60s}]
++  - platform: copy
++    source_id: circuit_09_current_raw
++    name: Garage Current Live
++    filters: [{throttle_average: 1s}]
++  - platform: copy
++    source_id: circuit_09_current_raw
++    name: Garage Current 1m Average
++    filters: [{throttle_average: 60s}]
++  - platform: copy
++    source_id: circuit_10_power_raw
++    id: circuit_10_power_corrected
++    internal: true
++    filters:
++      - lambda: return max(-x, 0.0f) * 1.0f;
++  - platform: copy
++    source_id: circuit_10_power_corrected
++    name: Dishwasher Power Live
++    filters: [{throttle_average: 1s}]
++  - platform: copy
++    source_id: circuit_10_power_corrected
++    name: Dishwasher Power 1m Average
++    filters: [{throttle_average: 60s}]
++  - platform: copy
++    source_id: circuit_10_current_raw
++    name: Dishwasher Current Live
++    filters: [{throttle_average: 1s}]
++  - platform: copy
++    source_id: circuit_10_current_raw
++    name: Dishwasher Current 1m Average
++    filters: [{throttle_average: 60s}]
++  - platform: copy
++    source_id: circuit_11_power_raw
++    id: circuit_11_power_corrected
++    internal: true
++    filters:
++      - lambda: return max(-x, 0.0f) * 2.0f;
++  - platform: copy
++    source_id: circuit_11_power_corrected
++    name: EV Charger Power Live
++    filters: [{throttle_average: 1s}]
++  - platform: copy
++    source_id: circuit_11_power_corrected
++    name: EV Charger Power 1m Average
++    filters: [{throttle_average: 60s}]
++  - platform: copy
++    source_id: circuit_11_current_raw
++    name: EV Charger Current Live
++    filters: [{throttle_average: 1s}]
++  - platform: copy
++    source_id: circuit_11_current_raw
++    name: EV Charger Current 1m Average
++    filters: [{throttle_average: 60s}]
++  - platform: copy
++    source_id: circuit_12_power_raw
++    id: circuit_12_power_corrected
++    internal: true
++    filters:
++      - lambda: return max(-x, 0.0f) * 2.0f;
++  - platform: copy
++    source_id: circuit_12_power_corrected
++    name: Claire Mini Split Power Live
++    filters: [{throttle_average: 1s}]
++  - platform: copy
++    source_id: circuit_12_power_corrected
++    name: Claire Mini Split Power 1m Average
++    filters: [{throttle_average: 60s}]
++  - platform: copy
++    source_id: circuit_12_current_raw
++    name: Claire Mini Split Current Live
++    filters: [{throttle_average: 1s}]
++  - platform: copy
++    source_id: circuit_12_current_raw
++    name: Claire Mini Split Current 1m Average
++    filters: [{throttle_average: 60s}]
++  - platform: copy
++    source_id: circuit_13_power_raw
++    id: circuit_13_power_corrected
++    internal: true
++    filters:
++      - lambda: return max(-x, 0.0f) * 1.0f;
++  - platform: copy
++    source_id: circuit_13_power_corrected
++    name: Office Power Live
++    filters: [{throttle_average: 1s}]
++  - platform: copy
++    source_id: circuit_13_power_corrected
++    name: Office Power 1m Average
++    filters: [{throttle_average: 60s}]
++  - platform: copy
++    source_id: circuit_13_current_raw
++    name: Office Current Live
++    filters: [{throttle_average: 1s}]
++  - platform: copy
++    source_id: circuit_13_current_raw
++    name: Office Current 1m Average
++    filters: [{throttle_average: 60s}]
++  - platform: copy
++    source_id: circuit_14_power_raw
++    id: circuit_14_power_corrected
++    internal: true
++    filters:
++      - lambda: return max(-x, 0.0f) * 1.0f;
++  - platform: copy
++    source_id: circuit_14_power_corrected
++    name: Master Bedroom Closet Power Live
++    filters: [{throttle_average: 1s}]
++  - platform: copy
++    source_id: circuit_14_power_corrected
++    name: Master Bedroom Closet Power 1m Average
++    filters: [{throttle_average: 60s}]
++  - platform: copy
++    source_id: circuit_14_current_raw
++    name: Master Bedroom Closet Current Live
++    filters: [{throttle_average: 1s}]
++  - platform: copy
++    source_id: circuit_14_current_raw
++    name: Master Bedroom Closet Current 1m Average
++    filters: [{throttle_average: 60s}]
++  - platform: copy
++    source_id: circuit_15_power_raw
++    id: circuit_15_power_corrected
++    internal: true
++    filters:
++      - lambda: return max(-x, 0.0f) * 1.0f;
++  - platform: copy
++    source_id: circuit_15_power_corrected
++    name: Basement Bathroom Power Live
++    filters: [{throttle_average: 1s}]
++  - platform: copy
++    source_id: circuit_15_power_corrected
++    name: Basement Bathroom Power 1m Average
++    filters: [{throttle_average: 60s}]
++  - platform: copy
++    source_id: circuit_15_current_raw
++    name: Basement Bathroom Current Live
++    filters: [{throttle_average: 1s}]
++  - platform: copy
++    source_id: circuit_15_current_raw
++    name: Basement Bathroom Current 1m Average
++    filters: [{throttle_average: 60s}]
++  - platform: copy
++    source_id: circuit_16_power_raw
++    id: circuit_16_power_corrected
++    internal: true
++    filters:
++      - lambda: return max(-x, 0.0f) * 1.0f;
++  - platform: copy
++    source_id: circuit_16_power_corrected
++    name: Loft Kids Bathroom Whole House Fan Power Live
++    filters: [{throttle_average: 1s}]
++  - platform: copy
++    source_id: circuit_16_power_corrected
++    name: Loft Kids Bathroom Whole House Fan Power 1m Average
++    filters: [{throttle_average: 60s}]
++  - platform: copy
++    source_id: circuit_16_current_raw
++    name: Loft Kids Bathroom Whole House Fan Current Live
++    filters: [{throttle_average: 1s}]
++  - platform: copy
++    source_id: circuit_16_current_raw
++    name: Loft Kids Bathroom Whole House Fan Current 1m Average
++    filters: [{throttle_average: 60s}]
++  - platform: copy
++    source_id: mains_a_power_raw
++    id: mains_a_power_corrected
++    internal: true
++    filters:
++      - lambda: return max(-x, 0.0f);
++  - platform: copy
++    source_id: mains_a_power_corrected
++    name: Mains A Power Live
++    filters: [{throttle_average: 1s}]
++  - platform: copy
++    source_id: mains_a_power_corrected
++    name: Mains A Power 1m Average
++    filters: [{throttle_average: 60s}]
++  - platform: copy
++    source_id: mains_b_power_raw
++    id: mains_b_power_corrected
++    internal: true
++    filters:
++      - lambda: return max(-x, 0.0f);
++  - platform: copy
++    source_id: mains_b_power_corrected
++    name: Mains B Power Live
++    filters: [{throttle_average: 1s}]
++  - platform: copy
++    source_id: mains_b_power_corrected
++    name: Mains B Power 1m Average
+     filters: [{throttle_average: 60s}]
+   - platform: uptime
+     name: Uptime

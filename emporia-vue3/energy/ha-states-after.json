@@ -1,0 +1,1286 @@
+[
+  {
+    "entity_id": "sensor.daily_ac_energy",
+    "state": "0.027246179071041438389539",
+    "attributes": {
+      "state_class": "total_increasing",
+      "status": "collecting",
+      "last_period": "7.446089046755527768270535",
+      "last_valid_state": "3534.172486165139471722578560",
+      "last_reset": "2026-09-27T06:00:00.005917+00:00",
+      "next_reset": "2026-09-28T00:00:00-06:00",
+      "unit_of_measurement": "kWh",
+      "device_class": "energy",
+      "friendly_name": "Daily AC Energy"
+    },
+    "last_changed": "2026-09-28T00:26:06.812616+00:00",
+    "last_reported": "2026-09-28T00:26:06.812616+00:00",
+    "last_updated": "2026-09-28T00:26:06.812616+00:00",
+    "context": {
+      "id": "01M3JPF62WY4QD4AFEYNN29DYY",
+      "parent_id": null,
+      "user_id": null
+    }
+  },
+  {
+    "entity_id": "sensor.daily_dryer_energy",
+    "state": "0.009223406755618972110606",
+    "attributes": {
+      "state_class": "total_increasing",
+      "status": "collecting",
+      "last_period": "0.031920898800263888837737",
+      "last_valid_state": "1504.024783483828077712922967",
+      "last_reset": "2026-09-27T06:00:00.044967+00:00",
+      "next_reset": "2026-09-28T00:00:00-06:00",
+      "unit_of_measurement": "kWh",
+      "device_class": "energy",
+      "friendly_name": "Daily Dryer Energy"
+    },
+    "last_changed": "2026-09-28T00:26:04.785175+00:00",
+    "last_reported": "2026-09-28T00:26:04.785175+00:00",
+    "last_updated": "2026-09-28T00:26:04.785175+00:00",
+    "context": {
+      "id": "01M3JPF43H22FA0H2F6AEAAVTK",
+      "parent_id": null,
+      "user_id": null
+    }
+  },
+  {
+    "entity_id": "sensor.daily_kitchen_energy",
+    "state": "0.0219012294047747560969165",
+    "attributes": {
+      "state_class": "total_increasing",
+      "status": "collecting",
+      "last_period": "0.7912561762470138874099724",
+      "last_valid_state": "565.1629418266443580416222597",
+      "last_reset": "2026-09-27T06:00:00.048125+00:00",
+      "next_reset": "2026-09-28T00:00:00-06:00",
+      "unit_of_measurement": "kWh",
+      "device_class": "energy",
+      "friendly_name": "Daily Kitchen Energy"
+    },
+    "last_changed": "2026-09-28T00:26:04.785509+00:00",
+    "last_reported": "2026-09-28T00:26:04.785509+00:00",
+    "last_updated": "2026-09-28T00:26:04.785509+00:00",
+    "context": {
+      "id": "01M3JPF43HTFHB0Q95FNR0D10T",
+      "parent_id": null,
+      "user_id": null
+    }
+  },
+  {
+    "entity_id": "sensor.daily_range_energy",
+    "state": "0.1519880907360973793862810",
+    "attributes": {
+      "state_class": "total_increasing",
+      "status": "collecting",
+      "last_period": "0.6105259781852638891033287",
+      "last_valid_state": "293.5202533805119166706225630",
+      "last_reset": "2026-09-27T06:00:00.030776+00:00",
+      "next_reset": "2026-09-28T00:00:00-06:00",
+      "unit_of_measurement": "kWh",
+      "device_class": "energy",
+      "friendly_name": "Daily Range Energy"
+    },
+    "last_changed": "2026-09-28T00:26:06.220473+00:00",
+    "last_reported": "2026-09-28T00:26:06.220473+00:00",
+    "last_updated": "2026-09-28T00:26:06.220473+00:00",
+    "context": {
+      "id": "01M3JPF5GC8DNJN0VVXMEJ1S17",
+      "parent_id": null,
+      "user_id": null
+    }
+  },
+  {
+    "entity_id": "sensor.daily_water_heater_energy",
+    "state": "0.0376282443962600876350577",
+    "attributes": {
+      "state_class": "total_increasing",
+      "status": "collecting",
+      "last_period": "0.2386439946430277775644704",
+      "last_valid_state": "239.1957321243840934316281448",
+      "last_reset": "2026-09-27T06:00:00.031687+00:00",
+      "next_reset": "2026-09-28T00:00:00-06:00",
+      "unit_of_measurement": "kWh",
+      "device_class": "energy",
+      "friendly_name": "Daily Water Heater Energy"
+    },
+    "last_changed": "2026-09-28T00:26:04.785609+00:00",
+    "last_reported": "2026-09-28T00:26:04.785609+00:00",
+    "last_updated": "2026-09-28T00:26:04.785609+00:00",
+    "context": {
+      "id": "01M3JPF43HRKXNK1X91R1HDDS8",
+      "parent_id": null,
+      "user_id": null
+    }
+  },
+  {
+    "entity_id": "sensor.daily_fridge_energy",
+    "state": "1.030575633651459935675409",
+    "attributes": {
+      "state_class": "total_increasing",
+      "status": "collecting",
+      "last_period": "3.279592520633847222132538",
+      "last_valid_state": "2084.684259583800376577771637",
+      "last_reset": "2026-09-27T06:00:00.047606+00:00",
+      "next_reset": "2026-09-28T00:00:00-06:00",
+      "unit_of_measurement": "kWh",
+      "device_class": "energy",
+      "friendly_name": "Daily Fridge Energy"
+    },
+    "last_changed": "2026-09-28T00:26:04.785405+00:00",
+    "last_reported": "2026-09-28T00:26:04.785405+00:00",
+    "last_updated": "2026-09-28T00:26:04.785405+00:00",
+    "context": {
+      "id": "01M3JPF43HJDTNSCGHC1AHANDN",
+      "parent_id": null,
+      "user_id": null
+    }
+  },
+  {
+    "entity_id": "sensor.daily_furnace_energy",
+    "state": "0.161585945754353925490988",
+    "attributes": {
+      "state_class": "total_increasing",
+      "status": "collecting",
+      "last_period": "3.938017396559222216128491",
+      "last_valid_state": "4125.450754652874812140517123",
+      "last_reset": "2026-09-27T06:00:00.050227+00:00",
+      "next_reset": "2026-09-28T00:00:00-06:00",
+      "unit_of_measurement": "kWh",
+      "device_class": "energy",
+      "friendly_name": "Daily Furnace Energy"
+    },
+    "last_changed": "2026-09-28T00:26:05.283336+00:00",
+    "last_reported": "2026-09-28T00:26:05.283336+00:00",
+    "last_updated": "2026-09-28T00:26:05.283336+00:00",
+    "context": {
+      "id": "01M3JPF4K342BWDJMV52Q61YA9",
+      "parent_id": null,
+      "user_id": null
+    }
+  },
+  {
+    "entity_id": "sensor.daily_tesla_energy",
+    "state": "35.8559930648309",
+    "attributes": {
+      "state_class": "total_increasing",
+      "status": "collecting",
+      "last_period": "70725.139413668361081502051",
+      "last_valid_state": "8411652.907436504019345997680",
+      "last_reset": "2026-09-27T06:00:00.017951+00:00",
+      "next_reset": "2026-09-28T00:00:00-06:00",
+      "unit_of_measurement": "kWh",
+      "device_class": "energy",
+      "friendly_name": "Daily Tesla Energy"
+    },
+    "last_changed": "2026-09-28T00:26:05.653502+00:00",
+    "last_reported": "2026-09-28T00:26:05.653502+00:00",
+    "last_updated": "2026-09-28T00:26:05.653502+00:00",
+    "context": {
+      "id": "01M3JPF4YN0AM79P7GT803WZJS",
+      "parent_id": null,
+      "user_id": null
+    }
+  },
+  {
+    "entity_id": "sensor.office_daily_energy_2",
+    "state": "0.827258373033127100888236",
+    "attributes": {
+      "state_class": "total_increasing",
+      "status": "collecting",
+      "last_period": "2.750410678782833336412323",
+      "last_valid_state": "1409.211963889894613159848291",
+      "last_reset": "2026-09-27T06:00:00.021885+00:00",
+      "next_reset": "2026-09-28T00:00:00-06:00",
+      "unit_of_measurement": "kWh",
+      "device_class": "energy",
+      "friendly_name": "Office Daily Energy "
+    },
+    "last_changed": "2026-09-28T00:26:05.654097+00:00",
+    "last_reported": "2026-09-28T00:26:05.654097+00:00",
+    "last_updated": "2026-09-28T00:26:05.654097+00:00",
+    "context": {
+      "id": "01M3JPF4YPGZD0RFZTF40W1XYZ",
+      "parent_id": null,
+      "user_id": null
+    }
+  },
+  {
+    "entity_id": "sensor.claire_mini_daily_energy",
+    "state": "0.0582383844228815990051010",
+    "attributes": {
+      "state_class": "total_increasing",
+      "status": "collecting",
+      "last_period": "0.5147476064682361110152542",
+      "last_valid_state": "428.8837880311789094105937880",
+      "last_reset": "2026-09-27T06:00:00.048478+00:00",
+      "next_reset": "2026-09-28T00:00:00-06:00",
+      "unit_of_measurement": "kWh",
+      "device_class": "energy",
+      "friendly_name": "Claire Mini Daily Energy"
+    },
+    "last_changed": "2026-09-28T00:26:04.785958+00:00",
+    "last_reported": "2026-09-28T00:26:04.785958+00:00",
+    "last_updated": "2026-09-28T00:26:04.785958+00:00",
+    "context": {
+      "id": "01M3JPF43HYC0TKQPQGJVM0X06",
+      "parent_id": null,
+      "user_id": null
+    }
+  },
+  {
+    "entity_id": "sensor.water_heater_energy",
+    "state": "239.1957321243840934316281448",
+    "attributes": {
+      "state_class": "total",
+      "source": "sensor.emporia_vue3_water_heater_power_1m_average",
+      "unit_of_measurement": "kWh",
+      "device_class": "energy",
+      "friendly_name": "Water Heater Energy"
+    },
+    "last_changed": "2026-09-28T00:26:04.784584+00:00",
+    "last_reported": "2026-09-28T00:26:04.784584+00:00",
+    "last_updated": "2026-09-28T00:26:04.784584+00:00",
+    "context": {
+      "id": "01M3JPF43GKTCDR0J5Y3WF8BAC",
+      "parent_id": null,
+      "user_id": null
+    }
+  },
+  {
+    "entity_id": "sensor.furnace_energy",
+    "state": "4125.450754652874812140517123",
+    "attributes": {
+      "state_class": "total",
+      "source": "sensor.emporia_vue3_furnace_power_1m_average",
+      "unit_of_measurement": "kWh",
+      "device_class": "energy",
+      "friendly_name": "Furnace Energy"
+    },
+    "last_changed": "2026-09-28T00:26:05.282984+00:00",
+    "last_reported": "2026-09-28T00:26:05.282984+00:00",
+    "last_updated": "2026-09-28T00:26:05.282984+00:00",
+    "context": {
+      "id": "01M3JPF4K2KPQH5S1A080YRYJA",
+      "parent_id": null,
+      "user_id": null
+    }
+  },
+  {
+    "entity_id": "sensor.fridge_energy",
+    "state": "2084.684259583800376577771637",
+    "attributes": {
+      "state_class": "total",
+      "source": "sensor.emporia_vue3_fridge_power_1m_average",
+      "unit_of_measurement": "kWh",
+      "device_class": "energy",
+      "friendly_name": "Fridge Energy"
+    },
+    "last_changed": "2026-09-28T00:26:04.784370+00:00",
+    "last_reported": "2026-09-28T00:26:04.784370+00:00",
+    "last_updated": "2026-09-28T00:26:04.784370+00:00",
+    "context": {
+      "id": "01M3JPF43GBCV8JZYWX8TFD83P",
+      "parent_id": null,
+      "user_id": null
+    }
+  },
+  {
+    "entity_id": "sensor.kitchen_energy",
+    "state": "565.1629418266443580416222597",
+    "attributes": {
+      "state_class": "total",
+      "source": "sensor.emporia_vue3_dishwasher_power_1m_average",
+      "unit_of_measurement": "kWh",
+      "device_class": "energy",
+      "friendly_name": "Kitchen Energy"
+    },
+    "last_changed": "2026-09-28T00:26:04.784483+00:00",
+    "last_reported": "2026-09-28T00:26:04.784483+00:00",
+    "last_updated": "2026-09-28T00:26:04.784483+00:00",
+    "context": {
+      "id": "01M3JPF43GXRA3VEQCQ47W1FPM",
+      "parent_id": null,
+      "user_id": null
+    }
+  },
+  {
+    "entity_id": "sensor.ac_energy",
+    "state": "3534.172486165139471722578560",
+    "attributes": {
+      "state_class": "total",
+      "source": "sensor.emporia_vue3_ac_power_1m_average",
+      "unit_of_measurement": "kWh",
+      "device_class": "energy",
+      "friendly_name": "AC Energy"
+    },
+    "last_changed": "2026-09-28T00:26:06.812464+00:00",
+    "last_reported": "2026-09-28T00:26:06.812464+00:00",
+    "last_updated": "2026-09-28T00:26:06.812464+00:00",
+    "context": {
+      "id": "01M3JPF62W35CWP6MWBASQYCVJ",
+      "parent_id": null,
+      "user_id": null
+    }
+  },
+  {
+    "entity_id": "sensor.dryer_energy",
+    "state": "1504.024783483828077712922967",
+    "attributes": {
+      "state_class": "total",
+      "source": "sensor.emporia_vue3_dryer_power_1m_average",
+      "unit_of_measurement": "kWh",
+      "device_class": "energy",
+      "friendly_name": "Dryer Energy"
+    },
+    "last_changed": "2026-09-28T00:26:04.784137+00:00",
+    "last_reported": "2026-09-28T00:26:04.784137+00:00",
+    "last_updated": "2026-09-28T00:26:04.784137+00:00",
+    "context": {
+      "id": "01M3JPF43G0J5TEXNSP1WFEFQ5",
+      "parent_id": null,
+      "user_id": null
+    }
+  },
+  {
+    "entity_id": "sensor.tesla_energy",
+    "state": "8411652.907436504019345997680",
+    "attributes": {
+      "state_class": "total",
+      "source": "sensor.emporia_vue3_ev_charger_power_1m_average",
+      "unit_of_measurement": "Wh",
+      "device_class": "energy",
+      "friendly_name": "Tesla Energy"
+    },
+    "last_changed": "2026-09-28T00:26:05.652671+00:00",
+    "last_reported": "2026-09-28T00:26:05.652671+00:00",
+    "last_updated": "2026-09-28T00:26:05.652671+00:00",
+    "context": {
+      "id": "01M3JPF4YM1XNSF22E3AWECKNR",
+      "parent_id": null,
+      "user_id": null
+    }
+  },
+  {
+    "entity_id": "sensor.oven_energy",
+    "state": "293.5202533805119166706225630",
+    "attributes": {
+      "state_class": "total",
+      "source": "sensor.emporia_vue3_range_oven_power_1m_average",
+      "unit_of_measurement": "kWh",
+      "device_class": "energy",
+      "friendly_name": "Oven Energy"
+    },
+    "last_changed": "2026-09-28T00:26:06.220205+00:00",
+    "last_reported": "2026-09-28T00:26:06.220205+00:00",
+    "last_updated": "2026-09-28T00:26:06.220205+00:00",
+    "context": {
+      "id": "01M3JPF5GCPNKNHS2FW1F97QD7",
+      "parent_id": null,
+      "user_id": null
+    }
+  },
+  {
+    "entity_id": "sensor.office_energy",
+    "state": "1409.211963889894613159848291",
+    "attributes": {
+      "state_class": "total",
+      "source": "sensor.emporia_vue3_office_power_1m_average",
+      "unit_of_measurement": "kWh",
+      "device_class": "energy",
+      "friendly_name": "Office Energy"
+    },
+    "last_changed": "2026-09-28T00:26:05.652900+00:00",
+    "last_reported": "2026-09-28T00:26:05.652900+00:00",
+    "last_updated": "2026-09-28T00:26:05.652900+00:00",
+    "context": {
+      "id": "01M3JPF4YM0RDPK3ZCRMM73CG5",
+      "parent_id": null,
+      "user_id": null
+    }
+  },
+  {
+    "entity_id": "sensor.claire_mini_energy",
+    "state": "428.8837880311789094105937880",
+    "attributes": {
+      "state_class": "total",
+      "source": "sensor.emporia_vue3_claire_mini_split_power_1m_average",
+      "unit_of_measurement": "kWh",
+      "device_class": "energy",
+      "friendly_name": "Claire Mini Energy"
+    },
+    "last_changed": "2026-09-28T00:26:04.785023+00:00",
+    "last_reported": "2026-09-28T00:26:04.785023+00:00",
+    "last_updated": "2026-09-28T00:26:04.785023+00:00",
+    "context": {
+      "id": "01M3JPF43HMCSZGAA3SBFR6YTD",
+      "parent_id": null,
+      "user_id": null
+    }
+  },
+  {
+    "entity_id": "sensor.emporia_vue3_fridge_power",
+    "state": "195.144683837891",
+    "attributes": {
+      "state_class": "measurement",
+      "unit_of_measurement": "W",
+      "device_class": "power",
+      "friendly_name": "Emporia Vue 3 Fridge Power"
+    },
+    "last_changed": "2026-09-28T00:26:41.300322+00:00",
+    "last_reported": "2026-09-28T00:26:41.300322+00:00",
+    "last_updated": "2026-09-28T00:26:41.300322+00:00",
+    "context": {
+      "id": "01M3JPG7RM81MXT7CJBSCMSZNV",
+      "parent_id": null,
+      "user_id": null
+    }
+  },
+  {
+    "entity_id": "sensor.emporia_vue3_fridge_power_1m_average",
+    "state": "190.209167480469",
+    "attributes": {
+      "state_class": "measurement",
+      "unit_of_measurement": "W",
+      "device_class": "power",
+      "friendly_name": "Emporia Vue 3 Fridge Power 1m Average"
+    },
+    "last_changed": "2026-09-28T00:26:04.782323+00:00",
+    "last_reported": "2026-09-28T00:26:04.782323+00:00",
+    "last_updated": "2026-09-28T00:26:04.782323+00:00",
+    "context": {
+      "id": "01M3JPF43EXBKTRQSF0R0CHNRR",
+      "parent_id": null,
+      "user_id": null
+    }
+  },
+  {
+    "entity_id": "sensor.emporia_vue3_dryer_power_live",
+    "state": "1.4936249256134",
+    "attributes": {
+      "state_class": "measurement",
+      "unit_of_measurement": "W",
+      "device_class": "power",
+      "friendly_name": "Emporia Vue 3 Dryer Power Live"
+    },
+    "last_changed": "2026-09-28T00:26:41.310827+00:00",
+    "last_reported": "2026-09-28T00:26:41.310827+00:00",
+    "last_updated": "2026-09-28T00:26:41.310827+00:00",
+    "context": {
+      "id": "01M3JPG7RYWEM2PYW1HEG6RX0Z",
+      "parent_id": null,
+      "user_id": null
+    }
+  },
+  {
+    "entity_id": "sensor.emporia_vue3_dryer_power_1m_average",
+    "state": "2.08417582511902",
+    "attributes": {
+      "state_class": "measurement",
+      "unit_of_measurement": "W",
+      "device_class": "power",
+      "friendly_name": "Emporia Vue 3 Dryer Power 1m Average"
+    },
+    "last_changed": "2026-09-28T00:26:04.781791+00:00",
+    "last_reported": "2026-09-28T00:26:04.781791+00:00",
+    "last_updated": "2026-09-28T00:26:04.781791+00:00",
+    "context": {
+      "id": "01M3JPF43DKT88AA47YNAQ1R5Y",
+      "parent_id": null,
+      "user_id": null
+    }
+  },
+  {
+    "entity_id": "sensor.emporia_vue3_ac_power_live",
+    "state": "3.33724999427795",
+    "attributes": {
+      "state_class": "measurement",
+      "unit_of_measurement": "W",
+      "device_class": "power",
+      "friendly_name": "Emporia Vue 3 AC Power Live"
+    },
+    "last_changed": "2026-09-28T00:26:41.303584+00:00",
+    "last_reported": "2026-09-28T00:26:41.303584+00:00",
+    "last_updated": "2026-09-28T00:26:41.303584+00:00",
+    "context": {
+      "id": "01M3JPG7RQPWYQM76NDW7N20ZN",
+      "parent_id": null,
+      "user_id": null
+    }
+  },
+  {
+    "entity_id": "sensor.emporia_vue3_ac_power_1m_average",
+    "state": "2.51304388046265",
+    "attributes": {
+      "state_class": "measurement",
+      "unit_of_measurement": "W",
+      "device_class": "power",
+      "friendly_name": "Emporia Vue 3 AC Power 1m Average"
+    },
+    "last_changed": "2026-09-28T00:26:06.812285+00:00",
+    "last_reported": "2026-09-28T00:26:06.812285+00:00",
+    "last_updated": "2026-09-28T00:26:06.812285+00:00",
+    "context": {
+      "id": "01M3JPF62WDJE7S5W729HTN73Y",
+      "parent_id": null,
+      "user_id": null
+    }
+  },
+  {
+    "entity_id": "sensor.emporia_vue3_range_oven_power_live",
+    "state": "0.771750032901764",
+    "attributes": {
+      "state_class": "measurement",
+      "unit_of_measurement": "W",
+      "device_class": "power",
+      "friendly_name": "Emporia Vue 3 Range Oven Power Live"
+    },
+    "last_changed": "2026-09-28T00:26:41.302326+00:00",
+    "last_reported": "2026-09-28T00:26:41.302326+00:00",
+    "last_updated": "2026-09-28T00:26:41.302326+00:00",
+    "context": {
+      "id": "01M3JPG7RPG1MS9YBA87YRBZ4B",
+      "parent_id": null,
+      "user_id": null
+    }
+  },
+  {
+    "entity_id": "sensor.emporia_vue3_range_oven_power_1m_average",
+    "state": "1.29510354995728",
+    "attributes": {
+      "state_class": "measurement",
+      "unit_of_measurement": "W",
+      "device_class": "power",
+      "friendly_name": "Emporia Vue 3 Range Oven Power 1m Average"
+    },
+    "last_changed": "2026-09-28T00:26:06.219805+00:00",
+    "last_reported": "2026-09-28T00:26:06.219805+00:00",
+    "last_updated": "2026-09-28T00:26:06.219805+00:00",
+    "context": {
+      "id": "01M3JPF5GBFAPPYFJKJY75WQ30",
+      "parent_id": null,
+      "user_id": null
+    }
+  },
+  {
+    "entity_id": "sensor.emporia_vue3_microwave_power_live",
+    "state": "0.591500043869019",
+    "attributes": {
+      "state_class": "measurement",
+      "unit_of_measurement": "W",
+      "device_class": "power",
+      "friendly_name": "Emporia Vue 3 Microwave Power Live"
+    },
+    "last_changed": "2026-09-28T00:26:41.313217+00:00",
+    "last_reported": "2026-09-28T00:26:41.313217+00:00",
+    "last_updated": "2026-09-28T00:26:41.313217+00:00",
+    "context": {
+      "id": "01M3JPG7S1NKV0QNQAQFDT3DBD",
+      "parent_id": null,
+      "user_id": null
+    }
+  },
+  {
+    "entity_id": "sensor.emporia_vue3_microwave_power_1m_average",
+    "state": "0.671205699443817",
+    "attributes": {
+      "state_class": "measurement",
+      "unit_of_measurement": "W",
+      "device_class": "power",
+      "friendly_name": "Emporia Vue 3 Microwave Power 1m Average"
+    },
+    "last_changed": "2026-09-28T00:26:04.999147+00:00",
+    "last_reported": "2026-09-28T00:26:04.999147+00:00",
+    "last_updated": "2026-09-28T00:26:04.999147+00:00",
+    "context": {
+      "id": "01M3JPF4A7XKMG3NKDZC455HW1",
+      "parent_id": null,
+      "user_id": null
+    }
+  },
+  {
+    "entity_id": "sensor.emporia_vue3_washer_bidet_laundry_power_live",
+    "state": "48.9680633544922",
+    "attributes": {
+      "state_class": "measurement",
+      "unit_of_measurement": "W",
+      "device_class": "power",
+      "friendly_name": "Emporia Vue 3 Washer Bidet Laundry Power Live"
+    },
+    "last_changed": "2026-09-28T00:26:41.304605+00:00",
+    "last_reported": "2026-09-28T00:26:41.304605+00:00",
+    "last_updated": "2026-09-28T00:26:41.304605+00:00",
+    "context": {
+      "id": "01M3JPG7RRBTPEJ1X4PWW9YM1A",
+      "parent_id": null,
+      "user_id": null
+    }
+  },
+  {
+    "entity_id": "sensor.emporia_vue3_washer_bidet_laundry_power_1m_average",
+    "state": "45.2443351745605",
+    "attributes": {
+      "state_class": "measurement",
+      "unit_of_measurement": "W",
+      "device_class": "power",
+      "friendly_name": "Emporia Vue 3 Washer Bidet Laundry Power 1m Average"
+    },
+    "last_changed": "2026-09-28T00:26:06.955504+00:00",
+    "last_reported": "2026-09-28T00:26:06.955504+00:00",
+    "last_updated": "2026-09-28T00:26:06.955504+00:00",
+    "context": {
+      "id": "01M3JPF67BRQETWTDFKXX337QV",
+      "parent_id": null,
+      "user_id": null
+    }
+  },
+  {
+    "entity_id": "sensor.emporia_vue3_furnace_power_live",
+    "state": "7.44318723678589",
+    "attributes": {
+      "state_class": "measurement",
+      "unit_of_measurement": "W",
+      "device_class": "power",
+      "friendly_name": "Emporia Vue 3 Furnace Power Live"
+    },
+    "last_changed": "2026-09-28T00:26:41.305596+00:00",
+    "last_reported": "2026-09-28T00:26:41.305596+00:00",
+    "last_updated": "2026-09-28T00:26:41.305596+00:00",
+    "context": {
+      "id": "01M3JPG7RSV1BQZWHZQP40SKY7",
+      "parent_id": null,
+      "user_id": null
+    }
+  },
+  {
+    "entity_id": "sensor.emporia_vue3_furnace_power_1m_average",
+    "state": "7.90436601638794",
+    "attributes": {
+      "state_class": "measurement",
+      "unit_of_measurement": "W",
+      "device_class": "power",
+      "friendly_name": "Emporia Vue 3 Furnace Power 1m Average"
+    },
+    "last_changed": "2026-09-28T00:26:05.282438+00:00",
+    "last_reported": "2026-09-28T00:26:05.282438+00:00",
+    "last_updated": "2026-09-28T00:26:05.282438+00:00",
+    "context": {
+      "id": "01M3JPF4K2DQ68RXFDFTK7MW3E",
+      "parent_id": null,
+      "user_id": null
+    }
+  },
+  {
+    "entity_id": "sensor.emporia_vue3_water_heater_power_live",
+    "state": "3.01962518692017",
+    "attributes": {
+      "state_class": "measurement",
+      "unit_of_measurement": "W",
+      "device_class": "power",
+      "friendly_name": "Emporia Vue 3 Water Heater Power Live"
+    },
+    "last_changed": "2026-09-28T00:26:41.312289+00:00",
+    "last_reported": "2026-09-28T00:26:41.312289+00:00",
+    "last_updated": "2026-09-28T00:26:41.312289+00:00",
+    "context": {
+      "id": "01M3JPG7S0SW7MAP6ZF4FHV1M2",
+      "parent_id": null,
+      "user_id": null
+    }
+  },
+  {
+    "entity_id": "sensor.emporia_vue3_water_heater_power_1m_average",
+    "state": "3.17264652252197",
+    "attributes": {
+      "state_class": "measurement",
+      "unit_of_measurement": "W",
+      "device_class": "power",
+      "friendly_name": "Emporia Vue 3 Water Heater Power 1m Average"
+    },
+    "last_changed": "2026-09-28T00:26:04.782881+00:00",
+    "last_reported": "2026-09-28T00:26:04.782881+00:00",
+    "last_updated": "2026-09-28T00:26:04.782881+00:00",
+    "context": {
+      "id": "01M3JPF43ECY5KG99ZS0885XQN",
+      "parent_id": null,
+      "user_id": null
+    }
+  },
+  {
+    "entity_id": "sensor.emporia_vue3_garage_power_live",
+    "state": "78.4577484130859",
+    "attributes": {
+      "state_class": "measurement",
+      "unit_of_measurement": "W",
+      "device_class": "power",
+      "friendly_name": "Emporia Vue 3 Garage Power Live"
+    },
+    "last_changed": "2026-09-28T00:26:41.306637+00:00",
+    "last_reported": "2026-09-28T00:26:41.306637+00:00",
+    "last_updated": "2026-09-28T00:26:41.306637+00:00",
+    "context": {
+      "id": "01M3JPG7RTQ64JGK7YTDS0TZ0Y",
+      "parent_id": null,
+      "user_id": null
+    }
+  },
+  {
+    "entity_id": "sensor.emporia_vue3_garage_power_1m_average",
+    "state": "78.6656951904297",
+    "attributes": {
+      "state_class": "measurement",
+      "unit_of_measurement": "W",
+      "device_class": "power",
+      "friendly_name": "Emporia Vue 3 Garage Power 1m Average"
+    },
+    "last_changed": "2026-09-28T00:26:04.782079+00:00",
+    "last_reported": "2026-09-28T00:26:04.782079+00:00",
+    "last_updated": "2026-09-28T00:26:04.782079+00:00",
+    "context": {
+      "id": "01M3JPF43E5AHVJJTA0548YB1V",
+      "parent_id": null,
+      "user_id": null
+    }
+  },
+  {
+    "entity_id": "sensor.emporia_vue3_dishwasher_power_live",
+    "state": "0.634812474250793",
+    "attributes": {
+      "state_class": "measurement",
+      "unit_of_measurement": "W",
+      "device_class": "power",
+      "friendly_name": "Emporia Vue 3 Dishwasher Power Live"
+    },
+    "last_changed": "2026-09-28T00:26:41.306438+00:00",
+    "last_reported": "2026-09-28T00:26:41.306438+00:00",
+    "last_updated": "2026-09-28T00:26:41.306438+00:00",
+    "context": {
+      "id": "01M3JPG7RT75NA3J9J9QFTWJ11",
+      "parent_id": null,
+      "user_id": null
+    }
+  },
+  {
+    "entity_id": "sensor.emporia_vue3_dishwasher_power_1m_average",
+    "state": "0.608495831489563",
+    "attributes": {
+      "state_class": "measurement",
+      "unit_of_measurement": "W",
+      "device_class": "power",
+      "friendly_name": "Emporia Vue 3 Dishwasher Power 1m Average"
+    },
+    "last_changed": "2026-09-28T00:26:04.782587+00:00",
+    "last_reported": "2026-09-28T00:26:04.782587+00:00",
+    "last_updated": "2026-09-28T00:26:04.782587+00:00",
+    "context": {
+      "id": "01M3JPF43E2K3FRDV873KK3MJX",
+      "parent_id": null,
+      "user_id": null
+    }
+  },
+  {
+    "entity_id": "sensor.emporia_vue3_ev_charger_power_live",
+    "state": "2.22250008583069",
+    "attributes": {
+      "state_class": "measurement",
+      "unit_of_measurement": "W",
+      "device_class": "power",
+      "friendly_name": "Emporia Vue 3 EV Charger Power Live"
+    },
+    "last_changed": "2026-09-28T00:26:41.312121+00:00",
+    "last_reported": "2026-09-28T00:26:41.312121+00:00",
+    "last_updated": "2026-09-28T00:26:41.312121+00:00",
+    "context": {
+      "id": "01M3JPG7S0JD83QR0MEBH9Z7CA",
+      "parent_id": null,
+      "user_id": null
+    }
+  },
+  {
+    "entity_id": "sensor.emporia_vue3_ev_charger_power_1m_average",
+    "state": "2.03774094581604",
+    "attributes": {
+      "state_class": "measurement",
+      "unit_of_measurement": "W",
+      "device_class": "power",
+      "friendly_name": "Emporia Vue 3 EV Charger Power 1m Average"
+    },
+    "last_changed": "2026-09-28T00:26:05.651700+00:00",
+    "last_reported": "2026-09-28T00:26:05.651700+00:00",
+    "last_updated": "2026-09-28T00:26:05.651700+00:00",
+    "context": {
+      "id": "01M3JPF4YK8XB3VNDQTDR4MMH2",
+      "parent_id": null,
+      "user_id": null
+    }
+  },
+  {
+    "entity_id": "sensor.emporia_vue3_claire_mini_split_power_live",
+    "state": "69.1661224365234",
+    "attributes": {
+      "state_class": "measurement",
+      "unit_of_measurement": "W",
+      "device_class": "power",
+      "friendly_name": "Emporia Vue 3 Claire Mini Split Power Live"
+    },
+    "last_changed": "2026-09-28T00:26:41.300940+00:00",
+    "last_reported": "2026-09-28T00:26:41.300940+00:00",
+    "last_updated": "2026-09-28T00:26:41.300940+00:00",
+    "context": {
+      "id": "01M3JPG7RM3JPRG8X0MFT5NENA",
+      "parent_id": null,
+      "user_id": null
+    }
+  },
+  {
+    "entity_id": "sensor.emporia_vue3_claire_mini_split_power_1m_average",
+    "state": "69.5275421142578",
+    "attributes": {
+      "state_class": "measurement",
+      "unit_of_measurement": "W",
+      "device_class": "power",
+      "friendly_name": "Emporia Vue 3 Claire Mini Split Power 1m Average"
+    },
+    "last_changed": "2026-09-28T00:26:04.783516+00:00",
+    "last_reported": "2026-09-28T00:26:04.783516+00:00",
+    "last_updated": "2026-09-28T00:26:04.783516+00:00",
+    "context": {
+      "id": "01M3JPF43FCSYP9YDEEY0VC8JM",
+      "parent_id": null,
+      "user_id": null
+    }
+  },
+  {
+    "entity_id": "sensor.emporia_vue3_office_power_live",
+    "state": "71.0906829833984",
+    "attributes": {
+      "state_class": "measurement",
+      "unit_of_measurement": "W",
+      "device_class": "power",
+      "friendly_name": "Emporia Vue 3 Office Power Live"
+    },
+    "last_changed": "2026-09-28T00:26:41.306134+00:00",
+    "last_reported": "2026-09-28T00:26:41.306134+00:00",
+    "last_updated": "2026-09-28T00:26:41.306134+00:00",
+    "context": {
+      "id": "01M3JPG7RTY31X7G29TP6Y4QRB",
+      "parent_id": null,
+      "user_id": null
+    }
+  },
+  {
+    "entity_id": "sensor.emporia_vue3_office_power_1m_average",
+    "state": "68.9376831054688",
+    "attributes": {
+      "state_class": "measurement",
+      "unit_of_measurement": "W",
+      "device_class": "power",
+      "friendly_name": "Emporia Vue 3 Office Power 1m Average"
+    },
+    "last_changed": "2026-09-28T00:26:05.652110+00:00",
+    "last_reported": "2026-09-28T00:26:05.652110+00:00",
+    "last_updated": "2026-09-28T00:26:05.652110+00:00",
+    "context": {
+      "id": "01M3JPF4YMJPY7CSRPR7ZR9R5C",
+      "parent_id": null,
+      "user_id": null
+    }
+  },
+  {
+    "entity_id": "sensor.emporia_vue3_master_bedroom_closet_power_live",
+    "state": "31.6592483520508",
+    "attributes": {
+      "state_class": "measurement",
+      "unit_of_measurement": "W",
+      "device_class": "power",
+      "friendly_name": "Emporia Vue 3 Master Bedroom Closet Power Live"
+    },
+    "last_changed": "2026-09-28T00:26:41.304925+00:00",
+    "last_reported": "2026-09-28T00:26:41.304925+00:00",
+    "last_updated": "2026-09-28T00:26:41.304925+00:00",
+    "context": {
+      "id": "01M3JPG7RRSWJAQK9G1KCG3K02",
+      "parent_id": null,
+      "user_id": null
+    }
+  },
+  {
+    "entity_id": "sensor.emporia_vue3_master_bedroom_closet_power_1m_average",
+    "state": "31.7465839385986",
+    "attributes": {
+      "state_class": "measurement",
+      "unit_of_measurement": "W",
+      "device_class": "power",
+      "friendly_name": "Emporia Vue 3 Master Bedroom Closet Power 1m Average"
+    },
+    "last_changed": "2026-09-28T00:26:06.605048+00:00",
+    "last_reported": "2026-09-28T00:26:06.605048+00:00",
+    "last_updated": "2026-09-28T00:26:06.605048+00:00",
+    "context": {
+      "id": "01M3JPF5WDX8GKDHFCB5CNHFXF",
+      "parent_id": null,
+      "user_id": null
+    }
+  },
+  {
+    "entity_id": "sensor.emporia_vue3_basement_bathroom_power_live",
+    "state": "20.8411884307861",
+    "attributes": {
+      "state_class": "measurement",
+      "unit_of_measurement": "W",
+      "device_class": "power",
+      "friendly_name": "Emporia Vue 3 Basement Bathroom Power Live"
+    },
+    "last_changed": "2026-09-28T00:26:41.305346+00:00",
+    "last_reported": "2026-09-28T00:26:41.305346+00:00",
+    "last_updated": "2026-09-28T00:26:41.305346+00:00",
+    "context": {
+      "id": "01M3JPG7RSJFMK3DGC40XP88VQ",
+      "parent_id": null,
+      "user_id": null
+    }
+  },
+  {
+    "entity_id": "sensor.emporia_vue3_basement_bathroom_power_1m_average",
+    "state": "23.8891353607178",
+    "attributes": {
+      "state_class": "measurement",
+      "unit_of_measurement": "W",
+      "device_class": "power",
+      "friendly_name": "Emporia Vue 3 Basement Bathroom Power 1m Average"
+    },
+    "last_changed": "2026-09-28T00:26:04.783070+00:00",
+    "last_reported": "2026-09-28T00:26:04.783070+00:00",
+    "last_updated": "2026-09-28T00:26:04.783070+00:00",
+    "context": {
+      "id": "01M3JPF43FPQ1Q5JEX3HQV0GKF",
+      "parent_id": null,
+      "user_id": null
+    }
+  },
+  {
+    "entity_id": "sensor.emporia_vue3_loft_kids_bathroom_whole_house_fan_power_live",
+    "state": "150.207748413086",
+    "attributes": {
+      "state_class": "measurement",
+      "unit_of_measurement": "W",
+      "device_class": "power",
+      "friendly_name": "Emporia Vue 3 Loft Kids Bathroom Whole House Fan Power Live"
+    },
+    "last_changed": "2026-09-28T00:26:41.311415+00:00",
+    "last_reported": "2026-09-28T00:26:41.311415+00:00",
+    "last_updated": "2026-09-28T00:26:41.311415+00:00",
+    "context": {
+      "id": "01M3JPG7RZ8WWPGGNF98HEGDNZ",
+      "parent_id": null,
+      "user_id": null
+    }
+  },
+  {
+    "entity_id": "sensor.emporia_vue3_loft_kids_bathroom_whole_house_fan_power_1m_average",
+    "state": "154.339309692383",
+    "attributes": {
+      "state_class": "measurement",
+      "unit_of_measurement": "W",
+      "device_class": "power",
+      "friendly_name": "Emporia Vue 3 Loft Kids Bathroom Whole House Fan Power 1m Average"
+    },
+    "last_changed": "2026-09-28T00:26:05.651320+00:00",
+    "last_reported": "2026-09-28T00:26:05.651320+00:00",
+    "last_updated": "2026-09-28T00:26:05.651320+00:00",
+    "context": {
+      "id": "01M3JPF4YKJPW18FFYCK7ACKQ4",
+      "parent_id": null,
+      "user_id": null
+    }
+  },
+  {
+    "entity_id": "sensor.emporia_vue3_mains_a_power_1m_average",
+    "state": "535.063537597656",
+    "attributes": {
+      "state_class": "measurement",
+      "unit_of_measurement": "W",
+      "device_class": "power",
+      "friendly_name": "Emporia Vue 3 Mains A Power 1m Average"
+    },
+    "last_changed": "2026-09-28T00:26:05.282012+00:00",
+    "last_reported": "2026-09-28T00:26:05.282012+00:00",
+    "last_updated": "2026-09-28T00:26:05.282012+00:00",
+    "context": {
+      "id": "01M3JPF4K221ZX8A3KRX6JWM5S",
+      "parent_id": null,
+      "user_id": null
+    }
+  },
+  {
+    "entity_id": "sensor.emporia_vue3_mains_b_power_1m_average",
+    "state": "754.114379882812",
+    "attributes": {
+      "state_class": "measurement",
+      "unit_of_measurement": "W",
+      "device_class": "power",
+      "friendly_name": "Emporia Vue 3 Mains B Power 1m Average"
+    },
+    "last_changed": "2026-09-28T00:26:04.782974+00:00",
+    "last_reported": "2026-09-28T00:26:04.782974+00:00",
+    "last_updated": "2026-09-28T00:26:04.782974+00:00",
+    "context": {
+      "id": "01M3JPF43E68KEQM9RY1EY5ZZ1",
+      "parent_id": null,
+      "user_id": null
+    }
+  },
+  {
+    "entity_id": "sensor.vue_microwave_energy",
+    "state": "0.002941",
+    "attributes": {
+      "state_class": "total",
+      "source": "sensor.emporia_vue3_microwave_power_1m_average",
+      "unit_of_measurement": "kWh",
+      "device_class": "energy",
+      "friendly_name": "Vue Microwave Energy"
+    },
+    "last_changed": "2026-09-28T00:26:05.007393+00:00",
+    "last_reported": "2026-09-28T00:26:05.007393+00:00",
+    "last_updated": "2026-09-28T00:26:05.007393+00:00",
+    "context": {
+      "id": "01M3JPF4AF4H3BYVC8FCKM8JTC",
+      "parent_id": null,
+      "user_id": null
+    }
+  },
+  {
+    "entity_id": "sensor.vue_microwave_daily_energy",
+    "state": "0.002934",
+    "attributes": {
+      "state_class": "total_increasing",
+      "status": "collecting",
+      "last_period": "0",
+      "last_valid_state": "0.002941",
+      "last_reset": "2026-09-28T00:08:34.660166+00:00",
+      "next_reset": "2026-09-28T00:00:00-06:00",
+      "unit_of_measurement": "kWh",
+      "device_class": "energy",
+      "friendly_name": "Vue Microwave Daily Energy"
+    },
+    "last_changed": "2026-09-28T00:26:05.007879+00:00",
+    "last_reported": "2026-09-28T00:26:05.007879+00:00",
+    "last_updated": "2026-09-28T00:26:05.007879+00:00",
+    "context": {
+      "id": "01M3JPF4AFW5VY5M1W6SSG63M4",
+      "parent_id": null,
+      "user_id": null
+    }
+  },
+  {
+    "entity_id": "sensor.vue_washer_bidet_laundry_energy",
+    "state": "0.013842",
+    "attributes": {
+      "state_class": "total",
+      "source": "sensor.emporia_vue3_washer_bidet_laundry_power_1m_average",
+      "unit_of_measurement": "kWh",
+      "device_class": "energy",
+      "friendly_name": "Vue Washer Bidet Laundry Energy"
+    },
+    "last_changed": "2026-09-28T00:26:06.956207+00:00",
+    "last_reported": "2026-09-28T00:26:06.956207+00:00",
+    "last_updated": "2026-09-28T00:26:06.956207+00:00",
+    "context": {
+      "id": "01M3JPF67CX7Q1ZAP7KE2JSTXM",
+      "parent_id": null,
+      "user_id": null
+    }
+  },
+  {
+    "entity_id": "sensor.vue_washer_bidet_laundry_daily_energy",
+    "state": "0.013067",
+    "attributes": {
+      "state_class": "total_increasing",
+      "status": "collecting",
+      "last_period": "0",
+      "last_valid_state": "0.013842",
+      "last_reset": "2026-09-28T00:08:34.843876+00:00",
+      "next_reset": "2026-09-28T00:00:00-06:00",
+      "unit_of_measurement": "kWh",
+      "device_class": "energy",
+      "friendly_name": "Vue Washer Bidet Laundry Daily Energy"
+    },
+    "last_changed": "2026-09-28T00:26:06.956361+00:00",
+    "last_reported": "2026-09-28T00:26:06.956361+00:00",
+    "last_updated": "2026-09-28T00:26:06.956361+00:00",
+    "context": {
+      "id": "01M3JPF67CDVZ28QRW4M9R4CEZ",
+      "parent_id": null,
+      "user_id": null
+    }
+  },
+  {
+    "entity_id": "sensor.vue_garage_energy",
+    "state": "0.023604",
+    "attributes": {
+      "state_class": "total",
+      "source": "sensor.emporia_vue3_garage_power_1m_average",
+      "unit_of_measurement": "kWh",
+      "device_class": "energy",
+      "friendly_name": "Vue Garage Energy"
+    },
+    "last_changed": "2026-09-28T00:26:04.784260+00:00",
+    "last_reported": "2026-09-28T00:26:04.784260+00:00",
+    "last_updated": "2026-09-28T00:26:04.784260+00:00",
+    "context": {
+      "id": "01M3JPF43GS94J3D10R4FJ805X",
+      "parent_id": null,
+      "user_id": null
+    }
+  },
+  {
+    "entity_id": "sensor.vue_garage_daily_energy",
+    "state": "0.022291",
+    "attributes": {
+      "state_class": "total_increasing",
+      "status": "collecting",
+      "last_period": "0",
+      "last_valid_state": "0.023604",
+      "last_reset": "2026-09-28T00:08:35.015454+00:00",
+      "next_reset": "2026-09-28T00:00:00-06:00",
+      "unit_of_measurement": "kWh",
+      "device_class": "energy",
+      "friendly_name": "Vue Garage Daily Energy"
+    },
+    "last_changed": "2026-09-28T00:26:04.785297+00:00",
+    "last_reported": "2026-09-28T00:26:04.785297+00:00",
+    "last_updated": "2026-09-28T00:26:04.785297+00:00",
+    "context": {
+      "id": "01M3JPF43HKTWPNQP8Z9BYB004",
+      "parent_id": null,
+      "user_id": null
+    }
+  },
+  {
+    "entity_id": "sensor.vue_master_bedroom_closet_energy",
+    "state": "0.010474",
+    "attributes": {
+      "state_class": "total",
+      "source": "sensor.emporia_vue3_master_bedroom_closet_power_1m_average",
+      "unit_of_measurement": "kWh",
+      "device_class": "energy",
+      "friendly_name": "Vue Master Bedroom Closet Energy"
+    },
+    "last_changed": "2026-09-28T00:26:06.605703+00:00",
+    "last_reported": "2026-09-28T00:26:06.605703+00:00",
+    "last_updated": "2026-09-28T00:26:06.605703+00:00",
+    "context": {
+      "id": "01M3JPF5WDWYVKPVTCZ86PZGB5",
+      "parent_id": null,
+      "user_id": null
+    }
+  },
+  {
+    "entity_id": "sensor.vue_master_bedroom_closet_daily_energy",
+    "state": "0.009844",
+    "attributes": {
+      "state_class": "total_increasing",
+      "status": "collecting",
+      "last_period": "0",
+      "last_valid_state": "0.010474",
+      "last_reset": "2026-09-28T00:08:35.244590+00:00",
+      "next_reset": "2026-09-28T00:00:00-06:00",
+      "unit_of_measurement": "kWh",
+      "device_class": "energy",
+      "friendly_name": "Vue Master Bedroom Closet Daily Energy"
+    },
+    "last_changed": "2026-09-28T00:26:06.606026+00:00",
+    "last_reported": "2026-09-28T00:26:06.606026+00:00",
+    "last_updated": "2026-09-28T00:26:06.606026+00:00",
+    "context": {
+      "id": "01M3JPF5WE7PYFRZQES5SXMDCZ",
+      "parent_id": null,
+      "user_id": null
+    }
+  },
+  {
+    "entity_id": "sensor.vue_basement_bathroom_energy",
+    "state": "0.008978",
+    "attributes": {
+      "state_class": "total",
+      "source": "sensor.emporia_vue3_basement_bathroom_power_1m_average",
+      "unit_of_measurement": "kWh",
+      "device_class": "energy",
+      "friendly_name": "Vue Basement Bathroom Energy"
+    },
+    "last_changed": "2026-09-28T00:26:04.784923+00:00",
+    "last_reported": "2026-09-28T00:26:04.784923+00:00",
+    "last_updated": "2026-09-28T00:26:04.784923+00:00",
+    "context": {
+      "id": "01M3JPF43GPQAFQD4NDBPFSTTK",
+      "parent_id": null,
+      "user_id": null
+    }
+  },
+  {
+    "entity_id": "sensor.vue_basement_bathroom_daily_energy",
+    "state": "0.008568",
+    "attributes": {
+      "state_class": "total_increasing",
+      "status": "collecting",
+      "last_period": "0",
+      "last_valid_state": "0.008978",
+      "last_reset": "2026-09-28T00:08:35.395801+00:00",
+      "next_reset": "2026-09-28T00:00:00-06:00",
+      "unit_of_measurement": "kWh",
+      "device_class": "energy",
+      "friendly_name": "Vue Basement Bathroom Daily Energy"
+    },
+    "last_changed": "2026-09-28T00:26:04.785849+00:00",
+    "last_reported": "2026-09-28T00:26:04.785849+00:00",
+    "last_updated": "2026-09-28T00:26:04.785849+00:00",
+    "context": {
+      "id": "01M3JPF43HZWQ387Z52JQ3DWWT",
+      "parent_id": null,
+      "user_id": null
+    }
+  },
+  {
+    "entity_id": "sensor.vue_loft_kids_bathroom_whole_house_fan_energy",
+    "state": "0.049612",
+    "attributes": {
+      "state_class": "total",
+      "source": "sensor.emporia_vue3_loft_kids_bathroom_whole_house_fan_power_1m_average",
+      "unit_of_measurement": "kWh",
+      "device_class": "energy",
+      "friendly_name": "Vue Loft Kids Bathroom Whole House Fan Energy"
+    },
+    "last_changed": "2026-09-28T00:26:05.652428+00:00",
+    "last_reported": "2026-09-28T00:26:05.652428+00:00",
+    "last_updated": "2026-09-28T00:26:05.652428+00:00",
+    "context": {
+      "id": "01M3JPF4YMKGVWFXD73HF9QCSQ",
+      "parent_id": null,
+      "user_id": null
+    }
+  },
+  {
+    "entity_id": "sensor.vue_loft_kids_bathroom_whole_house_fan_daily_energy",
+    "state": "0.046656",
+    "attributes": {
+      "state_class": "total_increasing",
+      "status": "collecting",
+      "last_period": "0",
+      "last_valid_state": "0.049612",
+      "last_reset": "2026-09-28T00:08:35.542965+00:00",
+      "next_reset": "2026-09-28T00:00:00-06:00",
+      "unit_of_measurement": "kWh",
+      "device_class": "energy",
+      "friendly_name": "Vue Loft Kids Bathroom Whole House Fan Daily Energy"
+    },
+    "last_changed": "2026-09-28T00:26:05.653167+00:00",
+    "last_reported": "2026-09-28T00:26:05.653167+00:00",
+    "last_updated": "2026-09-28T00:26:05.653167+00:00",
+    "context": {
+      "id": "01M3JPF4YNKBZTF8GMD495YRFY",
+      "parent_id": null,
+      "user_id": null
+    }
+  }
+]

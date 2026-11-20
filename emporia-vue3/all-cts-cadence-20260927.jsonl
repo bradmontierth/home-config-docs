@@ -1,0 +1,513 @@
+{"build": "Sep 27 2026, 16:05:51", "started_at": 1790525205.3261342}
+{
+  "Status": {
+    "reports": 1,
+    "last": true,
+    "median_interval_s": null,
+    "max_interval_s": null
+  },
+  "L1 Voltage": {
+    "reports": 27,
+    "last": 122.43641662597656,
+    "median_interval_s": 5.004,
+    "max_interval_s": 5.07
+  },
+  "Line Frequency": {
+    "reports": 27,
+    "last": 59.78658676147461,
+    "median_interval_s": 5.004,
+    "max_interval_s": 5.07
+  },
+  "L2 Voltage": {
+    "reports": 27,
+    "last": 122.51341247558594,
+    "median_interval_s": 5.004,
+    "max_interval_s": 5.07
+  },
+  "L2 Phase Angle": {
+    "reports": 27,
+    "last": 179.6341552734375,
+    "median_interval_s": 5.004,
+    "max_interval_s": 5.07
+  },
+  "Input 1 Signed Power L1 Reference": {
+    "reports": 130,
+    "last": -150.4273681640625,
+    "median_interval_s": 1.004,
+    "max_interval_s": 1.106
+  },
+  "Fridge Power": {
+    "reports": 130,
+    "last": 150.4273681640625,
+    "median_interval_s": 1.004,
+    "max_interval_s": 1.106
+  },
+  "Fridge Current": {
+    "reports": 130,
+    "last": 1.811406135559082,
+    "median_interval_s": 1.004,
+    "max_interval_s": 1.106
+  },
+  "Fridge Power 1m Average": {
+    "reports": 3,
+    "last": 150.033447265625,
+    "median_interval_s": 57.081,
+    "max_interval_s": 60.019
+  },
+  "Fridge Current 1m Average": {
+    "reports": 3,
+    "last": 1.8022373914718628,
+    "median_interval_s": 56.41,
+    "max_interval_s": 60.005
+  },
+  "Fridge Daily Energy": {
+    "reports": 3,
+    "last": 0.005027181934565306,
+    "median_interval_s": 55.4,
+    "max_interval_s": 60.467
+  },
+  "Mains A Signed Power Live": {
+    "reports": 130,
+    "last": -554.469970703125,
+    "median_interval_s": 1.004,
+    "max_interval_s": 1.107
+  },
+  "Mains A Signed Power 1m Average": {
+    "reports": 3,
+    "last": -559.51708984375,
+    "median_interval_s": 56.981,
+    "max_interval_s": 59.986
+  },
+  "Mains A Current Live": {
+    "reports": 130,
+    "last": 5.254668712615967,
+    "median_interval_s": 1.004,
+    "max_interval_s": 1.106
+  },
+  "Mains A Current 1m Average": {
+    "reports": 3,
+    "last": 5.295346736907959,
+    "median_interval_s": 56.41,
+    "max_interval_s": 60.004
+  },
+  "Mains B Signed Power Live": {
+    "reports": 130,
+    "last": -760.8876953125,
+    "median_interval_s": 1.004,
+    "max_interval_s": 1.106
+  },
+  "Mains B Signed Power 1m Average": {
+    "reports": 3,
+    "last": -740.961181640625,
+    "median_interval_s": 57.081,
+    "max_interval_s": 60.019
+  },
+  "Mains B Current Live": {
+    "reports": 130,
+    "last": 7.545631408691406,
+    "median_interval_s": 1.004,
+    "max_interval_s": 1.106
+  },
+  "Mains B Current 1m Average": {
+    "reports": 3,
+    "last": 7.396780967712402,
+    "median_interval_s": 57.454,
+    "max_interval_s": 59.986
+  },
+  "Circuit 01 Signed Power Live": {
+    "reports": 130,
+    "last": -150.4273681640625,
+    "median_interval_s": 1.004,
+    "max_interval_s": 1.106
+  },
+  "Circuit 01 Signed Power 1m Average": {
+    "reports": 3,
+    "last": -150.02992248535156,
+    "median_interval_s": 56.41,
+    "max_interval_s": 60.005
+  },
+  "Circuit 01 Current Live": {
+    "reports": 130,
+    "last": 1.811406135559082,
+    "median_interval_s": 1.004,
+    "max_interval_s": 1.106
+  },
+  "Circuit 01 Current 1m Average": {
+    "reports": 3,
+    "last": 1.8022373914718628,
+    "median_interval_s": 56.41,
+    "max_interval_s": 60.005
+  },
+  "Circuit 02 Signed Power Live": {
+    "reports": 130,
+    "last": -0.5166875123977661,
+    "median_interval_s": 1.004,
+    "max_interval_s": 1.106
+  },
+  "Circuit 02 Signed Power 1m Average": {
+    "reports": 3,
+    "last": -0.9822023510932922,
+    "median_interval_s": 57.147,
+    "max_interval_s": 59.994
+  },
+  "Circuit 02 Current Live": {
+    "reports": 130,
+    "last": 0.1886407881975174,
+    "median_interval_s": 1.004,
+    "max_interval_s": 1.106
+  },
+  "Circuit 02 Current 1m Average": {
+    "reports": 3,
+    "last": 0.18710005283355713,
+    "median_interval_s": 57.449,
+    "max_interval_s": 59.985
+  },
+  "Circuit 03 Signed Power Live": {
+    "reports": 130,
+    "last": 0.840874969959259,
+    "median_interval_s": 1.004,
+    "max_interval_s": 1.106
+  },
+  "Circuit 03 Signed Power 1m Average": {
+    "reports": 3,
+    "last": 0.9947933554649353,
+    "median_interval_s": 56.404,
+    "max_interval_s": 60.005
+  },
+  "Circuit 03 Current Live": {
+    "reports": 130,
+    "last": 0.19318634271621704,
+    "median_interval_s": 1.004,
+    "max_interval_s": 1.106
+  },
+  "Circuit 03 Current 1m Average": {
+    "reports": 3,
+    "last": 0.18629105389118195,
+    "median_interval_s": 56.487,
+    "max_interval_s": 60.001
+  },
+  "Circuit 04 Signed Power Live": {
+    "reports": 130,
+    "last": 0.4816874861717224,
+    "median_interval_s": 1.004,
+    "max_interval_s": 1.106
+  },
+  "Circuit 04 Signed Power 1m Average": {
+    "reports": 3,
+    "last": 0.36133038997650146,
+    "median_interval_s": 56.404,
+    "max_interval_s": 60.005
+  },
+  "Circuit 04 Current Live": {
+    "reports": 130,
+    "last": 0.19318634271621704,
+    "median_interval_s": 1.004,
+    "max_interval_s": 1.106
+  },
+  "Circuit 04 Current 1m Average": {
+    "reports": 3,
+    "last": 0.1851075291633606,
+    "median_interval_s": 57.448,
+    "max_interval_s": 59.986
+  },
+  "Circuit 05 Signed Power Live": {
+    "reports": 130,
+    "last": -0.8815625309944153,
+    "median_interval_s": 1.004,
+    "max_interval_s": 1.106
+  },
+  "Circuit 05 Signed Power 1m Average": {
+    "reports": 3,
+    "last": -0.5040295720100403,
+    "median_interval_s": 56.976,
+    "max_interval_s": 59.986
+  },
+  "Circuit 05 Current Live": {
+    "reports": 130,
+    "last": 0.18636800348758698,
+    "median_interval_s": 1.004,
+    "max_interval_s": 1.106
+  },
+  "Circuit 05 Current 1m Average": {
+    "reports": 3,
+    "last": 0.18575172126293182,
+    "median_interval_s": 56.404,
+    "max_interval_s": 60.005
+  },
+  "Circuit 06 Signed Power Live": {
+    "reports": 130,
+    "last": 55.95100021362305,
+    "median_interval_s": 1.004,
+    "max_interval_s": 1.106
+  },
+  "Circuit 06 Signed Power 1m Average": {
+    "reports": 3,
+    "last": 58.47757339477539,
+    "median_interval_s": 56.404,
+    "max_interval_s": 60.005
+  },
+  "Circuit 06 Current Live": {
+    "reports": 130,
+    "last": 0.6386513710021973,
+    "median_interval_s": 1.004,
+    "max_interval_s": 1.106
+  },
+  "Circuit 06 Current 1m Average": {
+    "reports": 3,
+    "last": 0.65463787317276,
+    "median_interval_s": 56.404,
+    "max_interval_s": 60.004
+  },
+  "Circuit 07 Signed Power Live": {
+    "reports": 130,
+    "last": -7.7923126220703125,
+    "median_interval_s": 1.004,
+    "max_interval_s": 1.107
+  },
+  "Circuit 07 Signed Power 1m Average": {
+    "reports": 3,
+    "last": -8.107341766357422,
+    "median_interval_s": 56.579,
+    "max_interval_s": 60.01
+  },
+  "Circuit 07 Current Live": {
+    "reports": 130,
+    "last": 0.24546030163764954,
+    "median_interval_s": 1.004,
+    "max_interval_s": 1.106
+  },
+  "Circuit 07 Current 1m Average": {
+    "reports": 3,
+    "last": 0.23952814936637878,
+    "median_interval_s": 56.404,
+    "max_interval_s": 60.005
+  },
+  "Circuit 08 Signed Power Live": {
+    "reports": 130,
+    "last": 2.7168750762939453,
+    "median_interval_s": 1.004,
+    "max_interval_s": 1.106
+  },
+  "Circuit 08 Signed Power 1m Average": {
+    "reports": 3,
+    "last": 3.028027057647705,
+    "median_interval_s": 56.399,
+    "max_interval_s": 60.005
+  },
+  "Circuit 08 Current Live": {
+    "reports": 130,
+    "last": 0.18409523367881775,
+    "median_interval_s": 1.004,
+    "max_interval_s": 1.106
+  },
+  "Circuit 08 Current 1m Average": {
+    "reports": 3,
+    "last": 0.18827800452709198,
+    "median_interval_s": 56.399,
+    "max_interval_s": 60.005
+  },
+  "Circuit 09 Signed Power Live": {
+    "reports": 130,
+    "last": -78.62750244140625,
+    "median_interval_s": 1.004,
+    "max_interval_s": 1.106
+  },
+  "Circuit 09 Signed Power 1m Average": {
+    "reports": 3,
+    "last": -79.11698913574219,
+    "median_interval_s": 56.399,
+    "max_interval_s": 60.005
+  },
+  "Circuit 09 Current Live": {
+    "reports": 130,
+    "last": 0.9022939205169678,
+    "median_interval_s": 1.004,
+    "max_interval_s": 1.106
+  },
+  "Circuit 09 Current 1m Average": {
+    "reports": 3,
+    "last": 0.9085724353790283,
+    "median_interval_s": 57.142,
+    "max_interval_s": 59.994
+  },
+  "Circuit 10 Signed Power Live": {
+    "reports": 130,
+    "last": -6.759374618530273,
+    "median_interval_s": 1.004,
+    "max_interval_s": 1.106
+  },
+  "Circuit 10 Signed Power 1m Average": {
+    "reports": 3,
+    "last": -6.364995956420898,
+    "median_interval_s": 56.399,
+    "max_interval_s": 60.004
+  },
+  "Circuit 10 Current Live": {
+    "reports": 130,
+    "last": 0.1045479103922844,
+    "median_interval_s": 1.004,
+    "max_interval_s": 1.106
+  },
+  "Circuit 10 Current 1m Average": {
+    "reports": 3,
+    "last": 0.09915485233068466,
+    "median_interval_s": 56.399,
+    "max_interval_s": 60.005
+  },
+  "Circuit 11 Signed Power Live": {
+    "reports": 130,
+    "last": -0.8373750448226929,
+    "median_interval_s": 1.004,
+    "max_interval_s": 1.106
+  },
+  "Circuit 11 Signed Power 1m Average": {
+    "reports": 3,
+    "last": -0.8490911722183228,
+    "median_interval_s": 56.878,
+    "max_interval_s": 60.018
+  },
+  "Circuit 11 Current Live": {
+    "reports": 130,
+    "last": 0.06818341463804245,
+    "median_interval_s": 1.004,
+    "max_interval_s": 1.106
+  },
+  "Circuit 11 Current 1m Average": {
+    "reports": 3,
+    "last": 0.06675811856985092,
+    "median_interval_s": 56.399,
+    "max_interval_s": 60.005
+  },
+  "Circuit 12 Signed Power Live": {
+    "reports": 130,
+    "last": -4.481750011444092,
+    "median_interval_s": 1.004,
+    "max_interval_s": 1.106
+  },
+  "Circuit 12 Signed Power 1m Average": {
+    "reports": 3,
+    "last": -4.649639129638672,
+    "median_interval_s": 56.399,
+    "max_interval_s": 60.005
+  },
+  "Circuit 12 Current Live": {
+    "reports": 130,
+    "last": 0.16591298580169678,
+    "median_interval_s": 1.004,
+    "max_interval_s": 1.106
+  },
+  "Circuit 12 Current 1m Average": {
+    "reports": 3,
+    "last": 0.16479593515396118,
+    "median_interval_s": 56.399,
+    "max_interval_s": 60.005
+  },
+  "Circuit 13 Signed Power Live": {
+    "reports": 130,
+    "last": -254.8874969482422,
+    "median_interval_s": 1.004,
+    "max_interval_s": 1.106
+  },
+  "Circuit 13 Signed Power 1m Average": {
+    "reports": 3,
+    "last": -244.89569091796875,
+    "median_interval_s": 56.482,
+    "max_interval_s": 60.0
+  },
+  "Circuit 13 Current Live": {
+    "reports": 130,
+    "last": 2.3591461181640625,
+    "median_interval_s": 1.004,
+    "max_interval_s": 1.107
+  },
+  "Circuit 13 Current 1m Average": {
+    "reports": 3,
+    "last": 2.2783281803131104,
+    "median_interval_s": 56.399,
+    "max_interval_s": 60.004
+  },
+  "Circuit 14 Signed Power Live": {
+    "reports": 130,
+    "last": -37.212440490722656,
+    "median_interval_s": 1.004,
+    "max_interval_s": 1.106
+  },
+  "Circuit 14 Signed Power 1m Average": {
+    "reports": 3,
+    "last": -36.537105560302734,
+    "median_interval_s": 56.394,
+    "max_interval_s": 60.005
+  },
+  "Circuit 14 Current Live": {
+    "reports": 130,
+    "last": 0.4909206032752991,
+    "median_interval_s": 1.004,
+    "max_interval_s": 1.106
+  },
+  "Circuit 14 Current 1m Average": {
+    "reports": 3,
+    "last": 0.4836013913154602,
+    "median_interval_s": 56.394,
+    "max_interval_s": 60.004
+  },
+  "Circuit 15 Signed Power Live": {
+    "reports": 130,
+    "last": -71.06005859375,
+    "median_interval_s": 1.004,
+    "max_interval_s": 1.106
+  },
+  "Circuit 15 Signed Power 1m Average": {
+    "reports": 3,
+    "last": -62.00076675415039,
+    "median_interval_s": 57.303,
+    "max_interval_s": 60.003
+  },
+  "Circuit 15 Current Live": {
+    "reports": 130,
+    "last": 0.7454720735549927,
+    "median_interval_s": 1.004,
+    "max_interval_s": 1.106
+  },
+  "Circuit 15 Current 1m Average": {
+    "reports": 3,
+    "last": 0.6723191738128662,
+    "median_interval_s": 57.065,
+    "max_interval_s": 60.019
+  },
+  "Circuit 16 Signed Power Live": {
+    "reports": 130,
+    "last": -114.75187683105469,
+    "median_interval_s": 1.004,
+    "max_interval_s": 1.106
+  },
+  "Circuit 16 Signed Power 1m Average": {
+    "reports": 3,
+    "last": -115.31038665771484,
+    "median_interval_s": 56.394,
+    "max_interval_s": 60.005
+  },
+  "Circuit 16 Current Live": {
+    "reports": 130,
+    "last": 1.2750298976898193,
+    "median_interval_s": 1.004,
+    "max_interval_s": 1.106
+  },
+  "Circuit 16 Current 1m Average": {
+    "reports": 3,
+    "last": 1.278265357017517,
+    "median_interval_s": 56.394,
+    "max_interval_s": 60.004
+  },
+  "Uptime": {
+    "reports": 3,
+    "last": 122.8280029296875,
+    "median_interval_s": 56.394,
+    "max_interval_s": 60.005
+  },
+  "IP Address": {
+    "reports": 1,
+    "last": "192.168.10.226",
+    "median_interval_s": null,
+    "max_interval_s": null
+  }
+}

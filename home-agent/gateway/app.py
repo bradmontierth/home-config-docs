@@ -978,7 +978,7 @@ async def reply_paragraphs(directory: Path) -> list[str]:
 
 def ensure_speech_job(directory: Path, paragraphs: list[str], backend: speech.Backend, fast_start: bool) -> tuple[speech.SpeechJob | None, Path]:
     """The finished file's path, plus the job rendering it when it is not there yet."""
-    out = speech.speech_path(directory, "\n".join(paragraphs), backend.voice)
+    out = speech.speech_path(directory, "\n".join(paragraphs), backend.cache_voice)
     if not paragraphs or out.exists():
         return None, out
     for name in [name for name, finished in speech_jobs.items() if finished.done and name != out.name]:

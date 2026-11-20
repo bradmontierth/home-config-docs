@@ -1,0 +1,1192 @@
+{
+  "benchmark": "knowledge_qa",
+  "benchmark_version": "1.0.0",
+  "run_label": "gpt54-low",
+  "started_at": "2026-09-13T02:40:38+00:00",
+  "requested_model": "openai/gpt-5.4",
+  "reasoning_effort": "low",
+  "model_catalog": {
+    "id": "openai/gpt-5.4",
+    "canonical_slug": "openai/gpt-5.4-20260305",
+    "hugging_face_id": "",
+    "name": "OpenAI: GPT-5.4",
+    "created": 1772734352,
+    "description": "GPT-5.4 is OpenAI\u2019s latest frontier model, unifying the Codex and GPT lines into a single system. It features a 1M+ token context window (922K input, 128K output) with support for...",
+    "context_length": 1050000,
+    "architecture": {
+      "modality": "text+image+file->text",
+      "input_modalities": [
+        "text",
+        "image",
+        "file"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "tokenizer": "GPT",
+      "instruct_type": null
+    },
+    "pricing": {
+      "prompt": "0.0000025",
+      "completion": "0.000015",
+      "web_search": "0.01",
+      "input_cache_read": "0.00000025",
+      "overrides": [
+        {
+          "min_prompt_tokens": 272000,
+          "prompt": "0.000005",
+          "completion": "0.0000225",
+          "input_cache_read": "0.0000005"
+        }
+      ]
+    },
+    "top_provider": {
+      "context_length": 1050000,
+      "max_completion_tokens": 128000,
+      "is_moderated": true
+    },
+    "per_request_limits": null,
+    "supported_parameters": [
+      "include_reasoning",
+      "max_completion_tokens",
+      "max_tokens",
+      "reasoning",
+      "reasoning_effort",
+      "response_format",
+      "seed",
+      "structured_outputs",
+      "tool_choice",
+      "tools"
+    ],
+    "default_parameters": {
+      "temperature": null,
+      "top_p": null,
+      "top_k": null,
+      "frequency_penalty": null,
+      "presence_penalty": null,
+      "repetition_penalty": null
+    },
+    "supported_voices": null,
+    "knowledge_cutoff": null,
+    "expiration_date": null,
+    "links": {
+      "details": "/api/v1/models/openai/gpt-5.4-20260305/endpoints"
+    },
+    "benchmarks": {
+      "design_arena": [
+        {
+          "arena": "models",
+          "category": "3d",
+          "elo": 1130,
+          "win_rate": 42.3,
+          "rank": 74
+        },
+        {
+          "arena": "models",
+          "category": "asciiart",
+          "elo": 1217,
+          "win_rate": 55.4,
+          "rank": 22
+        },
+        {
+          "arena": "models",
+          "category": "codecategories",
+          "elo": 1227,
+          "win_rate": 52.5,
+          "rank": 44
+        },
+        {
+          "arena": "models",
+          "category": "dataviz",
+          "elo": 1251,
+          "win_rate": 56.6,
+          "rank": 31
+        },
+        {
+          "arena": "models",
+          "category": "gamedev",
+          "elo": 1262,
+          "win_rate": 57.6,
+          "rank": 30
+        },
+        {
+          "arena": "models",
+          "category": "svg",
+          "elo": 1220,
+          "win_rate": 57.8,
+          "rank": 22
+        },
+        {
+          "arena": "models",
+          "category": "uicomponent",
+          "elo": 1254,
+          "win_rate": 57.4,
+          "rank": 33
+        },
+        {
+          "arena": "models",
+          "category": "website",
+          "elo": 1232,
+          "win_rate": 52.5,
+          "rank": 46
+        },
+        {
+          "arena": "agents",
+          "category": "androidnative",
+          "elo": 1049,
+          "win_rate": 47.4,
+          "rank": 35
+        },
+        {
+          "arena": "agents",
+          "category": "fullstack",
+          "elo": 1027,
+          "win_rate": 40.8,
+          "rank": 39
+        },
+        {
+          "arena": "agents",
+          "category": "godotgamedev",
+          "elo": 1135,
+          "win_rate": 46.9,
+          "rank": 21
+        },
+        {
+          "arena": "agents",
+          "category": "mobileapps",
+          "elo": 1116,
+          "win_rate": 46.1,
+          "rank": 38
+        },
+        {
+          "arena": "agents",
+          "category": "webapps",
+          "elo": 1077,
+          "win_rate": 40.3,
+          "rank": 35
+        }
+      ],
+      "artificial_analysis": {
+        "intelligence_index": null,
+        "coding_index": 71.1,
+        "agentic_index": null
+      }
+    },
+    "reasoning": {
+      "mandatory": false,
+      "default_enabled": false,
+      "supported_efforts": [
+        "xhigh",
+        "high",
+        "medium",
+        "low",
+        "none"
+      ],
+      "default_effort": "medium"
+    }
+  },
+  "prompt": "You are the knowledge engine for a household voice assistant. The user asked a spoken question. Answer it directly and factually.\n\nThe request originated in kitchen. This is routing context only; do not assume facts about that room or import context from any other room.\n\nRight now it is Saturday, September 12, 2026, 08:40 PM in the user's home timezone. Resolve every relative time word in the question \u2014 'today', 'yesterday', 'last night', 'this morning' \u2014 against THIS local date/time, NEVER against dates implied by search results: web pages and search tools often run on UTC or other timezones where it may already be a different day. If search results suggest a different current date, trust the date given here.\n\nYour built-in knowledge ends months before this date. You have a web search tool: for ANYTHING that may have changed since your training \u2014 sports results, news, weather, prices, schedules, anything 'today', 'yesterday', 'last night', or 'latest' \u2014 you MUST search the web before answering. Never answer such questions from memory and never say you don't know without having searched. If a search comes back unclear or inconclusive, search again with different terms \u2014 do not give up or report failure after one attempt, and report only facts (scores, numbers) actually stated in results, never guessed. Before claiming that something did NOT happen (no game, no event, nothing scheduled), confirm with a second search \u2014 absence from one set of results is not proof. But remember this is a live voice conversation with someone standing in a kitchen waiting: every extra search adds seconds. ONE well-chosen search is usually enough \u2014 answer as soon as the results support a clear answer, and never run more than three searches for a single question. Only skip the search for timeless general knowledge (conversions, definitions, how-tos), where searching just adds delay.\n\nReturn your answer in TWO parts separated by a line containing only ===MORE===\nPart 1 (before the separator): the SPOKEN answer \u2014 1 to 2 short sentences, plain and direct, the way you'd say it out loud across a kitchen. Lead with the actual answer. Never include URLs, citations, or source names here.\nPart 2 (after ===MORE===): the FULL answer for reading on a screen \u2014 more detail, useful specifics, short lists or steps where helpful. Plain text, no markdown headers or links; if you searched, you may name sources here.\n\nDo not offer follow-ups, do not ask questions back, do not mention that you are an AI. Always include the separator line.\n\nEarlier questions and answers from the last few minutes may precede the current question \u2014 use them to resolve references like 'they', 'it', or 'the game' in follow-ups.",
+  "prompt_sha256": "3a65e03652d6c4fc2ed6ef86bc96b85f81defae50c08f488a1bacb8ef2ac94c8",
+  "case_sha256": "dbb8460f96fd85c6a9c48eafbab40e4149f012fa93103d7a548b15c25bf53602",
+  "cases": [
+    {
+      "id": "lime_juice",
+      "text": "How much juice is in a lime?",
+      "checks": [
+        "Gives an approximate kitchen quantity with units; acknowledges size/juiciness variation",
+        "Short spoken answer answers directly"
+      ],
+      "search_policy": "optional",
+      "reference_status": "review_required",
+      "raw_text": "About 1 to 2 tablespoons, usually around 1 tablespoon for a regular lime.\n\n===MORE===\nA typical fresh lime gives about 1 to 2 tablespoons of juice, which is roughly 15 to 30 milliliters. For cooking, a medium lime is usually counted as about 1 tablespoon. Small limes may give less, and very juicy large limes can give closer to 2 tablespoons.",
+      "annotations": [],
+      "usage": {
+        "prompt_tokens": 5024,
+        "completion_tokens": 105,
+        "total_tokens": 5129,
+        "cost": 0.008087,
+        "is_byok": false,
+        "prompt_tokens_details": {
+          "cached_tokens": 2688,
+          "cache_write_tokens": 0,
+          "audio_tokens": 0,
+          "video_tokens": 0
+        },
+        "cost_details": {
+          "upstream_inference_cost": 0.008087,
+          "upstream_inference_prompt_cost": 0.006512,
+          "upstream_inference_completions_cost": 0.001575
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 15,
+          "image_tokens": 0,
+          "audio_tokens": 0
+        }
+      },
+      "first_token_ms": 976.9,
+      "spoken_ready_ms": 1162.3,
+      "error": null,
+      "finish_reason": "stop",
+      "generation_id": "gen-1789267241-Wkcgb1FQa7FJRd9Oi2Qr",
+      "served_model": "openai/gpt-5.4",
+      "provider": "OpenAI",
+      "total_ms": 1975.6,
+      "spoken": "About 1 to 2 tablespoons, usually around 1 tablespoon for a regular lime.",
+      "sentinel_present": true,
+      "request": {
+        "model": "openai/gpt-5.4",
+        "messages": [
+          {
+            "role": "system",
+            "content": "You are the knowledge engine for a household voice assistant. The user asked a spoken question. Answer it directly and factually.\n\nThe request originated in kitchen. This is routing context only; do not assume facts about that room or import context from any other room.\n\nRight now it is Saturday, September 12, 2026, 08:40 PM in the user's home timezone. Resolve every relative time word in the question \u2014 'today', 'yesterday', 'last night', 'this morning' \u2014 against THIS local date/time, NEVER against dates implied by search results: web pages and search tools often run on UTC or other timezones where it may already be a different day. If search results suggest a different current date, trust the date given here.\n\nYour built-in knowledge ends months before this date. You have a web search tool: for ANYTHING that may have changed since your training \u2014 sports results, news, weather, prices, schedules, anything 'today', 'yesterday', 'last night', or 'latest' \u2014 you MUST search the web before answering. Never answer such questions from memory and never say you don't know without having searched. If a search comes back unclear or inconclusive, search again with different terms \u2014 do not give up or report failure after one attempt, and report only facts (scores, numbers) actually stated in results, never guessed. Before claiming that something did NOT happen (no game, no event, nothing scheduled), confirm with a second search \u2014 absence from one set of results is not proof. But remember this is a live voice conversation with someone standing in a kitchen waiting: every extra search adds seconds. ONE well-chosen search is usually enough \u2014 answer as soon as the results support a clear answer, and never run more than three searches for a single question. Only skip the search for timeless general knowledge (conversions, definitions, how-tos), where searching just adds delay.\n\nReturn your answer in TWO parts separated by a line containing only ===MORE===\nPart 1 (before the separator): the SPOKEN answer \u2014 1 to 2 short sentences, plain and direct, the way you'd say it out loud across a kitchen. Lead with the actual answer. Never include URLs, citations, or source names here.\nPart 2 (after ===MORE===): the FULL answer for reading on a screen \u2014 more detail, useful specifics, short lists or steps where helpful. Plain text, no markdown headers or links; if you searched, you may name sources here.\n\nDo not offer follow-ups, do not ask questions back, do not mention that you are an AI. Always include the separator line.\n\nEarlier questions and answers from the last few minutes may precede the current question \u2014 use them to resolve references like 'they', 'it', or 'the game' in follow-ups."
+          },
+          {
+            "role": "user",
+            "content": "How much juice is in a lime?"
+          }
+        ],
+        "temperature": 0.3,
+        "max_tokens": 4000,
+        "stream": true,
+        "stream_options": {
+          "include_usage": true
+        },
+        "reasoning": {
+          "effort": "low"
+        },
+        "plugins": [
+          {
+            "id": "web",
+            "engine": "native"
+          }
+        ],
+        "web_search_options": {
+          "search_context_size": "high"
+        }
+      },
+      "accounting": {
+        "created_at": "2026-09-13T02:40:41.646Z",
+        "model": "openai/gpt-5.4-20260305",
+        "app_id": null,
+        "external_user": null,
+        "streamed": true,
+        "cancelled": false,
+        "latency": 836,
+        "moderation_latency": null,
+        "generation_time": 1757,
+        "tokens_prompt": 697,
+        "tokens_completion": 87,
+        "native_tokens_prompt": 5024,
+        "native_tokens_completion": 105,
+        "native_tokens_completion_images": 0,
+        "native_tokens_reasoning": 15,
+        "native_tokens_cached": 2688,
+        "num_media_prompt": null,
+        "num_input_audio_prompt": null,
+        "num_media_completion": 0,
+        "num_search_results": null,
+        "num_fetches": null,
+        "web_search_engine": "native",
+        "origin": "",
+        "is_byok": false,
+        "finish_reason": "stop",
+        "native_finish_reason": "completed",
+        "service_tier": "default",
+        "usage": 0.008087,
+        "router": null,
+        "user_agent": "python-httpx/0.28.1",
+        "http_referer": null,
+        "request_id": "req-1789267241-5xv92yV2aYmjOFNYSwI2",
+        "session_id": null,
+        "preset_id": null,
+        "api_type": "completions",
+        "id": "gen-1789267241-Wkcgb1FQa7FJRd9Oi2Qr",
+        "upstream_id": "resp_05afc4a850e68aac016aa60d29ce8887d1a935f8e8395730ca",
+        "provider_responses": [
+          {
+            "endpoint_id": "9ff5625c-403f-4d7f-b895-58ac7295062c",
+            "id": "resp_05afc4a850e68aac016aa60d29ce8887d1a935f8e8395730ca",
+            "is_byok": false,
+            "latency": 328,
+            "model_permaslug": "openai/gpt-5.4-20260305",
+            "provider_name": "OpenAI",
+            "status": 200
+          }
+        ],
+        "total_cost": 0.008087,
+        "cache_discount": 0.006048,
+        "upstream_inference_cost": 0,
+        "provider_name": "OpenAI",
+        "response_cache_source_id": null,
+        "data_region": "global",
+        "workspace_id": "0a514306-2a9e-513b-aba1-0014aff242a0"
+      },
+      "tts": {
+        "elapsed_ms": 220.7,
+        "audio_seconds": 5.19,
+        "bytes": 249382,
+        "voice": "fast:doorbell",
+        "measured_at": "2026-09-13T02:45:52+00:00",
+        "played": false,
+        "repeat_cached_elapsed_ms": 12.7,
+        "duration_note": "Duration corrected using actual PCM bytes on identical-length cached response; elapsed_ms retains first synthesis timing."
+      },
+      "tts_diagnostics": [
+        {
+          "elapsed_ms": 220.7,
+          "audio_seconds": 89478.49,
+          "bytes": 249382,
+          "voice": "fast:doorbell",
+          "measured_at": "2026-09-13T02:45:52+00:00",
+          "played": false,
+          "invalid_duration_reason": "streaming WAV placeholder frame count; excluded"
+        }
+      ],
+      "review": {
+        "status": "caution",
+        "notes": "Gives a plausible low yield range but calls 1 tablespoon the usual medium-lime cooking quantity. Sunkist's medium-lime reference implies roughly 2-2.7 tablespoons; this is a weaker default."
+      }
+    },
+    {
+      "id": "apple_one_year",
+      "text": "How should I serve an apple to a one-year-old, according to Solid Starts?",
+      "checks": [
+        "Retrieves and attributes Solid Starts rather than inventing its recommendation",
+        "Age-appropriate preparation; does not recommend raw chunks or wedges for a one-year-old",
+        "Distinguishes the source's thin raw slices/grated options from soft cooked apple"
+      ],
+      "search_policy": "required_named_source",
+      "reference_urls": [
+        "https://solidstarts.com/foods/apple/"
+      ],
+      "reference_notes": "Checked 2026-09-12: source's 9+ month section permits cooked sections, grated raw apple, thin rounds or half-rounds, with or without skin. Whole apples discussed at 18+ months; wedges at 24+ months with readiness qualifications.",
+      "reference_status": "agent_source_checked_not_human_approved",
+      "raw_text": "For a one-year-old, Solid Starts says to serve apple as cooked soft pieces, or raw apple grated or in very thin round or half-round slices. Avoid raw chunks, wedges, or a whole apple at this age.\n\n===MORE===\nAccording to Solid Starts, raw apple is a major choking hazard for children under 3, so for a 12-month-old they recommend staying with the \u201c9 months old +\u201d guidance: continue offering cooked apple sections, and if serving raw apple, use grated apple or thin round or half-round slices that are stiff enough to hold without flopping. They say whole apples are something to try at about 18 months and only if the child is clearly ready, and apple wedges or quarters usually come later, around 24 months. ([solidstarts.com](https://solidstarts.com/foods/apple/))\n\nSo, for a one-year-old, the practical Solid Starts options are:\n- soft cooked apple pieces or sections\n- grated raw apple\n- very thin raw apple rounds or half-round slices\n\nAnd not:\n- raw apple chunks\n- apple wedges\n- a whole apple ([solidstarts.com](https://solidstarts.com/foods/apple/))",
+      "annotations": [
+        {
+          "type": "url_citation",
+          "url_citation": {
+            "url": "https://solidstarts.com/foods/apple/",
+            "title": "solidstarts.com",
+            "start_index": 710,
+            "end_index": 767
+          }
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 12946,
+        "completion_tokens": 414,
+        "total_tokens": 13360,
+        "cost": 0.047919,
+        "is_byok": false,
+        "prompt_tokens_details": {
+          "cached_tokens": 4736,
+          "cache_write_tokens": 0,
+          "audio_tokens": 0,
+          "video_tokens": 0
+        },
+        "cost_details": {
+          "upstream_inference_cost": 0.047919,
+          "upstream_inference_prompt_cost": 0.021709,
+          "upstream_inference_completions_cost": 0.00621
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 170,
+          "image_tokens": 0,
+          "audio_tokens": 0
+        },
+        "server_tool_use_details": {
+          "web_search_requests": 2
+        }
+      },
+      "first_token_ms": 5800.1,
+      "spoken_ready_ms": 5802.3,
+      "error": null,
+      "finish_reason": "stop",
+      "generation_id": "gen-1789267246-TyDtwBUMDGwi87CR7Rrz",
+      "served_model": "openai/gpt-5.4",
+      "provider": "OpenAI",
+      "total_ms": 7311.0,
+      "spoken": "For a one-year-old, Solid Starts says to serve apple as cooked soft pieces, or raw apple grated or in very thin round or half-round slices. Avoid raw chunks, wedges, or a whole apple at this age.",
+      "sentinel_present": true,
+      "request": {
+        "model": "openai/gpt-5.4",
+        "messages": [
+          {
+            "role": "system",
+            "content": "You are the knowledge engine for a household voice assistant. The user asked a spoken question. Answer it directly and factually.\n\nThe request originated in kitchen. This is routing context only; do not assume facts about that room or import context from any other room.\n\nRight now it is Saturday, September 12, 2026, 08:40 PM in the user's home timezone. Resolve every relative time word in the question \u2014 'today', 'yesterday', 'last night', 'this morning' \u2014 against THIS local date/time, NEVER against dates implied by search results: web pages and search tools often run on UTC or other timezones where it may already be a different day. If search results suggest a different current date, trust the date given here.\n\nYour built-in knowledge ends months before this date. You have a web search tool: for ANYTHING that may have changed since your training \u2014 sports results, news, weather, prices, schedules, anything 'today', 'yesterday', 'last night', or 'latest' \u2014 you MUST search the web before answering. Never answer such questions from memory and never say you don't know without having searched. If a search comes back unclear or inconclusive, search again with different terms \u2014 do not give up or report failure after one attempt, and report only facts (scores, numbers) actually stated in results, never guessed. Before claiming that something did NOT happen (no game, no event, nothing scheduled), confirm with a second search \u2014 absence from one set of results is not proof. But remember this is a live voice conversation with someone standing in a kitchen waiting: every extra search adds seconds. ONE well-chosen search is usually enough \u2014 answer as soon as the results support a clear answer, and never run more than three searches for a single question. Only skip the search for timeless general knowledge (conversions, definitions, how-tos), where searching just adds delay.\n\nReturn your answer in TWO parts separated by a line containing only ===MORE===\nPart 1 (before the separator): the SPOKEN answer \u2014 1 to 2 short sentences, plain and direct, the way you'd say it out loud across a kitchen. Lead with the actual answer. Never include URLs, citations, or source names here.\nPart 2 (after ===MORE===): the FULL answer for reading on a screen \u2014 more detail, useful specifics, short lists or steps where helpful. Plain text, no markdown headers or links; if you searched, you may name sources here.\n\nDo not offer follow-ups, do not ask questions back, do not mention that you are an AI. Always include the separator line.\n\nEarlier questions and answers from the last few minutes may precede the current question \u2014 use them to resolve references like 'they', 'it', or 'the game' in follow-ups."
+          },
+          {
+            "role": "user",
+            "content": "How should I serve an apple to a one-year-old, according to Solid Starts?"
+          }
+        ],
+        "temperature": 0.3,
+        "max_tokens": 4000,
+        "stream": true,
+        "stream_options": {
+          "include_usage": true
+        },
+        "reasoning": {
+          "effort": "low"
+        },
+        "plugins": [
+          {
+            "id": "web",
+            "engine": "native"
+          }
+        ],
+        "web_search_options": {
+          "search_context_size": "high"
+        }
+      },
+      "accounting": {
+        "created_at": "2026-09-13T02:40:46.131Z",
+        "model": "openai/gpt-5.4-20260305",
+        "app_id": null,
+        "external_user": null,
+        "streamed": true,
+        "cancelled": false,
+        "latency": 1205,
+        "moderation_latency": null,
+        "generation_time": 7200,
+        "tokens_prompt": 708,
+        "tokens_completion": 499,
+        "native_tokens_prompt": 12946,
+        "native_tokens_completion": 414,
+        "native_tokens_completion_images": 0,
+        "native_tokens_reasoning": 170,
+        "native_tokens_cached": 4736,
+        "num_media_prompt": null,
+        "num_input_audio_prompt": null,
+        "num_media_completion": 0,
+        "num_search_results": null,
+        "num_fetches": null,
+        "web_search_engine": "native",
+        "origin": "",
+        "is_byok": false,
+        "finish_reason": "stop",
+        "native_finish_reason": "completed",
+        "service_tier": "default",
+        "usage": 0.047919,
+        "router": null,
+        "user_agent": "python-httpx/0.28.1",
+        "http_referer": null,
+        "request_id": "req-1789267246-rOzP7RwOBRIsssvRY4PS",
+        "session_id": null,
+        "preset_id": null,
+        "api_type": "completions",
+        "id": "gen-1789267246-TyDtwBUMDGwi87CR7Rrz",
+        "upstream_id": "resp_017c93c3d1d9e736016aa60d2e38e487d1b0c94a276d89d4c2",
+        "provider_responses": [
+          {
+            "endpoint_id": "9ff5625c-403f-4d7f-b895-58ac7295062c",
+            "id": "resp_017c93c3d1d9e736016aa60d2e38e487d1b0c94a276d89d4c2",
+            "is_byok": false,
+            "latency": 277,
+            "model_permaslug": "openai/gpt-5.4-20260305",
+            "provider_name": "OpenAI",
+            "status": 200
+          }
+        ],
+        "total_cost": 0.047919,
+        "cache_discount": 0.010656,
+        "upstream_inference_cost": 0,
+        "provider_name": "OpenAI",
+        "response_cache_source_id": null,
+        "data_region": "global",
+        "workspace_id": "0a514306-2a9e-513b-aba1-0014aff242a0"
+      },
+      "tts": {
+        "elapsed_ms": 410.3,
+        "audio_seconds": 12.82,
+        "bytes": 615430,
+        "voice": "fast:doorbell",
+        "measured_at": "2026-09-13T02:45:53+00:00",
+        "played": false,
+        "repeat_cached_elapsed_ms": 13.4,
+        "duration_note": "Duration corrected using actual PCM bytes on identical-length cached response; elapsed_ms retains first synthesis timing."
+      },
+      "tts_diagnostics": [
+        {
+          "elapsed_ms": 410.3,
+          "audio_seconds": 89478.49,
+          "bytes": 615430,
+          "voice": "fast:doorbell",
+          "measured_at": "2026-09-13T02:45:53+00:00",
+          "played": false,
+          "invalid_duration_reason": "streaming WAV placeholder frame count; excluded"
+        }
+      ],
+      "review": {
+        "status": "pass",
+        "notes": "Retrieved the requested primary source and accurately represented its age band and preparations."
+      }
+    },
+    {
+      "id": "apple_skin_followup",
+      "text": "What about with the skin on?",
+      "follows": "apple_one_year",
+      "checks": [
+        "Keeps one-year-old apple context",
+        "Accurately represents the named source: skin is permitted for the thin raw slices in its 9+ month section",
+        "Does not turn skin permission into permission for thick raw pieces"
+      ],
+      "search_policy": "source_in_history_or_retrieval",
+      "reference_urls": [
+        "https://solidstarts.com/foods/apple/"
+      ],
+      "reference_status": "agent_source_checked_not_human_approved",
+      "raw_text": "Yes \u2014 Solid Starts says thin raw apple slices for this age can be served with or without the skin. The skin can actually help the slice hold together, and many babies will chew it and spit it out.\n\n===MORE===\nFor a one-year-old, Solid Starts says raw apple in thin round or half-round slices may be served \u201cwith or without the skin.\u201d They note that babies often chew on the skin and spit it out, and that this can help with oral motor practice and familiarity with fruit skins later on. They also say the skin helps the apple stay together while baby munches on it. ([solidstarts.com](https://solidstarts.com/foods/apple/?utm_source=openai))\n\nSo for your one-year-old:\n- Skin on is okay if the apple is served the Solid Starts way: very thin rounds or half-rounds. ([solidstarts.com](https://solidstarts.com/foods/apple/?utm_source=openai))\n- Grated raw apple is also an option. ([solidstarts.com](https://solidstarts.com/foods/apple/?utm_source=openai))\n- Avoid raw chunks, wedges, or a whole apple at this age because raw apple is a choking hazard for children under 3. ([solidstarts.com](https://solidstarts.com/foods/apple/?utm_source=openai))\n\nIf the skin seems hard for your child, peeling it is a reasonable choice, but Solid Starts does allow skin on for those thin slices at this age. ([solidstarts.com](https://solidstarts.com/foods/apple/?utm_source=openai))",
+      "annotations": [
+        {
+          "type": "url_citation",
+          "url_citation": {
+            "url": "https://solidstarts.com/foods/apple/?utm_source=openai",
+            "title": "Can Babies Eat Apples - Solid Starts",
+            "start_index": 566,
+            "end_index": 641
+          }
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 9476,
+        "completion_tokens": 393,
+        "total_tokens": 9869,
+        "cost": 0.028929,
+        "is_byok": false,
+        "prompt_tokens_details": {
+          "cached_tokens": 4736,
+          "cache_write_tokens": 0,
+          "audio_tokens": 0,
+          "video_tokens": 0
+        },
+        "cost_details": {
+          "upstream_inference_cost": 0.028929,
+          "upstream_inference_prompt_cost": 0.013034,
+          "upstream_inference_completions_cost": 0.005895
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 94,
+          "image_tokens": 0,
+          "audio_tokens": 0
+        },
+        "server_tool_use_details": {
+          "web_search_requests": 1
+        }
+      },
+      "first_token_ms": 3324.9,
+      "spoken_ready_ms": 3332.6,
+      "error": null,
+      "finish_reason": "stop",
+      "generation_id": "gen-1789267279-YTD4qQMaEUEx0ZfaJCmV",
+      "served_model": "openai/gpt-5.4",
+      "provider": "OpenAI",
+      "total_ms": 5172.9,
+      "spoken": "Yes \u2014 Solid Starts says thin raw apple slices for this age can be served with or without the skin. The skin can actually help the slice hold together, and many babies will chew it and spit it out.",
+      "sentinel_present": true,
+      "request": {
+        "model": "openai/gpt-5.4",
+        "messages": [
+          {
+            "role": "system",
+            "content": "You are the knowledge engine for a household voice assistant. The user asked a spoken question. Answer it directly and factually.\n\nThe request originated in kitchen. This is routing context only; do not assume facts about that room or import context from any other room.\n\nRight now it is Saturday, September 12, 2026, 08:40 PM in the user's home timezone. Resolve every relative time word in the question \u2014 'today', 'yesterday', 'last night', 'this morning' \u2014 against THIS local date/time, NEVER against dates implied by search results: web pages and search tools often run on UTC or other timezones where it may already be a different day. If search results suggest a different current date, trust the date given here.\n\nYour built-in knowledge ends months before this date. You have a web search tool: for ANYTHING that may have changed since your training \u2014 sports results, news, weather, prices, schedules, anything 'today', 'yesterday', 'last night', or 'latest' \u2014 you MUST search the web before answering. Never answer such questions from memory and never say you don't know without having searched. If a search comes back unclear or inconclusive, search again with different terms \u2014 do not give up or report failure after one attempt, and report only facts (scores, numbers) actually stated in results, never guessed. Before claiming that something did NOT happen (no game, no event, nothing scheduled), confirm with a second search \u2014 absence from one set of results is not proof. But remember this is a live voice conversation with someone standing in a kitchen waiting: every extra search adds seconds. ONE well-chosen search is usually enough \u2014 answer as soon as the results support a clear answer, and never run more than three searches for a single question. Only skip the search for timeless general knowledge (conversions, definitions, how-tos), where searching just adds delay.\n\nReturn your answer in TWO parts separated by a line containing only ===MORE===\nPart 1 (before the separator): the SPOKEN answer \u2014 1 to 2 short sentences, plain and direct, the way you'd say it out loud across a kitchen. Lead with the actual answer. Never include URLs, citations, or source names here.\nPart 2 (after ===MORE===): the FULL answer for reading on a screen \u2014 more detail, useful specifics, short lists or steps where helpful. Plain text, no markdown headers or links; if you searched, you may name sources here.\n\nDo not offer follow-ups, do not ask questions back, do not mention that you are an AI. Always include the separator line.\n\nEarlier questions and answers from the last few minutes may precede the current question \u2014 use them to resolve references like 'they', 'it', or 'the game' in follow-ups."
+          },
+          {
+            "role": "user",
+            "content": "How should I serve an apple to a one-year-old, according to Solid Starts?"
+          },
+          {
+            "role": "assistant",
+            "content": "For a one-year-old, Solid Starts says to serve apple as cooked soft pieces, or raw apple grated or in very thin round or half-round slices. Avoid raw chunks, wedges, or a whole apple at this age.\n\n===MORE===\nAccording to Solid Starts, raw apple is a major choking hazard for children under 3, so for a 12-month-old they recommend staying with the \u201c9 months old +\u201d guidance: continue offering cooked apple sections, and if serving raw apple, use grated apple or thin round or half-round slices that are stiff enough to hold without flopping. They say whole apples are something to try at about 18 months and only if the child is clearly ready, and apple wedges or quarters usually come later, around 24 months. ([solidstarts.com](https://solidstarts.com/foods/apple/))\n\nSo, for a one-year-old, the practical Solid Starts options are:\n- soft cooked apple pieces or sections\n- grated raw apple\n- very thin raw apple rounds or half-round slices\n\nAnd not:\n- raw apple chunks\n- apple wedges\n- a whole apple ([solidstarts.com](https://solidstarts.com/foods/apple/))"
+          },
+          {
+            "role": "user",
+            "content": "What about with the skin on?"
+          }
+        ],
+        "temperature": 0.3,
+        "max_tokens": 4000,
+        "stream": true,
+        "stream_options": {
+          "include_usage": true
+        },
+        "reasoning": {
+          "effort": "low"
+        },
+        "plugins": [
+          {
+            "id": "web",
+            "engine": "native"
+          }
+        ],
+        "web_search_options": {
+          "search_context_size": "high"
+        }
+      },
+      "accounting": {
+        "created_at": "2026-09-13T02:41:19.653Z",
+        "model": "openai/gpt-5.4-20260305",
+        "app_id": null,
+        "external_user": null,
+        "streamed": true,
+        "cancelled": false,
+        "latency": 1757,
+        "moderation_latency": null,
+        "generation_time": 5044,
+        "tokens_prompt": 987,
+        "tokens_completion": 454,
+        "native_tokens_prompt": 9476,
+        "native_tokens_completion": 393,
+        "native_tokens_completion_images": 0,
+        "native_tokens_reasoning": 94,
+        "native_tokens_cached": 4736,
+        "num_media_prompt": null,
+        "num_input_audio_prompt": null,
+        "num_media_completion": 0,
+        "num_search_results": null,
+        "num_fetches": null,
+        "web_search_engine": "native",
+        "origin": "",
+        "is_byok": false,
+        "finish_reason": "stop",
+        "native_finish_reason": "completed",
+        "service_tier": "default",
+        "usage": 0.028929,
+        "router": null,
+        "user_agent": "python-httpx/0.28.1",
+        "http_referer": null,
+        "request_id": "req-1789267279-k4oOwlBHDC2wUULNE2My",
+        "session_id": null,
+        "preset_id": null,
+        "api_type": "completions",
+        "id": "gen-1789267279-YTD4qQMaEUEx0ZfaJCmV",
+        "upstream_id": "resp_06fac456f61d2ea7016aa60d4fc91487d1b3161ee0ce1a08df",
+        "provider_responses": [
+          {
+            "endpoint_id": "9ff5625c-403f-4d7f-b895-58ac7295062c",
+            "id": "resp_06fac456f61d2ea7016aa60d4fc91487d1b3161ee0ce1a08df",
+            "is_byok": false,
+            "latency": 473,
+            "model_permaslug": "openai/gpt-5.4-20260305",
+            "provider_name": "OpenAI",
+            "status": 200
+          }
+        ],
+        "total_cost": 0.028929,
+        "cache_discount": 0.010656,
+        "upstream_inference_cost": 0,
+        "provider_name": "OpenAI",
+        "response_cache_source_id": null,
+        "data_region": "global",
+        "workspace_id": "0a514306-2a9e-513b-aba1-0014aff242a0"
+      },
+      "tts": {
+        "elapsed_ms": 377.7,
+        "audio_seconds": 12.02,
+        "bytes": 577152,
+        "voice": "fast:doorbell",
+        "measured_at": "2026-09-13T02:45:53+00:00",
+        "played": false,
+        "repeat_cached_elapsed_ms": 13.7,
+        "duration_note": "Duration corrected using actual PCM bytes on identical-length cached response; elapsed_ms retains first synthesis timing."
+      },
+      "tts_diagnostics": [
+        {
+          "elapsed_ms": 377.7,
+          "audio_seconds": 89478.49,
+          "bytes": 577152,
+          "voice": "fast:doorbell",
+          "measured_at": "2026-09-13T02:45:53+00:00",
+          "played": false,
+          "invalid_duration_reason": "streaming WAV placeholder frame count; excluded"
+        }
+      ],
+      "review": {
+        "status": "pass",
+        "notes": "Correct source-specific answer with retained context and thin-slice qualification."
+      }
+    },
+    {
+      "id": "tour_yesterday",
+      "text": "Who won yesterday's Tour de France stage?",
+      "checks": [
+        "Resolves yesterday using supplied home date",
+        "Verifies race schedule through search",
+        "Does not invent a September Tour stage winner or silently substitute another race"
+      ],
+      "search_policy": "required_current",
+      "reference_urls": [
+        "https://racecenter.letour.fr/fr"
+      ],
+      "reference_notes": "For the frozen September 12 2026 run, yesterday is September 11. Men's 2026 Tour ran July 4-26. Re-adjudicate on later runs.",
+      "reference_status": "agent_source_checked_not_human_approved",
+      "raw_text": "There wasn\u2019t a Tour de France stage yesterday. The 2026 Tour de France ended on Sunday, July 26, 2026; the final stage was won by Mathieu van der Poel. \n===MORE===\n\u201cYesterday\u201d in your local time means Friday, September 11, 2026. There was no Tour de France stage on that date, because the 2026 Tour ran from July 4 to July 26, 2026. ([letour.fr](https://www.letour.fr/en?utm_source=openai))\n\nThe most recent Tour de France stage was Stage 21, Thoiry to Paris Champs-\u00c9lys\u00e9es, on July 26, and the official Tour site lists Mathieu van der Poel as the stage winner. ([letour.fr](https://www.letour.fr/en/etape-21?utm_source=openai))\n\nIf you meant a different race yesterday, the Vuelta a Espa\u00f1a Stage 19 was won by Eddie Dunbar on Friday, September 11, 2026. ([cyclingnews.com](https://www.cyclingnews.com/pro-cycling/racing/vuelta-a-espana-eddie-dunbar-denies-santiago-buitrago-with-late-pass-on-penas-blancas-as-irishman-claims-stage-19-victory/?utm_source=openai))",
+      "annotations": [
+        {
+          "type": "url_citation",
+          "url_citation": {
+            "url": "https://www.letour.fr/en?utm_source=openai",
+            "title": "Official website of Tour de France 2026",
+            "start_index": 333,
+            "end_index": 390
+          }
+        },
+        {
+          "type": "url_citation",
+          "url_citation": {
+            "url": "https://www.letour.fr/en/etape-21?utm_source=openai",
+            "title": "Stage 21 - Thoiry > Paris Champs-\u00c9lys\u00e9es - Tour de France 2026",
+            "start_index": 562,
+            "end_index": 628
+          }
+        },
+        {
+          "type": "url_citation",
+          "url_citation": {
+            "url": "https://www.cyclingnews.com/pro-cycling/racing/vuelta-a-espana-eddie-dunbar-denies-santiago-buitrago-with-late-pass-on-penas-blancas-as-irishman-claims-stage-19-victory/?utm_source=openai",
+            "title": "Vuelta a Espa\u00f1a: Eddie Dunbar denies Santiago Buitrago with late pass on Pe\u00f1as Blancas as Irishman claims stage 19 victory",
+            "start_index": 755,
+            "end_index": 963
+          }
+        }
+      ],
+      "usage": {
+        "prompt_tokens": 13547,
+        "completion_tokens": 515,
+        "total_tokens": 14062,
+        "cost": 0.0509365,
+        "is_byok": false,
+        "prompt_tokens_details": {
+          "cached_tokens": 4736,
+          "cache_write_tokens": 0,
+          "audio_tokens": 0,
+          "video_tokens": 0
+        },
+        "cost_details": {
+          "upstream_inference_cost": 0.0509365,
+          "upstream_inference_prompt_cost": 0.0232115,
+          "upstream_inference_completions_cost": 0.007725
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 280,
+          "image_tokens": 0,
+          "audio_tokens": 0
+        },
+        "server_tool_use_details": {
+          "web_search_requests": 2
+        }
+      },
+      "first_token_ms": 9039.0,
+      "spoken_ready_ms": 9039.1,
+      "error": null,
+      "finish_reason": "stop",
+      "generation_id": "gen-1789267299-nQ3uS6dM0gy4c4pA5S4t",
+      "served_model": "openai/gpt-5.4",
+      "provider": "OpenAI",
+      "total_ms": 9121.0,
+      "spoken": "There wasn\u2019t a Tour de France stage yesterday. The 2026 Tour de France ended on Sunday, July 26, 2026; the final stage was won by Mathieu van der Poel.",
+      "sentinel_present": true,
+      "request": {
+        "model": "openai/gpt-5.4",
+        "messages": [
+          {
+            "role": "system",
+            "content": "You are the knowledge engine for a household voice assistant. The user asked a spoken question. Answer it directly and factually.\n\nThe request originated in kitchen. This is routing context only; do not assume facts about that room or import context from any other room.\n\nRight now it is Saturday, September 12, 2026, 08:40 PM in the user's home timezone. Resolve every relative time word in the question \u2014 'today', 'yesterday', 'last night', 'this morning' \u2014 against THIS local date/time, NEVER against dates implied by search results: web pages and search tools often run on UTC or other timezones where it may already be a different day. If search results suggest a different current date, trust the date given here.\n\nYour built-in knowledge ends months before this date. You have a web search tool: for ANYTHING that may have changed since your training \u2014 sports results, news, weather, prices, schedules, anything 'today', 'yesterday', 'last night', or 'latest' \u2014 you MUST search the web before answering. Never answer such questions from memory and never say you don't know without having searched. If a search comes back unclear or inconclusive, search again with different terms \u2014 do not give up or report failure after one attempt, and report only facts (scores, numbers) actually stated in results, never guessed. Before claiming that something did NOT happen (no game, no event, nothing scheduled), confirm with a second search \u2014 absence from one set of results is not proof. But remember this is a live voice conversation with someone standing in a kitchen waiting: every extra search adds seconds. ONE well-chosen search is usually enough \u2014 answer as soon as the results support a clear answer, and never run more than three searches for a single question. Only skip the search for timeless general knowledge (conversions, definitions, how-tos), where searching just adds delay.\n\nReturn your answer in TWO parts separated by a line containing only ===MORE===\nPart 1 (before the separator): the SPOKEN answer \u2014 1 to 2 short sentences, plain and direct, the way you'd say it out loud across a kitchen. Lead with the actual answer. Never include URLs, citations, or source names here.\nPart 2 (after ===MORE===): the FULL answer for reading on a screen \u2014 more detail, useful specifics, short lists or steps where helpful. Plain text, no markdown headers or links; if you searched, you may name sources here.\n\nDo not offer follow-ups, do not ask questions back, do not mention that you are an AI. Always include the separator line.\n\nEarlier questions and answers from the last few minutes may precede the current question \u2014 use them to resolve references like 'they', 'it', or 'the game' in follow-ups."
+          },
+          {
+            "role": "user",
+            "content": "Who won yesterday's Tour de France stage?"
+          }
+        ],
+        "temperature": 0.3,
+        "max_tokens": 4000,
+        "stream": true,
+        "stream_options": {
+          "include_usage": true
+        },
+        "reasoning": {
+          "effort": "low"
+        },
+        "plugins": [
+          {
+            "id": "web",
+            "engine": "native"
+          }
+        ],
+        "web_search_options": {
+          "search_context_size": "high"
+        }
+      },
+      "accounting": {
+        "created_at": "2026-09-13T02:41:39.829Z",
+        "model": "openai/gpt-5.4-20260305",
+        "app_id": null,
+        "external_user": null,
+        "streamed": true,
+        "cancelled": false,
+        "latency": 2322,
+        "moderation_latency": null,
+        "generation_time": 8920,
+        "tokens_prompt": 700,
+        "tokens_completion": 561,
+        "native_tokens_prompt": 13547,
+        "native_tokens_completion": 515,
+        "native_tokens_completion_images": 0,
+        "native_tokens_reasoning": 280,
+        "native_tokens_cached": 4736,
+        "num_media_prompt": null,
+        "num_input_audio_prompt": null,
+        "num_media_completion": 0,
+        "num_search_results": null,
+        "num_fetches": null,
+        "web_search_engine": "native",
+        "origin": "",
+        "is_byok": false,
+        "finish_reason": "stop",
+        "native_finish_reason": "completed",
+        "service_tier": "default",
+        "usage": 0.0509365,
+        "router": null,
+        "user_agent": "python-httpx/0.28.1",
+        "http_referer": null,
+        "request_id": "req-1789267299-CBEvsUHVryUjuyY8g5EG",
+        "session_id": null,
+        "preset_id": null,
+        "api_type": "completions",
+        "id": "gen-1789267299-nQ3uS6dM0gy4c4pA5S4t",
+        "upstream_id": "resp_0868d3be9d666975016aa60d63f62487d1be9f6ece4ad88401",
+        "provider_responses": [
+          {
+            "endpoint_id": "9ff5625c-403f-4d7f-b895-58ac7295062c",
+            "id": "resp_0868d3be9d666975016aa60d63f62487d1be9f6ece4ad88401",
+            "is_byok": false,
+            "latency": 949,
+            "model_permaslug": "openai/gpt-5.4-20260305",
+            "provider_name": "OpenAI",
+            "status": 200
+          }
+        ],
+        "total_cost": 0.0509365,
+        "cache_discount": 0.010656,
+        "upstream_inference_cost": 0,
+        "provider_name": "OpenAI",
+        "response_cache_source_id": null,
+        "data_region": "global",
+        "workspace_id": "0a514306-2a9e-513b-aba1-0014aff242a0"
+      },
+      "tts": {
+        "elapsed_ms": 393.7,
+        "audio_seconds": 11.99,
+        "bytes": 575782,
+        "voice": "fast:doorbell",
+        "measured_at": "2026-09-13T02:45:54+00:00",
+        "played": false,
+        "repeat_cached_elapsed_ms": 15.4,
+        "duration_note": "Duration corrected using actual PCM bytes on identical-length cached response; elapsed_ms retains first synthesis timing."
+      },
+      "tts_diagnostics": [
+        {
+          "elapsed_ms": 393.7,
+          "audio_seconds": 89478.49,
+          "bytes": 575782,
+          "voice": "fast:doorbell",
+          "measured_at": "2026-09-13T02:45:54+00:00",
+          "played": false,
+          "invalid_duration_reason": "streaming WAV placeholder frame count; excluded"
+        }
+      ],
+      "review": {
+        "status": "pass",
+        "notes": "Correctly rejected premise with two searches. Clearly distinguishes optional Vuelta information instead of silently changing the question."
+      }
+    },
+    {
+      "id": "pancake_substitution",
+      "text": "Can I substitute baking soda for baking powder in pancakes?",
+      "checks": [
+        "Explains not a direct one-for-one substitution",
+        "Baking soda needs acid; baking powder contains an acid component",
+        "Avoids prescribing an unconditional replacement ratio without recipe context"
+      ],
+      "search_policy": "optional",
+      "reference_status": "review_required",
+      "raw_text": "Yes, but not one-for-one. Baking soda needs an acid to work, so in pancakes it only substitutes well if your recipe has something like buttermilk, yogurt, or lemon juice.\n\n===MORE===\nYou can substitute baking soda for baking powder, but you need less of it and the batter needs acid.\n\nA simple rule:\n- Use about 1/4 teaspoon baking soda for each 1 teaspoon baking powder\n- Make sure the recipe includes an acidic ingredient, such as:\n  - buttermilk\n  - yogurt\n  - sour cream\n  - lemon juice\n  - vinegar\n\nIf the recipe does not have acid, baking soda alone can leave the pancakes flat or give them a slightly soapy taste.\n\nIf you only have baking soda, a quick workaround is:\n- 1 teaspoon baking powder = 1/4 teaspoon baking soda plus about 1/2 teaspoon lemon juice or vinegar in the wet ingredients\n\nIf you want, I can also give you a pancake-specific swap based on your exact recipe.",
+      "annotations": [],
+      "usage": {
+        "prompt_tokens": 5027,
+        "completion_tokens": 232,
+        "total_tokens": 5259,
+        "cost": 0.0053915,
+        "is_byok": false,
+        "prompt_tokens_details": {
+          "cached_tokens": 4736,
+          "cache_write_tokens": 0,
+          "audio_tokens": 0,
+          "video_tokens": 0
+        },
+        "cost_details": {
+          "upstream_inference_cost": 0.0053915,
+          "upstream_inference_prompt_cost": 0.0019115,
+          "upstream_inference_completions_cost": 0.00348
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 18,
+          "image_tokens": 0,
+          "audio_tokens": 0
+        }
+      },
+      "first_token_ms": 1543.5,
+      "spoken_ready_ms": 1574.5,
+      "error": null,
+      "finish_reason": "stop",
+      "generation_id": "gen-1789267314-8iaLqdDCM9fIwP8ze1rs",
+      "served_model": "openai/gpt-5.4",
+      "provider": "OpenAI",
+      "total_ms": 3002.5,
+      "spoken": "Yes, but not one-for-one. Baking soda needs an acid to work, so in pancakes it only substitutes well if your recipe has something like buttermilk, yogurt, or lemon juice.",
+      "sentinel_present": true,
+      "request": {
+        "model": "openai/gpt-5.4",
+        "messages": [
+          {
+            "role": "system",
+            "content": "You are the knowledge engine for a household voice assistant. The user asked a spoken question. Answer it directly and factually.\n\nThe request originated in kitchen. This is routing context only; do not assume facts about that room or import context from any other room.\n\nRight now it is Saturday, September 12, 2026, 08:40 PM in the user's home timezone. Resolve every relative time word in the question \u2014 'today', 'yesterday', 'last night', 'this morning' \u2014 against THIS local date/time, NEVER against dates implied by search results: web pages and search tools often run on UTC or other timezones where it may already be a different day. If search results suggest a different current date, trust the date given here.\n\nYour built-in knowledge ends months before this date. You have a web search tool: for ANYTHING that may have changed since your training \u2014 sports results, news, weather, prices, schedules, anything 'today', 'yesterday', 'last night', or 'latest' \u2014 you MUST search the web before answering. Never answer such questions from memory and never say you don't know without having searched. If a search comes back unclear or inconclusive, search again with different terms \u2014 do not give up or report failure after one attempt, and report only facts (scores, numbers) actually stated in results, never guessed. Before claiming that something did NOT happen (no game, no event, nothing scheduled), confirm with a second search \u2014 absence from one set of results is not proof. But remember this is a live voice conversation with someone standing in a kitchen waiting: every extra search adds seconds. ONE well-chosen search is usually enough \u2014 answer as soon as the results support a clear answer, and never run more than three searches for a single question. Only skip the search for timeless general knowledge (conversions, definitions, how-tos), where searching just adds delay.\n\nReturn your answer in TWO parts separated by a line containing only ===MORE===\nPart 1 (before the separator): the SPOKEN answer \u2014 1 to 2 short sentences, plain and direct, the way you'd say it out loud across a kitchen. Lead with the actual answer. Never include URLs, citations, or source names here.\nPart 2 (after ===MORE===): the FULL answer for reading on a screen \u2014 more detail, useful specifics, short lists or steps where helpful. Plain text, no markdown headers or links; if you searched, you may name sources here.\n\nDo not offer follow-ups, do not ask questions back, do not mention that you are an AI. Always include the separator line.\n\nEarlier questions and answers from the last few minutes may precede the current question \u2014 use them to resolve references like 'they', 'it', or 'the game' in follow-ups."
+          },
+          {
+            "role": "user",
+            "content": "Can I substitute baking soda for baking powder in pancakes?"
+          }
+        ],
+        "temperature": 0.3,
+        "max_tokens": 4000,
+        "stream": true,
+        "stream_options": {
+          "include_usage": true
+        },
+        "reasoning": {
+          "effort": "low"
+        },
+        "plugins": [
+          {
+            "id": "web",
+            "engine": "native"
+          }
+        ],
+        "web_search_options": {
+          "search_context_size": "high"
+        }
+      },
+      "accounting": {
+        "created_at": "2026-09-13T02:41:54.479Z",
+        "model": "openai/gpt-5.4-20260305",
+        "app_id": null,
+        "external_user": null,
+        "streamed": true,
+        "cancelled": false,
+        "latency": 829,
+        "moderation_latency": null,
+        "generation_time": 2852,
+        "tokens_prompt": 705,
+        "tokens_completion": 340,
+        "native_tokens_prompt": 5027,
+        "native_tokens_completion": 232,
+        "native_tokens_completion_images": 0,
+        "native_tokens_reasoning": 18,
+        "native_tokens_cached": 4736,
+        "num_media_prompt": null,
+        "num_input_audio_prompt": null,
+        "num_media_completion": 0,
+        "num_search_results": null,
+        "num_fetches": null,
+        "web_search_engine": "native",
+        "origin": "",
+        "is_byok": false,
+        "finish_reason": "stop",
+        "native_finish_reason": "completed",
+        "service_tier": "default",
+        "usage": 0.0053915,
+        "router": null,
+        "user_agent": "python-httpx/0.28.1",
+        "http_referer": null,
+        "request_id": "req-1789267314-Sm59xCakfu6Gc70BM6ED",
+        "session_id": null,
+        "preset_id": null,
+        "api_type": "completions",
+        "id": "gen-1789267314-8iaLqdDCM9fIwP8ze1rs",
+        "upstream_id": "resp_097c188b2636c90d016aa60d72914487d1b99dd80d8d73ccab",
+        "provider_responses": [
+          {
+            "endpoint_id": "9ff5625c-403f-4d7f-b895-58ac7295062c",
+            "id": "resp_097c188b2636c90d016aa60d72914487d1b99dd80d8d73ccab",
+            "is_byok": false,
+            "latency": 260,
+            "model_permaslug": "openai/gpt-5.4-20260305",
+            "provider_name": "OpenAI",
+            "status": 200
+          }
+        ],
+        "total_cost": 0.0053915,
+        "cache_discount": 0.010656,
+        "upstream_inference_cost": 0,
+        "provider_name": "OpenAI",
+        "response_cache_source_id": null,
+        "data_region": "global",
+        "workspace_id": "0a514306-2a9e-513b-aba1-0014aff242a0"
+      },
+      "tts": {
+        "elapsed_ms": 357.6,
+        "audio_seconds": 11.08,
+        "bytes": 531876,
+        "voice": "fast:doorbell",
+        "measured_at": "2026-09-13T02:45:54+00:00",
+        "played": false,
+        "repeat_cached_elapsed_ms": 13.0,
+        "duration_note": "Duration corrected using actual PCM bytes on identical-length cached response; elapsed_ms retains first synthesis timing."
+      },
+      "tts_diagnostics": [
+        {
+          "elapsed_ms": 357.6,
+          "audio_seconds": 89478.49,
+          "bytes": 531876,
+          "voice": "fast:doorbell",
+          "measured_at": "2026-09-13T02:45:54+00:00",
+          "played": false,
+          "invalid_duration_reason": "streaming WAV placeholder frame count; excluded"
+        }
+      ],
+      "review": {
+        "status": "caution",
+        "notes": "Core answer is correct, but full response adds a precise lemon/vinegar quantity without a supporting source or recipe context; do not approve that ratio from this benchmark. Also violates the no-follow-up-offer instruction."
+      }
+    },
+    {
+      "id": "led_purple",
+      "text": "When I mix blue and red light from an LED strip, I see purple. Are the waveforms collapsing to an average wavelength, the same as a single purple wavelength, or are my eyes seeing purple while red and blue are still emitted separately?",
+      "checks": [
+        "Red and blue spectral components remain; ordinary LED mixing does not average them into a new wavelength",
+        "Explains additive color perception through cone responses and brain interpretation",
+        "Distinguishes nonspectral purple/magenta from spectral violet",
+        "Does not confuse superposition with nonlinear frequency conversion or quantum collapse"
+      ],
+      "search_policy": "optional",
+      "reference_urls": [
+        "https://www.exploratorium.edu/snacks/colored-shadows"
+      ],
+      "reference_status": "agent_source_checked_not_human_approved",
+      "raw_text": "Your eyes are seeing purple while the red and blue light are still being emitted separately. They do not collapse into one \u201caverage\u201d wavelength.\n\n===MORE===\nAn LED strip that mixes red and blue is sending out two different sets of wavelengths at the same time. In the air, those light waves just overlap; they don\u2019t merge into a new single wavelength.\n\nWhat happens is in your eyes and brain:\n- Red LEDs stimulate your long-wavelength cones more.\n- Blue LEDs stimulate your short-wavelength cones more.\n- Your visual system interprets that combination as purple or magenta.\n\nSo this is not the same thing as a single pure spectral color. In fact, \u201cpurple\u201d or \u201cmagenta\u201d is not one wavelength on the rainbow spectrum. It\u2019s a perceived color created by combining distant parts of the spectrum, especially red and blue.\n\nSo, in short:\n- Physically: red and blue are still separate light.\n- Perceptually: your brain combines their signals into purple.\n\nA useful comparison is sound: two notes played together do not turn into one average note in the air, even though your brain hears them as one combined chord.",
+      "annotations": [],
+      "usage": {
+        "prompt_tokens": 5065,
+        "completion_tokens": 270,
+        "total_tokens": 5335,
+        "cost": 0.0060565,
+        "is_byok": false,
+        "prompt_tokens_details": {
+          "cached_tokens": 4736,
+          "cache_write_tokens": 0,
+          "audio_tokens": 0,
+          "video_tokens": 0
+        },
+        "cost_details": {
+          "upstream_inference_cost": 0.0060565,
+          "upstream_inference_prompt_cost": 0.0020065,
+          "upstream_inference_completions_cost": 0.00405
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 32,
+          "image_tokens": 0,
+          "audio_tokens": 0
+        }
+      },
+      "first_token_ms": 1835.8,
+      "spoken_ready_ms": 1855.6,
+      "error": null,
+      "finish_reason": "stop",
+      "generation_id": "gen-1789267333-bPaejZva2JIrrDC3b08B",
+      "served_model": "openai/gpt-5.4",
+      "provider": "OpenAI",
+      "total_ms": 3765.4,
+      "spoken": "Your eyes are seeing purple while the red and blue light are still being emitted separately. They do not collapse into one \u201caverage\u201d wavelength.",
+      "sentinel_present": true,
+      "request": {
+        "model": "openai/gpt-5.4",
+        "messages": [
+          {
+            "role": "system",
+            "content": "You are the knowledge engine for a household voice assistant. The user asked a spoken question. Answer it directly and factually.\n\nThe request originated in kitchen. This is routing context only; do not assume facts about that room or import context from any other room.\n\nRight now it is Saturday, September 12, 2026, 08:40 PM in the user's home timezone. Resolve every relative time word in the question \u2014 'today', 'yesterday', 'last night', 'this morning' \u2014 against THIS local date/time, NEVER against dates implied by search results: web pages and search tools often run on UTC or other timezones where it may already be a different day. If search results suggest a different current date, trust the date given here.\n\nYour built-in knowledge ends months before this date. You have a web search tool: for ANYTHING that may have changed since your training \u2014 sports results, news, weather, prices, schedules, anything 'today', 'yesterday', 'last night', or 'latest' \u2014 you MUST search the web before answering. Never answer such questions from memory and never say you don't know without having searched. If a search comes back unclear or inconclusive, search again with different terms \u2014 do not give up or report failure after one attempt, and report only facts (scores, numbers) actually stated in results, never guessed. Before claiming that something did NOT happen (no game, no event, nothing scheduled), confirm with a second search \u2014 absence from one set of results is not proof. But remember this is a live voice conversation with someone standing in a kitchen waiting: every extra search adds seconds. ONE well-chosen search is usually enough \u2014 answer as soon as the results support a clear answer, and never run more than three searches for a single question. Only skip the search for timeless general knowledge (conversions, definitions, how-tos), where searching just adds delay.\n\nReturn your answer in TWO parts separated by a line containing only ===MORE===\nPart 1 (before the separator): the SPOKEN answer \u2014 1 to 2 short sentences, plain and direct, the way you'd say it out loud across a kitchen. Lead with the actual answer. Never include URLs, citations, or source names here.\nPart 2 (after ===MORE===): the FULL answer for reading on a screen \u2014 more detail, useful specifics, short lists or steps where helpful. Plain text, no markdown headers or links; if you searched, you may name sources here.\n\nDo not offer follow-ups, do not ask questions back, do not mention that you are an AI. Always include the separator line.\n\nEarlier questions and answers from the last few minutes may precede the current question \u2014 use them to resolve references like 'they', 'it', or 'the game' in follow-ups."
+          },
+          {
+            "role": "user",
+            "content": "When I mix blue and red light from an LED strip, I see purple. Are the waveforms collapsing to an average wavelength, the same as a single purple wavelength, or are my eyes seeing purple while red and blue are still emitted separately?"
+          }
+        ],
+        "temperature": 0.3,
+        "max_tokens": 4000,
+        "stream": true,
+        "stream_options": {
+          "include_usage": true
+        },
+        "reasoning": {
+          "effort": "low"
+        },
+        "plugins": [
+          {
+            "id": "web",
+            "engine": "native"
+          }
+        ],
+        "web_search_options": {
+          "search_context_size": "high"
+        }
+      },
+      "accounting_error": "Client error '404 Not Found' for url 'https://openrouter.ai/api/v1/generation?id=gen-1789267333-bPaejZva2JIrrDC3b08B'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/404",
+      "tts": {
+        "elapsed_ms": 282.3,
+        "audio_seconds": 8.38,
+        "bytes": 402546,
+        "voice": "fast:doorbell",
+        "measured_at": "2026-09-13T02:45:54+00:00",
+        "played": false,
+        "repeat_cached_elapsed_ms": 15.2,
+        "duration_note": "Duration corrected using actual PCM bytes on identical-length cached response; elapsed_ms retains first synthesis timing."
+      },
+      "tts_diagnostics": [
+        {
+          "elapsed_ms": 282.3,
+          "audio_seconds": 89478.49,
+          "bytes": 402546,
+          "voice": "fast:doorbell",
+          "measured_at": "2026-09-13T02:45:54+00:00",
+          "played": false,
+          "invalid_duration_reason": "streaming WAV placeholder frame count; excluded"
+        }
+      ],
+      "review": {
+        "status": "caution",
+        "notes": "Correct central mechanism and nonspectral purple explanation; does not explicitly explain spectral violet, one of the richer rubric checks."
+      }
+    }
+  ],
+  "scoring_status": "provisional_agent_review_not_human_approved",
+  "measurement": "text generation only; spoken_ready_ms is complete short answer before TTS; no audio played",
+  "finished_at": "2026-09-13T02:42:19+00:00",
+  "summary": {
+    "spoken_ready": {
+      "count": 6,
+      "min_ms": 1162.3,
+      "p50_ms": 2594.1,
+      "p95_ms": 8229.9,
+      "max_ms": 9039.1
+    },
+    "total_latency": {
+      "count": 6,
+      "min_ms": 1975.6,
+      "p50_ms": 4469.1,
+      "p95_ms": 8668.5,
+      "max_ms": 9121.0
+    },
+    "errors": 0,
+    "total_cost_usd": 0.1473195
+  }
+}

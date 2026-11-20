@@ -40,3 +40,9 @@ grafana-dashboard-backups/**/*-response.json
 .DS_Store
 .idea/
 *.iml
+
+# ESPHome Device Builder local state (root-owned; holds a peer-link key)
+voice-assistant/voice-pe/config/.device-builder*
+
+# Empty/scratch run logs
+music-loudness/*.err

@@ -1,0 +1,26 @@
+[
+  {
+    "id": "29bbcc343e24ac09",
+    "tab": "ee0f1588760b9b3b",
+    "name": "theMagic",
+    "sha256": "ee537dcfe3a6e111909810a8097976eff9155975d9cecc623e59defbced5cfe1"
+  },
+  {
+    "id": "12057a28cc4a9f11",
+    "tab": "8123861fc119b96b",
+    "name": "Seconds Oven On",
+    "sha256": "70c802f81ed796e4ab9f8e64564d05b51312ed603e2f0c03f4a682962b6dd1d9"
+  },
+  {
+    "id": "b0b4f535c19d2ed7",
+    "tab": "7fa25727b15db1f0",
+    "name": "combiner",
+    "sha256": "cdc6638e713f1b7ba60767df0b26ea05be97c68222fa4aa547b5831df7e9ceae"
+  },
+  {
+    "id": "dryer_outage_detector",
+    "tab": "0711e9167e62e249",
+    "name": "Sustained dryer load during outage",
+    "sha256": "fa4d2ce73c76cc357302de5ed9fcdfaca172d8aaf262969549a8baa2fc1c1469"
+  }
+]

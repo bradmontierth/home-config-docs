@@ -1,0 +1,1 @@
+{"intervals":[{"start":760.48,"end":833.84,"reason":"McDonald's and Babel ads with disclaimers."},{"start":833.92,"end":876.56,"reason":"Sephora ad read by Paige from Giggly Squad."}]}

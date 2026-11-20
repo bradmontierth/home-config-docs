@@ -62,6 +62,30 @@ sources on the empty crib, every one (Blue Iris included) sometimes reports
 alert thresholds — so the grab is about keeping Blue Iris-equivalent detail
 for the sitting/standing call, not a fix. A grab takes ~2-3 s.
 
+### Full-res crop + rotated double-check (2026-10-11)
+
+On 2026-10-11 the nap produced 4 false `awake` alerts (eyes clearly closed,
+often face-up). The cause was that `grab_frame` scaled the frame to 960x720
+before cropping, so the face reached the VLM ~30 px wide. Since then `vlm.py`:
+
+- grabs the full 2560x1920 frame and scales `crop_box` (still written in
+  960x720 coordinates) to the real frame size, so the VLM gets a ~1147x1619 crib crop;
+- when the upright answer is lying-awake (`awake >= vlm_lying`, not
+  sitting/standing), re-asks the SAME crop rotated 180 deg and stores it as
+  `rot_awake`; `lying_awake` needs both >= `vlm_lying`. At full res the
+  remaining false "eyes open" calls are heads at the bottom rail (face
+  upside down). The rotated view is a veto only: it wrongly reports
+  sitting/standing, so its position is never used. If the rotated call
+  fails, the hit is not counted.
+
+Bench (970 frames from Optiplex Lookout recordings: the 10-11 nap, Oct 8-11
+morning wake windows, night samples; kit in `/home/pi/claire-eval`, run
+`bench.py` then `score.py`): 0 of 335 asleep frames at alert level (old: 16),
+all 5 real wakes caught. Prompt and thresholds unchanged. Pre-change backup:
+`app/vlm.py.bak-20261011`. If false alerts recur, pull the alert-time
+frames from `optiplex:/srv/lookout-archive/claire/` (UTC-named 1-min MP4s)
+and add them to the bench before touching the prompt.
+
 To test the Node-RED path without alerting everyone, publish `reason: "test"`
 (goes only to Brad's phone, no speakers); `awake`/`cry` are production-shaped.
 

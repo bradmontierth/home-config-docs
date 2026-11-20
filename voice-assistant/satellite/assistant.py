@@ -38,6 +38,7 @@ import time
 import urllib.request
 import wave
 from collections import deque
+from concurrent.futures import Future
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -149,6 +150,14 @@ ENDPOINT_LAG_SPURIOUS_MS = int(os.getenv("ENDPOINT_LAG_SPURIOUS_MS", "400"))
 # stay spurious at any position — the family room logs 64-128ms blips 2-4s
 # into a capture, and letting one endpoint the turn is the original bug.
 SPURIOUS_ONSET_WINDOW_MS = int(os.getenv("SPURIOUS_ONSET_WINDOW_MS", "1000"))
+# Late chime (live 2026-10-24: Wi-Fi stalls put the kitchen /verify at 3.8-4.4s
+# while the server took ~0.2s): the capture buffer then holds the whole wait,
+# so a short blip (the wake phrase's tail) sits at ~3s in, past the 1s window,
+# and its buffered trailing silence endpointed the turn 91ms after the ding --
+# shipping a bare "okay computer" and cutting off the person who waited for the
+# ding. The bleed window is really "everything before the ding, plus the ding":
+# run_turn widens it to trigger->chime + this tail (wake.wav ~0.9s long).
+LATE_CHIME_TAIL_MS = int(os.getenv("LATE_CHIME_TAIL_MS", "700"))
 # /command/audio can legitimately take a minute: a searched+reasoning ask
 # measured 61s on 2026-07-09 (9 web searches) — the old 30s default hung up
 # before the answer, so the dashboard showed it but the kitchen never spoke.
@@ -320,7 +329,9 @@ FPS = SAMPLE_RATE / FRAME_SAMPLES
 HOP_FRAMES = max(1, int(HOP_MS / 1000 * FPS))
 
 CLIP_LOCK = threading.Lock()
-PLAYBACK_LOCK = threading.Lock()
+# Reentrant so post_command_with_chirp can reserve playback before starting
+# the upload, then use the ordinary play_file -> _play_scaled path.
+PLAYBACK_LOCK = threading.RLock()
 EVENTS_PATH = DATA_DIR / "events.jsonl"
 # Every verify pre-roll is kept, verdict in the name: the rejects are the
 # multi-voice-miss corpus we tune stage-2 against; the accepts are the
@@ -645,6 +656,36 @@ def play_file(path: Path, is_alarm: bool = False) -> None:
     _play_scaled(data)
 
 
+def post_command_with_chirp(path: str, wav_bytes: bytes) -> dict:
+    """Overlap local end-of-listen chirp with upload/ASR/dispatch.
+
+    Reserve playback BEFORE sending audio so even an immediate server-pushed
+    /speak reply queues behind the chirp. Release it before waiting for HTTP:
+    the orchestrator can await that /speak callback before returning its result.
+    Relayed speakers retain serial playback: this process cannot reserve the
+    remote speaker's playback lock.
+    """
+    if PLAYBACK_RELAY_URL:
+        play_file(SOUNDS_DIR / "vad.wav")
+        return post_wav(path, wav_bytes, timeout=COMMAND_TIMEOUT_S)
+    result = Future()
+    started = time.monotonic()
+
+    def upload():
+        try:
+            log(f"command upload starts with vad chirp (dispatch_delay={round((time.monotonic() - started) * 1000)}ms)")
+            result.set_result(post_wav(path, wav_bytes, timeout=COMMAND_TIMEOUT_S))
+        except BaseException as exc:
+            result.set_exception(exc)
+
+    with PLAYBACK_LOCK:
+        threading.Thread(target=upload, daemon=True).start()
+        play_file(SOUNDS_DIR / "vad.wav")
+    # Also ensures an early HTTP response can't start follow-up capture or
+    # unduck music while the chirp is still playing.
+    return result.result()
+
+
 def theme_sound(theme: str) -> Path:
     p = SOUNDS_DIR / "themes" / f"{theme}.wav"
     # Fallback = the house default (2026-10-14, was marimba): the stop model
@@ -661,6 +702,30 @@ def theme_sound(theme: str) -> Path:
 # ducked for exactly the playback lifetime (the watcher thread owns unduck).
 MEDIA_LOCK = threading.Lock()
 MEDIA_PROC: subprocess.Popen | None = None
+MEDIA_CACHE: dict[str, bytes] = {}
+MEDIA_CACHE_LOCK = threading.Lock()
+
+
+def media_prepare(url: str) -> bool:
+    """Small bounded raw-WAV cache; scale at playback to honor current volume."""
+    with MEDIA_CACHE_LOCK:
+        if url in MEDIA_CACHE:
+            return True
+    try:
+        data = get_bytes(url)
+        if len(data) > 4_000_000:
+            return False
+        with wave.open(io.BytesIO(data), "rb") as wav:
+            if wav.getcomptype() != "NONE":
+                return False
+        with MEDIA_CACHE_LOCK:
+            if len(MEDIA_CACHE) >= 32:
+                MEDIA_CACHE.pop(next(iter(MEDIA_CACHE)))
+            MEDIA_CACHE[url] = data
+        return True
+    except Exception as exc:
+        log(f"media prepare failed: {exc}")
+        return False
 
 
 def media_stop() -> None:
@@ -678,7 +743,9 @@ def media_play(url: str) -> bool:
     the caller (the kiosk viewer, transitively) can start the picture in step."""
     global MEDIA_PROC
     try:
-        data = _scale_wav(get_bytes(url), STATE.volume_factor(False))
+        with MEDIA_CACHE_LOCK:
+            data = MEDIA_CACHE.get(url)
+        data = _scale_wav(data if data is not None else get_bytes(url), STATE.volume_factor(False))
     except Exception as exc:  # noqa: BLE001
         log(f"media fetch failed ({url}): {exc}")
         return False
@@ -848,7 +915,8 @@ def _rewake_chime() -> None:
 
 def capture_command(stdout, vad, min_capture_ms: int = MIN_CAPTURE_MS,
                     onset_ms: int | None = None, partials: bool = False,
-                    rewake: bool = False) -> bytes:
+                    rewake: bool = False,
+                    spurious_window_ms: int = SPURIOUS_ONSET_WINDOW_MS) -> bytes:
     """Capture one utterance. Two independent windows:
       - `onset_ms`: how long to wait for speech to START before giving up (the
         wake turn = min_capture_ms; a follow-up = the longer FOLLOWUP window).
@@ -1001,9 +1069,20 @@ def capture_command(stdout, vad, min_capture_ms: int = MIN_CAPTURE_MS,
                 if (time.time() - hold_t0) * 1000 < REWAKE_HOLD_MS:
                     continue
             # A short voiced blip whose trailing "silence" was mostly BUFFERED
-            # audio is bleed, not the user (see MIN_COMMAND_VOICED_MS above) —
-            # discard it and re-arm onset. A real run-together command carries
-            # ≥1s of voice, so it still endpoints straight from the buffer.
+            # audio is probably bleed, not the user (see MIN_COMMAND_VOICED_MS
+            # above), so don't endpoint on it: re-arm onset. A real
+            # run-together command carries ≥1s of voice, so it still endpoints
+            # straight from the buffer.
+            #
+            # The blip's audio is KEPT as a prefix, not deleted (2026-11-01).
+            # The judgement runs on ch0, and in the kitchen ch0 is clamped
+            # after the ding. "set a timer" spoken ~0.4 s after the ding only
+            # scored 352 ms voiced, so it was taken for bleed and deleted
+            # (intact ch1 bytes included). Only "for eight minutes" shipped.
+            # voiced_ms resets, so a capture with nothing after the blip still
+            # returns b"" (same as before). When real speech follows, the
+            # prefix rides along, and a true chime blip costs at most a stray
+            # "uh".
             lag_ms = total_ms - (time.time() - t0) * 1000
             # Two prongs: a tiny blip (< MIN_VOICED_MS, 1-6 frames — a clank,
             # a TV syllable; the family room logs them 2-4s in) is bleed
@@ -1011,11 +1090,10 @@ def capture_command(stdout, vad, min_capture_ms: int = MIN_CAPTURE_MS,
             if lag_ms > ENDPOINT_LAG_SPURIOUS_MS and (
                     voiced_ms < MIN_VOICED_MS
                     or (voiced_ms < MIN_COMMAND_VOICED_MS
-                        and onset_at_ms < SPURIOUS_ONSET_WINDOW_MS)):
-                log(f"spurious onset discarded voiced={voiced_ms}ms "
-                    f"onset_at={onset_at_ms}ms lag={round(lag_ms)}ms total={total_ms}ms")
-                frames.clear()
-                last_partial_at = 0
+                        and onset_at_ms < spurious_window_ms)):
+                log(f"spurious onset held (kept as prefix) voiced={voiced_ms}ms "
+                    f"onset_at={onset_at_ms}ms window={spurious_window_ms}ms "
+                    f"lag={round(lag_ms)}ms total={total_ms}ms")
                 speech = False
                 voiced_ms = silence_ms = 0
                 continue
@@ -1156,7 +1234,10 @@ def run_turn(preroll_pcm: bytes, stdout, vad, trigger_t0: float,
                                   onset_ms=WAKE_ONSET_MS, partials=False)
         if cmd_pcm:
             try:
-                post_wav(sat_path("/command/shadow"),
+                shadow_path = sat_path("/command/shadow")
+                if v.get("arb_turn_id") and v.get("turn_id"):
+                    shadow_path += f"&arb_turn_id={v['arb_turn_id']}&turn_id={v['turn_id']}"
+                post_wav(shadow_path,
                          wrap_wav(preroll_pcm + cmd_pcm), timeout=30)
             except Exception as exc:  # noqa: BLE001
                 log(f"/command/shadow failed: {exc}")
@@ -1206,10 +1287,13 @@ def run_turn(preroll_pcm: bytes, stdout, vad, trigger_t0: float,
         # ("okay computer, download a car") spoken without waiting for the chime.
         # capture_command still processes it (Silero catches the speech in it); the
         # onset timeout is wall-clock, so the buffer doesn't steal the wait budget.
-        cmd_pcm = capture_command(stdout, vad, min_capture_ms=WAKE_MIN_CAPTURE_MS,
-                                  onset_ms=WAKE_ONSET_MS, partials=True)
-        play_file(SOUNDS_DIR / "vad.wav")
+        cmd_pcm = capture_command(
+            stdout, vad, min_capture_ms=WAKE_MIN_CAPTURE_MS,
+            onset_ms=WAKE_ONSET_MS, partials=True,
+            spurious_window_ms=max(SPURIOUS_ONSET_WINDOW_MS,
+                                   chime_ms + LATE_CHIME_TAIL_MS))
         if not cmd_pcm:
+            play_file(SOUNDS_DIR / "vad.wav")
             log("no command captured")
             cmd_clip = f"miss-{datetime.now().strftime('%Y%m%d-%H%M%S')}.wav"
             threading.Thread(target=_persist_miss,
@@ -1241,8 +1325,8 @@ def run_turn(preroll_pcm: bytes, stdout, vad, trigger_t0: float,
                 path = "/command/audio?stitched=1"
                 if turn_id:
                     path += f"&turn_id={turn_id}"
-                resp = post_wav(sat_path(path), wrap_wav(preroll_pcm + cmd_pcm),
-                                timeout=COMMAND_TIMEOUT_S)
+                resp = post_command_with_chirp(
+                    sat_path(path), wrap_wav(preroll_pcm + cmd_pcm))
             except Exception as exc:  # noqa: BLE001
                 log(f"/command/audio failed: {exc}")
                 return
@@ -1260,7 +1344,8 @@ def run_turn(preroll_pcm: bytes, stdout, vad, trigger_t0: float,
             except Exception as exc:  # noqa: BLE001
                 log(f"reply playback failed: {exc}")
         wait_out_zone_reply(stdout, resp)
-        run_followups(stdout, vad, awaiting=bool(resp.get("awaiting_slot")))
+        if not resp.get("end_session"):
+            run_followups(stdout, vad, awaiting=bool(resp.get("awaiting_slot")))
     finally:
         unduck_music()
 
@@ -1281,13 +1366,12 @@ def run_manual_turn(stdout, vad) -> None:
         pass
     cmd_pcm = capture_command(stdout, vad, min_capture_ms=WAKE_MIN_CAPTURE_MS,
                               onset_ms=WAKE_ONSET_MS, partials=True)
-    play_file(SOUNDS_DIR / "vad.wav")
     if not cmd_pcm:
+        play_file(SOUNDS_DIR / "vad.wav")
         log("manual turn: no command captured")
         return
     try:
-        resp = post_wav(sat_path("/command/audio"), wrap_wav(cmd_pcm),
-                        timeout=COMMAND_TIMEOUT_S)
+        resp = post_command_with_chirp(sat_path("/command/audio"), wrap_wav(cmd_pcm))
     except Exception as exc:  # noqa: BLE001
         log(f"manual /command/audio failed: {exc}")
         return
@@ -1305,7 +1389,8 @@ def run_manual_turn(stdout, vad) -> None:
         except Exception as exc:  # noqa: BLE001
             log(f"manual reply playback failed: {exc}")
     wait_out_zone_reply(stdout, resp)
-    run_followups(stdout, vad, awaiting=bool(resp.get("awaiting_slot")))
+    if not resp.get("end_session"):
+        run_followups(stdout, vad, awaiting=bool(resp.get("awaiting_slot")))
 
 
 def wait_out_zone_reply(stdout, resp: dict) -> None:
@@ -1433,6 +1518,8 @@ def _run_followups(stdout, vad, awaiting: bool) -> None:
                 play_wav_bytes(get_bytes(ORCH_BASE + url))
             except Exception as exc:  # noqa: BLE001
                 log(f"followup reply playback failed: {exc}")
+        if resp.get("end_session"):
+            return
     log("followup max turns reached -> ending session")
 
 
@@ -1930,6 +2017,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 url = ORCH_BASE + url
             threading.Thread(target=speak_url, args=(url,), daemon=True).start()
             self._json(200, {"ok": True})
+        elif self.path == "/media/prepare":
+            url = str(self._read_json().get("url", ""))
+            self._json(200, {"ok": bool(url) and media_prepare(url)})
         elif self.path == "/media/play":
             url = str(self._read_json().get("url", ""))
             if not url:

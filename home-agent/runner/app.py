@@ -10,6 +10,7 @@ import subprocess
 import threading
 import time
 import uuid
+from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
@@ -67,6 +68,16 @@ CLAUDE_IDLE_KEEPALIVE_S = int(os.environ.get("HOME_AGENT_CLAUDE_IDLE_KEEPALIVE_S
 # Each idle process holds a few hundred MB; the oldest idle ones are closed first.
 CLAUDE_IDLE_MAX = int(os.environ.get("HOME_AGENT_CLAUDE_IDLE_MAX", "4"))
 MAX_COMMAND_OUTPUT_CHARS = int(os.environ.get("HOME_AGENT_MAX_COMMAND_OUTPUT_CHARS", "1800"))
+
+
+# Commands and tool output shown inline are not markdown. A ``` line inside
+# them (a heredoc, or output cut off mid code block) would open a fence the
+# phone app never sees closed, turning the rest of the reply into raw text.
+_FENCE_LINE = re.compile(r"(?m)^([ \t]*)```")
+
+
+def defuse_fences(text: str) -> str:
+    return _FENCE_LINE.sub(r"\1'''", text)
 SHOW_SUCCESSFUL_COMMAND_OUTPUT = os.environ.get("HOME_AGENT_SHOW_COMMAND_OUTPUT", "0") == "1"
 ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
 
@@ -81,8 +92,8 @@ class StartRequest(BaseModel):
     reasoning_effort: Optional[str] = None
     codex_account: Optional[str] = None
     codex_model: Optional[str] = None
-    # Claude only: resume as a fork (new session id) because another live
-    # process, e.g. a tmux pane, still owns the original session file.
+    # Resume as a fork (new session/thread id) because another live process,
+    # e.g. a tmux pane or an SSH terminal, still owns the original session.
     fork_session: bool = False
 
 
@@ -228,7 +239,10 @@ class CodexSession:
         if self.agent == "claude":
             return self.claude_command(prompt)
         if CODEX_MODE == "exec":
-            if self.codex_thread_id:
+            if self.codex_thread_id and self.fork_session:
+                # `exec fork` runs in the process cwd and takes no --all.
+                cmd = [CODEX_BIN, "exec", "fork", "--json", "--skip-git-repo-check"]
+            elif self.codex_thread_id:
                 cmd = [
                     CODEX_BIN,
                     "exec",
@@ -888,12 +902,18 @@ def claude_models_from_cli() -> list[CodexModelInfo]:
             continue
         if entry.get("resolvedModel"):
             _claude_resolved_models[value] = str(entry["resolvedModel"])
+        # Older CLIs put the name in the description ("Opus 5 · Best for
+        # everyday, complex tasks"); since 2.1.28x it is in displayName and
+        # the description is only a tagline, often shared by several models.
         description = str(entry.get("description") or "")
-        headline, _, rest = description.partition(" \u00b7 ")
+        headline, separator, rest = description.partition(" \u00b7 ")
+        if not separator:
+            headline, rest = "", description
+        display_name = str(entry.get("displayName") or "")
         models.append(
             CodexModelInfo(
                 model_id=value,
-                label=headline or str(entry.get("displayName") or value),
+                label=display_name or headline or value,
                 description=rest,
                 is_default=bool(default_resolved) and entry.get("resolvedModel") == default_resolved
                 and not any(m.is_default for m in models),
@@ -1253,6 +1273,25 @@ def default_machine_codex_home() -> Path:
     return Path(os.environ.get("CODEX_HOME") or Path.home() / ".codex")
 
 
+def codex_thread_writer(codex_home: Path, thread_id: str) -> Optional[str]:
+    """pid holding the thread's writer lock, if any. Codex flocks
+    thread-writer-locks/<id>.lock for as long as a process (an interactive
+    `codex resume` in a terminal, say) owns the thread, and refuses a second
+    writer. Read from /proc/locks so we never contend for the lock, and a
+    stale file left by a crash does not count."""
+    try:
+        inode = (codex_home / "thread-writer-locks" / f"{thread_id}.lock").stat().st_ino
+        locks = Path("/proc/locks").read_text()
+    except OSError:
+        return None
+    for line in locks.splitlines():
+        fields = line.split()
+        # "1: FLOCK  ADVISORY  WRITE 3632628 fc:00:6946818 0 EOF"
+        if len(fields) >= 6 and fields[1] == "FLOCK" and fields[5].rsplit(":", 1)[-1] == str(inode):
+            return fields[4]
+    return None
+
+
 def parse_device_auth_output(output: str) -> tuple[Optional[str], Optional[str]]:
     cleaned = strip_ansi(output)
     uri_match = re.search(r"https?://[^\s)>\]]+", cleaned)
@@ -1464,7 +1503,7 @@ def format_claude_tool_use(block: dict) -> str:
     tool_input = block.get("input") if isinstance(block.get("input"), dict) else {}
     if name == "Bash":
         command = str(tool_input.get("command") or "")
-        return f"\n$ {command}\n" if command else "\n[claude] running command\n"
+        return f"\n$ {defuse_fences(command)}\n" if command else "\n[claude] running command\n"
     target = ""
     for key in ("file_path", "path", "pattern", "query", "url", "description"):
         value = tool_input.get(key)
@@ -1487,7 +1526,7 @@ def format_claude_tool_result(block: dict) -> str:
         text = str(content or "")
     text = text.rstrip()
     if block.get("is_error"):
-        snippet = text[:MAX_COMMAND_OUTPUT_CHARS].rstrip()
+        snippet = defuse_fences(text[:MAX_COMMAND_OUTPUT_CHARS].rstrip())
         return f"[tool error]\n{snippet}\n" if snippet else "[tool error]\n"
     if not text:
         return ""
@@ -1501,7 +1540,7 @@ def format_item_started(item: dict) -> str:
     item_type = item.get("type")
     if item_type == "command_execution":
         command = item.get("command") or item.get("cmd") or ""
-        return f"\n$ {command}\n" if command else "\n[codex] running command\n"
+        return f"\n$ {defuse_fences(command)}\n" if command else "\n[codex] running command\n"
     if item_type == "reasoning":
         return "\n[codex] reasoning\n"
     return ""
@@ -1557,10 +1596,10 @@ def format_command_output(command: str, output: str, force_show: bool = False) -
         return summarize_hidden_output("read", read_targets, output)
 
     if not force_show and len(output) <= MAX_COMMAND_OUTPUT_CHARS:
-        return output
+        return defuse_fences(output)
 
     line_count = len(output.splitlines())
-    return f"{output[:MAX_COMMAND_OUTPUT_CHARS].rstrip()}\n[output truncated: {line_count} lines, {len(output)} chars]"
+    return f"{defuse_fences(output[:MAX_COMMAND_OUTPUT_CHARS].rstrip())}\n[output truncated: {line_count} lines, {len(output)} chars]"
 
 
 def summarize_hidden_output(action: str, targets: list[str], output: str) -> str:
@@ -1947,10 +1986,11 @@ def describe_codex_rollout(path: Path) -> Optional[ExternalSession]:
     )
 
 
-def find_external_transcript(agent: str, thread_id: str) -> Optional[Path]:
+def find_external_transcript(agent: str, thread_id: str, codex_home: Optional[Path] = None) -> Optional[Path]:
     if agent == "claude":
         return next((CLAUDE_HOME / "projects").glob(f"*/{thread_id}.jsonl"), None)
-    return next((default_machine_codex_home() / "sessions").glob(f"*/*/*/rollout-*{thread_id}.jsonl"), None)
+    home = codex_home or default_machine_codex_home()
+    return next((home / "sessions").glob(f"*/*/*/rollout-*{thread_id}.jsonl"), None)
 
 
 def discover_external_sessions(limit: int) -> list[ExternalSession]:
@@ -1968,14 +2008,32 @@ def discover_external_sessions(limit: int) -> list[ExternalSession]:
         session = describe_claude_transcript(path) if agent == "claude" else describe_codex_rollout(path)
         if not session or session.thread_id in known:
             continue
-        if session.thread_id in live:
+        if agent == "claude" and session.thread_id in live:
             session.live, session.live_detail = True, live[session.thread_id]
+        elif agent == "codex":
+            writer = codex_thread_writer(default_machine_codex_home(), session.thread_id)
+            if writer:
+                session.live, session.live_detail = True, f"pid {writer}, open"
         found.append(session)
     return found
 
 
-def render_external_history(agent: str, path: Path, max_chars: int = 120_000) -> tuple[str, str]:
-    """(plain-text transcript for the phone's history view, last assistant reply)."""
+def _event_time(event: dict) -> Optional[float]:
+    value = event.get("timestamp")
+    if not isinstance(value, str):
+        return None
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00")).timestamp()
+    except ValueError:
+        return None
+
+
+def render_external_history(
+    agent: str, path: Path, max_chars: int = 120_000, since: Optional[float] = None
+) -> tuple[str, str]:
+    """(plain-text transcript for the phone's history view, last assistant reply).
+
+    With `since`, only turns written after that epoch time are rendered."""
     parts: list[str] = []
     last_reply = ""
     try:
@@ -1985,6 +2043,8 @@ def render_external_history(agent: str, path: Path, max_chars: int = 120_000) ->
     for line in raw.splitlines():
         event = parse_json_line(line)
         if not event:
+            continue
+        if since is not None and (_event_time(event) or 0.0) <= since:
             continue
         if agent == "claude":
             if event.get("isSidechain") or event.get("type") not in {"user", "assistant"}:
@@ -2014,6 +2074,42 @@ def render_external_history(agent: str, path: Path, max_chars: int = 120_000) ->
     if len(history) > max_chars:
         history = "[earlier history trimmed]\n" + history[-max_chars:]
     return history, last_reply
+
+
+def terminal_turns_since(info: "SessionInfo", since: float) -> str:
+    """Turns added to this conversation's agent session outside Home Agent
+    (e.g. `ha-resume` on a laptop) after `since`, as a block for the phone's
+    history view. The runner never sees those turns, so its logs lack them."""
+    if not info.codex_thread_id:
+        return ""
+    agent = normalize_agent(info.agent)
+    home = None if agent == "claude" else codex_home_for_account(normalize_codex_account(info.codex_account))
+    path = find_external_transcript(agent, info.codex_thread_id, home)
+    try:
+        if not path or path.stat().st_mtime <= since:
+            return ""
+    except OSError:
+        return ""
+    history, _ = render_external_history(agent, path, since=since)
+    if not history.strip():
+        return ""
+    return f"\n[on the computer]\n{history}\n[end of computer turns]\n"
+
+
+def has_newer_session(info: "SessionInfo") -> bool:
+    """Whether a later Home Agent session continues the same agent thread."""
+    for path in DEFAULT_SESSION_ROOT.glob("*/*/metadata.json"):
+        try:
+            metadata = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        if (
+            metadata.get("codex_thread_id") == info.codex_thread_id
+            and metadata.get("session_id") != info.session_id
+            and float(metadata.get("started_at") or 0) > info.started_at
+        ):
+            return True
+    return False
 
 
 app = FastAPI(title=APP_NAME)
@@ -2135,6 +2231,19 @@ async def get_session_log(session_id: str, max_chars: int = 200000) -> SessionLo
     if not path:
         raise HTTPException(status_code=404, detail="unknown session")
     text, truncated = format_session_log(path, max_chars=max_chars)
+    # Turns taken in a terminal since this session last wrote its log (only
+    # for the conversation's latest, finished session: a resumed child
+    # carries them at the top of its own log instead).
+    info = sessions[session_id].info() if session_id in sessions else find_session_info(session_id)
+    if info and info.status not in {"starting", "running", "waiting", "idle"}:
+        try:
+            log_mtime = path.stat().st_mtime
+        except OSError:
+            log_mtime = None
+        if log_mtime is not None:
+            extra = await asyncio.to_thread(terminal_turns_since, info, log_mtime)
+            if extra and not await asyncio.to_thread(has_newer_session, info):
+                text += extra
     return SessionLog(session_id=session_id, text=text, truncated=truncated)
 
 
@@ -2182,12 +2291,13 @@ async def resume_session(session_id: str, request: ResumeRequest) -> SessionInfo
     source_agent = normalize_agent(source_info.agent)
     requested_agent = normalize_agent(request.agent) if request.agent else source_agent
     requested_model = request.codex_model if requested_agent == source_agent else None
-    fork_session = False
+    # Two writers on one session would tangle it (Codex refuses outright with
+    # "already has an active writer"); branch instead.
     if source_agent == "claude":
-        holder = live_claude_sessions().get(thread_id)
-        if holder:
-            # Two writers on one session file would tangle it; branch instead.
-            fork_session = True
+        fork_session = bool(live_claude_sessions().get(thread_id))
+    else:
+        home = codex_home_for_account(normalize_codex_account(request.codex_account or source_info.codex_account))
+        fork_session = codex_thread_writer(home, thread_id) is not None
     child_request = StartRequest(
         prompt=request.prompt,
         fork_session=fork_session,
@@ -2208,6 +2318,15 @@ async def resume_session(session_id: str, request: ResumeRequest) -> SessionInfo
             status_code=500,
             detail=f"session storage is not writable: {exc}",
         ) from exc
+    try:
+        since = Path(source_info.log_path).stat().st_mtime
+    except OSError:
+        since = None
+    if since is not None:
+        # Keep laptop turns visible in this conversation's phone history.
+        extra = await asyncio.to_thread(terminal_turns_since, source_info, since)
+        if extra:
+            child.log_path.write_text(extra, encoding="utf-8")
     sessions[child_id] = child
     await child.start(request.prompt)
     return child.info()
@@ -2241,7 +2360,11 @@ async def adopt_external_session(request: AdoptRequest) -> SessionInfo:
     session_id = uuid.uuid4().hex[:12]
     session_dir = DEFAULT_SESSION_ROOT / time.strftime("%Y-%m-%d") / session_id
     session_dir.mkdir(parents=True, exist_ok=True)
-    live = live_claude_sessions().get(request.thread_id) if agent == "claude" else None
+    if agent == "claude":
+        live = live_claude_sessions().get(request.thread_id)
+    else:
+        writer = codex_thread_writer(default_machine_codex_home(), request.thread_id)
+        live = f"pid {writer}" if writer else None
     banner = f"[adopted {agent} session {request.thread_id} from {described.cwd}]\n"
     if live:
         banner += f"[still open in {live}: replies from here continue on a fork, the original stays untouched]\n"

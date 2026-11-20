@@ -1,0 +1,1 @@
+{"intervals":[{"start": 1339.44, "end": 1411.44, "reason": "Sponsor read for Article furniture."},{"start": 1411.6, "end": 1456.32, "reason": "Sponsor read for AG1 health drink."}]}

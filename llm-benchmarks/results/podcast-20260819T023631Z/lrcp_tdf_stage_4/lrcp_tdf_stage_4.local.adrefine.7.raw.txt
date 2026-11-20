@@ -1,0 +1,1 @@
+{"intervals":[{"start":1449.68,"end":1509.68,"reason":"T-Mobile ad read with setup, pitch, and legal disclaimers."},{"start":1509.76,"end":1552.00,"reason":"Fantasy Fan Fellas podcast promo with intro and details."}]}

@@ -154,6 +154,13 @@ ReadyToPrune=1
 90-day cutoff in timestamp/ID order, in bounded 50,000-row transactions. It uses the same
 enable gate, audit table, wall-clock/row limits, failure handler, and daily wrapper.
 
+The daily wrapper calls it with `batch=50000, max_rows=1000000, max_seconds=60`. The cap was
+250,000 until 2026-11-13. Daily inflow grew to about 255–300k rows a day (GX10 writes about 107k),
+so from 2026-11-12 the runs ended `partial`, `LastFullSuccessUTC` went stale, and the 36-hour
+watchdog fired. Deleting 250k rows takes about 3 seconds, so the 60-second limit still has plenty of
+headroom. If the alert returns, compare the daily `EligibleRows` in `WeatherRetentionAudit` with
+`max_rows` before suspecting anything else.
+
 There is **no rollup / aggregate table** for DeviceMonitoring—telemetry older than 90 days
 is gone for good, intentionally.
 

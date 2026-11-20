@@ -559,7 +559,7 @@ BEGIN
         v_weather_cutoff,250000,60,v_audit_run
     );
     CALL prune_device_monitoring_to_cutoff(
-        v_device_cutoff,50000,250000,60,v_audit_run
+        v_device_cutoff,50000,1000000,60,v_audit_run
     );
 
     SELECT COUNT(*) INTO v_weather_remaining

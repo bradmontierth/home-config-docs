@@ -1,0 +1,18 @@
+CREATE TABLE IF NOT EXISTS VuePowerMinute (
+ BucketStartUTC DATETIME NOT NULL,
+ Channel TINYINT UNSIGNED NOT NULL,
+ ReportedAtUTC DATETIME(3) NOT NULL,
+ Value DECIMAL(18,6) NOT NULL,
+ WattHours DECIMAL(20,9) NULL,
+ ObservedSeconds SMALLINT UNSIGNED NOT NULL DEFAULT 60,
+ PRIMARY KEY(BucketStartUTC,Channel),
+ KEY channel_time(Channel,BucketStartUTC)
+);
+CREATE TABLE IF NOT EXISTS VuePowerHourly (
+ BucketStartUTC DATETIME NOT NULL,
+ Channel TINYINT UNSIGNED NOT NULL,
+ AverageValue DECIMAL(18,6) NOT NULL,
+ WattHours DECIMAL(20,9) NULL,
+ ObservedSeconds INT UNSIGNED NOT NULL,
+ PRIMARY KEY(BucketStartUTC,Channel)
+);

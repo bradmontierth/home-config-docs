@@ -347,7 +347,8 @@
       "make it brighter in here",
       "bump up the lights",
       "turn up the lights",
-      "it's too dark"
+      "it's too dark",
+      "turn on the kitchen lights"
     ],
     "entity": "button.voice_kitchen_brighten",
     "confirm": "Brightening the kitchen."
@@ -1170,5 +1171,88 @@
     "sats": [
       "claire"
     ]
+  },
+  "main_comfort_hot": {
+    "aliases": [
+      "it's hot in here",
+      "it is hot in here",
+      "it's too hot in here",
+      "it's too hot",
+      "it's hot",
+      "too hot",
+      "i'm hot",
+      "make it cooler",
+      "make it colder",
+      "cool it down",
+      "it's warm in here",
+      "it's too warm"
+    ],
+    "entity": "button.voice_main_comfort_hot",
+    "confirm": "Adjusting the temperature one degree cooler for one hour.",
+    "sats": [
+      "kitchen",
+      "familyroom"
+    ]
+  },
+  "main_comfort_cold": {
+    "aliases": [
+      "it's cold in here",
+      "it is cold in here",
+      "it's too cold in here",
+      "it's too cold",
+      "it's cold",
+      "too cold",
+      "i'm cold",
+      "make it warmer",
+      "warm it up",
+      "it's chilly in here",
+      "it's freezing in here"
+    ],
+    "entity": "button.voice_main_comfort_cold",
+    "confirm": "Adjusting the temperature one degree warmer for one hour.",
+    "sats": [
+      "kitchen",
+      "familyroom"
+    ]
+  },
+  "simon_fx_construction_site": {
+    "aliases": [
+      "construction site",
+      "construction trucks",
+      "construction",
+      "dump truck",
+      "dump trucks"
+    ],
+    "entity": "button.voice_simon_fx_construction_site",
+    "confirm": "Setting the lights to construction site.",
+    "sats": [
+      "simon"
+    ]
+  },
+  "chaos_color_changer": {
+    "aliases": [
+      "chaos mode",
+      "give me chaos mode",
+      "set me chaos mode",
+      "set chaos mode",
+      "turn on chaos mode",
+      "enable chaos mode",
+      "start chaos mode",
+      "change chaos colors"
+    ],
+    "entity": "button.voice_chaos_color_changer",
+    "confirm": "Setting chaos colors."
+  },
+  "chaos_off": {
+    "aliases": [
+      "chaos off",
+      "turn off chaos",
+      "turn off chaos mode",
+      "disable chaos mode",
+      "stop chaos mode",
+      "exit chaos mode"
+    ],
+    "entity": "button.voice_chaos_off",
+    "confirm": "Restoring the normal white lights."
   }
 }

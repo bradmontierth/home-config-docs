@@ -1,0 +1,22 @@
+{
+  "backup_directory": "/home/pi/esphome/config/backup_vue3_labels_20260927_170622",
+  "config": "/home/pi/esphome/config/emporia-vue3.yaml",
+  "doubled_inputs": [
+    2,
+    3,
+    4,
+    11,
+    12
+  ],
+  "phase_assignments": "unchanged; provisional",
+  "correction": "observed sign normalization, clamp negative noise, multiply before independent averages",
+  "new_daily_energy_counters": false,
+  "node_red_changed": false,
+  "ha_restarted": false,
+  "build": "Sep 27 2026, 23:07:30",
+  "verification_finished_at": 1790550627.672423,
+  "native_verification_passed": true,
+  "recorder_verification_passed": true,
+  "ha_enabled_entities": 81,
+  "ha_disabled_diagnostic_entities": 69
+}

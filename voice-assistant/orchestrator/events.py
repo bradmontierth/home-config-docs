@@ -18,13 +18,13 @@ log = logging.getLogger("orchestrator.events")
 
 
 def on_dashboard(sat: str | None) -> bool:
-    """Whether a room's timer belongs on the kitchen display.
+    """Whether a satellite's events belong on the kitchen display.
 
-    One display today, and it lives in one room, so this is a comparison
-    rather than routing. A second screen means giving each one its own sat and
-    filtering per subscriber instead — the shape of that change is here, the
-    plumbing for it is not."""
-    return (sat or config.DEFAULT_SAT) == config.DASHBOARD_SAT
+    One display today, and it lives in one voice domain, so this is a
+    comparison rather than subscriber routing. More than one microphone may
+    belong to that domain: the family-room satellite relays to the kitchen and
+    should paint the same screen, while master and Simon remain isolated."""
+    return zones.display_for(sat) == zones.display_for(config.DASHBOARD_SAT)
 
 
 async def emit(event_type: str, **fields: Any) -> None:

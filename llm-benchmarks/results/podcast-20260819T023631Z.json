@@ -1,0 +1,335 @@
+{
+  "benchmark": "podcast_ads",
+  "benchmark_version": "1.0.0",
+  "started_at": "2026-08-19T02:36:31+00:00",
+  "host": "beelink",
+  "endpoint": "http://192.168.10.187:8095/v1",
+  "requested_model": "qwen3-next",
+  "served_models": {
+    "object": "list",
+    "data": [
+      {
+        "id": "qwen3-next",
+        "object": "model",
+        "created": 1787106991,
+        "owned_by": "vllm",
+        "root": "/models/xs",
+        "parent": null,
+        "max_model_len": 8192,
+        "permission": [
+          {
+            "id": "modelperm-98ac5e9e8516677c",
+            "object": "model_permission",
+            "created": 1787106991,
+            "allow_create_engine": false,
+            "allow_sampling": true,
+            "allow_logprobs": true,
+            "allow_search_indices": false,
+            "allow_view": true,
+            "allow_fine_tuning": false,
+            "organization": "*",
+            "group": null,
+            "is_blocking": false
+          }
+        ]
+      }
+    ]
+  },
+  "case_sha256": "75efe551a9498b4ce07362c7456807891860027cedeebd46271e426fc9e0b03c",
+  "prompt_sha256": "d6c53916e4636f827f43e039ba34a11362fa69cc08df92b1f790d111a8916780",
+  "python": "3.12.3",
+  "pipeline_source": "/home/pi/podcast/bin/chapterize_transcript.py",
+  "pipeline_source_sha256": "6f4ee239924a2759da330df0dec56f5410bc9d1af0491130af856f9052d9e824",
+  "finished_at": "2026-08-19T02:44:13+00:00",
+  "summary": {
+    "episodes": 4,
+    "truth_seconds": 2004.013,
+    "predicted_seconds": 1987.2930000000001,
+    "precision": 0.9382476564854804,
+    "recall": 0.9304196130464223,
+    "f1": 0.9343172385179186,
+    "blocks_detected": 18,
+    "blocks_missed": 0,
+    "false_predicted_blocks": 2,
+    "wall_seconds": 461.77,
+    "errors": 0
+  },
+  "cases": [
+    {
+      "id": "lrcp_tdf_stage_4",
+      "podcast": "Lanterne Rouge Cycling Podcast",
+      "title": "Tour de France 2026 - Stage 4",
+      "truth_status": "needs_manual_audio_review",
+      "truth_intervals": [
+        [
+          0.0,
+          122.4
+        ],
+        [
+          246.0,
+          253.84
+        ],
+        [
+          600.24,
+          663.44
+        ],
+        [
+          1449.68,
+          1552.0
+        ],
+        [
+          2118.72,
+          2210.978
+        ]
+      ],
+      "predicted_intervals": [
+        [
+          0.0,
+          115.2
+        ],
+        [
+          246.08,
+          253.84
+        ],
+        [
+          600.24,
+          663.44
+        ],
+        [
+          1449.68,
+          1509.68
+        ],
+        [
+          1509.76,
+          1552.0
+        ],
+        [
+          2120.72,
+          2210.978
+        ]
+      ],
+      "metrics": {
+        "truth_seconds": 388.018,
+        "predicted_seconds": 378.658,
+        "true_positive_seconds": 378.658,
+        "false_positive_seconds": 0.0,
+        "missed_seconds": 9.36,
+        "precision": 1.0,
+        "recall": 0.9758774077491251,
+        "f1": 0.9877914529736159,
+        "ad_blocks": 5,
+        "blocks_detected": 5,
+        "blocks_missed": 0,
+        "predicted_blocks": 6,
+        "false_predicted_blocks": 0,
+        "mean_boundary_error_seconds": 5.159999999999995
+      },
+      "wall_seconds": 108.619,
+      "error": null,
+      "pipeline_compare": null
+    },
+    {
+      "id": "lrcp_tdf_stage_5",
+      "podcast": "Lanterne Rouge Cycling Podcast",
+      "title": "Tour de France 2026 - Stage 5",
+      "truth_status": "needs_manual_audio_review",
+      "truth_intervals": [
+        [
+          0.0,
+          86.0
+        ],
+        [
+          633.76,
+          747.04
+        ],
+        [
+          1526.48,
+          1597.52
+        ],
+        [
+          2284.48,
+          2381.74
+        ]
+      ],
+      "predicted_intervals": [
+        [
+          37.92,
+          86.0
+        ],
+        [
+          633.76,
+          747.04
+        ],
+        [
+          1526.48,
+          1597.52
+        ],
+        [
+          2284.56,
+          2381.74
+        ]
+      ],
+      "metrics": {
+        "truth_seconds": 367.58,
+        "predicted_seconds": 329.58,
+        "true_positive_seconds": 329.58,
+        "false_positive_seconds": 0.0,
+        "missed_seconds": 38.0,
+        "precision": 1.0,
+        "recall": 0.8966211436966103,
+        "f1": 0.9454931436112227,
+        "ad_blocks": 4,
+        "blocks_detected": 4,
+        "blocks_missed": 0,
+        "predicted_blocks": 4,
+        "false_predicted_blocks": 0,
+        "mean_boundary_error_seconds": 4.749999999999991
+      },
+      "wall_seconds": 85.363,
+      "error": null,
+      "pipeline_compare": null
+    },
+    {
+      "id": "dtns_five_eyes",
+      "podcast": "Daily Tech News Show",
+      "title": "Five Eyes Security Give CISOs a Budget Weapon - DTNS 5294",
+      "truth_status": "needs_manual_audio_review",
+      "truth_intervals": [
+        [
+          0.0,
+          166.8
+        ],
+        [
+          613.12,
+          877.76
+        ],
+        [
+          2342.64,
+          2424.007
+        ]
+      ],
+      "predicted_intervals": [
+        [
+          0.0,
+          166.8
+        ],
+        [
+          670.96,
+          748.24
+        ],
+        [
+          752.4,
+          876.56
+        ],
+        [
+          1890.24,
+          1957.28
+        ],
+        [
+          2344.64,
+          2424.007
+        ]
+      ],
+      "metrics": {
+        "truth_seconds": 512.807,
+        "predicted_seconds": 514.647,
+        "true_positive_seconds": 447.607,
+        "false_positive_seconds": 67.04,
+        "missed_seconds": 65.2,
+        "precision": 0.8697359549361018,
+        "recall": 0.8728566497727214,
+        "f1": 0.8712935080305297,
+        "ad_blocks": 3,
+        "blocks_detected": 3,
+        "blocks_missed": 0,
+        "predicted_blocks": 5,
+        "false_predicted_blocks": 1,
+        "mean_boundary_error_seconds": 23.74666666666667
+      },
+      "wall_seconds": 103.857,
+      "error": null,
+      "pipeline_compare": null
+    },
+    {
+      "id": "pod_save_america_jd_is_lame",
+      "podcast": "Pod Save America",
+      "title": "Trump and Pod Save America Agree: JD Is Lame",
+      "truth_status": "needs_manual_audio_review",
+      "truth_intervals": [
+        [
+          0.0,
+          113.68
+        ],
+        [
+          1328.0,
+          1499.68
+        ],
+        [
+          2848.56,
+          3028.96
+        ],
+        [
+          4339.36,
+          4445.92
+        ],
+        [
+          4446.96,
+          4498.96
+        ],
+        [
+          5934.0,
+          6045.288
+        ]
+      ],
+      "predicted_intervals": [
+        [
+          0.0,
+          141.6
+        ],
+        [
+          227.36,
+          254.08
+        ],
+        [
+          1339.44,
+          1499.68
+        ],
+        [
+          2860.24,
+          3028.96
+        ],
+        [
+          4339.44,
+          4498.96
+        ],
+        [
+          5936.56,
+          6015.52
+        ],
+        [
+          6016.64,
+          6045.288
+        ]
+      ],
+      "metrics": {
+        "truth_seconds": 735.608,
+        "predicted_seconds": 764.408,
+        "true_positive_seconds": 708.728,
+        "false_positive_seconds": 55.68,
+        "missed_seconds": 26.88,
+        "precision": 0.9271593180605124,
+        "recall": 0.9634587987080074,
+        "f1": 0.9449605870870712,
+        "ad_blocks": 6,
+        "blocks_detected": 6,
+        "blocks_missed": 0,
+        "predicted_blocks": 7,
+        "false_predicted_blocks": 1,
+        "mean_boundary_error_seconds": 20.33399999999998
+      },
+      "wall_seconds": 163.931,
+      "error": null,
+      "pipeline_compare": null
+    }
+  ]
+}

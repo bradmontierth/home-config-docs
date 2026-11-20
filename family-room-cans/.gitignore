@@ -1,0 +1,5 @@
+backups/
+prepared/
+backup-path.txt
+deployed-at.txt
+*.log

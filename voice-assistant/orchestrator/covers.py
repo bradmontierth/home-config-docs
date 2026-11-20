@@ -28,6 +28,7 @@ grammars; this module owns only the targets and the call.
 from __future__ import annotations
 
 import logging
+import re
 
 import httpx
 
@@ -62,7 +63,11 @@ _TARGETS: dict[str, dict] = {
     "blind_slider": {
         "entities": ["cover.kitchen_sliding_kitchen_door"],
         "aliases": ["sliding door blind", "sliding door", "slider",
-                    "slider blind", "big blind", "big one", "door blind"],
+                    "slider blind", "big blind", "big one", "door blind",
+                    "sliding window", "large sliding window",
+                    "sliding door shade", "sliding door shades",
+                    "sliding door blinds", "sliding window blind",
+                    "sliding window shade", "slider shade"],
         "spoken": "sliding door blind",
     },
     "blind_small": {
@@ -125,6 +130,49 @@ _ROOM_WORDS = {
 _KID_ROOMS = {"simon", "claire"}
 
 
+_COVER_NOUN_RE = re.compile(
+    r"\b(?:blinds?|shades?|windows?|door|sliding|slider|sink|big one)\b")
+_LEVEL_RE = re.compile(
+    r"\d|%|\b(?:percent|per cent|half(?:way)?|quarter|third|"
+    r"zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|"
+    r"thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|"
+    r"twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred)\b")
+
+
+def has_level_request(phrase: str) -> bool:
+    """Protect position requests from payload-less open/close button matches.
+
+    Check after the cover noun so target names like "two small blinds" and
+    "the big one" still work. Explicit percent/fraction notation also counts
+    before the noun. This is a refusal guard, not a position parser.
+    """
+    phrase = (phrase or "").lower()
+    if not re.match(
+            r"^\s*(?:(?:please|hey|okay|ok|uh|um|can you|could you|would you|"
+            r"will you|go ahead and)\s+)*"
+            r"(?:open|raise|lift|pull|put|close|shut|lower|drop|set|move|adjust|"
+            r"leave|turn|make)\b", phrase):
+        return False
+    noun = _COVER_NOUN_RE.search(phrase)
+    return bool(noun and (
+        _LEVEL_RE.search(phrase[noun.end():])
+        or re.search(r"%|\b(?:percent|per cent|half(?:way)?|quarter|third)\b",
+                     phrase[:noun.start()])))
+
+
+# Words ASR reliably substitutes for a blind's name. Cohere wrote "sink" as
+# "sync" twice in a row on 2026-10-31 ("close the sync blind" then closed all
+# four kitchen blinds). Nothing the house controls is called "sync", so the
+# fold is safe everywhere a home phrase is matched.
+_HOMOPHONES = ((re.compile(r"\bsync\b"), "sink"),)
+
+
+def fold_homophones(text: str) -> str:
+    for pattern, word in _HOMOPHONES:
+        text = pattern.sub(word, text)
+    return text
+
+
 def _strip_kid_room(phrase: str, room: str) -> str:
     """Drop the words that name a kid's room ("in Claire's room", "Simon's")
     so what is left is the blind's own name."""
@@ -156,7 +204,7 @@ def resolve(phrase: str, sat: str | None = None) -> str | None:
     different window to a position nobody asked for. Room-local aliases are
     tried first so "the blind" means the local one.
     """
-    phrase = " ".join((phrase or "").lower().split())
+    phrase = fold_homophones(" ".join((phrase or "").lower().split()))
     if not phrase:
         return None
     for prefix in ("the ", "a ", "an ", "my ", "our "):

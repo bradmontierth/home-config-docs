@@ -217,6 +217,68 @@ Node-RED discovery, release-both-flags sequencing, and white repaint payload
 checks. No physical chaos-off activation was performed. Artifacts:
 `diagnostics/chaos-off/`. Previous image tag: `before-chaos-off-20260913`.
 
+## Voice chaos off now runs the real teardown — 2026-10-21
+
+Symptom: "turn off chaos" replied normally but most lights stayed in colour.
+The voice path (Voice Buttons tab, `voice/button/chaos_off`) only released the
+two flags and ran the Global CT repaint. That repaint is update-while-on: it
+skips the entry fixture while `entry_new_state_combined` is `color`, gates the
+pole on the coffee-corner LEDs, and never touches the WLEDs or the LIFX lamp.
+So only the cans went white. The actual teardown is the Chaos tab's `chaos off IN`
+link, and until now the only thing wired to it was a double-tap of kitchen table
+button 4 (`Chaos Off OUT` on Kitchen Motion Lighting; a single press is the colour changer).
+
+Fix (scoped PUTs of both tabs, exact readback):
+- Voice Buttons: link out `co10210000000001` from the chaos_off output → `chaos off IN`.
+- Chaos tab, on `chaos off IN` (so the double-tap gets these too):
+  - `co10210000000002` "entry + pole back to white". Only fires when the entry
+    fixture is in colour mode. Entry goes through its subflow in CT mode, both
+    sides (`sunPercentMod2400sunset` / `EntranceLightsBri`). Pole: wwcw on at
+    `sunPercentLamp` → 2700–6500 K, `BriCurveLamp`, using `color_temp_kelvin`;
+    rgb off.
+  - `co10210000000003` "lamp back to white": the FR LIFX lamp gets the Global CT
+    white (`officeCT`, `BriCurve`) when `FRLamp` is true. It replaces the old
+    lamp OFF (`2ef151a9b57c278c`, left unwired for rollback).
+- WLEDs (kitchen fixture .37, above-cab .120, entry sconce .115) still go OFF
+  on purpose. Their white counterparts are separate Zigbee/ESPHome controllers.
+
+Live test 00:12 UTC (button press): LIFX 2874 K, pole wwcw 3174 K and rgb off,
+entry RGB off and whites on (mode `both`), all three WLEDs off, cans unchanged white.
+Artifacts, offline check and rollback files (`*-before.json`):
+`diagnostics/chaos-off-teardown/`.
+
+## Chaos cans: no white flash, prompt chaos-off, whites restored — 2026-10-21 eve
+
+**Flash on chaos-on.** Node-RED sent one `light.turn_on {rgb_color, brightness_pct}`
+per pair group. z2m 1.40.2 (`publish.js` sorts `state`/`brightness` first when
+turning on) splits that into on+level then colour, so an OFF Sengled E12-N1E lit
+at 100% in its old white before the colour landed. `rgb A`/`rgb B` now send
+two calls. First: colour only, plus `brightness_pct: 1` if `cans now`
+(`cc10210000000001`, group state) says the cans are off. Second, 700 ms later:
+target brightness with a 0.5 s transition.
+
+**Slow chaos-off.** The Global CT repaint skips the cans while TVStatus is true,
+so the cans waited for the controller's own 60 s inject (it counts from Node-RED start;
+it is not the 5-minute circadian tick). Its "scheduled update" uses a 10 s
+transition, which reads as a slow 100% → dim drift. Chaos off IN now sends
+`frCansCommand: 'chaos_exit'` over link `cc10210000000006` → `Family room
+cans controller IN`. The policy gives it its own branch: if cans are on, paint
+the normal brightness/CT with a 1 s transition, independent of the hold flags.
+
+**Whites back on at chaos off** (`cc10210000000003`, all with a 1 s transition;
+WLED colour controllers stay off):
+- kitchen fixture → new `Kitchen Fixture Dynamic` instance `cc10210000000004`
+  (`sunPercentMod`, `BriCurve`; top-only when warm), same as motion lighting;
+- entry sconce ESPHome whites → existing `entry sconce` instance (`wallSconceBri`);
+- above-cabinet FUT035Z+ → `cc10210000000005` with the Global CT cabinet
+  payload (`CTAboveCab`, `BriCurve`).
+It is gated by `flow.chaosActive`, set by `mark chaos active` on the colour
+junction, with `entry_new_state_combined === 'color'` as the fallback, so
+chaos-off without chaos does nothing.
+
+Artifacts, offline check (`check.cjs`) and rollback `*-before.json`:
+`diagnostics/chaos-cans-whites/`. Live chaos on/off check by Brad pending.
+
 ## Chaos color gamma + can pair groups — 2026-10-11
 
 **Colors.** The entry fixture (`entry-fixture-simon` red/green/blue channels)

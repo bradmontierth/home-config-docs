@@ -1,0 +1,1 @@
+{"intervals":[{"start":52.64,"end":70.24,"reason":"T-Mobile ad read followed by podcast recommendation and intro."},{"start":70.96,"end":115.2,"reason":"Naked Beauty podcast promo with host intro and call to action."},{"start":246.08,"end":253.84,"reason":"Join cycling sponsor read and teaser for upcoming segment."}]}

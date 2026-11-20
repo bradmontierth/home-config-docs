@@ -1,0 +1,152 @@
+# bin 0.48
+{"ad_bins":[{"t": 0.48, "reason": "Contains sponsor reads for SimplySafe, Minky Couture, and Smith's/Nabisco before the show intro."}]}
+
+# bin 113.68
+{"ad_bins":[{"t": 113.68, "reason": "Contains sponsor reads for MinkyCouture and Smiths/Nabisco at the beginning of the bin."}]}
+
+# bin 227.36
+{"ad_bins":[{"t": 227.36, "reason": "Sponsor read for Crooked Media subscriptions"}]}
+
+# bin 349.52
+{"ad_bins":[]}
+
+# bin 465.92
+{"ad_bins": []}
+
+# bin 586.00
+{"ad_bins": []}
+
+# bin 704.40
+{"ad_bins": []}
+
+# bin 824.32
+{"ad_bins": []}
+
+# bin 934.64
+{"ad_bins":[]}
+
+# bin 1047.84
+{"ad_bins":[]}
+
+# bin 1165.04
+{"ad_bins": []}
+
+# bin 1276.64
+{"ad_bins":[{"t": 1276.64, "reason": "Contains sponsor reads for Article and AG1"}]}
+
+# bin 1396.64
+{"ad_bins":[{"t": 1396.64, "reason": "Contains sponsor reads for Article and AG1"}]}
+
+# bin 1512.64
+{"ad_bins": []}
+
+# bin 1625.36
+{"ad_bins":[]}
+
+# bin 1745.28
+{"ad_bins":[]}
+
+# bin 1861.12
+{"ad_bins":[]}
+
+# bin 1974.72
+{"ad_bins":[]}
+
+# bin 2087.84
+{"ad_bins":[]}
+
+# bin 2185.44
+{"ad_bins": []}
+
+# bin 2301.52
+{"ad_bins": []}
+
+# bin 2398.56
+{"ad_bins": []}
+
+# bin 2684.24
+{"ad_bins":[]}
+
+# bin 2801.68
+{"ad_bins":[{"t":2801.68,"reason":"ZipRecruiter sponsor read"}]}
+
+# bin 2919.04
+{"ad_bins":[{"t":2919.04,"reason":"Contains sponsor reads for ZipRecruiter, Minky Couture, and MessageBox Pro"}]}
+
+# bin 3035.12
+{"ad_bins":[{"t": 3035.12, "reason": "Contains sponsor read for messageboxpro.com"}]}
+
+# bin 3146.32
+{"ad_bins": []}
+
+# bin 3264.40
+{"ad_bins": []}
+
+# bin 3363.84
+{"ad_bins": []}
+
+# bin 3483.20
+{"ad_bins": []}
+
+# bin 3599.92
+{"ad_bins": []}
+
+# bin 3715.84
+{"ad_bins": []}
+
+# bin 3834.40
+{"ad_bins": []}
+
+# bin 3954.72
+{"ad_bins":[]}
+
+# bin 4068.72
+{"ad_bins": []}
+
+# bin 4188.64
+{"ad_bins": []}
+
+# bin 4307.68
+{"ad_bins":[{"t": 4307.68, "reason": "Contains sponsor reads for Quince and Minky Couture"}]}
+
+# bin 4427.44
+{"ad_bins":[{"t": 4427.44, "reason": "Contains sponsor reads for Quince, Minky Couture, and MessageBox Pro."}]}
+
+# bin 4543.12
+{"ad_bins": []}
+
+# bin 4656.56
+{"ad_bins": []}
+
+# bin 4774.24
+{"ad_bins":[]}
+
+# bin 4890.96
+{"ad_bins": []}
+
+# bin 5008.40
+{"ad_bins": []}
+
+# bin 5127.36
+{"ad_bins": []}
+
+# bin 5241.20
+{"ad_bins": []}
+
+# bin 5355.20
+{"ad_bins": []}
+
+# bin 5474.08
+{"ad_bins": []}
+
+# bin 5594.08
+{"ad_bins":[]}
+
+# bin 5711.68
+{"ad_bins":[]}
+
+# bin 5820.16
+{"ad_bins":[{"t": 5820.16, "reason": "Contains a sponsor read for Minky Couture blankets at the end of the segment."}]}
+
+# bin 5936.56
+{"ad_bins":[{"t": 5936.56, "reason": "Contains sponsor reads for Minky Couture, MessageBox Pro, and Culligan."}]}

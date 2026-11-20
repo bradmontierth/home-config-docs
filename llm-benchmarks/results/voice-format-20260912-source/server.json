@@ -1,0 +1,7 @@
+{
+  "image": "ghcr.io/aeon-7/vllm-aeon-ultimate-dflash:qwen36-v4",
+  "image_id": "sha256:75bd9a38be52a435ae8bdc35bf34807c3c67e3b26ae6d9fb377f5e6f5981665f",
+  "command": "[\"bash\",\"-lc\",\"exec vllm serve /models/xs \\\\\\n  --served-model-name qwen3-next \\\\\\n  --host 0.0.0.0 --port 8000 \\\\\\n  --tensor-parallel-size 1 \\\\\\n  --dtype bfloat16 \\\\\\n  --quantization compressed-tensors \\\\\\n  --kv-cache-dtype auto \\\\\\n  --max-model-len 8192 \\\\\\n  --max-num-seqs 1 \\\\\\n  --max-num-batched-tokens 8192 \\\\\\n  --gpu-memory-utilization 0.45 \\\\\\n  --enable-chunked-prefill \\\\\\n  --enable-prefix-caching \\\\\\n  --generation-config vllm \\\\\\n  --load-format fastsafetensors \\\\\\n  --trust-remote-code \\\\\\n  --reasoning-parser qwen3 \\\\\\n  --attention-backend flash_attn \\\\\\n  --limit-mm-per-prompt \\\"{\\\\\\\"image\\\\\\\":1,\\\\\\\"video\\\\\\\":0}\\\" \\\\\\n  --mm-encoder-tp-mode data \\\\\\n  --speculative-config \\\"{\\\\\\\"method\\\\\\\":\\\\\\\"dflash\\\\\\\",\\\\\\\"model\\\\\\\":\\\\\\\"/models/dflash-drafter\\\\\\\",\\\\\\\"num_speculative_tokens\\\\\\\":8,\\\\\\\"attention_backend\\\\\\\":\\\\\\\"flash_attn\\\\\\\"}\\\"\\n\"]",
+  "vllm_version": "0.20.2rc1.dev166+gf6490a284",
+  "schema_probe": "schema-enforcement-probe-20260912.json"
+}

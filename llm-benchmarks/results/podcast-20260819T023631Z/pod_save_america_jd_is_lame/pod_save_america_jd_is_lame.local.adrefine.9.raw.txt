@@ -1,0 +1,1 @@
+{"intervals":[{"start":4339.44,"end":4416.08,"reason":"Sponsor read for Quince with intro and CTA."},{"start":4416.08,"end":4445.92,"reason":"Sponsor read for Minky Couture blanket."},{"start":4445.92,"end":4489.20,"reason":"Promo for MessageBox Pro subscription service."}]}

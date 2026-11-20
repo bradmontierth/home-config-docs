@@ -1,0 +1,1 @@
+{"intervals":[{"start":1449.68,"end":1509.68,"reason":"T-Mobile ad read with legal disclaimers."}]}

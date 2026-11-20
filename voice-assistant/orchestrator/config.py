@@ -72,6 +72,10 @@ DASHBOARD_EVENT_TOKEN = os.getenv("DASHBOARD_EVENT_TOKEN", "")
 # camera video is a fullscreen VLC window over the kiosk, not a dashboard card,
 # so it cannot ride the /api/assistant/event fan-out like every other view.
 CAMERA_HELPER_URL = os.getenv("CAMERA_HELPER_URL", "http://192.168.10.92:8778")
+# Lookout (Optiplex): today's naps for the nap_status intent. Bearer token from a file
+# holding only Lookout's automation token (cecret_lake/lookout/voice_token).
+LOOKOUT_URL = os.getenv("LOOKOUT_URL", "http://192.168.10.49:8805")
+LOOKOUT_TOKEN_FILE = os.getenv("LOOKOUT_TOKEN_FILE", "/secrets/lookout_token")
 CAMERA_HTTP_TIMEOUT = float(os.getenv("CAMERA_HTTP_TIMEOUT", "6"))
 # Camera audio and our spoken confirmation share the kitchen big speakers, so
 # the audio start is held back until the reply has been said. Tuned to the
@@ -298,8 +302,7 @@ OPENROUTER_KEY_FILE = os.getenv("OPENROUTER_API_KEY_FILE", "")
 # starving deliberation entirely (~69 reasoning tokens, one-glance search reads).
 OPENROUTER_MAX_TOKENS = int(os.getenv("OPENROUTER_MAX_TOKENS", "4000"))
 # Reasoning effort for the smart model (empty string disables the param).
-# "medium" lets it think about search results and re-search; the spoken filler
-# masks the added seconds.
+# "medium" lets it think about search results and re-search.
 OPENROUTER_REASONING_EFFORT = os.getenv("OPENROUTER_REASONING_EFFORT", "medium")
 # Sentinel separating the short spoken answer from the full dashboard answer.
 ASK_SENTINEL = os.getenv("ASK_SENTINEL", "===MORE===")
@@ -331,10 +334,8 @@ PLACES_MAX_RESULTS = int(os.getenv("PLACES_MAX_RESULTS", "8"))
 # too, while leaving five calls of headroom for tests and enforcement lag.
 PLACES_DAILY_LIMIT = int(os.getenv("PLACES_DAILY_LIMIT", "20"))
 PLACES_CACHE_TTL_S = float(os.getenv("PLACES_CACHE_TTL_S", "86400"))
-# Spoken filler ("Let me look that up…") pushed to the satellite the moment an
-# ask heads to the smart model, masking the 3-7s round trip. Pre-rendered WAVs;
-# playback serializes behind the satellite's PLAYBACK_LOCK. Empty URL disables.
-ASK_FILLER = os.getenv("ASK_FILLER", "1") not in ("0", "false", "no", "")
+# Legacy spoken filler is opt-in. By default, speak only the actual answer.
+ASK_FILLER = os.getenv("ASK_FILLER", "0") not in ("0", "false", "no", "")
 SATELLITE_SPEAK_URL = os.getenv(
     "SATELLITE_SPEAK_URL", "http://192.168.10.251:8781/speak"
 )
@@ -556,3 +557,11 @@ SPEAKER_SHADOW_LOG = os.getenv("SPEAKER_SHADOW_LOG", "/data/speaker_shadow.jsonl
 # stereo conversion of it both crackled; this was clean).
 HA_TTS_ENGINE = os.getenv("HA_TTS_ENGINE", "tts.openai")
 TTS_PAD_URL = os.getenv("TTS_PAD_URL", "http://192.168.10.217:8097/pad")
+
+# Paired kitchen/family-room Cohere telemetry; selection is separately armed.
+MIC_QUALITY_OBSERVE = os.getenv("MIC_QUALITY_OBSERVE", "0") == "1"
+
+MIC_QUALITY_SELECT = os.getenv("MIC_QUALITY_SELECT", "0") == "1"
+# Only contested wakes wait. Clamp configuration to a hard 300 ms ceiling.
+MIC_QUALITY_WAIT_MS = min(300, max(0, int(os.getenv("MIC_QUALITY_WAIT_MS", "150"))))
+MIC_QUALITY_MARGIN = max(0.0, float(os.getenv("MIC_QUALITY_MARGIN", "0.01")))

@@ -47,7 +47,7 @@ import aiohttp
 from music_assistant_client.client import MusicAssistantClient
 from music_assistant_models.enums import (
     MediaType, PlayerState, QueueOption, RepeatMode)
-from rapidfuzz import fuzz
+from rapidfuzz import fuzz, process
 
 from . import config, music_log, snapcast
 
@@ -154,22 +154,41 @@ async def _refresh_index() -> None:
                 # spoken composer/artist qualifier ("Chopin's ballade 4",
                 # "baby beluga by raffi") without stripping heuristics.
                 full = _norm(f"{artist} {titled}") if artist else _norm(titled)
+                # A track's own album, so an album/track tie can tell "this
+                # album holds the song" (play the album) from "a different
+                # release that happens to share the title" (play the song).
+                album = getattr(it, "album", None) if kind == "track" else None
                 entries.append({
                     "kind": kind, "name": it.name, "uri": it.uri,
                     "norm": norm, "collapsed": _collapse(norm),
                     "skel": _skeleton(norm),
                     "full": full, "fullc": _collapse(full),
                     "ftoks": frozenset(full.split()),
-                    "artist": artist,
+                    "artist": artist, "version": version,
+                    "album_uri": getattr(album, "uri", None),
                     "local": _has_local(it),
                     "owned": _is_owned(it),
                 })
             if len(page) < _PAGE:
                 break
             offset += _PAGE
+    _count_album_tracks(entries)
     _index["entries"] = entries
     _index["ts"] = time.time()
     log.info("library index refreshed: %d entries", len(entries))
+
+
+def _count_album_tracks(entries: list[dict]) -> None:
+    """Stamp each album entry with how many library tracks list it as their
+    album — the album/track tiebreak needs to know a one-track "album" (a
+    single, i.e. just another release of the song) from a real one."""
+    counts: dict[str, int] = {}
+    for e in entries:
+        if e["kind"] == "track" and e.get("album_uri"):
+            counts[e["album_uri"]] = counts.get(e["album_uri"], 0) + 1
+    for e in entries:
+        if e["kind"] == "album":
+            e["ntracks"] = counts.get(e["uri"], 0)
 
 
 async def _refresh_index_guarded() -> None:
@@ -249,6 +268,23 @@ def _entry_score(e: dict, qn: str, qc: str, qtokens: list[str], qs: str) -> floa
         # so "baby beluga" still ties album-vs-track and keeps the album.
         bonus = 1.0 if e["kind"] == "track" else 0.0
         score = max(score, ts * (0.85 + 0.15 * cov) + bonus)
+        # The words that pick a VERSION are the ones ASR mangles worst: they
+        # are DJ names nobody's vocabulary has. Live 2026-10-13/14 "voldo"
+        # came back "foldo", "DRYPAPER" came back "dry paper", "Wubbaduck"
+        # came back "whabaduck" — none intersect exactly, so token-set fell
+        # back on the generic "mix" and The Living Tombstone's "Extended Mix"
+        # won all three. Re-spell such tokens onto this entry's own words and
+        # score again, a point off per repair so an exact spelling still wins.
+        # Gated on a decent first score: it only ever chooses BETWEEN titles
+        # the query already matches, never drags in an unrelated one.
+        if score >= 60:
+            aligned, fixed = _align(qtokens, e["ftoks"])
+            if fixed:
+                at = " ".join(aligned)
+                ts = max(fuzz.token_set_ratio(at, e["full"]),
+                         fuzz.token_set_ratio(_collapse(at), e["fullc"]))
+                cov = len(e["ftoks"].intersection(aligned)) / (len(e["ftoks"]) or 1)
+                score = max(score, ts * (0.85 + 0.15 * cov) + bonus - fixed)
     # A garbled SHORT transcript ("lenny rafi") can still contain a
     # single-word ARTIST name — score each query token too, but only accept a
     # near-exact token hit (≥90): this path is for recovering a name buried in
@@ -264,6 +300,40 @@ def _entry_score(e: dict, qn: str, qc: str, qtokens: list[str], qs: str) -> floa
                 if ts >= 90:
                     score = max(score, ts)
     return score
+
+
+def _align(qtokens: list[str], etoks: frozenset) -> tuple[list[str], int]:
+    """Query tokens re-spelled onto an entry's words where they are clearly
+    the same word misheard: two query tokens that join into one entry token
+    ("dry paper" -> "drypaper"), or a 4+ letter token within one edit-ish of
+    one ("foldo" -> "voldo", "remax" -> "remix"). Returns the new token list
+    and how many repairs it took (0 = nothing to gain, skip rescoring)."""
+    out: list[str] = []
+    fixed = 0
+    i = 0
+    while i < len(qtokens):
+        tok = qtokens[i]
+        if tok in etoks:
+            out.append(tok)
+            i += 1
+            continue
+        if i + 1 < len(qtokens) and tok + qtokens[i + 1] in etoks:
+            out.append(tok + qtokens[i + 1])
+            fixed += 1
+            i += 2
+            continue
+        if len(tok) >= 4:
+            hit = process.extractOne(_collapse(tok), {t: _collapse(t) for t in etoks
+                                                      if len(t) >= 4},
+                                     scorer=fuzz.ratio, score_cutoff=80)
+            if hit:
+                out.append(hit[2])
+                fixed += 1
+                i += 1
+                continue
+        out.append(tok)
+        i += 1
+    return out, fixed
 
 
 # Album/track dropped from 85/80 to 70 on 2026-08-06. The high bars were
@@ -329,6 +399,7 @@ async def _resolve_library(query: str, media_type: str | None,
         if v and v != qn and all(v != x[0] for x in variants):
             variants.append((v, _collapse(v), v.split(), _skeleton(v)))
     best: dict[str, tuple[float, dict]] = {}
+    qset = set(qn.split())
     for e in entries:
         if exclude and e["uri"] in exclude:
             continue
@@ -337,14 +408,21 @@ async def _resolve_library(query: str, media_type: str | None,
         s = max(_entry_score(e, *v) for v in variants)
         cur = best.get(e["kind"])
         # Ties go to locally-mapped items: of two library albums named "Baby
-        # Beluga", play the one whose files we own.
-        if cur is None or (s, e["local"]) > (cur[0], cur[1]["local"]):
-            best[e["kind"]] = (s, e)
+        # Beluga", play the one whose files we own. Then to the entry that
+        # accounts for more of what was said (token-set scores a title that
+        # is a SUBSET of the query at 100, so "bluey theme tune vocal version"
+        # ties the plain theme with the vocal one), and last to the plain
+        # release: MA keeps "Voldo Remix" in the version field, so a bare
+        # "spooky scary skeletons" ties the original with every remix at 100
+        # and the winner used to be whichever the library listed first.
+        key = (s, e["local"], len(qset & e["ftoks"]), not e.get("version"))
+        if cur is None or key > cur[2]:
+            best[e["kind"]] = (s, e, key)
     if trace is not None:
         trace["candidates"] = sorted(
             [{"kind": k, "name": e["name"], "artist": e["artist"],
               "uri": e["uri"], "score": round(s, 2), "bar": _LIB_THRESHOLDS[k]}
-             for k, (s, e) in best.items()],
+             for k, (s, e, _) in best.items()],
             key=lambda c: c["score"], reverse=True)
     if relaxed:
         hits = [h for h in best.values() if h[0] >= 60]
@@ -385,6 +463,20 @@ async def _resolve_library(query: str, media_type: str | None,
                   if (hit := best.get(kind)) and hit[0] >= _LIB_THRESHOLDS[kind]]
     if contenders:
         hit = max(contenders, key=lambda h: (h[0], h[1]["local"]))
+        # An album that ties a track by name is usually the album the song is
+        # on — play the album. But when the tied track's OWN album is a
+        # different one, the tied album is just another release sharing the
+        # title: the one-track "Spooky, Scary Skeletons" album is the SharaX
+        # remix, and it beat the original on every plain request (live
+        # 2026-09-23 → 10-14, spoken as "the album Spooky, Scary Skeletons").
+        trk = best.get("track")
+        if (hit[1]["kind"] == "album" and trk and trk[0] >= hit[0]
+                and hit[1].get("ntracks", 2) <= 1
+                and trk[1]["local"] >= hit[1]["local"]
+                and not trk[1].get("version")
+                and trk[1].get("album_uri")
+                and trk[1]["album_uri"] != hit[1]["uri"]):
+            hit = trk
         return {**hit[1], "score": hit[0]}
     return None
 
@@ -409,6 +501,37 @@ _NUM_WORDS = {
     "eighteenth": "18", "nineteenth": "19", "twentieth": "20",
     "opus": "op",
 }
+
+
+# Words that only ever name a VERSION of a song. If the command had them and
+# the classifier's query lost them, the query asked for the wrong recording.
+_VERSION_WORDS = frozenset({
+    "mix", "remix", "version", "edit", "live", "acoustic", "cover", "remaster",
+    "remastered", "extended", "instrumental", "slowed", "reverb", "dubstep",
+    "swing", "trap",
+})
+
+
+def keep_version_words(query: str | None, command: str | None) -> str | None:
+    """The play query with any version words the classifier dropped put back.
+
+    Live 2026-10-14: "play spooky scary skeletons voldo mix voldo mix" came
+    back query "spooky scary skeletons" — the stutter read as filler, and the
+    bare title played a different remix. When the query appears verbatim in
+    the command and the words AFTER it carry a version word the query lacks,
+    append them; the resolver's token-set scoring shrugs off the stutter."""
+    if not query or not command:
+        return query
+    qn, cn = _norm(query).split(), _norm(command).split()
+    if not qn or _VERSION_WORDS.intersection(qn):
+        return query
+    for i in range(len(cn) - len(qn) + 1):
+        if cn[i:i + len(qn)] == qn:
+            tail = cn[i + len(qn):]
+            if 0 < len(tail) <= 6 and _VERSION_WORDS.intersection(tail):
+                return f"{query} {' '.join(tail)}"
+            break
+    return query
 
 
 def _norm(s: str) -> str:
@@ -738,7 +861,7 @@ async def play(query: str | None, media_type: str | None = None,
     music_log.record(query, "play", winner=sel, via=via,
                      candidates=trace.get("candidates"))
     return {"kind": sel["kind"], "name": sel["name"], "artist": sel.get("artist"),
-            "uri": sel["uri"], "shuffle": shuffle}
+            "version": sel.get("version"), "uri": sel["uri"], "shuffle": shuffle}
 
 
 async def _notify_jukebox_takeover() -> None:

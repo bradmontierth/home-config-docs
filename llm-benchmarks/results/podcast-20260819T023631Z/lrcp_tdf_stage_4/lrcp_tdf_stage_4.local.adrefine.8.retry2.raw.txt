@@ -1,0 +1,1 @@
+{"intervals":[{"start": 2120.72, "end": 2180.88, "reason": "T-Mobile sponsor read with legal disclaimers."},{"start": 2180.96, "end": 2210.96, "reason": "Zyn nicotine pouches sponsor read with warning."}]}

@@ -197,3 +197,12 @@ is answered in minutes rather than discovered a week later at bedtime.
 - Spotify provider: 2.6.3 already throws intermittent `'refresh_token'` errors
   (see [[voice-assistant-project]] notes on the Fern Hill music misses). Check
   whether 2.9.x fixes or worsens that before upgrading, since it's a known sore spot.
+
+## Storybooks library source (added 2026-10-26)
+
+`/home/pi/music-assistant/docker-compose.yml` mounts `/home/pi/storybook/published`
+read-only at `/storybooks`, and MA has a second local-folder provider for it,
+`filesystem_local--FFkDVGzc` (content type music). The storybook app and its NFC
+cards store URIs with that instance id, so an upgrade must keep both the mount
+and the provider (a new instance id breaks every story card until republished).
+Compose backup before the change: `docker-compose.yml.bak-20261026-storybooks`.

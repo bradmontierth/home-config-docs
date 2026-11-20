@@ -1,0 +1,585 @@
+{
+  "build": "Sep 27 2026, 23:07:30",
+  "started_at": 1790550497.6696823,
+  "finished_at": 1790550627.672423,
+  "sensor_count": 150,
+  "streams": {
+    "Fridge Power": {
+      "reports": 130,
+      "last": 192.09881591796875,
+      "median_interval_s": 1.005,
+      "max_interval_s": 1.091,
+      "scaling_comparisons": 81,
+      "max_scaling_error": 0.0
+    },
+    "Fridge Current": {
+      "reports": 130,
+      "last": 2.3864197731018066,
+      "median_interval_s": 1.005,
+      "max_interval_s": 1.074,
+      "scaling_comparisons": 66,
+      "max_scaling_error": 0.0
+    },
+    "Fridge Power 1m Average": {
+      "reports": 3,
+      "last": 191.92538452148438,
+      "median_interval_s": 53.446,
+      "max_interval_s": 60.012,
+      "scaling_comparisons": 0,
+      "max_scaling_error": null
+    },
+    "Fridge Current 1m Average": {
+      "reports": 3,
+      "last": 2.378214120864868,
+      "median_interval_s": 53.446,
+      "max_interval_s": 60.012,
+      "scaling_comparisons": 0,
+      "max_scaling_error": null
+    },
+    "Dryer Power Live": {
+      "reports": 130,
+      "last": 6053.14501953125,
+      "median_interval_s": 1.005,
+      "max_interval_s": 1.109,
+      "scaling_comparisons": 56,
+      "max_scaling_error": 0.0
+    },
+    "Dryer Current Live": {
+      "reports": 130,
+      "last": 25.35059356689453,
+      "median_interval_s": 1.005,
+      "max_interval_s": 1.093,
+      "scaling_comparisons": 57,
+      "max_scaling_error": 0.0
+    },
+    "Dryer Power 1m Average": {
+      "reports": 3,
+      "last": 3758.295166015625,
+      "median_interval_s": 53.428,
+      "max_interval_s": 60.012,
+      "scaling_comparisons": 0,
+      "max_scaling_error": null
+    },
+    "Dryer Current 1m Average": {
+      "reports": 3,
+      "last": 16.584592819213867,
+      "median_interval_s": 53.428,
+      "max_interval_s": 60.012,
+      "scaling_comparisons": 0,
+      "max_scaling_error": null
+    },
+    "AC Power Live": {
+      "reports": 130,
+      "last": 0.9318749904632568,
+      "median_interval_s": 1.005,
+      "max_interval_s": 1.091,
+      "scaling_comparisons": 0,
+      "max_scaling_error": null
+    },
+    "AC Current Live": {
+      "reports": 130,
+      "last": 0.1886407881975174,
+      "median_interval_s": 1.005,
+      "max_interval_s": 1.09,
+      "scaling_comparisons": 48,
+      "max_scaling_error": 0.0
+    },
+    "AC Power 1m Average": {
+      "reports": 3,
+      "last": 1.8652774095535278,
+      "median_interval_s": 54.452,
+      "max_interval_s": 60.023,
+      "scaling_comparisons": 0,
+      "max_scaling_error": null
+    },
+    "AC Current 1m Average": {
+      "reports": 3,
+      "last": 0.1849813461303711,
+      "median_interval_s": 53.428,
+      "max_interval_s": 60.011,
+      "scaling_comparisons": 0,
+      "max_scaling_error": null
+    },
+    "Range Oven Power Live": {
+      "reports": 130,
+      "last": 3.2602498531341553,
+      "median_interval_s": 1.005,
+      "max_interval_s": 1.109,
+      "scaling_comparisons": 0,
+      "max_scaling_error": null
+    },
+    "Range Oven Current Live": {
+      "reports": 130,
+      "last": 0.1795496642589569,
+      "median_interval_s": 1.005,
+      "max_interval_s": 1.093,
+      "scaling_comparisons": 88,
+      "max_scaling_error": 0.0
+    },
+    "Range Oven Power 1m Average": {
+      "reports": 3,
+      "last": 4.8967814445495605,
+      "median_interval_s": 54.148,
+      "max_interval_s": 60.02,
+      "scaling_comparisons": 0,
+      "max_scaling_error": null
+    },
+    "Range Oven Current 1m Average": {
+      "reports": 3,
+      "last": 0.18555915355682373,
+      "median_interval_s": 53.428,
+      "max_interval_s": 60.012,
+      "scaling_comparisons": 0,
+      "max_scaling_error": null
+    },
+    "Microwave Power Live": {
+      "reports": 130,
+      "last": 0.3928750157356262,
+      "median_interval_s": 1.005,
+      "max_interval_s": 1.093,
+      "scaling_comparisons": 0,
+      "max_scaling_error": null
+    },
+    "Microwave Current Live": {
+      "reports": 130,
+      "last": 0.18409523367881775,
+      "median_interval_s": 1.005,
+      "max_interval_s": 1.093,
+      "scaling_comparisons": 63,
+      "max_scaling_error": 0.0
+    },
+    "Microwave Power 1m Average": {
+      "reports": 3,
+      "last": 0.46494385600090027,
+      "median_interval_s": 53.554,
+      "max_interval_s": 60.054,
+      "scaling_comparisons": 0,
+      "max_scaling_error": null
+    },
+    "Microwave Current 1m Average": {
+      "reports": 3,
+      "last": 0.18405680358409882,
+      "median_interval_s": 53.426,
+      "max_interval_s": 60.012,
+      "scaling_comparisons": 0,
+      "max_scaling_error": null
+    },
+    "Washer Bidet Laundry Power Live": {
+      "reports": 130,
+      "last": 49.28350067138672,
+      "median_interval_s": 1.005,
+      "max_interval_s": 1.09,
+      "scaling_comparisons": 73,
+      "max_scaling_error": 0.0
+    },
+    "Washer Bidet Laundry Current Live": {
+      "reports": 130,
+      "last": 0.5818318128585815,
+      "median_interval_s": 1.005,
+      "max_interval_s": 1.091,
+      "scaling_comparisons": 51,
+      "max_scaling_error": 0.0
+    },
+    "Washer Bidet Laundry Power 1m Average": {
+      "reports": 3,
+      "last": 48.49064636230469,
+      "median_interval_s": 54.503,
+      "max_interval_s": 59.986,
+      "scaling_comparisons": 0,
+      "max_scaling_error": null
+    },
+    "Washer Bidet Laundry Current 1m Average": {
+      "reports": 3,
+      "last": 0.5785958766937256,
+      "median_interval_s": 53.991,
+      "max_interval_s": 59.999,
+      "scaling_comparisons": 0,
+      "max_scaling_error": null
+    },
+    "Furnace Power Live": {
+      "reports": 130,
+      "last": 7.955499649047852,
+      "median_interval_s": 1.005,
+      "max_interval_s": 1.074,
+      "scaling_comparisons": 0,
+      "max_scaling_error": null
+    },
+    "Furnace Current Live": {
+      "reports": 130,
+      "last": 0.2318236231803894,
+      "median_interval_s": 1.005,
+      "max_interval_s": 1.093,
+      "scaling_comparisons": 58,
+      "max_scaling_error": 0.0
+    },
+    "Furnace Power 1m Average": {
+      "reports": 3,
+      "last": 8.62777042388916,
+      "median_interval_s": 53.697,
+      "max_interval_s": 60.044,
+      "scaling_comparisons": 0,
+      "max_scaling_error": null
+    },
+    "Furnace Current 1m Average": {
+      "reports": 3,
+      "last": 0.23663896322250366,
+      "median_interval_s": 53.697,
+      "max_interval_s": 59.936,
+      "scaling_comparisons": 0,
+      "max_scaling_error": null
+    },
+    "Water Heater Power Live": {
+      "reports": 130,
+      "last": 1.5981874465942383,
+      "median_interval_s": 1.005,
+      "max_interval_s": 1.091,
+      "scaling_comparisons": 0,
+      "max_scaling_error": null
+    },
+    "Water Heater Current Live": {
+      "reports": 130,
+      "last": 0.1795496642589569,
+      "median_interval_s": 1.005,
+      "max_interval_s": 1.09,
+      "scaling_comparisons": 66,
+      "max_scaling_error": 0.0
+    },
+    "Water Heater Power 1m Average": {
+      "reports": 3,
+      "last": 1.762309193611145,
+      "median_interval_s": 53.426,
+      "max_interval_s": 60.012,
+      "scaling_comparisons": 0,
+      "max_scaling_error": null
+    },
+    "Water Heater Current 1m Average": {
+      "reports": 3,
+      "last": 0.18617548048496246,
+      "median_interval_s": 53.797,
+      "max_interval_s": 59.994,
+      "scaling_comparisons": 0,
+      "max_scaling_error": null
+    },
+    "Garage Power Live": {
+      "reports": 130,
+      "last": 78.663818359375,
+      "median_interval_s": 1.005,
+      "max_interval_s": 1.091,
+      "scaling_comparisons": 74,
+      "max_scaling_error": 0.0
+    },
+    "Garage Current Live": {
+      "reports": 130,
+      "last": 0.9068394899368286,
+      "median_interval_s": 1.005,
+      "max_interval_s": 1.09,
+      "scaling_comparisons": 66,
+      "max_scaling_error": 0.0
+    },
+    "Garage Power 1m Average": {
+      "reports": 3,
+      "last": 78.74755859375,
+      "median_interval_s": 53.426,
+      "max_interval_s": 60.012,
+      "scaling_comparisons": 0,
+      "max_scaling_error": null
+    },
+    "Garage Current 1m Average": {
+      "reports": 3,
+      "last": 0.9084954857826233,
+      "median_interval_s": 53.425,
+      "max_interval_s": 60.012,
+      "scaling_comparisons": 0,
+      "max_scaling_error": null
+    },
+    "Dishwasher Power Live": {
+      "reports": 130,
+      "last": 796.589111328125,
+      "median_interval_s": 1.005,
+      "max_interval_s": 1.091,
+      "scaling_comparisons": 72,
+      "max_scaling_error": 0.0
+    },
+    "Dishwasher Current Live": {
+      "reports": 130,
+      "last": 6.666065216064453,
+      "median_interval_s": 1.005,
+      "max_interval_s": 1.091,
+      "scaling_comparisons": 73,
+      "max_scaling_error": 0.0
+    },
+    "Dishwasher Power 1m Average": {
+      "reports": 3,
+      "last": 765.898681640625,
+      "median_interval_s": 53.426,
+      "max_interval_s": 60.012,
+      "scaling_comparisons": 0,
+      "max_scaling_error": null
+    },
+    "Dishwasher Current 1m Average": {
+      "reports": 3,
+      "last": 6.396721839904785,
+      "median_interval_s": 53.426,
+      "max_interval_s": 60.012,
+      "scaling_comparisons": 0,
+      "max_scaling_error": null
+    },
+    "EV Charger Power Live": {
+      "reports": 130,
+      "last": 3.195499897003174,
+      "median_interval_s": 1.005,
+      "max_interval_s": 1.074,
+      "scaling_comparisons": 0,
+      "max_scaling_error": null
+    },
+    "EV Charger Current Live": {
+      "reports": 130,
+      "last": 0.06818341463804245,
+      "median_interval_s": 1.005,
+      "max_interval_s": 1.074,
+      "scaling_comparisons": 68,
+      "max_scaling_error": 0.0
+    },
+    "EV Charger Power 1m Average": {
+      "reports": 3,
+      "last": 3.061338186264038,
+      "median_interval_s": 53.856,
+      "max_interval_s": 60.018,
+      "scaling_comparisons": 0,
+      "max_scaling_error": null
+    },
+    "EV Charger Current 1m Average": {
+      "reports": 3,
+      "last": 0.06814489513635635,
+      "median_interval_s": 54.442,
+      "max_interval_s": 60.023,
+      "scaling_comparisons": 0,
+      "max_scaling_error": null
+    },
+    "Claire Mini Split Power Live": {
+      "reports": 130,
+      "last": 71.6467514038086,
+      "median_interval_s": 1.005,
+      "max_interval_s": 1.093,
+      "scaling_comparisons": 69,
+      "max_scaling_error": 0.0
+    },
+    "Claire Mini Split Current Live": {
+      "reports": 130,
+      "last": 0.4522833228111267,
+      "median_interval_s": 1.005,
+      "max_interval_s": 1.074,
+      "scaling_comparisons": 54,
+      "max_scaling_error": 0.0
+    },
+    "Claire Mini Split Power 1m Average": {
+      "reports": 3,
+      "last": 71.47608184814453,
+      "median_interval_s": 53.417,
+      "max_interval_s": 60.012,
+      "scaling_comparisons": 0,
+      "max_scaling_error": null
+    },
+    "Claire Mini Split Current 1m Average": {
+      "reports": 3,
+      "last": 0.45147469639778137,
+      "median_interval_s": 53.417,
+      "max_interval_s": 60.011,
+      "scaling_comparisons": 0,
+      "max_scaling_error": null
+    },
+    "Office Power Live": {
+      "reports": 130,
+      "last": 112.7109375,
+      "median_interval_s": 1.005,
+      "max_interval_s": 1.074,
+      "scaling_comparisons": 67,
+      "max_scaling_error": 0.0
+    },
+    "Office Current Live": {
+      "reports": 130,
+      "last": 1.195482611656189,
+      "median_interval_s": 1.005,
+      "max_interval_s": 1.093,
+      "scaling_comparisons": 58,
+      "max_scaling_error": 0.0
+    },
+    "Office Power 1m Average": {
+      "reports": 3,
+      "last": 113.04718780517578,
+      "median_interval_s": 53.911,
+      "max_interval_s": 59.993,
+      "scaling_comparisons": 0,
+      "max_scaling_error": null
+    },
+    "Office Current 1m Average": {
+      "reports": 3,
+      "last": 1.2002567052841187,
+      "median_interval_s": 53.856,
+      "max_interval_s": 60.018,
+      "scaling_comparisons": 0,
+      "max_scaling_error": null
+    },
+    "Master Bedroom Closet Power Live": {
+      "reports": 130,
+      "last": 34.352500915527344,
+      "median_interval_s": 1.005,
+      "max_interval_s": 1.093,
+      "scaling_comparisons": 63,
+      "max_scaling_error": 0.0
+    },
+    "Master Bedroom Closet Current Live": {
+      "reports": 130,
+      "last": 0.44773778319358826,
+      "median_interval_s": 1.005,
+      "max_interval_s": 1.09,
+      "scaling_comparisons": 66,
+      "max_scaling_error": 0.0
+    },
+    "Master Bedroom Closet Power 1m Average": {
+      "reports": 3,
+      "last": 34.69562530517578,
+      "median_interval_s": 54.341,
+      "max_interval_s": 60.007,
+      "scaling_comparisons": 0,
+      "max_scaling_error": null
+    },
+    "Master Bedroom Closet Current 1m Average": {
+      "reports": 3,
+      "last": 0.45051148533821106,
+      "median_interval_s": 53.417,
+      "max_interval_s": 60.012,
+      "scaling_comparisons": 0,
+      "max_scaling_error": null
+    },
+    "Basement Bathroom Power Live": {
+      "reports": 130,
+      "last": 32.8155632019043,
+      "median_interval_s": 1.005,
+      "max_interval_s": 1.09,
+      "scaling_comparisons": 52,
+      "max_scaling_error": 0.0
+    },
+    "Basement Bathroom Current Live": {
+      "reports": 130,
+      "last": 0.4818294644355774,
+      "median_interval_s": 1.005,
+      "max_interval_s": 1.11,
+      "scaling_comparisons": 68,
+      "max_scaling_error": 0.0
+    },
+    "Basement Bathroom Power 1m Average": {
+      "reports": 3,
+      "last": 24.895061492919922,
+      "median_interval_s": 53.417,
+      "max_interval_s": 60.012,
+      "scaling_comparisons": 0,
+      "max_scaling_error": null
+    },
+    "Basement Bathroom Current 1m Average": {
+      "reports": 3,
+      "last": 0.43060600757598877,
+      "median_interval_s": 54.341,
+      "max_interval_s": 60.007,
+      "scaling_comparisons": 0,
+      "max_scaling_error": null
+    },
+    "Loft Kids Bathroom Whole House Fan Power Live": {
+      "reports": 130,
+      "last": 167.2313232421875,
+      "median_interval_s": 1.005,
+      "max_interval_s": 1.109,
+      "scaling_comparisons": 63,
+      "max_scaling_error": 0.0
+    },
+    "Loft Kids Bathroom Whole House Fan Current Live": {
+      "reports": 130,
+      "last": 1.6864031553268433,
+      "median_interval_s": 1.005,
+      "max_interval_s": 1.074,
+      "scaling_comparisons": 75,
+      "max_scaling_error": 0.0
+    },
+    "Loft Kids Bathroom Whole House Fan Power 1m Average": {
+      "reports": 3,
+      "last": 167.43569946289062,
+      "median_interval_s": 53.856,
+      "max_interval_s": 60.018,
+      "scaling_comparisons": 0,
+      "max_scaling_error": null
+    },
+    "Loft Kids Bathroom Whole House Fan Current 1m Average": {
+      "reports": 3,
+      "last": 1.684205412864685,
+      "median_interval_s": 53.911,
+      "max_interval_s": 59.993,
+      "scaling_comparisons": 0,
+      "max_scaling_error": null
+    },
+    "Mains A Power Live": {
+      "reports": 130,
+      "last": 4080.025390625,
+      "median_interval_s": 1.005,
+      "max_interval_s": 1.074,
+      "scaling_comparisons": 68,
+      "max_scaling_error": 0.0
+    },
+    "Mains A Current Live": {
+      "reports": 130,
+      "last": 34.200801849365234,
+      "median_interval_s": 1.005,
+      "max_interval_s": 1.074,
+      "scaling_comparisons": 0,
+      "max_scaling_error": null
+    },
+    "Mains A Power 1m Average": {
+      "reports": 3,
+      "last": 2901.107177734375,
+      "median_interval_s": 53.624,
+      "max_interval_s": 60.032,
+      "scaling_comparisons": 0,
+      "max_scaling_error": null
+    },
+    "Mains A Current 1m Average": {
+      "reports": 3,
+      "last": 24.67207145690918,
+      "median_interval_s": 53.446,
+      "max_interval_s": 60.011,
+      "scaling_comparisons": 0,
+      "max_scaling_error": null
+    },
+    "Mains B Power Live": {
+      "reports": 130,
+      "last": 3847.112548828125,
+      "median_interval_s": 1.005,
+      "max_interval_s": 1.093,
+      "scaling_comparisons": 42,
+      "max_scaling_error": 0.0
+    },
+    "Mains B Current Live": {
+      "reports": 130,
+      "last": 32.49167251586914,
+      "median_interval_s": 1.005,
+      "max_interval_s": 1.074,
+      "scaling_comparisons": 0,
+      "max_scaling_error": null
+    },
+    "Mains B Power 1m Average": {
+      "reports": 3,
+      "last": 2677.76513671875,
+      "median_interval_s": 53.415,
+      "max_interval_s": 60.012,
+      "scaling_comparisons": 0,
+      "max_scaling_error": null
+    },
+    "Mains B Current 1m Average": {
+      "reports": 3,
+      "last": 23.180662155151367,
+      "median_interval_s": 53.446,
+      "max_interval_s": 60.012,
+      "scaling_comparisons": 0,
+      "max_scaling_error": null
+    }
+  },
+  "failures": []
+}

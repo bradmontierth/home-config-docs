@@ -826,6 +826,70 @@ profile used during ring-window stop detection. This is tuning work rather
 than an urgent correctness issue: room-scoped sessions, prompts, commands,
 timers, music, and output routing do not depend on it.
 
+### E. Cross-mic transcript arbitration by quality — BACKLOG 2026-09-04
+
+**2026-09-08: Observation and automatic transcript selection deployed.**
+After the first labeled trials, Brad authorized enabling the picker with ongoing
+logging. Matching Cohere scores choose between disagreeing commands with a 0.01
+margin; only contested wakes wait, at most 150 ms. The original satellite keeps
+reply/session ownership; selected audio also feeds speaker ID. Missing/invalid
+scores and Parakeet fallbacks retain the original. See the guide below.
+
+Initial observation rollout:
+Cohere scores both microphones using its existing greedy decoder (the beam-4
+assumption below was stale). Paired recordings, scores, timing and human labels
+are available at http://192.168.10.217:8785/quality/ui. Reply/session ownership stays unchanged. The kitchen changes channels after pre-roll, so
+we log command-channel level contrast rather than claim calibrated SNR.
+Implementation, test results and rollback: [quality observation guide](voice-assistant/quality-observation-guide.md).
+
+Original proposal follows for context:
+
+**Trigger.** "What is the square root of seventy three" (2026-09-04 11:52):
+the family room won the wake against the kitchen and its clip is muffled and
+barely audible. Nothing separated the mics — RMS was −30.0 vs −29.3 dBFS — so
+the hop race decided it (family room verified 300 ms sooner). The transcript
+came out right anyway, but the ding and reply went to the wrong room and the
+decode was on the edge. Loudness is the wrong signal in general: a kitchen fan
+or music raises the kitchen's RMS in exactly the case the family room hears
+better, and the kitchen now transcribes from the channel with no noise
+suppression (two-stream capture), so its level is inflated further.
+
+**Both mics already transcribe.** The loser posts `/command/shadow`; in this
+turn its transcript landed half a second BEFORE the winner's final. The
+missing piece is a fast "which decode is better" score. Four cheap signals:
+
+1. **ASR confidence (free, best single number).** Neither endpoint returns it
+   today but both have it: Cohere is a beam-4 LLM decoder (length-normalised
+   sequence log-prob), Parakeet has per-token log-probs. Ask the GX10 side for
+   a `confidence` field on both responses. A muffled clip decodes flat.
+2. **SNR, not level.** The satellite already measures pre-roll loudness
+   (`wake_rms_db`, loudness.py); add the noise floor from the same 2.5 s
+   pre-roll and send speech-minus-floor. A blasting fan LOWERS the kitchen's
+   SNR, which is the ordering we want.
+3. **Agreement check.** rapidfuzz ratio ≥ ~90 after normalisation → nothing
+   to decide, no cost. Only disagreements reach the picker.
+4. **Speaker-embedding score as a clarity proxy** (already computed every
+   turn: 0.62 from the family room here vs 0.73 on the kitchen turn before).
+   Drops on muffled audio but also on a different speaker — tie-break only.
+
+Skip the local LLM as judge: it would add a second candidate to the classify
+prompt, which is already the slowest stage; confidence gets most of the value
+at zero latency.
+
+**Structural part.** The winner's dispatch has to hold for the shadow up to a
+short cap (~300 ms), then when the two disagree pick by confidence, tie-break
+on SNR. The reply should probably go out of the higher-SNR room too — that is
+where the person is standing.
+
+**Order.** Phase 1 = log only: confidence from both models, SNR from both
+satellites, and the shadow transcript stored on the winner's turn row
+(`other_transcript`; today it lives only in docker logs, which the 09-04
+rebuilds wiped). ~46 paired kitchen/family-room turns exist per fortnight, so
+a week or two shows whether confidence + SNR would have picked the right mic.
+Phase 2 = the picker. Related: `other_sat`/`other_rms_db` paired-mic columns
+(2026-08-25) and the Simon/Claire ≥8 dB loudness hand-off (08-31), which stays
+as-is for those rooms.
+
 ## Latency Budget (measured where noted)
 
 | Stage | Time |

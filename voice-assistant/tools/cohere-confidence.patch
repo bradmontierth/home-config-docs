@@ -1,0 +1,54 @@
+--- a/app/candidate_asr_server.py
++++ b/app/candidate_asr_server.py
+@@ -441,7 +441,27 @@
+             root_scale = float(opts.get("bias_root_scale", 0.5))
+             kwargs["logits_processor"] = LogitsProcessorList([TrieBoost(self._phrase_ids(phrases), bias_weight, prompt_len, root_scale=root_scale)])
+             info["decoder"] += f"+trie-boost-rollback({scope}:{len(phrases)},root={root_scale})"
+-        out = self.model.generate(**inputs, **kwargs)
++        want_confidence = bool(opts.get("confidence"))
++        if want_confidence:
++            kwargs.update(return_dict_in_generate=True, output_scores=True)
++        generated = self.model.generate(**inputs, **kwargs)
++        out = generated.sequences if want_confidence else generated
++        if want_confidence:
++            # Normalize each step's distribution and follow the selected beam.
++            # Exclude language/prompt/EOS/padding tokens from the mean. Scores
++            # are comparable only with the same model and decoding/bias config.
++            transition = self.model.compute_transition_scores(
++                out, generated.scores, getattr(generated, "beam_indices", None),
++                normalize_logits=True)[0]
++            tokens = out[0, -transition.shape[-1]:]
++            mask = torch.ones_like(tokens, dtype=torch.bool)
++            for token_id in self.processor.tokenizer.all_special_ids:
++                mask &= tokens != token_id
++            selected = transition[mask]
++            valid = bool(selected.numel()) and bool(torch.isfinite(selected).all())
++            info.update(confidence=float(selected.float().mean()) if valid else None,
++                        confidence_method="mean_token_logprob_v1",
++                        confidence_tokens=int(selected.numel()))
+         text = self.processor.decode(out, skip_special_tokens=True)
+         if isinstance(text, list):
+             text = text[0]
+@@ -450,6 +470,11 @@
+         t2 = time.perf_counter()
+         new_tokens = int(out.shape[-1] - prompt_len)
+         info.update({"generate_seconds": round(t2 - t1, 4), "new_tokens": new_tokens, "repeat_stopped": new_tokens < max_new and has_repeat_loop(out[0, prompt_len:].tolist()), "collapsed": text != raw})
++        if want_confidence:
++            info["confidence_valid"] = bool(
++                info.get("confidence") is not None and text
++                and not info["repeat_stopped"] and not info["collapsed"]
++                and new_tokens < max_new)
+         return text, info
+ 
+ 
+@@ -634,8 +659,10 @@
+     bias_root_scale: float | None = None,
+     beam_width: int | None = None,
+     token_min_logp: float | None = None,
++    confidence: bool = False,
+ ):
+     opts = {k: v for k, v in {"hotwords": hotwords, "beam_width": beam_width, "token_min_logp": token_min_logp, "bias_mode": bias_mode, "bias_scope": bias_scope, "bias_beams": bias_beams, "bias_root_scale": bias_root_scale}.items() if v is not None}
++    opts["confidence"] = confidence
+     if not state.ready or state.backend is None:
+         return JSONResponse({"ok": False, "error": "model_not_ready", "detail": state.error}, status_code=503)
+     body = await request.body()

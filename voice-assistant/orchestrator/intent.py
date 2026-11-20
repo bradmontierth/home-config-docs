@@ -8,22 +8,14 @@ the timer intents for this slice; the schema leaves room for the rest
 from __future__ import annotations
 
 import logging
+import json
 import re
 
-from . import camera, clients, climate, clock, config, covers, moon, sun, zones
+from . import camera, clients, climate, clock, config, covers, home_status, moon, nap_status, sun, zones
+from .intent_schema import INTENTS
+from . import animals
 
 log = logging.getLogger("orchestrator.intent")
-
-INTENTS = (
-    "set_timer", "timer_query", "timer_adjust", "timer_rename", "timer_cancel",
-    "add_items", "set_reminder", "show_todos", "show_shopping", "show_reminders",
-    "complete_item",
-    "remove_items", "clear_list", "play_music", "music_control", "music_query",
-    "sports", "weather", "time_query", "business_hours", "place_search",
-    "home_control", "cover_set", "climate_set",
-    "broadcast", "find_phone", "show_camera", "close_camera",
-    "ask", "show_answer", "unclear", "none",
-)
 
 CAMERA_TARGETS = ("simon", "claire")
 
@@ -71,7 +63,16 @@ _SYSTEM = f"""You are the intent parser for a household voice assistant. Convert
 user's command into a single strict JSON object and output ONLY that JSON — no \
 prose, no code fences, no explanation.
 
-Schema:
+Output only the intent and meaningful slots, using compact JSON. Omit unused
+fields, nulls, and defaults (scope one, phone_action ring, missing_content false,
+sound_theme achievement_bell). The application supplies these values. Preserve EVERY
+specified name, target, duration, action, and nondefault sound theme. A timer
+name is relevant to ALL timer intents, including timer_query, not only setting
+a timer. For example, "how long on the rice timer" requires label "rice";
+"how long on my timer" has no label. Omitting fields never changes the routing
+rules below or the stricter rules for follow-up and clarification turns.
+
+Available fields (omit those without meaningful values):
 {{
   "intent": one of {list(INTENTS)},
   "label": short lowercase name of the timer (e.g. "chicken", "rice", "pasta"), or null if the user gave none,
@@ -79,7 +80,7 @@ Schema:
   "duration_seconds": integer total seconds for set_timer / timer_adjust (adjust may be negative to remove time), else null,
   "sound_theme": one of {list(config.SOUND_THEMES)},
   "scope": "one" or "all" — "all" only when the user clearly means every timer (e.g. "cancel all timers"), else "one",
-  "query": for intent "ask" the cleaned question text; for "play_music" the name of what to play; for "business_hours" or "place_search" the named business; for "broadcast" the message to speak; else null,
+  "query": for intent "ask" ONLY if the question must be cleaned of background speech or separated from an abandoned command (otherwise omit query; the original question is forwarded); for "play_music" the name of what to play; for "business_hours" or "place_search" the named business; for "broadcast" the message to speak; else null,
   "broadcast_target": for "broadcast", the person or room the message is for, close to as spoken ("simon", "the kids", "the loft"); null when none was named,
   "phone_owner": for "find_phone", whose phone as spoken — "my", "brad", "adrienne", "mom", "dad"; else null,
   "phone_action": for "find_phone", "stop" when they say the phone is found or to stop the ringing; else "ring",
@@ -97,7 +98,10 @@ Schema:
   "time_kind": for time_query, what they asked for — one of {list(clock.KINDS)}; else null,
   "time_day": for time_query, one of {list(clock.DAYS)} — "today" unless they name another day; else null,
   "hours_when": for business_hours, one of {list(HOURS_WHEN)}; else null,
-  "camera_target": for "show_camera", which child's camera — one of {list(CAMERA_TARGETS)}; else null
+  "camera_target": for "show_camera", which child's camera — one of {list(CAMERA_TARGETS)}; else null,
+  "animal": for "animal_sound", the singular lowercase animal name, or "again"/"stop" when explicitly referring to animal playback; else null,
+  "status_scope": for "home_status", one of {list(home_status.SCOPES)}; else null,
+  "nap_kid": for "nap_status", which child: "claire", "simon", or "both" (the kids, everyone, unnamed); else null
 }}
 
 Rules:
@@ -120,7 +124,8 @@ Rules:
   "change the timer to be called", "change the timer to be a") is still timer_rename with
   new_label null so the assistant can ask what to call it. Do not treat "change the timer to
   ten minutes" as rename; that concerns duration and is timer_adjust.
-- timer_cancel = "cancel the rice timer" (scope one) or "cancel all timers" (scope all).
+- timer_cancel = "cancel the rice timer" (scope one) or "cancel all timers" (scope all). A REMINDER
+  is not a timer: "cancel the trash reminder" is remove_items.
 - sports = a score, result, or upcoming-game question about a NAMED team or league: "what was the
   score of the jazz game" (query "jazz", sports_action "last"), "who won the world cup game
   yesterday" (query "world cup", "last", sports_date "yesterday"), "did the cubs win last night"
@@ -179,7 +184,23 @@ Rules:
   "query", close to as spoken. Use it for house-change commands even if the target sounds
   unsupported ("open the garage") — the control layer decides what it controls. But music
   playback stays music_control ("turn it up", "stop the music"), and QUESTIONS about the house
-  state ("are the blinds closed", "is the kitchen light on") are "ask", never home_control.
+  state are never home_control: doors, locks, windows, garage, and gates are home_status (below);
+  anything else ("are the blinds closed", "is the kitchen light on") is "ask".
+- home_status = a QUESTION about whether the house is closed up and locked: doors, locks, windows,
+  the garage doors, the gates. status_scope says which: "is the house secure", "what's the status
+  of the house", "is everything locked up", "did we lock up", "are we good to leave", "is anything open" ->
+  "all";
+  "are the doors closed", "is the front door open", "which doors are open" -> "doors"; "is the
+  garage open", "did I close the garage door", "is the big garage door down" -> "garage"; "are the
+  doors locked", "is the front door locked", "did we lock the doors" -> "locks"; "are the windows closed",
+  "how many windows are open", "which windows are open" -> "windows"; "is the gate closed", "are
+  the gates shut" -> "gates". Only questions: "close the garage door" or "lock the front door" is
+  home_control.
+- nap_status = a QUESTION about the kids' naps TODAY: whether, when or how long Claire (the baby)
+  or Simon napped, or whether one is napping now: "did Claire nap today", "when did Simon go down",
+  "how long did the baby sleep", "is Claire still asleep", "did the kids nap" -> nap_kid "claire",
+  "simon" or "both". Not for showing a camera ("show me Claire" is show_camera) and not for
+  bedtime or overnight sleep questions (those are "ask").
 - broadcast = relaying a message to a person or room ELSEWHERE in the house over its speaker:
   "tell simon to come eat dinner" -> query "Simon, come eat dinner", broadcast_target "simon";
   "tell the kids it's time to leave" -> query "It's time to leave", broadcast_target "the kids";
@@ -202,11 +223,14 @@ Rules:
   phone ("is my phone charged") are "ask".
 - ask = a general knowledge or factual question NOT about timers: "how many tablespoons in a cup",
   "when do babies start walking", "what temperature is chicken done at", "how do I dice an onion".
-  Put the cleaned question in "query". No keyword is needed — natural questions route here.
+  Omit query if the user message is already the question; include it only to remove unrelated
+  speech or an abandoned command. No keyword is needed — natural questions route here.
+  Requests to perform unsupported external actions (booking travel, buying products) are none,
+  not ask. Questions ABOUT how those things work are still ask.
   A question that refers back to an earlier exchange is STILL ask, even if it can't stand alone:
   "when do they play next", "but who's playing in it", "what about tomorrow", "how old is she".
-  The knowledge service keeps the conversation history — pass the question through in "query"
-  as spoken; never route a question to "unclear" just because its subject is a pronoun.
+  The knowledge service keeps the conversation history and receives the original question when
+  query is omitted. Never route a question to unclear just because its subject is a pronoun.
 - add_items = adding things to a shopping or todo list: "add eggs and milk to the shopping list",
   "put paper towels on the list", "add a todo to call the plumber", "add diapers to the Costco list"
   (Costco is a section of the shopping list). Leave label/query/item_text null;
@@ -233,13 +257,18 @@ Rules:
   target description in "item_text" — including categories ("the dairy") and properties ("everything
   orange"). If they mean whatever was just added ("scratch my last", "undo", "remove that"), leave
   "item_text" null. Different from complete_item, which marks something DONE rather than removing it.
+  Ending a reminder is remove_items too: "cancel the trash reminder", "stop reminding me to take out
+  the trash", "delete my Wednesday reminder" (item_text "the trash reminder" / "take out the trash"
+  / "Wednesday reminder").
 - clear_list = emptying a whole list: "clear the shopping list", "clear my todos", "delete everything
   on the list", "empty the list". Set "list_type" to "shopping", "todo", or "all". NOT the same as
   remove_items (which targets specific items); clear_list wipes the entire list.
 - play_music = starting music: "play raffi", "play baby beluga", "put on the wheels on the bus",
   "play the album baby beluga", "play some music". Put WHAT to play in "query" — just the name, with
   filler dropped ("play the album baby beluga" -> query "baby beluga", media_type "album"; "play some
-  raffi" -> query "raffi"). If they only want music with nothing named ("play some music", "turn on
+  raffi" -> query "raffi"). Remix/version/artist words are part of the name, never filler — keep
+  them even when repeated or oddly spelled ("play spooky scary skeletons voldo mix" -> query
+  "spooky scary skeletons voldo mix"). If they only want music with nothing named ("play some music", "turn on
   the music"), leave query null. media_type stays null unless they LITERALLY SAY the word "artist",
   "album", "song"/"track", or "playlist" — never infer it from the name ("play the best of raffi"
   -> query "the best of raffi", media_type null, even though it sounds like an album).
@@ -251,6 +280,7 @@ Rules:
   "normal volume" / "back to normal volume" -> volume_normal.
   A bare "pause" or "stop" with no object is music_control too (timers get cancelled, not stopped).
 - music_query = asking about the current song: "what's playing", "what song is this", "who sings this".
+- animal_sound = play an animal sound/video: "what sound does a lion make", "let me hear an elephant", "show me a frog croaking". Set animal to the singular animal name. The current catalog is supplied below; preserve other names so the handler can explain missing clips. Questions about WHY animals make sounds stay ask.
 - show_camera = put a CHILD's camera on the kitchen display: "show me Simon", "show me Claire",
   "pull up Simon's camera", "let me see Claire", "put Simon's room on the screen", "check on
   Claire", "I want to see Simon". Set camera_target to "simon" or "claire". Only these two
@@ -270,7 +300,7 @@ Rules:
   just say", "repeat that", "say that again". No other fields. A NEW question about the same topic
   ("but who's playing in it") is "ask", not show_answer.
 {_MULTI_SPEAKER}
-- If the command is not a timer, list, music, home-control, or knowledge command, intent "none".
+- If the command is not a timer, list, music, home-control, home-status, or knowledge command, intent "none".
 Return JSON only."""
 
 
@@ -281,6 +311,8 @@ def _system(sat: str | None = None) -> str:
     room = zones.spoken_for(sat)
     return (
         _SYSTEM
+        + "\nANIMAL VIDEO CATALOG (spoken label to animal slot): "
+        + json.dumps(animals.aliases(), ensure_ascii=False)
         + f"\n\nORIGIN ROOM: {room}. This identifies where the command was spoken. "
           "Do not assume devices that are not named, and do not import context "
           "from any other room."
@@ -300,10 +332,15 @@ Choose the intent by whether the speech is addressed to you:
 add butter", "make that fifteen minutes", "and cancel the rice", "scratch my \
 last").
 - A follow-up QUESTION about your previous answer ("but who's playing in it", \
-"when do they play next", "what about tomorrow") is intent "ask" — put it in \
-"query" as spoken.
+"when do they play next", "what about tomorrow") MUST use intent "ask", even \
+when the prior topic was weather or sports. The knowledge service has that \
+history. Omit query when the user message is already the question; retain query \
+only when background speech or an abandoned command must be removed.
 - If it clearly seems addressed to you (a command, a request, second person) \
-but you cannot map it to any supported action, use intent "unclear".
+but you cannot map it to any supported action, use intent "unclear". A directly \
+addressed but underspecified request ("can you handle that thing for me") is \
+unclear, never none or ask: it is a request to act, not background chatter or a \
+factual question.
 - If it is small talk, a fragment, someone else's conversation, or anything not \
 directed at you, use intent "none". When it is not clearly for you, prefer \
 "none" over "unclear" — do not talk back to the room."""
@@ -483,7 +520,7 @@ def spoken_duration(text: str) -> int | None:
     parser has the original command for context.
     """
     words = re.findall(r"[a-z0-9]+", text.lower())
-    total = 0
+    segments: list[tuple[int, int]] = []    # (seconds, unit) per "N unit"
     num: int | None = None
     article = False     # the current num came from "a"/"an", not a real count
     half = False
@@ -511,16 +548,29 @@ def spoken_duration(text: str) -> int | None:
             continue
         if w in _UNIT_SECONDS:
             mult = _UNIT_SECONDS[w]
-            total += int(((num or 0) + (0.5 if half else 0)) * mult)
+            segments.append(
+                (int(((num or 0) + (0.5 if half else 0)) * mult), mult))
             last_unit, saw_unit = mult, True
             num, half, article = None, False, False
             continue
         if w in _DURATION_FILLER:
             continue
         return None                 # not a pure duration -> let the LLM read it
-    if half and saw_unit:
-        total += int(0.5 * last_unit)   # trailing "...and a half"
-    if not saw_unit or total <= 0:
+    if not saw_unit:
+        return None
+    if half:
+        secs, unit = segments[-1]       # trailing "...and a half"
+        segments[-1] = (secs + int(0.5 * last_unit), unit)
+    units = [unit for _, unit in segments]
+    if all(a > b for a, b in zip(units, units[1:])):
+        total = sum(secs for secs, _ in segments)
+    elif len(set(segments)) == 1:
+        # The same duration said twice: "Ten minutes. Ten minutes." is a
+        # repeat, not 20 minutes (live 2026-10-03 set a 20-minute timer).
+        total = segments[0][0]
+    else:
+        return None     # "ten minutes fifteen minutes" -> let the LLM read it
+    if total <= 0:
         return None
     return total
 
@@ -667,6 +717,60 @@ _MUSIC_QUERY_ALIASES = {
     "what's this song", "what is this song", "who sings this",
     "who is singing this",
 }
+# House security questions -> home_status scope. Anchored, question-shaped
+# only: a command ("close the garage door") never matches, and anything looser
+# goes to the classifier, which has the same rule in prose. "all" is checked
+# first so "is the house locked" is the whole-house answer, not just locks.
+_HS_TAIL = r"(?:\s+(?:right now|now|still|yet))?"
+_HOME_STATUS_PATTERNS: tuple[tuple[str, re.Pattern], ...] = tuple(
+    (scope, re.compile(rf"^(?:{body}){_HS_TAIL}$")) for scope, body in (
+        ("all", r"(?:is|are)\s+(?:the\s+)?(?:house|home|everything|we)\s+(?:all\s+)?"
+                r"(?:secure|secured|locked up|closed up|buttoned up|locked|"
+                r"locked and closed|closed and locked)"),
+        ("all", r"(?:(?:what(?:'s| is)|give me|tell me)\s+)?(?:the\s+)?"
+                r"(?:house|home|security)\s+status"),
+        ("all", r"(?:what(?:'s| is)|give me|tell me)\s+the\s+(?:security\s+)?status\s+"
+                r"of\s+the\s+(?:house|home)"),
+        ("all", r"is\s+(?:there\s+)?anything\s+(?:left\s+)?(?:open|unlocked)"),
+        ("all", r"(?:did|have)\s+we\s+lock(?:ed)?\s+up"),
+        ("all", r"are\s+we\s+(?:good|all set|clear|okay|ok)\s+to\s+leave"),
+        ("garage", r"(?:is|are)\s+(?:both\s+|either\s+)?(?:of\s+)?(?:the\s+)?"
+                   r"(?:big\s+|small\s+|main\s+|little\s+)?garage(?:\s+doors?)?\s+"
+                   r"(?:still\s+)?(?:open|closed|shut|down|up)"),
+        ("garage", r"(?:did|have)\s+(?:i|we|you|someone|somebody)\s+(?:close|closed|shut)\s+"
+                   r"(?:the\s+)?(?:big\s+|small\s+)?garage(?:\s+doors?)?"),
+        ("locks", r"(?:are|is)\s+(?:all\s+)?(?:the\s+)?(?:doors|locks)\s+(?:all\s+)?locked"),
+        ("locks", r"is\s+the\s+(?:front|sliding|back|slider|entryway|backyard|garage)\s+"
+                  r"(?:door\s+)?locked"),
+        ("locks", r"(?:are|is)\s+(?:there\s+)?any\s+(?:of\s+the\s+)?(?:doors?|locks?)\s+unlocked"),
+        ("locks", r"(?:which|what)\s+(?:doors?|locks?)\s+(?:are|is)\s+unlocked"),
+        ("locks", r"did\s+(?:i|we|you)\s+lock\s+(?:the\s+|all\s+the\s+)?doors?"),
+        ("doors", r"(?:are|is)\s+(?:all\s+)?(?:the\s+)?(?:outside\s+|exterior\s+)?doors\s+"
+                  r"(?:all\s+)?(?:closed|shut|open)"),
+        ("doors", r"(?:are|is)\s+(?:there\s+)?any\s+(?:of\s+the\s+)?(?:outside\s+)?doors?\s+"
+                  r"(?:left\s+)?open"),
+        ("doors", r"(?:which|what)\s+doors?\s+(?:are|is)\s+open"),
+        ("doors", r"is\s+the\s+(?:front|sliding|back|slider)\s+door\s+(?:open|closed|shut)"),
+        ("windows", r"(?:are|is)\s+(?:all\s+)?(?:the\s+)?windows?\s+(?:all\s+)?"
+                    r"(?:closed|shut|open)"),
+        ("windows", r"(?:are|is)\s+(?:there\s+)?any\s+(?:of\s+the\s+)?windows?\s+"
+                    r"(?:left\s+)?open"),
+        ("windows", r"(?:which|what|how many)\s+windows?\s+(?:are|is)\s+open"),
+        ("gates", r"(?:are|is)\s+(?:both\s+|all\s+)?(?:the\s+)?(?:big\s+|small\s+)?"
+                  r"(?:fence\s+)?gates?\s+(?:all\s+)?(?:closed|shut|open|latched)"),
+        ("gates", r"(?:are|is)\s+(?:there\s+)?any\s+gates?\s+(?:left\s+)?open"),
+    ))
+
+
+def fast_parse_home_status(command: str) -> dict | None:
+    """A house security question -> home_status with its scope, or None."""
+    text = _fast_clean(command)
+    for scope, pattern in _HOME_STATUS_PATTERNS:
+        if pattern.fullmatch(text):
+            return _validate({"intent": "home_status", "status_scope": scope})
+    return None
+
+
 _WEATHER_NOW = {
     "what's the weather", "what is the weather", "how's the weather",
     "how is the weather", "what's it like outside", "what is it like outside",
@@ -811,6 +915,50 @@ def fast_parse_timer_rename(command: str) -> dict | None:
     return None
 
 
+# "change the timer to be 10 minutes" / "make the rice timer 5 minutes": a
+# new REMAINING time for a running timer. Matched before the rename grammar,
+# which would otherwise read the duration as the new name (live 2026-10-03:
+# "change the timer to be 10 minutes" renamed a 20-minute timer "10 minutes").
+# "set" stays out: "set the timer for 10 minutes" is how people start one.
+_TIMER_SET_TO = re.compile(
+    r"^(?:change|make|reset|update|modify|adjust|put)\s+(?:(?:the|my|a)\s+)?"
+    r"(?:(?P<label>[a-z0-9][a-z0-9' ]*?)\s+)?timer\s+"
+    r"(?:(?:to|at)\s+)?(?:be\s+)?(?P<dur>.+)$")
+
+
+def timer_target_seconds(text: str) -> int | None:
+    """Seconds named by a set-to target: a spoken duration, or a bare count
+    of minutes ("to be a 10" — the mic cut off before the unit)."""
+    seconds = spoken_duration(text)
+    if seconds is not None:
+        return seconds
+    words = re.findall(r"[a-z0-9]+", text.lower())
+    if words and words[0] in ("a", "an"):
+        words = words[1:]
+    if len(words) != 1:
+        return None
+    n = int(words[0]) if words[0].isdigit() else _NUM_WORDS.get(words[0])
+    return n * 60 if n and n <= 180 else None
+
+
+def fast_parse_timer_set_to(command: str) -> dict | None:
+    """Parse "change the timer to be 10 minutes" as a timer_adjust that sets
+    the remaining time (``set_remaining``) rather than adding to it."""
+    match = _TIMER_SET_TO.fullmatch(_fast_clean(command))
+    if not match:
+        return None
+    seconds = timer_target_seconds(match.group("dur"))
+    if seconds is None:
+        return None
+    parsed = _validate({
+        "intent": "timer_adjust",
+        "label": _timer_label(match.group("label")),
+        "duration_seconds": seconds,
+    })
+    parsed["set_remaining"] = True
+    return parsed
+
+
 def _fast_timer_theme(label: str) -> str:
     """Sound for a spoken timer name: first word that names a food, else the
     default. Checks every word so "chicken thighs" and "the roasting pan" both
@@ -855,9 +1003,8 @@ def fast_parse_labelled_timer(text: str) -> dict | None:
 # who lives here. Matching the kid cameras deterministically keeps them off
 # that coin flip, and off an LLM round trip.
 # "set the sink blind to 30 percent" -- the one home command carrying a number.
-# The verb decides direction (see covers.py); the amount is anchored after
-# "to"/"at" so a bare number can never be read off some other part of the
-# phrase. A "halfway" form is separate because it has no number to anchor.
+# The verb decides direction (see covers.py). A trailing bare level is also
+# accepted, but only after an exact curated target, never a fuzzy guess.
 _COVER_VERBS_OPEN = ("open", "raise", "lift", "pull up", "put up")
 _COVER_VERBS_CLOSE = ("close", "shut", "lower", "drop", "pull down", "put down")
 _COVER_VERBS_NEUTRAL = ("set", "put", "move", "adjust", "leave")
@@ -874,6 +1021,13 @@ _COVER_HALF_RE = re.compile(
     rf"^(?P<verb>{_COVER_VERBS})\s+(?P<target>.+?)\s+"
     r"(?:half\s?way|half\s+down|half\s+up|to\s+half)"
     r"(?:\s+(?:open|closed|down|up))?$"
+)
+_COVER_BARE_LEVEL_RE = re.compile(
+    rf"^(?P<verb>{_COVER_VERBS})\s+(?P<target>.+?)\s+"
+    r"(?P<amount>\d+|(?:twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety)"
+    r"\s+(?:one|two|three|four|five|six|seven|eight|nine)|"
+    + "|".join(_NUM_WORDS) + r")"
+    r"(?:\s*(?:percent|per cent))?(?:\s+(?:open|closed|down|up))?$"
 )
 
 
@@ -902,8 +1056,11 @@ def fast_parse_cover_level(command: str, sat: str | None = None) -> dict | None:
     level, which nothing else in the house handles. Takes the satellite because
     the target is resolved here: "the blind" is a different window in each room.
     """
+    # Generic punctuation cleaning must not turn -20 into 20 or 20.5 into 205.
+    if re.search(r"(?<!\w)[+-]\s*\d|\d[.,]\d", command or ""):
+        return None
     text = _fast_clean(command)
-    for pattern in (_COVER_LEVEL_RE, _COVER_HALF_RE):
+    for pattern in (_COVER_LEVEL_RE, _COVER_HALF_RE, _COVER_BARE_LEVEL_RE):
         match = pattern.fullmatch(text)
         if not match:
             continue
@@ -1115,6 +1272,14 @@ def fast_parse(command: str) -> dict | None:
     if not text:
         return None
 
+    animal = animals.fast_parse(text)
+    if animal:
+        return _validate(animal)
+
+    set_to = fast_parse_timer_set_to(text)
+    if set_to is not None:
+        return set_to
+
     rename = fast_parse_timer_rename(text)
     if rename is not None:
         return rename
@@ -1154,6 +1319,14 @@ def fast_parse(command: str) -> dict | None:
     clock_hit = fast_parse_clock(text)
     if clock_hit is not None:
         return clock_hit
+
+    status = fast_parse_home_status(text)
+    if status is not None:
+        return status
+
+    nap_kid = nap_status.fast_kid(text)
+    if nap_kid is not None:
+        return _validate({"intent": "nap_status", "nap_kid": nap_kid})
 
     store_list = fast_parse_store_list(text)
     if store_list is not None:
@@ -1430,6 +1603,21 @@ def _validate(data: dict) -> dict:
     if intent != "climate_set":
         climate_target = climate_setpoint = None
 
+    # Read-only, so an unreadable scope is safe to widen: the whole-house answer
+    # covers whatever they meant.
+    status_scope = data.get("status_scope")
+    if status_scope not in home_status.SCOPES:
+        status_scope = "all"
+    if intent != "home_status":
+        status_scope = None
+
+    # Read-only too: an unreadable child answers for both kids.
+    nap_kid = data.get("nap_kid")
+    if nap_kid not in nap_status.NAP_KIDS:
+        nap_kid = "both"
+    if intent != "nap_status":
+        nap_kid = None
+
     return {
         "intent": intent,
         "label": label,
@@ -1460,4 +1648,7 @@ def _validate(data: dict) -> dict:
         "cover_position": cover_position,
         "climate_target": climate_target,
         "climate_setpoint": climate_setpoint,
+        "animal": (str(data.get("animal") or "").strip().lower() or None) if intent == "animal_sound" else None,
+        "status_scope": status_scope,
+        "nap_kid": nap_kid,
     }

@@ -1,0 +1,19 @@
+{
+"intervals": [
+{
+"start": 2860.24,
+"end": 2945.76,
+"reason": "ZipRecruiter sponsor read with intro, features, and CTA."
+},
+{
+"start": 2945.76,
+"end": 2975.60,
+"reason": "Minky Couture blanket sponsor read with product details and CTA."
+},
+{
+"start": 2975.60,
+"end": 3028.96,
+"reason": "Dan Pfeiffer promoting MessageBox Pro subscription service."
+}
+]
+}

@@ -1,0 +1,78 @@
+{
+  "request": {
+    "model": "qwen3-next",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Reply with exactly the JSON object {\"intent\":\"ask\"}."
+      }
+    ],
+    "max_tokens": 80,
+    "temperature": 0,
+    "chat_template_kwargs": {
+      "enable_thinking": false
+    },
+    "response_format": {
+      "type": "json_schema",
+      "json_schema": {
+        "name": "constraint_probe",
+        "strict": true,
+        "schema": {
+          "type": "object",
+          "properties": {
+            "probe": {
+              "type": "string",
+              "enum": [
+                "constraint_was_enforced"
+              ]
+            }
+          },
+          "required": [
+            "probe"
+          ],
+          "additionalProperties": false
+        }
+      }
+    }
+  },
+  "status": 200,
+  "response": {
+    "id": "chatcmpl-9cb2ecab05dda674",
+    "object": "chat.completion",
+    "created": 1789267548,
+    "prompt_routed_experts": null,
+    "model": "qwen3-next",
+    "choices": [
+      {
+        "index": 0,
+        "message": {
+          "role": "assistant",
+          "content": "{\"probe\":\"constraint_was_enforced\"}",
+          "refusal": null,
+          "annotations": null,
+          "audio": null,
+          "function_call": null,
+          "tool_calls": [],
+          "reasoning": null
+        },
+        "logprobs": null,
+        "finish_reason": "stop",
+        "stop_reason": null,
+        "token_ids": null,
+        "routed_experts": null
+      }
+    ],
+    "service_tier": null,
+    "system_fingerprint": "vllm-0.20.2rc1.dev166+gf6490a284-a2e9dc2d",
+    "usage": {
+      "prompt_tokens": 24,
+      "total_tokens": 39,
+      "completion_tokens": 15,
+      "prompt_tokens_details": null
+    },
+    "prompt_logprobs": null,
+    "prompt_token_ids": null,
+    "kv_transfer_params": null
+  },
+  "elapsed_ms": 1560.9116293489933
+}

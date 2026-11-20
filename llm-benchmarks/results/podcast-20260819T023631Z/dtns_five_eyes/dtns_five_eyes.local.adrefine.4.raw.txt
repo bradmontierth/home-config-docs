@@ -1,0 +1,29 @@
+{
+"intervals": [
+{
+"start": 670.96,
+"end": 700.80,
+"reason": "Smith's grocery store promotional read."
+},
+{
+"start": 700.80,
+"end": 748.24,
+"reason": "Paylocity podcast ad read by hosts."
+},
+{
+"start": 752.40,
+"end": 794.72,
+"reason": "McDonald's World Cup meal promotion."
+},
+{
+"start": 799.20,
+"end": 833.92,
+"reason": "Babbel language app advertisement."
+},
+{
+"start": 833.92,
+"end": 876.56,
+"reason": "Sephora beauty products advertisement."
+}
+]
+}

@@ -161,6 +161,7 @@ Doing so would invalidate every level below, so re-sweep afterwards.
 | Path | Volume | Set by |
 | --- | --- | --- |
 | Kitchen Message subflow (dishwasher, garage, water leak) | Day 95 / Early Morning 80 / Evening 80 / Night 70 / Away 80 | explicit `volume_level` from the mode map |
+| Window rain alert (Message for Rain Windows subflow `14f5e1b6853b14f4`) | 75, all modes | `msg.volume = 75` in its Build the message, overrides the map (2026-10-23, Day 95 blasted) |
 | Doorbell fast TTS | 75 | MA `absolute` strategy (no volume passed) |
 | Baby monitor cry alert | 75 | MA `absolute` strategy (no volume passed) |
 

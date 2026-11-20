@@ -1,0 +1,175 @@
+TAP version 13
+# Subtest: dryer real dwell independent of 1000 ms reports
+ok 1 - dryer real dwell independent of 1000 ms reports
+  ---
+  duration_ms: 3.470879
+  ...
+# Subtest: dishwasher equivalent legacy timing at 1000 ms
+ok 2 - dishwasher equivalent legacy timing at 1000 ms
+  ---
+  duration_ms: 0.954819
+  ...
+# Subtest: outage guard uses 10 seconds, not two samples, at 1000 ms
+ok 3 - outage guard uses 10 seconds, not two samples, at 1000 ms
+  ---
+  duration_ms: 0.409255
+  ...
+# Subtest: dryer real dwell independent of 5000 ms reports
+ok 4 - dryer real dwell independent of 5000 ms reports
+  ---
+  duration_ms: 0.251739
+  ...
+# Subtest: dishwasher equivalent legacy timing at 5000 ms
+ok 5 - dishwasher equivalent legacy timing at 5000 ms
+  ---
+  duration_ms: 1.703072
+  ...
+# Subtest: outage guard uses 10 seconds, not two samples, at 5000 ms
+ok 6 - outage guard uses 10 seconds, not two samples, at 5000 ms
+  ---
+  duration_ms: 0.317197
+  ...
+# Subtest: dryer real dwell independent of 10000 ms reports
+ok 7 - dryer real dwell independent of 10000 ms reports
+  ---
+  duration_ms: 0.261902
+  ...
+# Subtest: dishwasher equivalent legacy timing at 10000 ms
+ok 8 - dishwasher equivalent legacy timing at 10000 ms
+  ---
+  duration_ms: 0.773912
+  ...
+# Subtest: outage guard uses 10 seconds, not two samples, at 10000 ms
+ok 9 - outage guard uses 10 seconds, not two samples, at 10000 ms
+  ---
+  duration_ms: 0.155897
+  ...
+# Subtest: range catches a five-second pulse; one indicator on/off
+ok 10 - range catches a five-second pulse; one indicator on/off
+  ---
+  duration_ms: 0.357265
+  ...
+# Subtest: oven latch needs 180 seconds; survives short cycling and releases after five minutes
+ok 11 - oven latch needs 180 seconds; survives short cycling and releases after five minutes
+  ---
+  duration_ms: 0.604958
+  ...
+# Subtest: short dishwasher wake never creates clean
+ok 12 - short dishwasher wake never creates clean
+  ---
+  duration_ms: 0.471493
+  ...
+# Subtest: missing watts, strings, future times and unavailable are never zero
+ok 13 - missing watts, strings, future times and unavailable are never zero
+  ---
+  duration_ms: 0.207159
+  ...
+# Subtest: out-of-order cache update rejected; explicit unavailability accepted
+ok 14 - out-of-order cache update rejected; explicit unavailability accepted
+  ---
+  duration_ms: 0.448233
+  ...
+# Subtest: silence cannot finish dryer or bridge a start qualification
+ok 15 - silence cannot finish dryer or bridge a start qualification
+  ---
+  duration_ms: 0.548767
+  ...
+# Subtest: gap in low observations restarts completion dwell
+ok 16 - gap in low observations restarts completion dwell
+  ---
+  duration_ms: 0.148449
+  ...
+# Subtest: unchanged power plus fresh reports qualifies on clock deadlines
+ok 17 - unchanged power plus fresh reports qualifies on clock deadlines
+  ---
+  duration_ms: 0.330223
+  ...
+# Subtest: no startup dryer-complete alert from an idle snapshot
+ok 18 - no startup dryer-complete alert from an idle snapshot
+  ---
+  duration_ms: 0.504734
+  ...
+# Subtest: outage alert rearms only after genuine low interval or grid restoration
+ok 19 - outage alert rearms only after genuine low interval or grid restoration
+  ---
+  duration_ms: 0.200201
+  ...
+# Subtest: time weighted windows stable across sampling rates
+ok 20 - time weighted windows stable across sampling rates
+  ---
+  duration_ms: 0.636358
+  ...
+# Subtest: window gaps reduce coverage instead of fabricating history
+ok 21 - window gaps reduce coverage instead of fabricating history
+  ---
+  duration_ms: 0.12512
+  ...
+# Subtest: window buffer bounded in time
+ok 22 - window buffer bounded in time
+  ---
+  duration_ms: 3.262551
+  ...
+# Subtest: rich dishwasher features use thirty seconds for fast running and four minutes warmup
+ok 23 - rich dishwasher features use thirty seconds for fast running and four minutes warmup
+  ---
+  duration_ms: 0.723213
+  ...
+# Subtest: command gate drops 3599 duplicate attempts after successful ack
+ok 24 - command gate drops 3599 duplicate attempts after successful ack
+  ---
+  duration_ms: 2.245384
+  ...
+# Subtest: latest target wins without replaying a queued intermediate target
+ok 25 - latest target wins without replaying a queued intermediate target
+  ---
+  duration_ms: 0.154716
+  ...
+# Subtest: failure does not latch success and retry is bounded
+ok 26 - failure does not latch success and retry is bounded
+  ---
+  duration_ms: 0.103176
+  ...
+# Subtest: urgent stop bypasses normal cooldown and failed normal-command backoff
+ok 27 - urgent stop bypasses normal cooldown and failed normal-command backoff
+  ---
+  duration_ms: 0.106559
+  ...
+# Subtest: late response cannot acknowledge newer urgent command
+ok 28 - late response cannot acknowledge newer urgent command
+  ---
+  duration_ms: 0.100197
+  ...
+# Subtest: actuator state mismatch explicitly invalidates dedup
+ok 29 - actuator state mismatch explicitly invalidates dedup
+  ---
+  duration_ms: 0.102523
+  ...
+# Subtest: EV tuple includes outdoor loads and subtracts EV once
+ok 30 - EV tuple includes outdoor loads and subtracts EV once
+  ---
+  duration_ms: 0.265712
+  ...
+# Subtest: EV preserves automation-disable yield, but outage overrides it
+ok 31 - EV preserves automation-disable yield, but outage overrides it
+  ---
+  duration_ms: 0.167284
+  ...
+# Subtest: invalid EV amp requests cannot escape
+ok 32 - invalid EV amp requests cannot escape
+  ---
+  duration_ms: 0.110702
+  ...
+# Subtest: proposed stale-solar stop waits thirty seconds and never takes manual ownership
+ok 33 - proposed stale-solar stop waits thirty seconds and never takes manual ownership
+  ---
+  duration_ms: 0.202708
+  ...
+1..33
+# tests 33
+# suites 0
+# pass 33
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 125.312313

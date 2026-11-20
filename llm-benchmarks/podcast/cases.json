@@ -1,0 +1,30 @@
+[
+  {
+    "id":"lrcp_tdf_stage_4",
+    "podcast":"Lanterne Rouge Cycling Podcast",
+    "title":"Tour de France 2026 - Stage 4",
+    "input":"/home/pi/podcast/transcripts_v2/lanterne-rouge-cycling-podcast/2026-07-07-tour-de-france-2026-stage-4/v2sub_11__v2ep_16140909__tour-de-france-2026-stage-4.json",
+    "truth":"truth/lrcp_tdf_stage_4.json"
+  },
+  {
+    "id":"lrcp_tdf_stage_5",
+    "podcast":"Lanterne Rouge Cycling Podcast",
+    "title":"Tour de France 2026 - Stage 5",
+    "input":"/home/pi/podcast/transcripts_v2/lanterne-rouge-cycling-podcast/2026-07-08-tour-de-france-2026-stage-5/v2sub_11__v2ep_16449246__tour-de-france-2026-stage-5.json",
+    "truth":"truth/lrcp_tdf_stage_5.json"
+  },
+  {
+    "id":"dtns_five_eyes",
+    "podcast":"Daily Tech News Show",
+    "title":"Five Eyes Security Give CISOs a Budget Weapon - DTNS 5294",
+    "input":"/home/pi/podcast/transcripts_v2/daily-tech-news-show/2026-06-22-five-eyes-security-give-cisos-a-budget-weapon-dtns-5294/v2sub_2__v2ep_11623637__five-eyes-security-give-cisos-a-budget-weapon-dtns-5294.json",
+    "truth":"truth/dtns_five_eyes.json"
+  },
+  {
+    "id":"pod_save_america_jd_is_lame",
+    "podcast":"Pod Save America",
+    "title":"Trump and Pod Save America Agree: JD Is Lame",
+    "input":"/home/pi/podcast/transcripts_v2/pod-save-america/2026-06-02-trump-and-pod-save-america-agree-jd-is-lame/v2sub_13__v2ep_5417677__trump-and-pod-save-america-agree-jd-is-lame.json",
+    "truth":"truth/pod_save_america_jd_is_lame.json"
+  }
+]

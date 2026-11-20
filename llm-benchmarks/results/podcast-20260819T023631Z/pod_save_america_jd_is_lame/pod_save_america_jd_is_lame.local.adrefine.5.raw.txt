@@ -1,0 +1,14 @@
+{
+  "intervals": [
+    {
+      "start": 1339.44,
+      "end": 1411.6,
+      "reason": "Article sponsor read including intro, product details, and offer."
+    },
+    {
+      "start": 1411.6,
+      "end": 1499.68,
+      "reason": "AG1 sponsor read including intro, product details, and offer."
+    }
+  ]
+}

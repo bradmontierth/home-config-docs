@@ -30,6 +30,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -63,6 +64,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
@@ -78,8 +80,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withLink
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -1185,10 +1189,16 @@ fun HomeAgentApp(launchSessionId: MutableState<String?>) {
                 )
             }
 
-            Terminal(
-                text = terminal,
-                modifier = Modifier.weight(1f)
-            )
+            val linkHost = remember(gatewayUrl) { runCatching { Uri.parse(gatewayUrl).host }.getOrNull() }
+            val replyLinks = remember(terminal, linkHost) { latestReplyLinks(terminal, linkHost) }
+            CompositionLocalProvider(LocalLinkHost provides linkHost) {
+                Terminal(
+                    text = terminal,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+
+            LinkBar(urls = replyLinks)
 
             ActionRow(
                 hasSession = hasCurrentSession,
@@ -2419,6 +2429,7 @@ fun approvalPendingIn(text: String): Boolean {
 fun Terminal(text: String, modifier: Modifier = Modifier) {
     val scrollState = rememberScrollState()
     val blocks = remember(text) { markdownBlocks(text.ifBlank { "Agent output will appear here." }) }
+    val linkHost = LocalLinkHost.current
     LaunchedEffect(text.length) {
         scrollState.scrollTo(scrollState.maxValue)
     }
@@ -2440,7 +2451,7 @@ fun Terminal(text: String, modifier: Modifier = Modifier) {
                 verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 blocks.forEach { block ->
-                    MarkdownTerminalBlock(block)
+                    MarkdownTerminalBlock(block, linkHost)
                 }
             }
         }
@@ -2448,13 +2459,44 @@ fun Terminal(text: String, modifier: Modifier = Modifier) {
 }
 
 
-data class MarkdownBlock(val type: String, val text: String, val level: Int = 0)
+data class MarkdownBlock(
+    val type: String,
+    val text: String,
+    val level: Int = 0,
+    val rows: List<List<String>> = emptyList()
+)
+
+private val TableSeparator = Regex("""^\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?$""")
+
+/** Split a markdown table row on unescaped pipes outside inline code. */
+fun splitTableRow(line: String): List<String> {
+    var body = line.trim()
+    if (body.startsWith("|")) body = body.drop(1)
+    if (body.endsWith("|") && !body.endsWith("\\|")) body = body.dropLast(1)
+    val cells = mutableListOf<String>()
+    val cell = StringBuilder()
+    var inTick = false
+    var i = 0
+    while (i < body.length) {
+        val c = body[i]
+        when {
+            c == '\\' && i + 1 < body.length && body[i + 1] == '|' -> { cell.append('|'); i++ }
+            c == '`' -> { inTick = !inTick; cell.append(c) }
+            c == '|' && !inTick -> { cells.add(cell.toString().trim()); cell.clear() }
+            else -> cell.append(c)
+        }
+        i++
+    }
+    cells.add(cell.toString().trim())
+    return cells
+}
 
 
 fun markdownBlocks(text: String): List<MarkdownBlock> {
     val blocks = mutableListOf<MarkdownBlock>()
     val paragraph = mutableListOf<String>()
     val code = mutableListOf<String>()
+    val table = mutableListOf<String>()
     var inCode = false
 
     fun flushParagraph() {
@@ -2469,8 +2511,34 @@ fun markdownBlocks(text: String): List<MarkdownBlock> {
         code.clear()
     }
 
+    fun flushTable() {
+        if (table.isEmpty()) return
+        if (table.size >= 2 && TableSeparator.matches(table[1].trim())) {
+            flushParagraph()
+            val header = splitTableRow(table[0])
+            val body = table.drop(2).map { row ->
+                val cells = splitTableRow(row)
+                List(header.size) { cells.getOrElse(it) { "" } }
+            }
+            blocks.add(MarkdownBlock("table", "", rows = listOf(header) + body))
+        } else {
+            paragraph.addAll(table)
+        }
+        table.clear()
+    }
+
     text.lines().forEach { line ->
         val trimmed = line.trimEnd()
+        if (!inCode) {
+            val t = trimmed.trimStart()
+            val isTableLine = t.startsWith("|") && t.count { it == '|' } >= 2 ||
+                (table.size == 1 && TableSeparator.matches(t))
+            if (isTableLine) {
+                table.add(t)
+                return@forEach
+            }
+            flushTable()
+        }
         if (trimmed.trimStart().startsWith("```")) {
             if (inCode) {
                 flushCode()
@@ -2508,13 +2576,14 @@ fun markdownBlocks(text: String): List<MarkdownBlock> {
         paragraph.add(trimmed)
     }
     if (inCode) flushCode()
+    flushTable()
     flushParagraph()
     return blocks
 }
 
 
 @Composable
-fun MarkdownTerminalBlock(block: MarkdownBlock) {
+fun MarkdownTerminalBlock(block: MarkdownBlock, linkHost: String? = null) {
     when (block.type) {
         "heading" -> Text(
             text = block.text,
@@ -2523,11 +2592,11 @@ fun MarkdownTerminalBlock(block: MarkdownBlock) {
             style = if (block.level <= 2) MaterialTheme.typography.titleMedium else MaterialTheme.typography.bodyLarge
         )
         "bullet" -> Text(
-            text = terminalInlineAnnotated("- ${block.text}", terminalLineStyle(block.text)),
+            text = terminalInlineAnnotated("- ${block.text}", terminalLineStyle(block.text), linkHost),
             style = MaterialTheme.typography.bodyMedium
         )
         "code" -> Text(
-            text = block.text.ifBlank { " " },
+            text = linkifiedString(block.text.ifBlank { " " }, linkHost),
             modifier = Modifier
                 .fillMaxWidth()
                 .background(Color(0xFF17221F), RoundedCornerShape(6.dp))
@@ -2536,38 +2605,147 @@ fun MarkdownTerminalBlock(block: MarkdownBlock) {
             fontFamily = FontFamily.Monospace,
             style = MaterialTheme.typography.bodySmall
         )
+        "table" -> MarkdownTable(block.rows, linkHost)
         "terminal" -> Text(
-            text = terminalInlineAnnotated(block.text, terminalLineStyle(block.text)),
+            text = terminalInlineAnnotated(block.text, terminalLineStyle(block.text), linkHost),
             fontFamily = FontFamily.Monospace,
             style = MaterialTheme.typography.bodySmall
         )
         else -> Text(
-            text = terminalInlineAnnotated(block.text, SpanStyle(color = Color(0xFFF4F2ED))),
+            text = terminalInlineAnnotated(block.text, SpanStyle(color = Color(0xFFF4F2ED)), linkHost),
             style = MaterialTheme.typography.bodyMedium
         )
     }
 }
 
 
-fun terminalInlineAnnotated(text: String, baseStyle: SpanStyle) = buildAnnotatedString {
+/** Rough rendered length of a cell: markdown syntax stripped, link URLs dropped. */
+private fun cellDisplayLength(cell: String): Int =
+    cell.replace(Regex("\\[([^\\]]+)]\\([^)]+\\)"), "$1").replace("**", "").replace("`", "").length
+
+
+/**
+ * Markdown tables on a phone: a striped grid when the columns fit the screen,
+ * otherwise one card per row (first cell as the title, the rest as
+ * "Header  value" lines) so nothing needs sideways scrolling.
+ */
+@Composable
+fun MarkdownTable(rows: List<List<String>>, linkHost: String? = null) {
+    if (rows.isEmpty()) return
+    val header = rows.first()
+    val body = rows.drop(1)
+    val cols = header.size
+    val text = Color(0xFFF4F2ED)
+    val dim = Color(0xFF9FB3AA)
+    val border = Color(0xFF2C3A35)
+    // Widest cell per column, capped so one long cell does not starve the rest.
+    val natural = (0 until cols).map { c ->
+        rows.maxOf { cellDisplayLength(it.getOrElse(c) { "" }) }.coerceIn(3, 28)
+    }
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        val charDp = 7.6f
+        val cellPadDp = 12f
+        val needed = natural.sumOf { (it * charDp + cellPadDp).toDouble() }
+        if (cols <= 1 || needed <= maxWidth.value || body.isEmpty()) {
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .border(1.dp, border, RoundedCornerShape(6.dp))
+                    .clip(RoundedCornerShape(6.dp))
+            ) {
+                rows.forEachIndexed { r, row ->
+                    val bg = when {
+                        r == 0 -> Color(0xFF1F2E29)
+                        r % 2 == 0 -> Color(0xFF141C19)
+                        else -> Color.Transparent
+                    }
+                    Row(Modifier.fillMaxWidth().background(bg)) {
+                        row.forEachIndexed { c, cell ->
+                            Text(
+                                text = terminalInlineAnnotated(
+                                    cell,
+                                    SpanStyle(
+                                        color = text,
+                                        fontWeight = if (r == 0) FontWeight.Bold else null
+                                    ),
+                                    linkHost
+                                ),
+                                modifier = Modifier
+                                    .weight(natural[c].toFloat())
+                                    .padding(horizontal = 6.dp, vertical = 5.dp),
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                    }
+                }
+            }
+        } else {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                body.forEach { row ->
+                    Column(
+                        Modifier
+                            .fillMaxWidth()
+                            .background(Color(0xFF141C19), RoundedCornerShape(6.dp))
+                            .border(1.dp, border, RoundedCornerShape(6.dp))
+                            .padding(horizontal = 10.dp, vertical = 7.dp),
+                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                    ) {
+                        Text(
+                            text = terminalInlineAnnotated(
+                                row.first().ifBlank { "—" },
+                                SpanStyle(color = text, fontWeight = FontWeight.Bold),
+                                linkHost
+                            ),
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                        row.drop(1).forEachIndexed { i, cell ->
+                            if (cell.isBlank()) return@forEachIndexed
+                            Row {
+                                Text(
+                                    text = header.getOrElse(i + 1) { "" },
+                                    color = dim,
+                                    modifier = Modifier.widthIn(min = 72.dp, max = 120.dp).padding(end = 8.dp),
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                                Text(
+                                    text = terminalInlineAnnotated(cell, SpanStyle(color = text), linkHost),
+                                    modifier = Modifier.weight(1f),
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+
+fun terminalInlineAnnotated(text: String, baseStyle: SpanStyle, linkHost: String? = null) = buildAnnotatedString {
     pushStyle(baseStyle)
-    val pattern = Regex("(`[^`]+`|\\*\\*[^*]+\\*\\*)")
+    // Markdown links first so their URL is not also matched as a bare link.
+    val pattern = Regex("(\\[[^\\]\\n]+]\\([^)\\s]+\\)|`[^`]+`|\\*\\*[^*]+\\*\\*)")
     var index = 0
     pattern.findAll(text).forEach { match ->
-        append(text.substring(index, match.range.first))
+        appendLinkified(text.substring(index, match.range.first), linkHost)
         val token = match.value
-        if (token.startsWith("`")) {
+        if (token.startsWith("[")) {
+            val label = token.substring(1, token.indexOf("]("))
+            val url = openableUrl(trimUrl(token.substring(token.indexOf("](") + 2, token.length - 1)), linkHost)
+            withLink(linkAnnotation(url)) { append(label) }
+        } else if (token.startsWith("`")) {
             pushStyle(SpanStyle(color = Color(0xFFE6EFE9), background = Color(0xFF17221F), fontFamily = FontFamily.Monospace))
-            append(token.trim('`'))
+            appendLinkified(token.trim('`'), linkHost)
             pop()
         } else {
             pushStyle(SpanStyle(fontWeight = FontWeight.Bold))
-            append(token.removePrefix("**").removeSuffix("**"))
+            appendLinkified(token.removePrefix("**").removeSuffix("**"), linkHost)
             pop()
         }
         index = match.range.last + 1
     }
-    append(text.substring(index))
+    appendLinkified(text.substring(index), linkHost)
     pop()
 }
 

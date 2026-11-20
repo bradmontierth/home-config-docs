@@ -25,7 +25,7 @@ media-center/
 | Server container `media-center` | Plex Pi (`ssh plex`, 192.168.10.150) | `http://192.168.10.150:8790` (LAN address only) |
 | Server code + compose on the Pi | `/home/pi/media-center/server` | deploy target (rsync from the Beelink copy) |
 | Server data (DB, art, thumbs) | Pi `/home/pi/media-center/server/data` (uid 1500) | `media.db`, `art/`, `thumbs/` |
-| TV app | Shield (192.168.40.67, IoT VLAN 40), Chromecast GTV not yet | adb over network |
+| TV app | Shield (192.168.40.67, IoT VLAN 40); basement projector Chromecast GTV (main LAN, Wi-Fi 192.168.10.230 / Ethernet .160) | adb over network |
 | Secrets | Beelink `/home/pi/cecret_lake/media_center/` | `client_token`, `tmdb_api_key` |
 | Server env on the Pi | `/home/pi/media-center/server/server.env` (0600) | `MC_TOKEN`, `MC_TMDB_KEY`, `MC_SCAN_TOKEN` (scan-only key the download pipeline uses) |
 
@@ -172,6 +172,23 @@ $ADB -s 192.168.40.67:5555 install -r app/build/outputs/apk/release/app-release.
   `am start -n com.local.mediacenter/.MainActivity --es mc_token "$(cat /home/pi/cecret_lake/media_center/client_token)"`.
 - Deep link (testing / future voice): `--es play_item <episode-or-movie id>`.
 - Not yet: automatic updates via the F-Droid repo; only adb installs.
+- **Projector Chromecast with Google TV** (installed 0.23 on 2026-11-14): Android 14,
+  armeabi-v7a, ~1 GB free on /data. No port 5555: it needs **Wireless debugging**
+  (pairing code + random connect port), and that only stays on while it's on **Wi-Fi**
+  (on its Ethernet adapter the toggle switches itself off). Steps: Brad switches it to Wi-Fi,
+  turns on Wireless debugging, reads the code; `adb pair <ip>:<pairport> <code>`, then
+  `adb connect <ip>:<port>` (`adb mdns services` shows both ports). The Beelink key is
+  paired now, so later sessions only need Wireless debugging on plus the connect port.
+  Also installed 2026-11-14: Photos TV + Music TV (own `projector` tokens in
+  cecret_lake/photos_tv + music_tv device_tokens), tv-home launcher, and the screensaver
+  set to `com.local.photostv/.PhotoDream` (rollback:
+  `settings put secure screensaver_components com.google.android.apps.tv.dreamx/.service.Backdrop`).
+  **tv-home is Home** (2026-11-14, screenshot-verified): Google TV hands Home to
+  `com.google.android.tungsten.setupwraith/.RecoveryActivity` (priority 1) once `launcherx` is
+  disabled (set-home-activity / role don't override it), so BOTH are disabled with
+  `pm disable-user --user 0`. Rollback: `pm enable com.google.android.apps.tv.launcherx;
+  pm enable com.google.android.tungsten.setupwraith` (re-enable setupwraith before any
+  factory reset / setup flow). tvrecommendations was already disabled.
 
 ## Testing on the real Shield (lessons)
 

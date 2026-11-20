@@ -1,0 +1,1 @@
+{"intervals":[{"start":1.52,"end":30.56,"reason":"Sponsor reads for Smith's pickup and Sephora."},{"start":69.84,"end":101.76,"reason":"Sponsor read for Granger office supplies."},{"start":101.76,"end":166.8,"reason":"Sponsor read for Alienware gaming deals."}]}

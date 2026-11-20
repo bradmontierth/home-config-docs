@@ -1,0 +1,1 @@
+{"intervals":[{"start": 632.4, "end": 663.04, "reason": "Promotional read for Tour de France workout program and t-shirt draw."}]}

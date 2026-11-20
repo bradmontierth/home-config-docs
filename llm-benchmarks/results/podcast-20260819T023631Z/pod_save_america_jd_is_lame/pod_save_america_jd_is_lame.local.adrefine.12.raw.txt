@@ -1,0 +1,19 @@
+{
+"intervals": [
+{
+"start": 5936.56,
+"end": 5966.4,
+"reason": "Minky Couture blanket sponsor read."
+},
+{
+"start": 5967.52,
+"end": 6015.52,
+"reason": "MessageBox Pro subscription service promotion."
+},
+{
+"start": 6016.64,
+"end": 6045.288,
+"reason": "Culligan water system trade-in event ad."
+}
+]
+}

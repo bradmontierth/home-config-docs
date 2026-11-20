@@ -1,0 +1,174 @@
+#!/usr/bin/env python3
+"""Resume a Home Agent (phone) conversation in a terminal, e.g. from a laptop over SSH.
+
+    ha-resume              list recent phone conversations, pick one
+    ha-resume 3            resume entry 3 from the list
+    ha-resume <id>         resume by Home Agent session id (or prefix)
+    ha-resume -p 3         only print the command, don't stop or launch anything
+
+Phone sessions run on this host, so their transcripts are already here; this
+just finds the agent session id behind a conversation, stops the runner's
+copy if it is still alive (a warm Claude process or a Codex writer lock would
+otherwise fight the terminal for the same session), and opens it in a named
+tmux session. Being in tmux, the phone can adopt it back afterwards.
+"""
+
+import argparse
+import json
+import os
+import shlex
+import shutil
+import subprocess
+import sys
+import time
+import urllib.request
+
+RUNNER = os.environ.get("HOME_AGENT_RUNNER_URL", "http://127.0.0.1:8766").rstrip("/")
+# Mirrors how Brad runs the CLIs interactively on this host.
+CLAUDE_FLAGS = ["--dangerously-skip-permissions"]
+CODEX_FLAGS = ["--dangerously-bypass-approvals-and-sandbox"]
+# "idle" = finished turn kept warm for the prompt cache; safe to stop.
+BUSY = {"starting", "running", "waiting"}
+LIVE = BUSY | {"idle"}
+
+
+def api(method: str, path: str):
+    req = urllib.request.Request(f"{RUNNER}{path}", method=method)
+    with urllib.request.urlopen(req, timeout=15) as resp:
+        return json.load(resp)
+
+
+def conversations(limit: int) -> list[dict]:
+    """Latest session per conversation (root_session_id), newest first."""
+    latest: dict[str, dict] = {}
+    for s in api("GET", "/sessions"):
+        if not s.get("codex_thread_id"):
+            continue
+        root = s.get("root_session_id") or s["session_id"]
+        if root not in latest or s["started_at"] > latest[root]["started_at"]:
+            latest[root] = s
+    rows = sorted(latest.values(), key=lambda s: s["started_at"], reverse=True)
+    return rows[:limit]
+
+
+def age(ts: float) -> str:
+    mins = int((time.time() - ts) / 60)
+    if mins < 60:
+        return f"{mins}m"
+    if mins < 48 * 60:
+        return f"{mins // 60}h"
+    return f"{mins // 1440}d"
+
+
+def title(s: dict) -> str:
+    return (s.get("latest_title") or s.get("display_title") or s.get("title") or "").strip()
+
+
+def which(name: str) -> str:
+    found = shutil.which(name) or os.path.expanduser(f"~/.local/bin/{name}")
+    if not os.path.exists(found):
+        sys.exit(f"{name} not found on PATH")
+    return found
+
+
+def command(s: dict) -> list[str]:
+    thread, model, effort = s["codex_thread_id"], s.get("codex_model"), s.get("reasoning_effort")
+    if s.get("agent") == "claude":
+        cmd = [which("claude"), *CLAUDE_FLAGS, "--resume", thread]
+        if model:
+            cmd += ["--model", model]
+        if effort:
+            cmd += ["--effort", effort]
+        return cmd
+    cmd = [which("codex"), "resume", *CODEX_FLAGS]
+    if model:
+        cmd += ["-m", model]
+    if effort:
+        cmd += ["-c", f'model_reasoning_effort="{effort}"']
+    return cmd + [thread]
+
+
+def codex_home(s: dict) -> str | None:
+    if s.get("agent") == "claude":
+        return None
+    try:
+        for acct in api("GET", "/codex/accounts"):
+            if acct["account_id"] == s.get("codex_account") and not acct.get("is_default"):
+                return acct["codex_home"]
+    except OSError:
+        pass
+    return None
+
+
+def pick(rows: list[dict], arg: str | None) -> dict:
+    if arg is None:
+        for i, s in enumerate(rows, 1):
+            state = s["status"] if s["status"] in LIVE else ""
+            print(f"{i:>2}  {age(s['started_at']):>4}  {s.get('agent', 'codex'):<6} {state:<8} {title(s)[:70]}")
+        arg = input("resume #: ").strip()
+        if not arg:
+            sys.exit(0)
+    if arg.isdigit() and 1 <= int(arg) <= len(rows):
+        return rows[int(arg) - 1]
+    matches = [s for s in api("GET", "/sessions") if s["session_id"].startswith(arg)]
+    if len(matches) != 1:
+        sys.exit(f"no unique session matching {arg!r}")
+    s = matches[0]
+    if not s.get("codex_thread_id"):
+        sys.exit("that session has no agent session id yet")
+    return s
+
+
+def release(s: dict) -> None:
+    """Stop the runner's live process for this conversation, if any."""
+    status = s["status"]
+    if status not in LIVE:
+        return
+    if status in BUSY:
+        answer = input(f"Phone copy is {status} (mid-turn). Stop it and take over? [y/N] ")
+        if answer.strip().lower() != "y":
+            sys.exit("left it running")
+    api("POST", f"/sessions/{s['session_id']}/stop")
+    print(f"stopped the phone's {status} process ({s['session_id']})")
+
+
+def launch(s: dict, cmd: list[str], home: str | None) -> None:
+    shell = f"cd {shlex.quote(s['cwd'])} && "
+    if home:
+        shell += f"CODEX_HOME={shlex.quote(home)} "
+    shell += shlex.join(cmd)
+    name = f"ha-{s['session_id'][:8]}"
+    if not shutil.which("tmux"):
+        os.execvp("bash", ["bash", "-lc", shell])
+    if subprocess.run(["tmux", "has-session", "-t", name], capture_output=True).returncode != 0:
+        # Leave the pane open after the CLI exits so its last screen is readable.
+        subprocess.run(["tmux", "new-session", "-d", "-s", name, "-c", s["cwd"],
+                        "bash", "-lc", shell + "; exec bash"], check=True)
+    if os.environ.get("TMUX"):
+        os.execvp("tmux", ["tmux", "switch-client", "-t", name])
+    os.execvp("tmux", ["tmux", "attach", "-t", name])
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("target", nargs="?", help="list number or Home Agent session id (prefix)")
+    ap.add_argument("-n", type=int, default=15, help="how many conversations to list")
+    ap.add_argument("-p", "--print", action="store_true", help="print the command only")
+    args = ap.parse_args()
+
+    try:
+        s = pick(conversations(args.n), args.target)
+    except OSError as err:
+        sys.exit(f"runner unreachable at {RUNNER}: {err}")
+    cmd, home = command(s), codex_home(s)
+    if args.print:
+        prefix = f"CODEX_HOME={shlex.quote(home)} " if home else ""
+        print(f"cd {shlex.quote(s['cwd'])} && {prefix}{shlex.join(cmd)}")
+        return
+    print(f"{title(s)[:70]}\n{s.get('agent')} session {s['codex_thread_id']}")
+    release(s)
+    launch(s, cmd, home)
+
+
+if __name__ == "__main__":
+    main()

@@ -148,6 +148,25 @@ class ActiveScopeTest(TimerRoomScopeTest):
         rooms = self.engine.active("master")
         self.assertEqual([t["label"] for t in rooms], ["laundry"])
 
+    def test_kitchen_display_includes_the_familyroom_microphone(self):
+        self._add("pasta", "kitchen")
+        self._add("roasting", "familyroom")
+        self._add("shower", "master")
+        self._add("bedtime", "simon")
+
+        labels = [t["label"] for t in self.engine.active("kitchen")]
+
+        self.assertEqual(labels, ["pasta", "roasting"])
+
+    def test_familyroom_display_scope_is_the_same_kitchen_board(self):
+        self._add("pasta", "kitchen")
+        self._add("roasting", "familyroom")
+        self._add("shower", "master")
+
+        labels = [t["label"] for t in self.engine.active("familyroom")]
+
+        self.assertEqual(labels, ["pasta", "roasting"])
+
     def test_the_default_room_keeps_timers_that_predate_the_column(self):
         """Rows with a NULL sat were all kitchen timers. Scoping the board to
         the kitchen must not drop them off it."""

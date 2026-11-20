@@ -1,0 +1,101 @@
+{
+  "status": "LIVE - deployed 2026-09-27, user authorized without shadow mode",
+  "runtime": "Node-RED Admin API port 1880",
+  "default_mode": "live",
+  "source": "Home Assistant native ESPHome labeled entities; already scaled in firmware",
+  "sources": {
+    "range": "sensor.emporia_vue3_range_oven_power_live",
+    "dryer": "sensor.emporia_vue3_dryer_power_live",
+    "dishwasher": "sensor.emporia_vue3_dishwasher_power_live",
+    "ev": "sensor.emporia_vue3_ev_charger_power_live",
+    "ac": "sensor.emporia_vue3_ac_power_live",
+    "furnace": "sensor.emporia_vue3_furnace_power_live",
+    "mains_a": "sensor.emporia_vue3_mains_a_power_live",
+    "mains_b": "sensor.emporia_vue3_mains_b_power_live",
+    "outdoor": "sensor.iotawattsolar_total_heat_pump_power",
+    "solar": "sensor.tesla_powerwall_3_pw3_total_solar",
+    "powerwall_out": "sensor.tesla_powerwall_3_pw3_total_power_out"
+  },
+  "cadence": {
+    "live_ingress": "state events; no service calls on numeric updates",
+    "freshness_reconciliation_ms": 5000,
+    "max_power_age_ms": 20000,
+    "range": "immediate threshold evaluation plus due deadlines",
+    "dryer_dishwasher": "threshold transitions and due deadlines",
+    "dishwasher_rich_features_ms": 5000,
+    "ev_evaluate_ms": 5000,
+    "ev_normal_command_min_interval_ms": 10000,
+    "ev_power_source_max_skew_ms": "aligned common window end; each input <20s old",
+    "ev_stale_solar_hold_ms": 30000,
+    "history_power_ms": 60000,
+    "energy_mqtt_existing_ms": 15000,
+    "ev_power_window_ms": 5000
+  },
+  "tabs": [
+    {
+      "id": "8123861fc119b96b",
+      "name": "IotaWatt",
+      "changes": [
+        "detach old main-Iota control outputs as each consumer switches",
+        "replace range power classifier with elapsed-time state and transition outputs",
+        "publish global AC/Furnace/Tesla/dishwasherPower from selected Vue cache at compatibility cadence; no fake old row",
+        "split SQL/discovery from live control"
+      ]
+    },
+    {
+      "id": "0711e9167e62e249",
+      "name": "Washer Dryer",
+      "changes": [
+        "replace Dryer IN old col8 source with named watts contract",
+        "retain 60 s high/35 s low and completion-helper polarity",
+        "preserve door/recent-door/notification gates",
+        "10 s outage qualification with explicit missing-data handling",
+        "leave washer smart plug, motion and contact paths intact"
+      ]
+    },
+    {
+      "id": "ee0f1588760b9b3b",
+      "name": "Dishwasher",
+      "changes": [
+        "replace old Kitchen alias with direct dishwasher watts",
+        "elapsed-time legacy classifier and state-transition service gate",
+        "keep contact/temperature/dirty handlers as authoritative events",
+        "rich drying classifier live on dishwasher_new; independent legacy dishwasher_status helper"
+      ]
+    },
+    {
+      "id": "7fa25727b15db1f0",
+      "name": "Tesla",
+      "changes": [
+        "replace trigger and charger power input with labeled Vue entity",
+        "validate coherent indoor mains plus outdoor load before self-balancing cutover",
+        "retain charging policy and override priorities",
+        "5 s evaluation, changed-target 10 s minimum command gate with acknowledgement and reconciliation",
+        "outage stop bypass; automation-disable yields control",
+        "check reserve command through separate acknowledgement-aware gate"
+      ]
+    },
+    {
+      "id": "afea81d223c193eb",
+      "name": "Energy MQTT Sensors",
+      "changes": [
+        "replace validated total-home source after boundaries/units verified",
+        "retain 15 s reporting and SQL cadence"
+      ]
+    }
+  ],
+  "deployment_requirements": [
+    "Generate per-tab patches from fresh GET /flow snapshots and compare fingerprints before applying",
+    "Read and update both endpoints for any new cross-tab link; do not reuse one-sided links",
+    "Single selected writer per device/helper; old Iota CTs are removed and are not a valid failover source",
+    "Dispatchers recheck current desired state, mode and source health; no stale FIFO commands",
+    "Confirm installed OpenEVSE auto-release/reconnect semantics and command/readback ordering before enable",
+    "Verify mains boundaries, sign/reference and outdoor solar-source freshness before EV power-balance activation",
+    "No shadow mode: explicitly authorized live cutover; verify real transitions and command/recorder rates",
+    "No HA restart without separate prior approval"
+  ],
+  "explicitly_not_built": [
+    "per-circuit cumulative energy / utility-meter migration",
+    "new washer classifier from shared washer/bidet CT"
+  ]
+}

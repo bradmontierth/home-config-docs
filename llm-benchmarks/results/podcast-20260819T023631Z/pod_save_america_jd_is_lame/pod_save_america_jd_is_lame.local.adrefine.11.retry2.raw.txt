@@ -1,0 +1,1 @@
+{"intervals":[{"start": 5936.56, "end": 5966.4, "reason": "Sponsor read for Minky Couture blankets."},{"start": 5966.4, "end": 6001.84, "reason": "Promo for MessageBox Pro subscription service."}]}

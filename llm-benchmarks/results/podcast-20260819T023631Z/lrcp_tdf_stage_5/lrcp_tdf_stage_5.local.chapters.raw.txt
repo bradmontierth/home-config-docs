@@ -1,0 +1,88 @@
+{
+"chapters": [
+{
+"start": 0.0,
+"title": "Introduction and Critique of Incentives",
+"summary": "The hosts discuss leadership in technology and begin critiquing the lack of incentives for intermediate sprints and KOM points in flat stages.",
+"is_ad": false
+},
+{
+"start": 113.04,
+"title": "KOM Points and Heat Analysis",
+"summary": "Discussion on why KOM incentives should be higher and an analysis of how heat affects riders, noting that no one is immune.",
+"is_ad": false
+},
+{
+"start": 231.12,
+"title": "Proposing Rule Changes for Excitement",
+"summary": "The hosts propose adding more intermediate sprints and golden kilometers to make stages more entertaining for breakaway riders.",
+"is_ad": false
+},
+{
+"start": 465.2,
+"title": "(Ad) Bitdefender",
+"summary": "Sponsor read for Bitdefender antivirus software, highlighting protection against phishing and malicious downloads.",
+"is_ad": true
+},
+{
+"start": 580.72,
+"title": "Sprint Performance and Crashes",
+"summary": "Analysis of recent sprint performances, noting competitive riders and a significant crash involving Jonas Vingegaard near the finish.",
+"is_ad": false
+},
+{
+"start": 816.64,
+"title": "Valentin Parietti Sprint Hypothetical",
+"summary": "The hosts debate whether Valentin Parietti could beat top sprinters like Visma, Wright, and Asgreen in a flat sprint scenario.",
+"is_ad": false
+},
+{
+"start": 1053.6,
+"title": "Crash Details and Peloton Positioning",
+"summary": "Detailed breakdown of the crash dynamics, rider positioning, and how the peloton reacted in the final kilometers.",
+"is_ad": false
+},
+{
+"start": 1292.0,
+"title": "Jonathan Milan vs. Jasper Nys",
+"summary": "Comparison of Jonathan Milan and Jasper Nys, discussing Milan's positioning skills and his first Tour de France stage win.",
+"is_ad": false
+},
+{
+"start": 1526.48,
+"title": "(Ad) Acast",
+"summary": "Sponsor read for Acast, the podcast hosting platform that powers the show.",
+"is_ad": true
+},
+{
+"start": 1644.4,
+"title": "Top 10 Sprint Results",
+"summary": "Review of the top 10 finishers, highlighting surprises like Hubert and the strong performances of Kooi and Philipsen.",
+"is_ad": false
+},
+{
+"start": 1882.48,
+"title": "Stage 6 Preview and GC Favorites",
+"summary": "Preview of the next stage, identifying Pogacar as the favorite with Vingegaard as the second favorite for the General Classification.",
+"is_ad": false
+},
+{
+"start": 2002.08,
+"title": "Podium Contenders and Climbing Analysis",
+"summary": "Discussion on potential podium finishers and an analysis of climbing abilities for riders like Hindley and Harper.",
+"is_ad": false
+},
+{
+"start": 2121.04,
+"title": "Pogacar's Headache and Stage Outlook",
+"summary": "Speculation on whether Pogacar's headache will impact his performance and expectations for big action in the mountains.",
+"is_ad": false
+},
+{
+"start": 2237.36,
+"title": "(Ad) Nutrition Diva and Acast",
+"summary": "Sponsor reads for Nutrition Diva podcast and Acast podcasting platform.",
+"is_ad": true
+}
+]
+}

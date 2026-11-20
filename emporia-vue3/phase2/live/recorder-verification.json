@@ -1,0 +1,25 @@
+{
+  "since": 1790552820,
+  "checked_at": 1790553374.2283943,
+  "live_rows": [],
+  "average_entities": 36,
+  "average_rows": 360,
+  "consumer_rows": [
+    [
+      "input_select.dishwasher_new",
+      1
+    ],
+    [
+      "input_select.dishwasher_status",
+      1
+    ],
+    [
+      "sensor.dashboard_energy_calculations_effective_home_usage",
+      31
+    ],
+    [
+      "sensor.total_home_and_heat_pump",
+      36
+    ]
+  ]
+}

@@ -1,0 +1,9 @@
+{
+"intervals": [
+{
+"start": 0.48,
+"end": 141.60,
+"reason": "Continuous sponsor reads for SimplySafe, Minky Couture, and Nabisco."
+}
+]
+}

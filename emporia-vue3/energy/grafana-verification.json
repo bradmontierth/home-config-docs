@@ -1,0 +1,830 @@
+[
+  {
+    "uid": "aebnyja8531moa",
+    "panel": 16,
+    "title": "Tesla",
+    "range": "recent",
+    "error": null,
+    "rows": 37,
+    "seconds": 0.071
+  },
+  {
+    "uid": "aebnyja8531moa",
+    "panel": 12,
+    "title": "Panel total usage (outdoor heat pumps separate)",
+    "range": "recent",
+    "error": null,
+    "rows": 37,
+    "seconds": 0.074
+  },
+  {
+    "uid": "aebnyja8531moa",
+    "panel": 12,
+    "title": "Panel total usage (outdoor heat pumps separate)",
+    "range": "archive",
+    "error": null,
+    "rows": 745,
+    "seconds": 0.087
+  },
+  {
+    "uid": "aebnyja8531moa",
+    "panel": 15,
+    "title": "AC",
+    "range": "recent",
+    "error": null,
+    "rows": 37,
+    "seconds": 0.066
+  },
+  {
+    "uid": "aebnyja8531moa",
+    "panel": 16,
+    "title": "Tesla",
+    "range": "archive",
+    "error": null,
+    "rows": 745,
+    "seconds": 0.092
+  },
+  {
+    "uid": "aebnyja8531moa",
+    "panel": 15,
+    "title": "AC",
+    "range": "archive",
+    "error": null,
+    "rows": 745,
+    "seconds": 0.093
+  },
+  {
+    "uid": "aebnyja8531moa",
+    "panel": 18,
+    "title": "Heat Pump",
+    "range": "recent",
+    "error": null,
+    "rows": 120,
+    "seconds": 0.142
+  },
+  {
+    "uid": "aebnyja8531moa",
+    "panel": 18,
+    "title": "Heat Pump",
+    "range": "archive",
+    "error": null,
+    "rows": 745,
+    "seconds": 0.147
+  },
+  {
+    "uid": "aebnyja8531moa",
+    "panel": 14,
+    "title": "Furnace",
+    "range": "recent",
+    "error": null,
+    "rows": 37,
+    "seconds": 0.162
+  },
+  {
+    "uid": "aebnyja8531moa",
+    "panel": 17,
+    "title": "Dryer",
+    "range": "recent",
+    "error": null,
+    "rows": 37,
+    "seconds": 0.084
+  },
+  {
+    "uid": "aebnyja8531moa",
+    "panel": 14,
+    "title": "Furnace",
+    "range": "archive",
+    "error": null,
+    "rows": 745,
+    "seconds": 0.12
+  },
+  {
+    "uid": "aebnyja8531moa",
+    "panel": 17,
+    "title": "Dryer",
+    "range": "archive",
+    "error": null,
+    "rows": 745,
+    "seconds": 0.07
+  },
+  {
+    "uid": "aebnyja8531moa",
+    "panel": 13,
+    "title": "All Other ",
+    "range": "archive",
+    "error": null,
+    "rows": 745,
+    "seconds": 0.148
+  },
+  {
+    "uid": "aebnyja8531moa",
+    "panel": 13,
+    "title": "All Other ",
+    "range": "recent",
+    "error": null,
+    "rows": 37,
+    "seconds": 0.201
+  },
+  {
+    "uid": "aebnyja8531moa",
+    "panel": 3,
+    "title": "Breakdown",
+    "range": "recent",
+    "error": null,
+    "rows": 938,
+    "seconds": 0.247
+  },
+  {
+    "uid": "aebnyja8531moa",
+    "panel": 3,
+    "title": "Breakdown",
+    "range": "archive",
+    "error": null,
+    "rows": 745,
+    "seconds": 0.16
+  },
+  {
+    "uid": "aebnyja8531moa",
+    "panel": 10,
+    "title": "Usage by Hour",
+    "range": "recent",
+    "error": null,
+    "rows": 1,
+    "seconds": 0.072
+  },
+  {
+    "uid": "aebnyja8531moa",
+    "panel": 3,
+    "title": "Breakdown",
+    "range": "recent",
+    "error": null,
+    "rows": 37,
+    "seconds": 0.666
+  },
+  {
+    "uid": "aebnyja8531moa",
+    "panel": 3,
+    "title": "Breakdown",
+    "range": "archive",
+    "error": null,
+    "rows": 745,
+    "seconds": 0.55
+  },
+  {
+    "uid": "aebnyja8531moa",
+    "panel": 10,
+    "title": "Usage by Hour",
+    "range": "recent",
+    "error": null,
+    "rows": 3,
+    "seconds": 0.104
+  },
+  {
+    "uid": "aebnyja8531moa",
+    "panel": 10,
+    "title": "Usage by Hour",
+    "range": "archive",
+    "error": null,
+    "rows": 745,
+    "seconds": 0.098
+  },
+  {
+    "uid": "aebnyja8531moa",
+    "panel": 10,
+    "title": "Usage by Hour",
+    "range": "archive",
+    "error": null,
+    "rows": 745,
+    "seconds": 0.144
+  },
+  {
+    "uid": "aebnyja8531moa",
+    "panel": 5,
+    "title": "Panel total power (outdoor heat pumps separate)",
+    "range": "recent",
+    "error": null,
+    "rows": 37,
+    "seconds": 0.099
+  },
+  {
+    "uid": "aebnyja8531moa",
+    "panel": 5,
+    "title": "Panel total power (outdoor heat pumps separate)",
+    "range": "archive",
+    "error": null,
+    "rows": 745,
+    "seconds": 0.071
+  },
+  {
+    "uid": "aebnyjaoxeha8b",
+    "panel": 12,
+    "title": "Solar",
+    "range": "recent",
+    "error": null,
+    "rows": 1,
+    "seconds": 0.051
+  },
+  {
+    "uid": "aebnyjaoxeha8b",
+    "panel": 12,
+    "title": "Solar",
+    "range": "archive",
+    "error": null,
+    "rows": 32,
+    "seconds": 0.054
+  },
+  {
+    "uid": "aebnyjaoxeha8b",
+    "panel": 14,
+    "title": "Electricity",
+    "range": "recent",
+    "error": null,
+    "rows": 1,
+    "seconds": 0.073
+  },
+  {
+    "uid": "aebnyja8531moa",
+    "panel": 5,
+    "title": "Panel total power (outdoor heat pumps separate)",
+    "range": "recent",
+    "error": null,
+    "rows": 37,
+    "seconds": 0.435
+  },
+  {
+    "uid": "aebnyja8531moa",
+    "panel": 5,
+    "title": "Panel total power (outdoor heat pumps separate)",
+    "range": "archive",
+    "error": null,
+    "rows": 745,
+    "seconds": 0.505
+  },
+  {
+    "uid": "aebnyjaoxeha8b",
+    "panel": 14,
+    "title": "Electricity",
+    "range": "archive",
+    "error": null,
+    "rows": 32,
+    "seconds": 0.185
+  },
+  {
+    "uid": "aebnyjaoxeha8b",
+    "panel": 2,
+    "title": "Solar",
+    "range": "recent",
+    "error": null,
+    "rows": 1,
+    "seconds": 0.098
+  },
+  {
+    "uid": "aebnyjaoxeha8b",
+    "panel": 2,
+    "title": "Solar",
+    "range": "archive",
+    "error": null,
+    "rows": 32,
+    "seconds": 0.141
+  },
+  {
+    "uid": "aebnyjaoxeha8b",
+    "panel": 13,
+    "title": "Estimated net energy value",
+    "range": "archive",
+    "error": null,
+    "rows": 745,
+    "seconds": 0.388
+  },
+  {
+    "uid": "aebnyjaoxeha8b",
+    "panel": 13,
+    "title": "Estimated net energy value",
+    "range": "recent",
+    "error": null,
+    "rows": 63,
+    "seconds": 0.502
+  },
+  {
+    "uid": "aebnyjaoxeha8b",
+    "panel": 6,
+    "title": "Electricity",
+    "range": "recent",
+    "error": null,
+    "rows": 1,
+    "seconds": 0.122
+  },
+  {
+    "uid": "aebnyjaoxeha8b",
+    "panel": 10,
+    "title": "Estimated net energy value",
+    "range": "recent",
+    "error": null,
+    "rows": 1,
+    "seconds": 0.347
+  },
+  {
+    "uid": "aebnyjaoxeha8b",
+    "panel": 6,
+    "title": "Electricity",
+    "range": "archive",
+    "error": null,
+    "rows": 32,
+    "seconds": 0.147
+  },
+  {
+    "uid": "aebnyjaoxeha8b",
+    "panel": 10,
+    "title": "Estimated net energy value",
+    "range": "archive",
+    "error": null,
+    "rows": 32,
+    "seconds": 0.34
+  },
+  {
+    "uid": "aebnyjaoxeha8b",
+    "panel": 6,
+    "title": "Electricity",
+    "range": "recent",
+    "error": null,
+    "rows": 1,
+    "seconds": 0.124
+  },
+  {
+    "uid": "aebnyjaoxeha8b",
+    "panel": 6,
+    "title": "Electricity",
+    "range": "archive",
+    "error": null,
+    "rows": 32,
+    "seconds": 0.155
+  },
+  {
+    "uid": "cebnyj1w2a680f",
+    "panel": 12,
+    "title": "Current Usage",
+    "range": "recent",
+    "error": null,
+    "rows": 121,
+    "seconds": 0.197
+  },
+  {
+    "uid": "cebnyj1w2a680f",
+    "panel": 12,
+    "title": "Current Usage",
+    "range": "archive",
+    "error": null,
+    "rows": 745,
+    "seconds": 0.233
+  },
+  {
+    "uid": "cebnyj1w2a680f",
+    "panel": 19,
+    "title": "Voltage",
+    "range": "recent",
+    "error": null,
+    "rows": 37,
+    "seconds": 0.241
+  },
+  {
+    "uid": "cebnyj1w2a680f",
+    "panel": 19,
+    "title": "Voltage",
+    "range": "archive",
+    "error": null,
+    "rows": 745,
+    "seconds": 0.331
+  },
+  {
+    "uid": "cebnyj1w2a680f",
+    "panel": 20,
+    "title": "Frequency",
+    "range": "recent",
+    "error": null,
+    "rows": 37,
+    "seconds": 0.269
+  },
+  {
+    "uid": "cebnyj1w2a680f",
+    "panel": 20,
+    "title": "Frequency",
+    "range": "archive",
+    "error": null,
+    "rows": 745,
+    "seconds": 0.256
+  },
+  {
+    "uid": "cebnyj1w2a680f",
+    "panel": 23,
+    "title": "Panel Title",
+    "range": "archive",
+    "error": null,
+    "rows": 745,
+    "seconds": 0.231
+  },
+  {
+    "uid": "cebnyj1w2a680f",
+    "panel": 23,
+    "title": "Panel Title",
+    "range": "recent",
+    "error": null,
+    "rows": 937,
+    "seconds": 0.221
+  },
+  {
+    "uid": "cebnyj1w2a680f",
+    "panel": 23,
+    "title": "Panel Title",
+    "range": "recent",
+    "error": null,
+    "rows": 38,
+    "seconds": 0.331
+  },
+  {
+    "uid": "cebnyj1w2a680f",
+    "panel": 23,
+    "title": "Panel Title",
+    "range": "archive",
+    "error": null,
+    "rows": 745,
+    "seconds": 0.152
+  },
+  {
+    "uid": "cebnyj1w2a680f",
+    "panel": 3,
+    "title": "Breakdown",
+    "range": "recent",
+    "error": null,
+    "rows": 38,
+    "seconds": 0.215
+  },
+  {
+    "uid": "cebnyj1w2a680f",
+    "panel": 3,
+    "title": "Breakdown",
+    "range": "archive",
+    "error": null,
+    "rows": 745,
+    "seconds": 0.205
+  },
+  {
+    "uid": "cebnyj1w2a680f",
+    "panel": 3,
+    "title": "Breakdown",
+    "range": "recent",
+    "error": null,
+    "rows": 937,
+    "seconds": 0.201
+  },
+  {
+    "uid": "cebnyj1w2a680f",
+    "panel": 3,
+    "title": "Breakdown",
+    "range": "archive",
+    "error": null,
+    "rows": 745,
+    "seconds": 0.141
+  },
+  {
+    "uid": "cebnyj1w2a680f",
+    "panel": 22,
+    "title": "Estimated amps (power / nominal voltage)",
+    "range": "recent",
+    "error": null,
+    "rows": 121,
+    "seconds": 0.132
+  },
+  {
+    "uid": "cebnyj1w2a680f",
+    "panel": 22,
+    "title": "Estimated amps (power / nominal voltage)",
+    "range": "archive",
+    "error": null,
+    "rows": 745,
+    "seconds": 0.149
+  },
+  {
+    "uid": "cebnyj1w2a680f",
+    "panel": 22,
+    "title": "Estimated amps (power / nominal voltage)",
+    "range": "recent",
+    "error": null,
+    "rows": 38,
+    "seconds": 0.24
+  },
+  {
+    "uid": "cebnyj1w2a680f",
+    "panel": 22,
+    "title": "Estimated amps (power / nominal voltage)",
+    "range": "archive",
+    "error": null,
+    "rows": 745,
+    "seconds": 0.23
+  },
+  {
+    "uid": "cebnyj1w2a680f",
+    "panel": 5,
+    "title": "Watts, Volts, and Frequency",
+    "range": "recent",
+    "error": null,
+    "rows": 38,
+    "seconds": 0.24
+  },
+  {
+    "uid": "cebnyj1w2a680f",
+    "panel": 21,
+    "title": "Volts and Solar",
+    "range": "recent",
+    "error": null,
+    "rows": 38,
+    "seconds": 0.183
+  },
+  {
+    "uid": "cebnyj1w2a680f",
+    "panel": 5,
+    "title": "Watts, Volts, and Frequency",
+    "range": "archive",
+    "error": null,
+    "rows": 745,
+    "seconds": 0.211
+  },
+  {
+    "uid": "cebnyj1w2a680f",
+    "panel": 21,
+    "title": "Volts and Solar",
+    "range": "archive",
+    "error": null,
+    "rows": 745,
+    "seconds": 0.215
+  },
+  {
+    "uid": "debnyj9w02t4wa",
+    "panel": 2,
+    "title": "Total Solar Generated",
+    "range": "recent",
+    "error": null,
+    "rows": 120,
+    "seconds": 0.05
+  },
+  {
+    "uid": "cebnyj1w2a680f",
+    "panel": 21,
+    "title": "Volts and Solar",
+    "range": "archive",
+    "error": null,
+    "rows": 745,
+    "seconds": 0.194
+  },
+  {
+    "uid": "debnyj9w02t4wa",
+    "panel": 2,
+    "title": "Total Solar Generated",
+    "range": "archive",
+    "error": null,
+    "rows": 745,
+    "seconds": 0.055
+  },
+  {
+    "uid": "cebnyj1w2a680f",
+    "panel": 21,
+    "title": "Volts and Solar",
+    "range": "recent",
+    "error": null,
+    "rows": 121,
+    "seconds": 0.225
+  },
+  {
+    "uid": "debnyj9w02t4wa",
+    "panel": 5,
+    "title": "Current Solar Power",
+    "range": "archive",
+    "error": null,
+    "rows": 745,
+    "seconds": 0.152
+  },
+  {
+    "uid": "debnyj9w02t4wa",
+    "panel": 8,
+    "title": "Current Usage",
+    "range": "recent",
+    "error": null,
+    "rows": 937,
+    "seconds": 0.179
+  },
+  {
+    "uid": "debnyj9w02t4wa",
+    "panel": 5,
+    "title": "Current Solar Power",
+    "range": "recent",
+    "error": null,
+    "rows": 937,
+    "seconds": 0.253
+  },
+  {
+    "uid": "debnyj9w02t4wa",
+    "panel": 8,
+    "title": "Current Usage",
+    "range": "archive",
+    "error": null,
+    "rows": 745,
+    "seconds": 0.163
+  },
+  {
+    "uid": "debnyj9w02t4wa",
+    "panel": 9,
+    "title": "Current To Grid (From Grid)",
+    "range": "recent",
+    "error": null,
+    "rows": 937,
+    "seconds": 0.138
+  },
+  {
+    "uid": "debnyj9w02t4wa",
+    "panel": 6,
+    "title": "Usage and Solar Generation",
+    "range": "recent",
+    "error": null,
+    "rows": 937,
+    "seconds": 0.211
+  },
+  {
+    "uid": "debnyj9w02t4wa",
+    "panel": 6,
+    "title": "Usage and Solar Generation",
+    "range": "archive",
+    "error": null,
+    "rows": 745,
+    "seconds": 0.217
+  },
+  {
+    "uid": "debnyj9w02t4wa",
+    "panel": 9,
+    "title": "Current To Grid (From Grid)",
+    "range": "archive",
+    "error": null,
+    "rows": 745,
+    "seconds": 0.301
+  },
+  {
+    "uid": "debnyj9w02t4wa",
+    "panel": 4,
+    "title": "Solar by Day",
+    "range": "recent",
+    "error": null,
+    "rows": 120,
+    "seconds": 0.049
+  },
+  {
+    "uid": "debnyj9w02t4wa",
+    "panel": 4,
+    "title": "Solar by Day",
+    "range": "archive",
+    "error": null,
+    "rows": 745,
+    "seconds": 0.05
+  },
+  {
+    "uid": "debnyj9w02t4wa",
+    "panel": 6,
+    "title": "Usage and Solar Generation",
+    "range": "recent",
+    "error": null,
+    "rows": 937,
+    "seconds": 0.131
+  },
+  {
+    "uid": "debnyj9w02t4wa",
+    "panel": 6,
+    "title": "Usage and Solar Generation",
+    "range": "archive",
+    "error": null,
+    "rows": 745,
+    "seconds": 0.129
+  },
+  {
+    "uid": "debnyj9w02t4wa",
+    "panel": 10,
+    "title": "Estimated net energy value",
+    "range": "recent",
+    "error": null,
+    "rows": 1,
+    "seconds": 0.153
+  },
+  {
+    "uid": "debnyj9w02t4wa",
+    "panel": 10,
+    "title": "Estimated net energy value",
+    "range": "archive",
+    "error": null,
+    "rows": 1,
+    "seconds": 0.157
+  },
+  {
+    "uid": "debnyj9w02t4wa",
+    "panel": 11,
+    "title": "Solar Value",
+    "range": "recent",
+    "error": null,
+    "rows": 1,
+    "seconds": 0.176
+  },
+  {
+    "uid": "debnyj9w02t4wa",
+    "panel": 11,
+    "title": "Solar Value",
+    "range": "archive",
+    "error": null,
+    "rows": 1,
+    "seconds": 0.148
+  },
+  {
+    "uid": "debnyj9w02t4wa",
+    "panel": 12,
+    "title": "Estimated household energy cost",
+    "range": "recent",
+    "error": null,
+    "rows": 1,
+    "seconds": 0.138
+  },
+  {
+    "uid": "debnyj9w02t4wa",
+    "panel": 12,
+    "title": "Estimated household energy cost",
+    "range": "archive",
+    "error": null,
+    "rows": 1,
+    "seconds": 0.136
+  },
+  {
+    "uid": "cebnyj6gvkzk0a",
+    "panel": 8,
+    "title": "AC Cost",
+    "range": "recent",
+    "error": null,
+    "rows": 38,
+    "seconds": 0.118
+  },
+  {
+    "uid": "debnyj9w02t4wa",
+    "panel": 13,
+    "title": "Direct solar / load overlap (estimate)",
+    "range": "archive",
+    "error": null,
+    "rows": 1,
+    "seconds": 0.217
+  },
+  {
+    "uid": "debnyj9w02t4wa",
+    "panel": 13,
+    "title": "Direct solar / load overlap (estimate)",
+    "range": "recent",
+    "error": null,
+    "rows": 1,
+    "seconds": 0.221
+  },
+  {
+    "uid": "cebnyj6gvkzk0a",
+    "panel": 8,
+    "title": "AC Cost",
+    "range": "archive",
+    "error": null,
+    "rows": 745,
+    "seconds": 0.092
+  },
+  {
+    "uid": "cebnyj6gvkzk0a",
+    "panel": 9,
+    "title": "Blower Cost",
+    "range": "recent",
+    "error": null,
+    "rows": 38,
+    "seconds": 0.064
+  },
+  {
+    "uid": "cebnyj6gvkzk0a",
+    "panel": 9,
+    "title": "Blower Cost",
+    "range": "archive",
+    "error": null,
+    "rows": 745,
+    "seconds": 0.068
+  },
+  {
+    "uid": "cebnyj6gvkzk0a",
+    "panel": 10,
+    "title": "Gas + AC Cost",
+    "range": "recent",
+    "error": null,
+    "rows": 1,
+    "seconds": 0.063
+  },
+  {
+    "uid": "cebnyj6gvkzk0a",
+    "panel": 10,
+    "title": "Gas + AC Cost",
+    "range": "archive",
+    "error": null,
+    "rows": 2,
+    "seconds": 0.06
+  }
+]

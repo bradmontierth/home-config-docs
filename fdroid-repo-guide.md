@@ -91,6 +91,14 @@ Served names (same as before): `tts-router-latest.apk`, `home-agent-latest.apk`,
 `antennapod-v2-latest.apk`, `tempo-latest.apk`, `voice-notes-latest.apk`,
 `trainer-max-latest.apk`, `android-stt-latest.apk`.
 
+**Brand-new app (first publish):** since 2026-10-21 publish.sh creates the
+metadata skeleton itself (Name/Summary = the APK label; edit afterwards). Before
+that it did NOT list a new package by itself. Manual recipe: create `/home/pi/fdroid/metadata/<package>.yml` (copy
+`com.local.grafanamobile.yml`; set Name + Summary), then rerun `fdroid update`
+with publish.sh's JAVA_HOME and rsync `repo/` to `/home/pi/apks/fdroid/repo/`
+(or just publish a fresh build). Missed for Media Center on 2026-10-11: the
+APK was in repo/ but absent from index-v2.json until the yml existed.
+
 ## Phone Enrollment (One-Time Per Phone)
 
 1. Install **F-Droid Basic** (from f-droid.org, or sideload its APK — it can

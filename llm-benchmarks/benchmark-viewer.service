@@ -1,0 +1,16 @@
+[Unit]
+Description=GX10 workload benchmark viewer
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/pi/home_config/llm-benchmarks
+ExecStart=/usr/bin/python3 /home/pi/home_config/llm-benchmarks/viewer/report_server.py --host 0.0.0.0 --port 8794
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=default.target

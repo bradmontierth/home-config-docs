@@ -16,7 +16,8 @@ from dataclasses import dataclass
 
 import httpx
 
-from . import config, timing
+from . import config, timing, quality
+from .intent_schema import RESPONSE_FORMAT
 
 log = logging.getLogger("orchestrator.clients")
 
@@ -35,11 +36,13 @@ async def _asr_request(url: str, wav_bytes: bytes,
     """One ASR call. Returns (text, model label from the response or None,
     wall ms). Raises on HTTP/connection failure."""
     t0 = time.perf_counter()
+    obs = quality.context.get() if url == config.FINAL_ASR_URL else None
     async with httpx.AsyncClient(timeout=30) as client:
         r = await client.post(
             url,
             params={"chunk_seconds": 300, "context_seconds": 2,
-                    "client": client_name or config.ASR_CLIENT},
+                    "client": client_name or config.ASR_CLIENT,
+                    **({"confidence": "true"} if obs is not None else {})},
             content=wav_bytes,
             headers={"Content-Type": "audio/wav"},
         )
@@ -47,6 +50,8 @@ async def _asr_request(url: str, wav_bytes: bytes,
     payload = r.json()
     if isinstance(payload, dict) and payload.get("ok") is False:
         raise RuntimeError(f"asr {url} refused: {payload.get('error')}")
+    if obs is not None and isinstance(payload, dict):
+        quality.complete(obs, payload, round((time.perf_counter() - t0) * 1000))
     model = payload.get("model") if isinstance(payload, dict) else None
     return (_clean_transcript(payload if isinstance(payload, dict) else {}),
             str(model) if model else None,
@@ -252,6 +257,7 @@ async def parse_intent_raw(messages: list[dict]) -> str:
         "temperature": 0,
         "max_tokens": config.LLM_MAX_TOKENS,
         "chat_template_kwargs": {"enable_thinking": False},
+        "response_format": RESPONSE_FORMAT,
     }
     with timing.stage("classify"):
         async with httpx.AsyncClient(timeout=30) as client:

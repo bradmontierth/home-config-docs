@@ -24,7 +24,10 @@ APK links are under the `APK Downloads` section.
 | STT Keyboard | `http://192.168.10.217:3000/apk/android-stt-latest.apk` | `/home/pi/apks/android-stt-latest.apk` |
 | EV Planner | `http://192.168.10.217:3000/apk/ev-planner-latest.apk` | `/home/pi/apks/ev-planner-latest.apk` |
 | Lookout | `http://192.168.10.217:3000/apk/lookout-latest.apk` | `/home/pi/apks/lookout-latest.apk` |
+| SMS Gate (Messages fork) | `http://192.168.10.217:3000/apk/sms-gate-latest.apk` | `/home/pi/apks/sms-gate-latest.apk` |
 | Dashboards (Grafana Mobile) | `http://192.168.10.217:3000/apk/grafana-mobile-latest.apk` | `/home/pi/apks/grafana-mobile-latest.apk` |
+| Roaster | `http://192.168.10.217:3000/apk/roaster-latest.apk` | `/home/pi/apks/roaster-latest.apk` |
+| Labels (MakeID printer) | `http://192.168.10.217:3000/apk/labels-latest.apk` | `/home/pi/apks/labels-latest.apk` |
 | Windows Transcribe | `http://192.168.10.217:3000/apk/windows-transcribe-latest.exe` | `/home/pi/apks/windows-transcribe-latest.exe` |
 
 Publish APKs with the F-Droid publish script (preferred — it also feeds the
@@ -59,6 +62,7 @@ Current source APKs for the service-backed apps:
 ```text
 /home/pi/tts-router/android/app/build/outputs/apk/debug/app-debug.apk
 /home/pi/home_config/home-agent-android/app/build/outputs/apk/debug/app-debug.apk
+/home/pi/sms-gate/app/build/outputs/apk/foss/debug/sms-gate-*-foss-debug.apk   (build recipe: /home/pi/sms-gate/README.md, JDK 21, assembleFossDebug only)
 ```
 
 ## Shared Android Toolchain
@@ -438,6 +442,46 @@ systemd-run --user --scope -p MemoryMax=3G -p MemorySwapMax=1G \
 ```
 
 Page changes need no rebuild: the app loads the live page from the server.
+
+## Roaster Build And Publish
+
+Roaster is a WebView shell around the coffee-roaster page on `:8806`. Screen stays
+on while visible, Back walks WebView history, the page's bag-photo file input gets
+a camera-or-gallery chooser (CAMERA asked at first use, FileProvider in
+`cache/photos`), and a Retry screen shows when the Beelink is unreachable.
+Targets SDK 35. Builds the **release** variant (signed with the shared key above,
+lintVital off) — note the different output path.
+
+Repo: `/home/pi/roaster-android` (application ID `com.local.roaster`, JDK 17, same
+environment block as STT Keyboard; local git only, no remote). F-Droid metadata:
+`/home/pi/fdroid/metadata/com.local.roaster.yml`.
+
+```bash
+cd /home/pi/roaster-android
+systemd-run --user --scope -p MemoryMax=3G -p MemorySwapMax=1G \
+  ./gradlew --no-daemon --max-workers=1 :app:assembleRelease
+/home/pi/fdroid/publish.sh app/build/outputs/apk/release/app-release.apk roaster-latest.apk
+```
+
+Page changes need no rebuild: the app loads the live page from the server.
+
+## Labels (MakeID Printer) Build And Publish
+
+Labels is a native app (no WebView) that prints on the MakeID S1 Pro label printer
+over BLE, replacing the vendor "MakeID Label" app. Protocol and Python driver live
+beside it (`/home/pi/makeid-printer/PROTOCOL.md`, `makeid.py`). Targets SDK 35.
+Builds the **release** variant like Roaster.
+
+Repo: `/home/pi/makeid-printer/android` (application ID `com.local.labelprinter`, JDK 17,
+same environment block as STT Keyboard; local git only, no remote). F-Droid metadata:
+`/home/pi/fdroid/metadata/com.local.labelprinter.yml`.
+
+```bash
+cd /home/pi/makeid-printer/android
+systemd-run --user --scope -p MemoryMax=3G -p MemorySwapMax=1G \
+  ./gradlew --no-daemon --max-workers=1 :app:assembleRelease
+/home/pi/fdroid/publish.sh app/build/outputs/apk/release/app-release.apk labels-latest.apk
+```
 
 ## Signing Keys
 

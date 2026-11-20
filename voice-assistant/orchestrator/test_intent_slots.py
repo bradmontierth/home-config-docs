@@ -154,6 +154,15 @@ class SpokenDurationTest(unittest.TestCase):
     def test_the_live_answer(self):
         self.assertEqual(intent.spoken_duration("Eight minutes."), 480)
 
+    def test_repeated_duration_is_not_summed(self):
+        # Live 2026-10-03: "Ten minutes. Ten minutes." set a 20-minute timer.
+        self.assertEqual(intent.spoken_duration("Ten minutes. Ten minutes."), 600)
+        self.assertEqual(intent.spoken_duration("one hour thirty minutes"), 5400)
+        self.assertEqual(intent.spoken_duration("two minutes ten seconds"), 130)
+        for text in ("ten minutes fifteen minutes", "ten seconds one minute"):
+            with self.subTest(text=text):
+                self.assertIsNone(intent.spoken_duration(text))
+
     def test_word_numbers(self):
         cases = {
             "five minutes": 300, "twenty minutes": 1200,
@@ -306,8 +315,9 @@ class DeterministicIntentTest(unittest.TestCase):
             "set a pasta timer for a while",
             "set a pasta timer for eight",
             # Adjustments and other timer verbs are untouched.
+            # ("change the pasta timer to ten minutes" is now a deterministic
+            # set-to; see test_timer_set_to_forms.)
             "add eight minutes to the pasta timer",
-            "change the pasta timer to ten minutes",
         ):
             with self.subTest(text=text):
                 self.assertIsNone(intent.fast_parse(text))
@@ -344,6 +354,29 @@ class DeterministicIntentTest(unittest.TestCase):
                 parsed = intent.fast_parse_timer_rename(text)
                 self.assertEqual(parsed["intent"], "timer_rename")
                 self.assertIsNone(parsed["new_label"])
+
+    def test_timer_set_to_forms(self):
+        cases = {
+            # Live 2026-10-03: this one renamed the timer "10 minutes".
+            "Change the timer to be 10 minutes.": (None, 600),
+            "change the timer to ten minutes": (None, 600),
+            "make the rice timer five minutes": ("rice", 300),
+            "modify the timer to be a 10": (None, 600),
+            "reset the timer to an hour and a half": (None, 5400),
+        }
+        for text, (label, seconds) in cases.items():
+            with self.subTest(text=text):
+                parsed = intent.fast_parse_timer_set_to(text)
+                self.assertEqual(parsed["intent"], "timer_adjust")
+                self.assertTrue(parsed["set_remaining"])
+                self.assertEqual(parsed["label"], label)
+                self.assertEqual(parsed["duration_seconds"], seconds)
+                self.assertEqual(intent.fast_parse(text), parsed)
+        for text in ("change the timer to be called pasta",
+                     "change the timer to be a", "set the timer for 10 minutes",
+                     "change the timer to be ten minutes and pasta"):
+            with self.subTest(text=text):
+                self.assertIsNone(intent.fast_parse_timer_set_to(text))
 
     def test_ambiguous_timer_changes_are_not_renames(self):
         for text in ("change the timer to ten minutes",

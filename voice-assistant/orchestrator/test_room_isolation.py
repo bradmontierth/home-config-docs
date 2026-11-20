@@ -8,7 +8,25 @@ import copy
 import unittest
 from unittest.mock import AsyncMock, patch
 
-from . import app, ask, config, intent
+from . import app, ask, config, events, intent
+
+
+class DisplayDomainTest(unittest.IsolatedAsyncioTestCase):
+    def test_familyroom_shares_the_kitchen_display_but_other_rooms_do_not(self):
+        self.assertTrue(events.on_dashboard("kitchen"))
+        self.assertTrue(events.on_dashboard("familyroom"))
+        self.assertFalse(events.on_dashboard("master"))
+        self.assertFalse(events.on_dashboard("simon"))
+
+    async def test_familyroom_transcript_and_response_reach_the_display(self):
+        with patch.object(app.events, "emit", new=AsyncMock()) as emit:
+            await app._turn_event("transcript", sat="familyroom", text="set a timer")
+            await app._turn_event("response", sat="familyroom", text="Timer set")
+            await app._turn_event("transcript", sat="simon", text="lights off")
+
+        self.assertEqual(emit.await_count, 2)
+        self.assertEqual(emit.await_args_list[0].args, ("transcript",))
+        self.assertEqual(emit.await_args_list[1].args, ("response",))
 
 
 class SessionRoomIsolationTest(unittest.TestCase):

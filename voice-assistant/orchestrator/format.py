@@ -130,9 +130,26 @@ def _spoken_text(item: dict) -> str:
     return text
 
 
+def humanize_repeat(repeat: str, due_at: str | None) -> str:
+    """Recurring reminder tail: ' every Wednesday at 7:00 PM', plus ', starting
+    tonight' when the first one is today — 'every Wednesday' said on a
+    Wednesday afternoon is ambiguous about whether tonight counts."""
+    try:
+        dt = datetime.fromisoformat(due_at or "")
+    except ValueError:
+        return f" {repeat}"
+    clock = dt.strftime("%I:%M %p").lstrip("0")
+    tail = ""
+    if dt.date() == datetime.now(dt.tzinfo).date():
+        tail = ", starting tonight" if dt.hour >= 17 else ", starting today"
+    return f" {repeat} at {clock}{tail}"
+
+
 def _item_phrase(item: dict) -> str:
     text = _spoken_text(item)
     if item.get("type") == "reminder":
+        if item.get("repeat"):
+            return text + humanize_repeat(item["repeat"], item.get("due_at"))
         return text + humanize_due(item.get("due_at"))
     return text
 
@@ -265,10 +282,16 @@ def confirm_play(sel: dict) -> str:
         return f"Playing the album {name}."
     if kind == "playlist":
         return f"Shuffling the playlist {name}."
+    # Name the version when MA keeps it out of the title: eight library
+    # tracks are all "Spooky Scary Skeletons", and "Playing Spooky Scary
+    # Skeletons by EDM Bot" can't tell you whether you got Voldo or DRYPAPER.
+    version = (sel.get("version") or "").strip()
+    if version and version.lower() not in (name or "").lower():
+        name = f"{name}, {version},"
     artist = sel.get("artist")
     if artist:
         return f"Playing {name} by {artist}."
-    return f"Playing {name}."
+    return f"Playing {name.rstrip(',')}."
 
 
 _MUSIC_ACK = {

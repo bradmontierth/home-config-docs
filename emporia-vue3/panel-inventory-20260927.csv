@@ -1,0 +1,31 @@
+side,printed_breaker_number,panel_label_or_actual_load,reported_ct_coverage,vue_input,mapping_confidence,notes
+left,1/3,AC,Yes; lower pole described,3,high; breaker pair inferred from label order,"2-pole; exact CT pole inferred as 3, not verified"
+left,5/7,Range / Oven,Yes; lower pole described,4,high; breaker pair inferred from label order,"2-pole; exact CT pole inferred as 7, not verified"
+left,9,Fridge,Yes; fifth position,1,confirmed CT identity; panel label user-reported,
+left,11,Kitchen GFCI,No; sixth position,,unmapped,
+left,13,Microwave,Yes; seventh position,5,high; user-reported microwave startup matched,Input 5 rose to ~1690 W during manual microwave test.
+left,15,Washer,Yes; eighth position,6,high; manual bidet event and user-confirmed shared washer circuit,Bidet heater activation on input 6 around 16:11. Laundry GFCI vacuum also input 6 at 16:19; exact printed breaker association remains unverified.
+left,17,Bath GFCI,Yes; ninth position,,unmapped,
+left,19,Upstairs Bath GFCI,No; tenth position,,unmapped,
+left,21,Furnace,Yes; eleventh position,7,high CT identity; panel label user-reported,
+left,23,Water Heater,Reported present; hard to trace,8,high; controlled hot-water draw and heater activation match,"Input 8 starts 16:25:08, settles ~180 W; panel breaker 23 per user label."
+left,25,Basement Bath GFCI,Basement vanity confirmed monitored,15,high basement vanity identity; printed breaker association unverified,Input 15 two-stage vanity test ~17:02. Basement bidet sharing not verified; bottom-left relocation may invalidate exact printed breaker number.
+left,27,Dishwasher,User confirms added CT after previously skipping circuit,10,high event timing; moved port confirmation pending,Only mapped after relocation around 16:02-16:05; earlier input 10 data was UPS.
+right,2/4,Dryer,Yes; top double pole,2,high CT identity; pair inferred from label order,Exact measured pole unknown
+right,6,Master Bed / Bath,Yes; third position,14,high; second vacuum test matched,"Input 14 vacuum pulse 16:10:47-53. Closet vacuum also input 14 at 16:17; bidet is input 6, so do not infer all bath loads from printed name."
+right,8,Two Beds / Smoke,Not specified,,unmapped,"Kids-bedroom vacuum pulse appears on Mains A around 16:10:20-24 with no comparable branch spike. Tested outlet likely unmonitored; exact breaker identity remains assumed from label, not verified."
+right,10,Entry / Study (Office),Yes; fifth position,13,high; manual office startup matches,Laptop/screens change at 16:06. Light-off not independently isolated.
+right,12,Kitchen / Garage,Uncertain; sixth vs seventh position,,unmapped,
+right,14,Bath / Hall / Laundry,Uncertain; sixth vs seventh position,,unmapped,
+right,16,Family Room,Probably no; eighth position,,unmapped,
+right,18,Garage GFCI (printed),Ninth position reported CT on Claire Mini double pole,,printed label may be stale,Claire Mini likely occupies this region; exact pair unverified
+right,20,House GFCI (printed),Uncertain,,printed label may be stale,May be affected by Claire Mini relocation; do not infer current circuit
+right,22,Basement Bedroom,Uncertain,,unmapped,
+right,24,Basement Family Room,Uncertain; third-from-bottom single reported,,unmapped,Bottom-relative counting ambiguous because EV spans two positions
+right,26,Basement Bedrooms,Uncertain; third-from-bottom single reported,,unmapped,Bottom-relative counting ambiguous because EV spans two positions
+right,28 (+ second pole unspecified),EV,Yes; bottom 50 A double pole,11,high; manual EV start and 6 A current match,Input 11; second printed pole number not supplied.
+right,Unverified; around ninth position,Claire Mini,Yes; 15 A double pole,12,high; user mini-split toggle matches input 12,Exact breaker pair still unverified; reworked right-side area.
+left,Bottom tandem; exact position unverified,Two individual 15 A circuits,User believes both have CTs,,unmapped,One relocated from right; actual labels unknown; shared leg per user
+unknown,unknown,UPS / Compute and Network,Previously monitored; appears CT moved to dishwasher,,historical input 10; current coverage uncertain,"Input 10 lost UPS-like load around 16:02, dishwasher event at 16:05:04. Await moved-port confirmation."
+unknown,Unknown,Loft / Kids Bathroom,Confirmed by two vacuum tests,16,high load identity; breaker unknown,Loft 16:17:57-16:18:02 and kids bath 16:18:39-43. Smoke detectors not verified; earlier kids-bedroom outlet is distinct.
+unknown,Unknown,Garage / Big Door Opener,Confirmed by garage door event,9,high load identity; exact breaker unknown,User HA door-open timestamp 16:31:51 matches input 9 step 16:31:52. Other garage equipment and lights not individually verified.

@@ -1,0 +1,1 @@
+{"intervals":[{"start":641.36,"end":747.04,"reason":"NordVPN sponsor read with setup, pitch, and CTA."}]}

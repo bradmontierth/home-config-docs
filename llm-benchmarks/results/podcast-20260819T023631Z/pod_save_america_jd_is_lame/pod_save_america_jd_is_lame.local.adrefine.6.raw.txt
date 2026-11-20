@@ -1,0 +1,1 @@
+{"intervals":[{"start": 2860.24, "end": 2976.64, "reason": "ZipRecruiter and Minky Couture sponsor reads."}]}

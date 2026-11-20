@@ -1,0 +1,5 @@
+Isolated connection-local temporary tables; production data unchanged.
+AverageValue	WattHours	ObservedSeconds
+600.000000	20.000000000	120
+COUNT(*)	SUM(WattHours)	SUM(ObservedSeconds)
+1	20.000000000	120

@@ -58,10 +58,13 @@ async def ensure_fillers() -> None:
         _filler_urls.append(url)
 
 
-async def _play_filler() -> None:
+async def _play_filler(sat: str | None) -> None:
     """Best-effort: tell the satellite to speak a random filler right now,
     in parallel with the smart-model round trip. Never raises."""
-    if not config.ASK_FILLER or not config.SATELLITE_SPEAK_URL:
+    if not config.ASK_FILLER:
+        return
+    speak_url = zones.speak_url_for(sat)
+    if not speak_url:
         return
     if not _filler_urls:
         await ensure_fillers()          # TTS was down at startup — retry now
@@ -70,7 +73,7 @@ async def _play_filler() -> None:
     try:
         async with httpx.AsyncClient(timeout=4) as client:
             await client.post(
-                config.SATELLITE_SPEAK_URL,
+                speak_url,
                 json={"url": random.choice(_filler_urls)},
             )
     except Exception as exc:  # noqa: BLE001
@@ -78,13 +81,17 @@ async def _play_filler() -> None:
 
 
 def _should_play_legacy_filler(sat: str | None) -> bool:
-    """The legacy filler speaker is kitchen-only.
+    """Whether this local-speaker satellite has an explicit speak endpoint.
 
     Room-routed satellites deliver their eventual response through Voice
-    Broadcast, but this filler still uses the old kitchen `/speak` endpoint.
-    Suppress it for every routed satellite so an ask cannot leak across rooms.
+    Broadcast and do not use local filler. Unknown satellites also suppress it
+    so they cannot fall through to the legacy kitchen endpoint.
     """
-    return zones.route_for(sat) is None
+    return (
+        config.ASK_FILLER
+        and zones.route_for(sat) is None
+        and zones.speak_url_for(sat) is not None
+    )
 
 
 # --- per-satellite conversation history ------------------------------------
@@ -283,11 +290,10 @@ async def handle_ask(query: str, sat: str | None = None) -> dict:
     if not query:
         return {"response": "I didn't catch the question.", "full": "", "ok": False}
 
-    # The legacy filler endpoint is the kitchen satellite. Never use it for a
-    # zone-routed room: that would make a Simon question speak in the kitchen
-    # before its actual answer correctly arrives in Simon's room.
+    # Use the asking satellite's own endpoint. Zone-routed and unknown rooms
+    # stay silent rather than leaking the filler through the kitchen default.
     if _should_play_legacy_filler(sat):
-        asyncio.create_task(_play_filler())
+        asyncio.create_task(_play_filler(sat))
 
     messages = [
         {"role": "system", "content": _system(sat)},

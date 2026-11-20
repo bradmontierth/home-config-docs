@@ -12,6 +12,9 @@ What it adds over the raw Breeze API:
   * every piece's median pitch is logged next to the voice's own (`pitch_hz` +-
     `pitch_tol_hz` in <voice>.json). LOG ONLY since 2026-11-12: pitch was half of
     all re-renders (17 of 33 since 10-31) and a re-render stalls real-time playback
+  * a voice json may set `tempo` (e.g. 0.92): applied after verification with ffmpeg
+    atempo (pitch kept). A clone reads at its reference clip's pace through a given
+    model; this is the per-voice correction (Ming reads calm_explainer_f ~10% fast)
   * callers can pass `deadline_s`: a re-render that would land after it is skipped
     and the first take is used (a repeated phrase beats 30 s of silence)
 """
@@ -87,6 +90,15 @@ def trim(pcm):
     first = next((i for i, s in enumerate(a) if abs(s) > SILENCE), 0)
     last = next((i for i in range(len(a) - 1, -1, -1) if abs(a[i]) > SILENCE), len(a) - 1)
     return a[max(first - keep, 0): last + keep].tobytes()
+
+
+def apply_tempo(pcm, tempo):
+    if not tempo or abs(float(tempo) - 1.0) < 1e-3:
+        return pcm
+    return subprocess.run(
+        ["ffmpeg", "-loglevel", "error", "-f", "s16le", "-ar", str(RATE), "-ac", "1", "-i", "pipe:0",
+         "-af", f"atempo={float(tempo)}", "-f", "s16le", "-ar", str(RATE), "-ac", "1", "pipe:1"],
+        input=pcm, capture_output=True, check=True).stdout
 
 
 def wav_bytes(pcm, rate=RATE):
@@ -258,7 +270,11 @@ def health():
         ok = False
     if not ok:
         raise HTTPException(status_code=503, detail="Breeze backend is not ready")
-    return {"status": "ok", "batch": True, "voices": sorted(p.stem for p in VOICES_DIR.glob("*.wav")), "default_voice": DEFAULT_VOICE}
+    speed = {}  # how long a group takes, for the gateway's play-through estimates (absent = its Breeze defaults)
+    if os.environ.get("GROUP_FACTOR_JSON"):
+        speed = {"group_factor": json.loads(os.environ["GROUP_FACTOR_JSON"]),
+                 "group_overhead_s": float(os.environ.get("GROUP_OVERHEAD_S", "0"))}
+    return speed | {"status": "ok", "batch": True, "backend": os.environ.get("BACKEND_NAME", "breeze"), "voices": sorted(p.stem for p in VOICES_DIR.glob("*.wav")), "default_voice": DEFAULT_VOICE}
 
 
 @app.post("/v1/audio/speech")
@@ -283,6 +299,7 @@ async def speech(request: Request):
                 audio += b"\x00" * (int(SPLICE_PAUSE_S * RATE) * 2)
             audio += pcm
             logs.append(log)
+    audio = apply_tempo(bytes(audio), voice[3].get("tempo"))
     seconds = len(audio) / 2 / RATE
     print(json.dumps({"voice": voice[0], "chars": len(text), "audio_s": round(seconds, 1),
                       "wall_s": round(time.time() - t0, 1), "pieces": logs}), flush=True)
@@ -323,6 +340,7 @@ async def speech_batch(request: Request):
                     results.append((bytes(audio), {"pieces": logs}))
         except Exception as exc:
             raise HTTPException(status_code=502, detail=f"render failed: {exc}") from exc
+    results = [(apply_tempo(pcm, voice[3].get("tempo")), log) for pcm, log in results]
     seconds = [len(pcm) / 2 / RATE for pcm, _ in results]
     print(json.dumps({"voice": voice[0], "batch": len(inputs), "deadline_s": body.get("deadline_s"), "chars": [len(t) for t in inputs],
                       "audio_s": [round(s, 1) for s in seconds], "wall_s": round(time.time() - t0, 1),

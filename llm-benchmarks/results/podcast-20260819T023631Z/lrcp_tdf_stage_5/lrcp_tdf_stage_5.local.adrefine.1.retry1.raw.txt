@@ -1,0 +1,1 @@
+{"intervals":[{"start": 37.92, "end": 86.0, "reason": "Sponsor reads for Acast and Guardian Football Weekly."}]}

@@ -1,0 +1,1 @@
+{"intervals":[{"start": 2284.56, "end": 2320.24, "reason": "Wealthfront sponsor read with legal disclaimers."},{"start": 2320.24, "end": 2381.74, "reason": "ACAST promo and Nutrition Diva podcast recommendation."}]}

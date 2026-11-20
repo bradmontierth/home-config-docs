@@ -206,6 +206,44 @@ kitchen shades have reported `supported_features: 15` (open|close|**set_position
 - **Open:** `blind_glare` still closes fully. Brad is finding the position he
   likes by voice first; bake that number into the glare button afterward.
 
+### Sliding-door percentage repair — deployed 2026-09-14
+
+Recorded failures on 2026-08-22 included "close the sliding door twenty
+percent", "close the sliding window twenty percent", and "close the large
+sliding window, 20%". The grammar required `to`/`at`; the percentage target
+table also lacked `sliding window`, although the button matcher accepted it
+fuzzily. On 2026-08-20, "close the sliding door 20" fell through to the full
+close button, losing the requested amount.
+
+- `intent.fast_parse_cover_level` now accepts a trailing level without
+  `to`/`at`, still requiring an exact curated target and a whole number 0–100.
+  "Set the sliding door 50 percent" sets 50% open; "close the sliding window
+  twenty percent" sets 80% open, preserving the existing verb convention.
+- `covers.py` adds sliding-window, large-sliding-window, and sliding-door
+  shade/blinds aliases. These remain separate from the phone button editor.
+- Unsupported position requests bypass the classifier and ask for a final
+  position. Relative `by 20` requests remain unsupported: no current-position
+  read or relative movement is inferred. Signed/decimal numeric input is
+  rejected before punctuation cleaning.
+- The button matcher, exact fast path, phone tester, and handler reject cover
+  level requests. The handler checks the original command too, protecting
+  against a classifier query that drops the number. Plain open/close and
+  target names such as "the big one" remain unchanged.
+
+Validation: 87 focused tests passed; built image ran 593 tests, 592 passed and
+one live-only test skipped. Device calls were mocked in routing tests. Running
+container parser checks, health, and startup logs passed after deployment at
+07:43 MDT; no blind movement was dispatched for validation. Only
+`voice-orchestrator` was recreated, with zero active timers at cutover.
+
+Rollback image: `voice-pipeline-voice-orchestrator:before-cover-percent-20260914`.
+Original changed source files and a consistent SQLite snapshot are in
+`/home/pi/voice-pipeline/rollback/cover-percent-20260914/`. For code rollback,
+retag that image to `voice-pipeline-voice-orchestrator`, then run
+`docker compose up -d --no-deps --no-build voice-orchestrator` from
+`/home/pi/voice-pipeline`. Preserve the current database; restore the saved
+source files before a later rebuild if retaining the rollback.
+
 ## Simon's room — fan + fun-color brightness (2026-08-22)
 
 - **Blind percentage** ("close the blind to 70", "open the blinds halfway") already worked in Simon's room — `covers.py` has had `blind_simon` (`cover.boys_room_baby_blind`, sats `simon`) since the 2026-08-18 percentage build. Nothing changed.
@@ -308,6 +346,141 @@ at all; only Claire's did.
 - **Not in scope:** the master-bed `hvac99` unit (the closet satellite) — it
   has its own morning-setpoint automation and watchdog; adding it is one
   `_TARGETS` entry + `_ROOM_WORDS` if wanted.
+
+## Main house — adaptive one-hour comfort and spoken confirmation (2026-09-12)
+
+**Current implementation; supersedes the fixed ±1°F behavior below for new requests.**
+Brad voice-tested v1, then approved adaptive targets with **2°F automatic,
+over 2°F through 4°F requiring spoken confirmation, and a hard 4°F maximum**.
+All adjustments are measured from the normal schedule, never a prior hold.
+
+- Cooling / hot: `startAt = min(78, floor(currentWeatherTemp * 10) / 10)`;
+  `stopAt = startAt - 1`. Thus **77.5 → 77.5/76.5**, automatic; **76.8 →
+  76.8/75.8**, a 2.2°F shift from the normal 79°F start, requiring yes.
+- Cooling / cold: `startAt = max(80, ceil((currentWeatherTemp + 1) * 10) / 10)`;
+  `stopAt = startAt - 1`. This lifts the stopping temperature to at least the
+  current sensor reading; it eases cooling without switching on heat.
+- Heating / cold: `max(heatHomeSP + 1, ceil(ecobeeCurrentTemp + 1))`.
+  Heating / hot: `min(heatHomeSP - 1, floor(ecobeeCurrentTemp - 1))`.
+  Heating uses the Ecobee's own temperature, matching the device that controls
+  heating. Whole Fahrenheit targets follow the existing thermostat writer.
+- A proposal outside the 4°F limit is refused without changing an existing
+  hold. Off/auto, night/away, open windows, manual override, grid outage/unknown,
+  and unavailable/invalid readings are refused with an explanatory reply.
+- The exact accepted targets are frozen for 60 minutes. Repeat requests
+  refresh the hour using the normal baseline; an opposite request replaces
+  the hold. Office cooling demand, pre-cooling, and the minimum 30-minute
+  cooling run are unchanged and can keep AC running below the requested stop.
+- Heating/cooling mode changes between proposal and confirmation reject the
+  request, as do heating baseline changes. An active v2 hold applies only to
+  the HVAC mode it was made for; a changed heating baseline invalidates it.
+
+**Conversation:** `main_comfort.py` supplies `awaiting_slot` for the existing
+longer satellite listening window. `app.py` stores a dedicated `main_comfort`
+pending operation in the requesting satellite's session. Only a whole affirmative
+reply in that satellite's follow-up applies it. No, an unrelated reply, a fresh
+wake, `/session/idle`, or expiry abandons the proposal. Another room's yes cannot
+approve it. Proposals expire after 90 seconds; no action occurs while waiting.
+The existing list-confirmation executor is never used for thermostat requests.
+
+**Control path:** policy and state remain in Node-RED. The voice service reads
+`GET http://127.0.0.1:1880/main-comfort/preview?kind=hot&request_id=<uuid>`;
+the response has `proposal`, `adjustment`, and `requires_confirmation`, or an
+explanatory refusal. This endpoint does not modify the hold. After approval (or
+for an automatic-tier request), the voice service calls **HA `mqtt.publish`**
+on `voice/main_comfort/apply` with `{proposal, confirmed}`, QoS 1, retain false.
+Node-RED rereads HA state and validates the exact proposal's mode, baseline,
+age, direction, band width, and limits before applying it. MQTT duplicates do
+not refresh the hold. The voice service reads
+`GET /main-comfort/result/<requestId>` for acknowledgement before reporting
+success. A lost acknowledgement produces an uncertain-delivery reply.
+
+Existing HA `button.voice_main_comfort_hot/cold` buttons now use the automatic
+tier only; they cannot bypass confirmation for a larger request. Voice dispatch
+uses the adaptive path instead of blindly pressing these two buttons. Kids'
+buttons and room scoping remain unchanged. The previous bare AC/heat-to-cans
+matcher collision is fixed by adding `fr_cans` to the existing HVAC noun guard.
+
+**Deployment:** `Ecobee Master` tab only, Admin API `PUT /flow/9ab666e4123d2c15`;
+voice-orchestrator rebuilt and recreated from `/home/pi/voice-pipeline`.
+No satellite firmware/service or HA restart. Existing v1 holds survive until
+their original expiry; new holds store `version: 2`, their proposal fields,
+and `expiresAt` in the same persistent `mainComfortHold` flow value.
+
+Sources: `voice-assistant/node-red/main-comfort/{policy.js,adaptive_hold.js,prepare_adaptive.py}`
+and `voice-assistant/orchestrator/main_comfort.py`. The prepare script builds
+`tab.after.json` from `tab.before.json` in a specified backup directory; it
+does not deploy. Admin API remains the source of truth. Rollout backups and
+previous image ID: `/home/pi/nodered/backups/main_comfort_adaptive_20260912_114148/`.
+Restore only this task's voice changes plus the backed-up tab through the API
+if rolling back, checking for newer edits first. A v2 hold is ignored/cleared
+by the old v1 Mega Logic rather than becoming an unlimited override.
+
+Validation: `test_adaptive.js` exercises 41 policy/timer scenarios against the
+prepared tab. `test_main_comfort.py`, `test_home_control.py`, and
+`test_room_isolation.py` pass 64 tests in a separate container with networking
+disabled. They mock all service/device/audio calls; heat mode is not switched
+on the live house for testing. The legacy `test_logic.js` targets v1 snapshots.
+Live verification: preview endpoint returns the current policy; an intentionally
+over-limit 4.5°F request through HA MQTT was rejected and acknowledged through
+the result endpoint, with the pre-existing hold and expiry unchanged. Service
+health and Node-RED deploy logs checked. A physical voice confirmation exchange
+is still for the next real larger request; it was tested with mocked audio.
+
+## Main house — original one-hour voice comfort hold (2026-09-12, superseded)
+
+Approved and deployed on the **Ecobee Master** tab (`9ab666e4123d2c15`) via
+the Node-RED Admin API. The new buttons' discovery and handlers live on that
+tab, so **Voice Buttons did not need a deploy**. Voice aliases were added to
+the repo seed and live `/home/pi/voice-pipeline/data/home_commands.json`; the
+orchestrator hot-reloads that table, so no service restart was needed.
+
+- `main_comfort_hot` / `button.voice_main_comfort_hot`: "it's hot in here",
+  "I'm hot", "make it cooler", "cool it down", and the existing kid-room
+  hot aliases except ambiguous "turn it down".
+- `main_comfort_cold` / `button.voice_main_comfort_cold`: matching cold/warmer
+  phrases, excluding "turn it up". Both commands have
+  `sats: ["kitchen", "familyroom"]`; the kids retain their mini-split commands.
+- **Cooling:** offset the weather-station sensor's normal start/stop band
+  **79/77°F** by −1°F when hot (**78/76**) or +1°F when cold (**80/78**).
+  The office sensor's **75/73.5** demand, scheduled pre-cooling, and the
+  existing **30-minute minimum cooling runtime** still apply. The Ecobee's
+  low forced-cooling target is unchanged; this changes the sensor thresholds.
+- **Heating:** offset the current `heatHomeSP` by −1°F when hot or +1°F when
+  cold. Does not switch HVAC mode. Off/auto modes do not receive this offset.
+- A single persistent flow value `mainComfortHold = {delta, expiresAt}` holds
+  the request for **60 minutes**. Repeats refresh the hour without stacking;
+  the opposite request replaces it. No use of `input_boolean.thermostat_override`.
+- The offset applies only in Mega Logic's home mode, with no grid outage or
+  manual thermostat override. Night/away/open-window rules take precedence.
+  A blocked hold continues counting down; it can apply if the restriction
+  clears before expiry. Spoken confirmation acknowledges the request, not
+  proof the compressor has started.
+- Exact expiry triggers normal reevaluation through the existing outage-read
+  node. An inject 5 seconds after deploy/start restores the timer from the
+  persisted timestamp, and Mega Logic checks expiry on every evaluation too.
+  Expiry restores the **current** baseline, never a captured stale setpoint.
+  Minimum runtime may keep cooling running after the voice hold expires.
+- Existing Ecobee sensor status entities now expose `comfort_hold_active`,
+  `comfort_requested_delta`, `comfort_applied_delta`, `comfort_expires_at`,
+  `weather_start_at`, and `weather_stop_at` attributes.
+
+Implementation and offline tests: `voice-assistant/node-red/main-comfort/`.
+`prepare.py BACKUP_DIRECTORY` transforms an Admin API tab snapshot and writes
+an `.after.json` **without deploying**. Check the live tab still equals the
+snapshot before `PUT /flow/:id`. The deployed Admin API remains authoritative.
+Backups for this rollout: `/home/pi/nodered/backups/main_comfort_20260912_112949/`.
+To roll back, restore just the two alias entries and use the backed-up tab via
+the Admin API after checking for newer edits. Remove the two retained MQTT
+discovery configs if retiring the buttons. No direct deployed-flow file edits.
+
+Validation covers heating/cooling boundaries, expiry, refreshed/opposite holds,
+restart recovery, manual override, outage, windows, away/night, office demand,
+pre-cooling and minimum runtime, plus mocked room-scoped HA button dispatch.
+An unrelated existing matcher issue was observed: bare "turn on/off the AC"
+or "turn on/off the heat" from the kitchen can fuzzy-match the family-room
+cans. The new entries do not alter that result; fixing the matcher is separate
+work requiring a voice-service code deployment.
 
 ## Kid rooms — staged "turn on the lights" / "brighter" + quiet hours off (2026-08-25)
 

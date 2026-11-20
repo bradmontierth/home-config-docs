@@ -1,0 +1,81 @@
+{"build": "Sep 27 2026, 14:58:16", "started_at": 1790521259.678277}
+{
+  "Status": {
+    "reports": 1,
+    "last": true,
+    "median_interval_s": null,
+    "max_interval_s": null
+  },
+  "L1 Voltage": {
+    "reports": 27,
+    "last": 122.5031509399414,
+    "median_interval_s": 5.004,
+    "max_interval_s": 5.042
+  },
+  "Line Frequency": {
+    "reports": 27,
+    "last": 59.786582946777344,
+    "median_interval_s": 5.004,
+    "max_interval_s": 5.042
+  },
+  "L2 Voltage": {
+    "reports": 27,
+    "last": 123.01519775390625,
+    "median_interval_s": 5.004,
+    "max_interval_s": 5.042
+  },
+  "L2 Phase Angle": {
+    "reports": 27,
+    "last": 179.78048706054688,
+    "median_interval_s": 5.004,
+    "max_interval_s": 5.042
+  },
+  "Input 1 Signed Power L1 Reference": {
+    "reports": 131,
+    "last": -184.820556640625,
+    "median_interval_s": 1.005,
+    "max_interval_s": 1.097
+  },
+  "Fridge Power": {
+    "reports": 131,
+    "last": 184.820556640625,
+    "median_interval_s": 1.005,
+    "max_interval_s": 1.097
+  },
+  "Fridge Current": {
+    "reports": 131,
+    "last": 2.2795989513397217,
+    "median_interval_s": 1.005,
+    "max_interval_s": 1.097
+  },
+  "Fridge Power 1m Average": {
+    "reports": 3,
+    "last": 185.05435180664062,
+    "median_interval_s": 58.107,
+    "max_interval_s": 59.996
+  },
+  "Fridge Current 1m Average": {
+    "reports": 3,
+    "last": 2.272395133972168,
+    "median_interval_s": 57.688,
+    "max_interval_s": 59.997
+  },
+  "Fridge Daily Energy": {
+    "reports": 3,
+    "last": 0.006207047961652279,
+    "median_interval_s": 56.773,
+    "max_interval_s": 60.29
+  },
+  "Uptime": {
+    "reports": 3,
+    "last": 124.98400115966797,
+    "median_interval_s": 58.816,
+    "max_interval_s": 59.992
+  },
+  "IP Address": {
+    "reports": 2,
+    "last": "192.168.10.226",
+    "median_interval_s": 0.371,
+    "max_interval_s": 0.371
+  }
+}

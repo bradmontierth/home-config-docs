@@ -1,0 +1,32 @@
+[
+  {
+    "entity_id": "sensor.total_home_and_heat_pump",
+    "state": "1854.0",
+    "last_reported": "2026-09-27T23:18:45.807758+00:00",
+    "last_updated": "2026-09-27T23:18:45.807758+00:00"
+  },
+  {
+    "entity_id": "binary_sensor.powerwall_grid_outage",
+    "state": "off",
+    "last_reported": "2026-09-27T23:18:49.666458+00:00",
+    "last_updated": "2026-09-27T23:18:49.666458+00:00"
+  },
+  {
+    "entity_id": "sensor.iotawattsolar_total_heat_pump_power",
+    "state": "477.8",
+    "last_reported": "2026-09-27T23:18:45.804063+00:00",
+    "last_updated": "2026-09-27T23:18:45.804063+00:00"
+  },
+  {
+    "entity_id": "sensor.tesla_powerwall_3_pw3_total_solar",
+    "state": "875",
+    "last_reported": "2026-09-27T23:18:49.663978+00:00",
+    "last_updated": "2026-09-27T23:18:49.663978+00:00"
+  },
+  {
+    "entity_id": "sensor.tesla_powerwall_3_pw3_total_power_out",
+    "state": "270",
+    "last_reported": "2026-09-27T23:18:49.664861+00:00",
+    "last_updated": "2026-09-27T23:18:49.664861+00:00"
+  }
+]

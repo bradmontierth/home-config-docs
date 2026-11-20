@@ -1,0 +1,222 @@
+{
+  "item_id": "v2sub_11",
+  "episode_id": "v2ep_16140909",
+  "title": "Tour de France 2026 - Stage 4",
+  "duration": 2210.978,
+  "provider": "local",
+  "model": "qwen3-next",
+  "base_url": "http://192.168.10.187:8095/v1",
+  "bins_used": 20,
+  "chapters": [
+    {
+      "start": 0.0,
+      "ts": "00:00:00.000",
+      "title": "(Ad) T-Mobile, Naked Beauty",
+      "summary": "Sponsor reads for T-Mobile and the Naked Beauty podcast.",
+      "is_ad": true
+    },
+    {
+      "start": 115.2,
+      "ts": "00:01:55.200",
+      "title": "Stage 4 Recap Intro",
+      "summary": "Introduction to the recap of Stage 4 of the Tour de France 2026.",
+      "is_ad": false
+    },
+    {
+      "start": 234.96,
+      "ts": "00:03:54.960",
+      "title": "Peterson's Strategy",
+      "summary": "Discussion on how UAE Team Emirates planned to handle Mads Pedersen.",
+      "is_ad": false
+    },
+    {
+      "start": 354.16,
+      "ts": "00:05:54.160",
+      "title": "Breakaway Dynamics",
+      "summary": "Analysis of the breakaway riders and their chances.",
+      "is_ad": false
+    },
+    {
+      "start": 470.56,
+      "ts": "00:07:50.560",
+      "title": "Climbing Performance",
+      "summary": "Review of the climbing efforts and team tactics on the hills.",
+      "is_ad": false
+    },
+    {
+      "start": 578.16,
+      "ts": "00:09:38.160",
+      "title": "Intermediate Sprint Upset",
+      "summary": "Biniam Gidey takes the intermediate sprint ahead of Pedersen and Philipsen.",
+      "is_ad": false
+    },
+    {
+      "start": 695.12,
+      "ts": "00:11:35.120",
+      "title": "Peloton Control",
+      "summary": "Discussion on the control strategies within the main peloton.",
+      "is_ad": false
+    },
+    {
+      "start": 815.28,
+      "ts": "00:13:35.280",
+      "title": "Tactical Errors",
+      "summary": "Critique of team tactics regarding pulling and gaps.",
+      "is_ad": false
+    },
+    {
+      "start": 929.04,
+      "ts": "00:15:29.040",
+      "title": "Pedersen's Consistency",
+      "summary": "Reflection on Mads Pedersen's record of stage wins.",
+      "is_ad": false
+    },
+    {
+      "start": 1048.4,
+      "ts": "00:17:28.400",
+      "title": "Race Finish",
+      "summary": "Details of the final sprint and the stage winner.",
+      "is_ad": false
+    },
+    {
+      "start": 1163.76,
+      "ts": "00:19:23.760",
+      "title": "Standings Update",
+      "summary": "Updates on the Yellow, Green, and White jersey standings.",
+      "is_ad": false
+    },
+    {
+      "start": 1348.96,
+      "ts": "00:22:28.960",
+      "title": "(Ad) T-Mobile",
+      "summary": "Sponsor read for T-Mobile.",
+      "is_ad": true
+    },
+    {
+      "start": 1509.68,
+      "ts": "00:25:09.680",
+      "title": "GC Implications",
+      "summary": "Analysis of the General Classification gaps and future outlook.",
+      "is_ad": false
+    },
+    {
+      "start": 1584.88,
+      "ts": "00:26:24.880",
+      "title": "Stage 5 Preview",
+      "summary": "Overview of the upcoming stage profile and key climbs.",
+      "is_ad": false
+    },
+    {
+      "start": 1703.28,
+      "ts": "00:28:23.280",
+      "title": "Trek's Strategy",
+      "summary": "Tactical advice for Trek-Seguedo to drop rivals.",
+      "is_ad": false
+    },
+    {
+      "start": 1821.28,
+      "ts": "00:30:21.280",
+      "title": "Past Stage Comparisons",
+      "summary": "Comparing recent stages to historical Tour de France routes.",
+      "is_ad": false
+    },
+    {
+      "start": 1937.52,
+      "ts": "00:32:17.520",
+      "title": "Hypothetical Scenarios",
+      "summary": "Fun discussion about 1950s cycling conditions.",
+      "is_ad": false
+    },
+    {
+      "start": 2055.6,
+      "ts": "00:34:15.600",
+      "title": "(Ad) T-Mobile, Zyn",
+      "summary": "Sponsor reads for T-Mobile and Zyn nicotine pouches.",
+      "is_ad": true
+    }
+  ],
+  "ad_bins": [
+    0.8,
+    115.2,
+    234.96,
+    578.16,
+    695.12,
+    1348.96,
+    1466.64,
+    2055.6,
+    2175.44
+  ],
+  "ad_intervals": [
+    {
+      "start": 0.0,
+      "end": 115.2
+    },
+    {
+      "start": 246.08,
+      "end": 253.84
+    },
+    {
+      "start": 600.24,
+      "end": 663.44
+    },
+    {
+      "start": 1449.68,
+      "end": 1509.68
+    },
+    {
+      "start": 1509.76,
+      "end": 1552.0
+    },
+    {
+      "start": 2120.72,
+      "end": 2210.978
+    }
+  ],
+  "ad_refine_model": "qwen3-next",
+  "ad_refine_coverage_gaps": [
+    [
+      115.2,
+      180.8
+    ],
+    [
+      115.2,
+      235.2
+    ],
+    [
+      253.84,
+      295.2
+    ],
+    [
+      234.96,
+      354.96
+    ],
+    [
+      578.16,
+      600.24
+    ],
+    [
+      663.44,
+      698.16
+    ],
+    [
+      695.12,
+      758.16
+    ],
+    [
+      695.12,
+      815.12
+    ],
+    [
+      1348.96,
+      1449.68
+    ],
+    [
+      1552.0,
+      1586.64
+    ],
+    [
+      2055.6,
+      2120.72
+    ]
+  ]
+}

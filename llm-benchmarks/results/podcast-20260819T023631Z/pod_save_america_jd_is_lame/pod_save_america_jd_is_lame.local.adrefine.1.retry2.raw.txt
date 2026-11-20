@@ -1,0 +1,1 @@
+{"intervals":[{"start": 0.48, "end": 141.6, "reason": "Sponsor reads for SimplySafe, Minky Couture, and Smith's/Nabisco."}]}

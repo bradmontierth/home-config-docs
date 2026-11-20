@@ -1,0 +1,1 @@
+{"intervals":[{"start": 227.36, "end": 254.08, "reason": "Sponsor read for Crooked Media subscriptions."}]}

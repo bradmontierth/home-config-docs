@@ -1,0 +1,10 @@
+services:
+  shelly-tv-plug-log:
+    image: python:3.12-alpine
+    container_name: shelly-tv-plug-log
+    network_mode: host
+    restart: unless-stopped
+    command: ["python", "-u", "/app/listener.py"]
+    volumes:
+      - ./listener.py:/app/listener.py:ro
+      - ./logs:/logs

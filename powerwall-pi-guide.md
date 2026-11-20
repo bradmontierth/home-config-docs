@@ -82,6 +82,18 @@ telemetry snapshot to the house MQTT broker.
   occasional reserve-changing commands. After a command, Node-RED waits for
   propagation and verifies the result from the local Home Assistant reserve
   sensor, without a second cloud data request.
+- **Reserve + EV night-charge policy (changed 2026-11-06, Brad's request).**
+  50% is the default reserve. The Tesla tab drops it to exactly 20% at 5:00 PM
+  (5:30 reconcile, 5:55 final check, 8 PM emergency 10% if peak won't last) and
+  `pw_dynamic_eval` restores **50% unconditionally** at 10:05 PM and on safe
+  startup catch-up (decision sensor `sensor.powerwall_dynamic_reserve_decision`
+  = `default_50`). The old regime + low-SOC gating is gone. The Vue EV policy's
+  `POWERWALL_DEFAULT_RESERVE_PERCENT` is 50 so low-car recovery never lowers
+  the reserve below 50. The `Tesla Auto Tonight` tab no longer uses the 7-day
+  solar-vs-demand regime: it turns on `input_boolean.tesla_charge_tonight`
+  (auto-owned, cleared 8:05 AM, never turns a manual toggle off) when a Tesla
+  is plugged in at Home below 60%, checked 5:50 PM, 10:10 PM, every 15 min
+  10 PM-4 AM. Pre-change tab JSON: `/home/pi/backups/nodered-tesla-20261106/`.
 - The Docker Node-RED `Powerwall Reserve Forecast` tab
   (`8d7289c449f38a92`) reads this local reserve sensor and recalculates both
   periodically and immediately when the reserve state changes. The Tesla

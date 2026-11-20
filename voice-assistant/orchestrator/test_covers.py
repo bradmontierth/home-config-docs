@@ -2,7 +2,8 @@ import asyncio
 import unittest
 from unittest.mock import AsyncMock, patch
 
-from . import covers, intent
+from . import app, covers, home_control, intent
+from .test_clarify import _SlotTestBase
 
 
 def _parse(command: str, sat: str | None = "kitchen"):
@@ -27,13 +28,18 @@ class CoverLevelParseTest(unittest.TestCase):
                 self.assertEqual(parsed["cover_target"], target)
                 self.assertEqual(parsed["cover_position"], position)
 
+    def test_sync_is_heard_as_sink(self):
+        parsed = _parse("set the sync blind to 30 percent")
+        self.assertEqual(parsed["cover_target"], "blind_sink")
+        self.assertEqual(covers.resolve("the sync blind"), "blind_sink")
+
     def test_close_verb_inverts_the_number(self):
         """"Close it to 80%" means 80% down -- HA position 20."""
         cases = {
             "close the sink blind to 80 percent": ("blind_sink", 20),
             "lower the kitchen blinds to 70 percent": ("blinds_all", 30),
             "drop the left blind to 60": ("blind_left", 40),
-            "close the blinds 25 percent": None,     # no anchor -> classifier
+            "close the blinds 25 percent": ("blinds_all", 75),
         }
         for text, expected in cases.items():
             with self.subTest(text=text):
@@ -49,6 +55,37 @@ class CoverLevelParseTest(unittest.TestCase):
         self.assertEqual(parsed["cover_position"], 30)
         raised = _parse("raise the blinds to 90 percent")
         self.assertEqual(raised["cover_position"], 90)
+
+    def test_recorded_sliding_door_failures_and_natural_variants(self):
+        for phrase, position in (
+            ("Close the sliding door twenty percent.", 80),
+            ("Close the sliding window twenty percent.", 80),
+            ("Close the large sliding window, 20%.", 80),
+            ("close the sliding door 20", 80),
+            ("set the sliding door 50%", 50),
+            ("set the sliding door shade to 50 percent", 50),
+            ("set the sliding door blinds to fifty percent", 50),
+            ("open the kitchen sliding window eighty five percent", 85),
+            ("please close the sliding door fifty percent please", 50),
+        ):
+            for sat in ("kitchen", "familyroom", "master"):
+                with self.subTest(phrase=phrase, sat=sat):
+                    parsed = _parse(phrase, sat)
+                    self.assertIsNotNone(parsed)
+                    self.assertEqual((parsed["cover_target"], parsed["cover_position"]),
+                                     ("blind_slider", position))
+
+    def test_unsupported_levels_and_unknown_targets_do_not_parse(self):
+        for phrase in (
+            "close the sliding window by 20",
+            "close the sliding door 130 percent",
+            "close the sliding door to -20%",
+            "close the sliding door to 20.5%",
+            "set the garage door 50 percent",
+            "set the sliding widow 50 percent",
+        ):
+            with self.subTest(phrase=phrase):
+                self.assertIsNone(_parse(phrase))
 
     def test_halfway_forms(self):
         for text in ("close the sink blind halfway",
@@ -164,3 +201,75 @@ class CoverHandleTest(unittest.TestCase):
         self.assertIsNone(asyncio.run(covers.handle(
             {"cover_target": "blind_sink", "cover_position": None})))
         self.call.assert_not_awaited()
+
+
+class CoverLevelDispatchTest(_SlotTestBase):
+    """Exercise the real routing with every device call mocked."""
+
+    def setUp(self):
+        super().setUp()
+        token = app._CUR_SAT.set("kitchen")
+        self.addCleanup(app._CUR_SAT.reset, token)
+
+    def test_percentage_moves_only_the_slider_and_skips_classifier(self):
+        for phrase, position in (
+            ("close the sliding door 20", 80),
+            ("close the large sliding window, 20%", 80),
+            ("set the sliding door 50 percent", 50),
+        ):
+            with (self.subTest(phrase=phrase),
+                  patch.object(covers, "_set_position", new=AsyncMock()) as move,
+                  patch.object(home_control, "_press", new=AsyncMock()) as press,
+                  patch.object(intent, "parse", new=AsyncMock()) as classify):
+                result = self._run(phrase)
+                self.assertTrue(result["ok"])
+                self.assertEqual(result["intent"], "cover_set")
+                move.assert_awaited_once_with(
+                    ["cover.kitchen_sliding_kitchen_door"], position)
+                press.assert_not_awaited()
+                classify.assert_not_awaited()
+
+    def test_unsupported_percentage_cannot_fall_through_to_buttons(self):
+        for phrase in ("close the sliding window by 20",
+                       "close the sliding door 130%",
+                       "close the sliding door to -20%",
+                       "close the sliding door to 20.5%",
+                       "close the sliding widow to 50%"):
+            with (self.subTest(phrase=phrase),
+                  patch.object(covers, "_set_position", new=AsyncMock()) as move,
+                  patch.object(home_control, "_press", new=AsyncMock()) as press,
+                  patch.object(intent, "parse", new=AsyncMock(return_value=
+                      intent.validate({"intent": "home_control",
+                                       "query": "close the sliding door"})))):
+                result = self._run(phrase)
+                self.assertFalse(result["ok"])
+                move.assert_not_awaited()
+                press.assert_not_awaited()
+
+    def test_classifier_cannot_drop_the_original_number(self):
+        with patch.object(home_control, "_press", new=AsyncMock()) as press:
+            result = asyncio.run(home_control.handle(
+                {"query": "close the sliding door"},
+                "close the sliding door 20", "kitchen"))
+            self.assertFalse(result["ok"])
+            press.assert_not_awaited()
+
+    def test_phone_tester_and_fuzzy_rescue_do_not_offer_full_close(self):
+        for phrase in ("close the sliding door 20", "close simons blind to 20",
+                       "close the sliding window by 20"):
+            with self.subTest(phrase=phrase):
+                self.assertFalse(home_control.has_exact_match(phrase, "kitchen"))
+                self.assertIsNone(home_control.fuzzy_match(phrase, "kitchen"))
+                self.assertFalse(home_control.evaluate(phrase)["matched"])
+
+    def test_plain_close_and_named_targets_still_work(self):
+        for phrase in ("close the sliding door", "close the sliding window",
+                       "close the big one"):
+            with (self.subTest(phrase=phrase),
+                  patch.object(home_control, "_press", new=AsyncMock()) as press):
+                result = asyncio.run(home_control.handle({}, phrase, "kitchen"))
+                self.assertTrue(result["ok"])
+                press.assert_awaited_once_with("button.voice_blind_slider_close")
+        for phrase in ("close the two small blinds", "close the big one",
+                       "why is the sliding door 50 percent open"):
+            self.assertFalse(covers.has_level_request(phrase))

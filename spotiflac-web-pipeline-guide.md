@@ -1,6 +1,6 @@
 # SpotiFLAC Web Pipeline Guide
 
-Last updated: 2026-07-22
+Last updated: 2026-09-10
 
 This documents the SpotiFLAC web app integration built for searching Spotify, queueing music downloads on the Plex Pi, importing validated files into the shared music library, and refreshing Navidrome.
 
@@ -214,6 +214,13 @@ The importer watches ready markers and validates files before release.
 Important behaviors:
 
 - Validates with ClamAV, ffprobe, and mutagen where available.
+- Runs as `spotiflac-importer.service` on the media host and uses host
+  `clamdscan --fdpass`. If clamd isn't running, every file is rejected with
+  `clamav_error` ("Could not connect to clamd … clamd.ctl"). On 2026-10-26 the
+  freshly installed `clamav-daemon` was skipped at boot because freshclam
+  hadn't finished downloading the signature DB, and systemd never retried it.
+  It was started manually on 2026-11-01. Check
+  `ssh plex 'systemctl status clamav-daemon'` first on any `clamav_error`.
 - Uses audio tags to match downloaded files back to track rows.
 - Releases into artist/album folders under `/media/externalHDD/media/music`.
 - Writes `.m3u8` playlist files for Spotify playlist jobs.
@@ -226,7 +233,59 @@ Known repaired issue:
 
 ## Navidrome Integration
 
-The UI has a Navidrome button that calls:
+### Scan & sync button (deployed 2026-09-10)
+
+The updated frontend replaces the Navidrome button with **Scan & sync**. It
+uses `POST /local-api/library/refresh` and polls
+`GET /local-api/library/refresh` for progress. Both endpoints use the existing
+admin-token protection. The original scan-only endpoint remains available.
+
+The bridge starts an incremental Navidrome scan, waits for `getScanStatus` to
+report that scanning has finished, then requests Music Assistant `music/sync`
+for artists, albums, tracks, and playlists. Only available `opensubsonic` and
+`filesystem_local` providers are selected. `MA_URL` defaults to
+`http://host.docker.internal:8095` in the frontend compose file.
+
+The final message says **sync requested**: Music Assistant queues the sync,
+and the button does not certify that every track has been indexed. Scan failure,
+unreadable scan status, and a ten-minute scan timeout prevent the MA request.
+Repeated taps while the bridge is working join the existing refresh. Closing
+the browser does not interrupt it; bridge restart does. Progress is held in
+memory and resets on bridge restart. This is a manual button, with no automatic
+refresh after each release.
+
+Offline regression tests: `spotiflac-web/tests/test_library_refresh.py`.
+
+Deployment validation: all nine tests passed in the newly built bridge image,
+the frontend production build passed, and `pip check` found no broken
+requirements. Both containers were recreated after phone approval. The live
+button API started Navidrome at `19:52:15Z`, its scan finished at `19:52:17Z`,
+and MA sync requests followed; all local provider sync tasks subsequently
+finished. Navidrome and MA search both returned the Spirit
+Halloween track; MA marked `library://track/3281` playable.
+
+Pre-deployment images are retained for rollback:
+
+- `spotiflac-web:before-scan-sync-20260910`
+- `spotiflac-navidrome-bridge:before-scan-sync-20260910`
+
+### Missing Spirit Halloween track diagnosis (2026-09-10)
+
+Job `acd8a2b3-0f65-4c2d-8fb4-26e8cce14bdd` released at `19:38:27Z` to
+`Spooked4u/YouTube/01 - Spooky Scary Skeletons (Spirit Halloween Music Video).m4a`.
+The NFC jukebox refresh at `19:38:57Z` rebuilt its filesystem search index and
+requested only MA playlists. It did not scan Navidrome, whose previous scan
+was at `19:00Z`. The file existed and was visible over NFS, but was absent from
+Navidrome and MA's indexed library.
+
+The approved Navidrome scan imported the track at `19:45:50Z`; an MA local
+provider sync followed. MA search then returned `library://track/3281` with
+artist **Spooked4u** and album **YouTube**. To discover newly released music,
+scan Navidrome first, then sync MA tracks as well as playlists.
+
+### Original scan-only integration
+
+The original Navidrome button called this endpoint, which remains available:
 
 ```text
 POST /local-api/navidrome/scan
@@ -284,8 +343,78 @@ YouTube search ranks multiple candidates by title, artist, and duration and
 penalizes likely karaoke, cover, dialogue, instrumental, reaction, and tutorial
 matches before attempting downloads.
 
+Direct YouTube/YouTube Music links automatically use only the YouTube provider
+and keep the supplied video ID; they do not use Spotify matching or the YouTube
+search candidate ranking. The job quality selector does not impose a minimum
+bitrate on these downloads. Audio is selected with `bestaudio/best` and converted
+to M4A; the former `M4A 256kbps` banner described conversion settings, not source
+quality or a download threshold.
+
+On 2026-09-10, the direct-link download of video `V-NXhrA2U2M` resolved metadata
+but received HTTP 403 twice while fetching media; Cobalt and YT1D also failed.
+Subsequent read-only audio stream probes succeeded. The provider now checks
+format availability and makes up to three fresh yt-dlp attempts, trying best
+audio, M4A-preferred audio, then lower-bandwidth audio before external fallbacks.
+Each attempt uses yt-dlp's default clients and an isolated temporary directory.
+Only completed audio is moved into the watched inbox. Existing duration checks
+and importer validation still apply.
+
+Direct errors, with signed URLs redacted, are retained in the track manifest;
+jobs with no files now include track/provider errors in the job error and event.
+Regression tests are in `spotiflac-web/tests/test_youtube_retry.py` and run in the
+backend image with an isolated state/inbox and no network. The pre-change image
+is retained on Plex as
+`spotiflac-service-spotiflac-api:before-youtube-retry-20260910`; corresponding
+source backups have the suffix `.before-retry-20260910`.
+
+Deployment validation on 2026-09-10: all six regression tests and `pip check`
+passed in the rebuilt image (yt-dlp `2026.8.19`, EJS `0.8.0`). Retry job
+`b46e6107-2da9-4da7-99c4-6610bd281143` downloaded the exact video and reached
+`released` with zero failures/rejections at `14:40:33Z`. The M4A was released to
+`/media/externalHDD/media/music/Bass Boosted City/YouTube/01 - SPOOKY SCARY SKELETONS (Dma Illan TRAP REMIX).m4a`.
+An incremental Navidrome scan was requested through the local bridge.
+
+### YouTube picker: official uploads over live/fan uploads (2026-11-01)
+
+Lossless providers were all failing on 2026-11-01, so most of that day's
+Christmas downloads (91 tracks) came from the YouTube fallback. The song.link
+(Odesli) API now returns `401`, so Spotify-track YouTube picks come only from
+`_search_youtube_candidates`. Its old scoring (title similarity, artist name,
+duration) ranked the fan upload `hlhIYg991vI` of "Queen of the Winter Night"
+(TSOVids channel, mean −24.6 dB) above the official upload `AKpb9xOXpi4`. The
+official title's "(Official …)" suffix lowered its similarity score.
+
+The patch to `src/SpotiFLAC-Module-Version/SpotiFLAC/providers/youtube.py` on
+the media host (`ssh plex`, `/home/pi/spotiflac-service`, not a git repo) adds:
+
+- −4 when the title contains live/concert/performs/performance/performing/
+  bootleg/fancam/tour, unless the requested title has one of those words.
+- Bonuses only when the title matches (similarity ≥ 0.6 or the requested title
+  appears in it). Without that rule, testing promoted the official upload of a
+  *different* song ("Remember" → "Christmas Canon") and another artist's Topic
+  track ("I Saw Three Ships"):
+  - +4 for a YouTube Music `… - Topic` channel that contains the artist name.
+  - +2 for the artist's own channel, or VEVO with the artist in the title.
+  - +1.5 when the title says "official" and the requested title does not.
+- WARNING-level log lines, so the pick is visible in `docker logs spotiflac-api`:
+  `[youtube] Ranked search candidates: <id>=<score>, …` and
+  `[youtube] Selected video <id> for <artist> - <title>`.
+
+Backups: `youtube.py.before-picker-20261101` and image tag
+`spotiflac-service-spotiflac-api:before-picker-20261101`. In a re-test against 8
+of the quietest YouTube tracks, using their real durations, 6 picked the
+official or artist upload. "Remember" and "The Silent Nutcracker" still pick
+third-party uploads with matching durations.
+
+Queen of the Winter Night was re-downloaded from `AKpb9xOXpi4` (mean −11.3 dB).
+The old file is in `/media/externalHDD/downloads/spotiflac/replaced-20261101/`.
+Tracks downloaded before this patch have no record of which video was used.
+Low loudness alone doesn't prove a live recording; many Mannheim Steamroller
+tracks are just quiet.
+
 Common failure types seen:
 
+- `401` from song.link/Odesli (YouTube candidate lookup, 2026-11-01)
 - `429 Too Many Requests`
 - `403`
 - invalid JSON

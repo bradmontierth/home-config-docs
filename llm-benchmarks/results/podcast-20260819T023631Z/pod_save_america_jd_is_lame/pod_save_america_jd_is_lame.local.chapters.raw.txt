@@ -1,0 +1,112 @@
+{
+  "chapters": [
+    {
+      "start": 0.0,
+      "title": "(Ad) Simply Safe, Smith's, Nabisco",
+      "summary": "Sponsor reads for Simply Safe, Smith's, and Nabisco.",
+      "is_ad": true
+    },
+    {
+      "start": 113.68,
+      "title": "Trump Abandons Slush Fund",
+      "summary": "Discussion of Trump giving up on the slush fund and the DOJ's reaction.",
+      "is_ad": false
+    },
+    {
+      "start": 227.36,
+      "title": "(Ad) Pod Save America Subscription",
+      "summary": "Call to action for listeners to become friends of the pod.",
+      "is_ad": true
+    },
+    {
+      "start": 349.52,
+      "title": "Economic Confidence and Debt",
+      "summary": "Analysis of consumer confidence, savings depletion, and credit card debt.",
+      "is_ad": false
+    },
+    {
+      "start": 586.0,
+      "title": "IRS Audits and DOJ Chaos",
+      "summary": "Reports on Trump's IRS audit immunity and internal DOJ turmoil.",
+      "is_ad": false
+    },
+    {
+      "start": 824.32,
+      "title": "Iran Negotiations Collapse",
+      "summary": "The breakdown of Iran nuclear deal talks and media coverage.",
+      "is_ad": false
+    },
+    {
+      "start": 1276.64,
+      "title": "(Ad) Article",
+      "summary": "Sponsor read for Article furniture.",
+      "is_ad": true
+    },
+    {
+      "start": 1396.64,
+      "title": "Iowa Senate Primary",
+      "summary": "The primary race between Josh Turek and Zach Waples in Iowa.",
+      "is_ad": false
+    },
+    {
+      "start": 1745.28,
+      "title": "California Governor Race",
+      "summary": "Analysis of the California gubernatorial primary candidates.",
+      "is_ad": false
+    },
+    {
+      "start": 2087.84,
+      "title": "LA Mayoral Race and Homelessness",
+      "summary": "Discussion on the LA mayoral race and frustration with local governance.",
+      "is_ad": false
+    },
+    {
+      "start": 2684.24,
+      "title": "Michael Tubbs and Election Night",
+      "summary": "Speculation on election results and Michael Tubbs' lieutenant governor run.",
+      "is_ad": false
+    },
+    {
+      "start": 2801.68,
+      "title": "(Ad) ZipRecruiter",
+      "summary": "Sponsor read for ZipRecruiter hiring platform.",
+      "is_ad": true
+    },
+    {
+      "start": 2919.04,
+      "title": "Graham Plattner Scandals",
+      "summary": "The sexting and tattoo controversies surrounding Maine candidate Graham Plattner.",
+      "is_ad": false
+    },
+    {
+      "start": 3715.84,
+      "title": "Maine Senate Race Conclusion",
+      "summary": "Janet Mills stays in the race as Plattner faces character questions.",
+      "is_ad": false
+    },
+    {
+      "start": 3954.72,
+      "title": "JD Vance Criticism",
+      "summary": "Trump and Pod Save America agree that JD Vance is underwhelming.",
+      "is_ad": false
+    },
+    {
+      "start": 4307.68,
+      "title": "(Ad) Minky Couture",
+      "summary": "Sponsor read for Minky Couture blankets.",
+      "is_ad": true
+    },
+    {
+      "start": 4427.44,
+      "title": "Detainee Conditions and Protests",
+      "summary": "First-hand account of poor conditions at detention facilities and ICE protests.",
+      "is_ad": false
+    },
+    {
+      "start": 5820.16,
+      "title": "(Ad) Minky Couture, Culligan",
+      "summary": "Final sponsor reads for Minky Couture and Culligan water.",
+      "is_ad": true
+    }
+  ]
+}

@@ -1,0 +1,36 @@
+{
+  "reviewer": "Codex agent",
+  "status": "provisional_agent_review_not_human_approved",
+  "policy": "Review core answer, named-source fidelity, and unsupported extras separately. These are notes, not an automated correctness score. No promotion to approved truth.",
+  "sources": {
+    "lime": "https://foodservice.sunkist.com/why-fresh-citrus/",
+    "apple": "https://solidstarts.com/foods/apple/",
+    "baking": "https://www.kingarthurbaking.com/blog/2021/09/10/baking-soda-vs-baking-powder-substitutions",
+    "light": "https://www.exploratorium.edu/snacks/colored-shadows",
+    "tour": "https://www.letour.fr/en/etape-21"
+  },
+  "gpt54-medium": {
+    "lime_juice": {"status":"pass","notes":"Useful approximate quantity; 2 tablespoons agrees with Sunkist's 6-8 medium limes per cup. Explicitly notes variation."},
+    "apple_one_year": {"status":"pass","notes":"Retrieved Solid Starts and correctly used the 9+ month guidance for a one-year-old. Differentiated later whole-apple and wedge milestones. Source name appears in spoken response despite production prompt asking to omit it."},
+    "apple_skin_followup": {"status":"pass","notes":"Preserved age/source context and accurately explained that skin is permitted for the source's thin raw slices."},
+    "tour_yesterday": {"status":"pass","notes":"Correctly rejected the September stage premise with search. Official final-stage page confirms added final-stage winner. Three searches and extra unrequested race detail lengthened response."},
+    "pancake_substitution": {"status":"caution","notes":"Correct non-1:1 and acid requirement. Full answer gives a conditional ratio and milk replacement without quantifying acid; recipe-specific numerical adequacy remains unreviewed."},
+    "led_purple": {"status":"pass","notes":"Correct spectral persistence, cone-response explanation and explicit purple/magenta versus spectral-violet distinction."}
+  },
+  "gpt54-low": {
+    "lime_juice": {"status":"caution","notes":"Gives a plausible low yield range but calls 1 tablespoon the usual medium-lime cooking quantity. Sunkist's medium-lime reference implies roughly 2-2.7 tablespoons; this is a weaker default."},
+    "apple_one_year": {"status":"pass","notes":"Retrieved the requested primary source and accurately represented its age band and preparations."},
+    "apple_skin_followup": {"status":"pass","notes":"Correct source-specific answer with retained context and thin-slice qualification."},
+    "tour_yesterday": {"status":"pass","notes":"Correctly rejected premise with two searches. Clearly distinguishes optional Vuelta information instead of silently changing the question."},
+    "pancake_substitution": {"status":"caution","notes":"Core answer is correct, but full response adds a precise lemon/vinegar quantity without a supporting source or recipe context; do not approve that ratio from this benchmark. Also violates the no-follow-up-offer instruction."},
+    "led_purple": {"status":"caution","notes":"Correct central mechanism and nonspectral purple explanation; does not explicitly explain spectral violet, one of the richer rubric checks."}
+  },
+  "flash38-low": {
+    "lime_juice": {"status":"caution","notes":"Core 2-tablespoon answer is sound. Extra Key-lime claims are arithmetically inconsistent: 1-2 teaspoons each and 2-3 such limes do not generally equal 6 teaspoons. Unrequested extras weaken an otherwise good short answer."},
+    "apple_one_year": {"status":"fail","notes":"Attributes raw matchsticks to Solid Starts, but the checked page lists grated apple or thin rounds/half-rounds. Citation metadata associates the opening preparation claim with another feeding site and Facebook; Solid Starts is cited for a later choking statement. This fails requested-source fidelity, without asserting all matchstick preparation is inherently unsafe."},
+    "apple_skin_followup": {"status":"caution","notes":"Core thin-slice skin permission matches Solid Starts. Adds cooked-skin advice under a Solid Starts heading that is not supported by the checked page; corresponding citation is another feeding site."},
+    "tour_yesterday": {"status":"pass","notes":"Searches and correctly rejects the September premise; concise spoken answer."},
+    "pancake_substitution": {"status":"caution","notes":"Correct core non-1:1 and acid requirement. Precise liquid-acid substitution in full answer is unsupported by saved citations and requires recipe-specific verification."},
+    "led_purple": {"status":"caution","notes":"Correct answer to the user's main question and explicit violet distinction. Longer answer oversimplifies overlapping cone sensitivities and adds a secondary L-cone sensitivity claim not established by the checked reference; avoid treating every extra physiological detail as verified."}
+  }
+}

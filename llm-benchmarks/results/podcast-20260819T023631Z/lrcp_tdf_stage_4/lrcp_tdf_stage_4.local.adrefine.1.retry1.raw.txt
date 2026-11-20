@@ -1,0 +1,14 @@
+{
+"intervals": [
+{
+"start": 0.8,
+"end": 57.84,
+"reason": "T-Mobile ad read with offer details and legal disclaimers."
+},
+{
+"start": 66.56,
+"end": 115.2,
+"reason": "Promo for Naked Beauty podcast with host intro and call to action."
+}
+]
+}

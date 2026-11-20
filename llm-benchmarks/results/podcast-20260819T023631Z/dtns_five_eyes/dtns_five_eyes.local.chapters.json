@@ -1,0 +1,169 @@
+{
+  "item_id": "v2sub_2",
+  "episode_id": "v2ep_11623637",
+  "title": "Five Eyes Security Give CISOs a Budget Weapon - DTNS 5294",
+  "duration": 2424.007,
+  "provider": "local",
+  "model": "qwen3-next",
+  "base_url": "http://192.168.10.187:8095/v1",
+  "bins_used": 21,
+  "chapters": [
+    {
+      "start": 0.0,
+      "ts": "00:00:00.000",
+      "title": "(Ad) Smith's, Alienware",
+      "summary": "Sponsor reads for grocery pickup and gaming hardware discounts.",
+      "is_ad": true
+    },
+    {
+      "start": 166.8,
+      "ts": "00:02:46.800",
+      "title": "Five Eyes Security Warning",
+      "summary": "Discusses the urgent need for companies to update risk assumptions amid rapid cyber threats.",
+      "is_ad": false
+    },
+    {
+      "start": 231.6,
+      "ts": "00:03:51.600",
+      "title": "Integrating AI in Defense",
+      "summary": "Explores the necessity of integrating foundational AI models to respond to attacks quickly.",
+      "is_ad": false
+    },
+    {
+      "start": 464.56,
+      "ts": "00:07:44.560",
+      "title": "AI Risks for CISOs",
+      "summary": "Analyzes the high stakes for CISOs in an era where hackers only need to be right once.",
+      "is_ad": false
+    },
+    {
+      "start": 582.56,
+      "ts": "00:09:42.560",
+      "title": "(Ad) Smith's, Paylocity, Babel",
+      "summary": "Sponsor reads for grocery shopping, payroll software, and language learning apps.",
+      "is_ad": true
+    },
+    {
+      "start": 752.4,
+      "ts": "00:12:32.400",
+      "title": "(Ad) Babel, Giggly Squad",
+      "summary": "Continued sponsorship reads for language learning and other partners.",
+      "is_ad": true
+    },
+    {
+      "start": 937.68,
+      "ts": "00:15:37.680",
+      "title": "Payments Strategy in India",
+      "summary": "Discusses the potential for payments apps in the Indian market and leadership changes.",
+      "is_ad": false
+    },
+    {
+      "start": 1050.32,
+      "ts": "00:17:30.320",
+      "title": "Microsoft's AI Strategy",
+      "summary": "Examines Microsoft's rollout of lower-cost AI models and Copilot agents.",
+      "is_ad": false
+    },
+    {
+      "start": 1284.32,
+      "ts": "00:21:24.320",
+      "title": "Corporate AI Adoption",
+      "summary": "Considers the long-term organizational impact of AI integration and workforce changes.",
+      "is_ad": false
+    },
+    {
+      "start": 1518.16,
+      "ts": "00:25:18.160",
+      "title": "Apple Product Design",
+      "summary": "Reflects on the longevity and potential staleness of Apple's current hardware designs.",
+      "is_ad": false
+    },
+    {
+      "start": 1742.72,
+      "ts": "00:29:02.720",
+      "title": "Podcast Updates and Streams",
+      "summary": "Announces upcoming live streams and weekend episodes with special guests.",
+      "is_ad": false
+    },
+    {
+      "start": 1979.68,
+      "ts": "00:32:59.680",
+      "title": "Tech IPOs and Innovation",
+      "summary": "Covers Lime's IPO roadshow and new ultrasound coffee brewing technology.",
+      "is_ad": false
+    },
+    {
+      "start": 2214.96,
+      "ts": "00:36:54.960",
+      "title": "Listener Corrections and Patreon",
+      "summary": "Addresses listener feedback on operating systems and promotes the Patreon community.",
+      "is_ad": false
+    },
+    {
+      "start": 2344.64,
+      "ts": "00:39:04.640",
+      "title": "(Ad) Smith's, Venmo",
+      "summary": "Final sponsor reads for grocery services and digital payment platforms.",
+      "is_ad": true
+    }
+  ],
+  "ad_bins": [
+    1.52,
+    117.6,
+    582.56,
+    700.8,
+    819.92,
+    1862.16,
+    2214.96,
+    2344.64
+  ],
+  "ad_intervals": [
+    {
+      "start": 0.0,
+      "end": 166.8
+    },
+    {
+      "start": 670.96,
+      "end": 748.24
+    },
+    {
+      "start": 752.4,
+      "end": 876.56
+    },
+    {
+      "start": 1890.24,
+      "end": 1957.28
+    },
+    {
+      "start": 2344.64,
+      "end": 2424.007
+    }
+  ],
+  "ad_refine_model": "qwen3-next",
+  "ad_refine_coverage_gaps": [
+    [
+      166.8,
+      237.6
+    ],
+    [
+      582.56,
+      670.96
+    ],
+    [
+      876.56,
+      939.92
+    ],
+    [
+      1862.16,
+      1890.24
+    ],
+    [
+      1957.28,
+      1982.16
+    ],
+    [
+      2214.96,
+      2334.96
+    ]
+  ]
+}

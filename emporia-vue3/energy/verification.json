@@ -1,0 +1,156 @@
+{
+  "checked_at": 1790555202.4832735,
+  "daily_counters": [
+    {
+      "label": "Fridge",
+      "daily": "1.030575633651459935675409",
+      "unit": "kWh",
+      "source": "sensor.emporia_vue3_fridge_power_1m_average"
+    },
+    {
+      "label": "Dryer",
+      "daily": "0.009223406755618972110606",
+      "unit": "kWh",
+      "source": "sensor.emporia_vue3_dryer_power_1m_average"
+    },
+    {
+      "label": "AC",
+      "daily": "0.027246179071041438389539",
+      "unit": "kWh",
+      "source": "sensor.emporia_vue3_ac_power_1m_average"
+    },
+    {
+      "label": "Range Oven",
+      "daily": "0.1519880907360973793862810",
+      "unit": "kWh",
+      "source": "sensor.emporia_vue3_range_oven_power_1m_average"
+    },
+    {
+      "label": "Microwave",
+      "daily": "0.002934",
+      "unit": "kWh",
+      "source": "sensor.emporia_vue3_microwave_power_1m_average"
+    },
+    {
+      "label": "Washer Bidet Laundry",
+      "daily": "0.013067",
+      "unit": "kWh",
+      "source": "sensor.emporia_vue3_washer_bidet_laundry_power_1m_average"
+    },
+    {
+      "label": "Furnace",
+      "daily": "0.161585945754353925490988",
+      "unit": "kWh",
+      "source": "sensor.emporia_vue3_furnace_power_1m_average"
+    },
+    {
+      "label": "Water Heater",
+      "daily": "0.0376282443962600876350577",
+      "unit": "kWh",
+      "source": "sensor.emporia_vue3_water_heater_power_1m_average"
+    },
+    {
+      "label": "Garage",
+      "daily": "0.022291",
+      "unit": "kWh",
+      "source": "sensor.emporia_vue3_garage_power_1m_average"
+    },
+    {
+      "label": "Dishwasher",
+      "daily": "0.0219012294047747560969165",
+      "unit": "kWh",
+      "source": "sensor.emporia_vue3_dishwasher_power_1m_average"
+    },
+    {
+      "label": "EV Charger",
+      "daily": "35.8559930648309",
+      "unit": "kWh",
+      "source": "sensor.emporia_vue3_ev_charger_power_1m_average"
+    },
+    {
+      "label": "Claire Mini Split",
+      "daily": "0.0582383844228815990051010",
+      "unit": "kWh",
+      "source": "sensor.emporia_vue3_claire_mini_split_power_1m_average"
+    },
+    {
+      "label": "Office",
+      "daily": "0.827258373033127100888236",
+      "unit": "kWh",
+      "source": "sensor.emporia_vue3_office_power_1m_average"
+    },
+    {
+      "label": "Master Bedroom Closet",
+      "daily": "0.009844",
+      "unit": "kWh",
+      "source": "sensor.emporia_vue3_master_bedroom_closet_power_1m_average"
+    },
+    {
+      "label": "Basement Bathroom",
+      "daily": "0.008568",
+      "unit": "kWh",
+      "source": "sensor.emporia_vue3_basement_bathroom_power_1m_average"
+    },
+    {
+      "label": "Loft Kids Bathroom Whole House Fan",
+      "daily": "0.046656",
+      "unit": "kWh",
+      "source": "sensor.emporia_vue3_loft_kids_bathroom_whole_house_fan_power_1m_average"
+    }
+  ],
+  "sql_ha_same_report_matches": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18
+  ],
+  "live_rows_5m": 0,
+  "counter_rows_5m": {
+    "sensor.fridge_energy": 5,
+    "sensor.daily_fridge_energy": 5,
+    "sensor.dryer_energy": 5,
+    "sensor.daily_dryer_energy": 5,
+    "sensor.ac_energy": 5,
+    "sensor.daily_ac_energy": 5,
+    "sensor.oven_energy": 5,
+    "sensor.daily_range_energy": 5,
+    "sensor.vue_microwave_energy": 5,
+    "sensor.vue_microwave_daily_energy": 5,
+    "sensor.vue_washer_bidet_laundry_energy": 5,
+    "sensor.vue_washer_bidet_laundry_daily_energy": 5,
+    "sensor.furnace_energy": 5,
+    "sensor.daily_furnace_energy": 5,
+    "sensor.water_heater_energy": 5,
+    "sensor.daily_water_heater_energy": 5,
+    "sensor.vue_garage_energy": 5,
+    "sensor.vue_garage_daily_energy": 5,
+    "sensor.kitchen_energy": 5,
+    "sensor.daily_kitchen_energy": 5,
+    "sensor.tesla_energy": 5,
+    "sensor.daily_tesla_energy": 5,
+    "sensor.claire_mini_energy": 5,
+    "sensor.claire_mini_daily_energy": 5,
+    "sensor.office_energy": 5,
+    "sensor.office_daily_energy_2": 5,
+    "sensor.vue_master_bedroom_closet_energy": 5,
+    "sensor.vue_master_bedroom_closet_daily_energy": 5,
+    "sensor.vue_basement_bathroom_energy": 5,
+    "sensor.vue_basement_bathroom_daily_energy": 5,
+    "sensor.vue_loft_kids_bathroom_whole_house_fan_energy": 5,
+    "sensor.vue_loft_kids_bathroom_whole_house_fan_daily_energy": 5
+  }
+}

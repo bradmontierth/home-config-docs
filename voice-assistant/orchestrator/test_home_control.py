@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from unittest.mock import AsyncMock, patch
 
-from . import app, config, home_control
+from . import app, config, home_control, main_comfort
 
 
 def _handle(query: str, sat: str | None = None):
@@ -19,6 +19,9 @@ class HomeControlMatchTest(unittest.TestCase):
         patcher = patch.object(home_control, "_press", new=AsyncMock())
         self.press = patcher.start()
         self.addCleanup(patcher.stop)
+        comfort = patch.object(main_comfort, "request", new=AsyncMock(return_value={"ok": True, "response": "Comfort request."}))
+        self.comfort = comfort.start()
+        self.addCleanup(comfort.stop)
 
     def _pressed(self):
         return self.press.await_args.args[0] if self.press.await_args else None
@@ -240,7 +243,11 @@ class HomeControlMatchTest(unittest.TestCase):
             for sat in ("kitchen", "simon"):
                 self.press.reset_mock()
                 result = _handle(phrase, sat)
-                if result is not None:
+                if phrase == "it's hot in here" and sat == "kitchen":
+                    self.assertIsNotNone(result)
+                    self.press.assert_not_awaited()
+                    self.comfort.assert_awaited_with("hot")
+                elif result is not None:
                     self.assertNotIn("claire", self._pressed(), (phrase, sat))
                 elif sat == "kitchen":
                     self.press.assert_not_awaited()
@@ -267,11 +274,14 @@ class HomeControlMatchTest(unittest.TestCase):
                 self.press.reset_mock()
                 self.assertIsNotNone(_handle(phrase, "simon"), phrase)
                 self.assertEqual(self._pressed(), entity)
-        for phrase in ("it's hot in here", "turn on the ac", "turn off the mini split"):
+        for phrase in ("turn on the ac", "turn off the mini split"):
             with self.subTest(phrase=phrase, sat="kitchen"):
                 self.press.reset_mock()
                 self.assertIsNone(_handle(phrase, "kitchen"))
                 self.press.assert_not_awaited()
+        self.assertIsNotNone(_handle("it's hot in here", "kitchen"))
+        self.comfort.assert_awaited_with("hot")
+        self.press.assert_not_awaited()
         # Same split in Claire's room: the fan/air words keep them apart.
         for phrase, entity in {"turn off the air": "button.voice_claire_hvac_off",
                                "turn off the fan": "button.voice_claire_fan_off"}.items():
@@ -388,6 +398,55 @@ class HomeControlMatchTest(unittest.TestCase):
         self.assertEqual(self._pressed(), "button.voice_fr_cans_on")
         _handle("turn off the fans", sat="familyroom")
         self.assertEqual(self._pressed(), "button.voice_fr_fan_off")
+
+    def test_bare_lights_never_mean_the_cans(self):
+        # 2026-11-05: "turn on the lights" from the kitchen scored 90 against
+        # "turn on the cans" and lit the family-room cans.
+        for sat in ("kitchen", "familyroom"):
+            _handle("turn on the lights", sat=sat)
+            self.assertEqual(self._pressed(), "button.voice_kitchen_brighten", sat)
+            _handle("turn on the kitchen lights", sat=sat)
+            self.assertEqual(self._pressed(), "button.voice_kitchen_brighten", sat)
+            _handle("turn on the recessed lights", sat=sat)
+            self.assertEqual(self._pressed(), "button.voice_fr_cans_on", sat)
+        # Simon's room keeps its own lights.
+        _handle("turn on the lights", sat="simon")
+        self.assertEqual(self._pressed(), "button.voice_simon_lights_on")
+
+    def test_off_never_brightens(self):
+        for sat in ("kitchen", "familyroom", "master"):
+            self.press.reset_mock()
+            _handle("turn off the lights", sat=sat)
+            self.assertNotIn(self._pressed(), ("button.voice_kitchen_brighten",
+                                               "button.voice_fr_cans_off"), sat)
+
+    def test_sync_is_heard_as_sink(self):
+        """Cohere wrote "sink" as "sync" twice on 2026-10-31; the second one
+        closed all four kitchen blinds."""
+        self.assertTrue(home_control.has_exact_match("close the sync blind", "kitchen"))
+        for phrase in ("close the sync blind", "open the sync blind",
+                       "close the sync shade"):
+            self.press.reset_mock()
+            _handle(phrase, "kitchen")
+            want = ("button.voice_blind_sink_open" if "open" in phrase
+                    else "button.voice_blind_sink_close")
+            self.assertEqual(self._pressed(), want, phrase)
+
+    def test_unknown_blind_name_never_fuzzes_onto_all_blinds(self):
+        """The word that says WHICH blind can't be the word fuzzy drops."""
+        for phrase in ("close the flurb blind", "close the zinc blinds",
+                       "open the dog shade"):
+            with self.subTest(phrase=phrase):
+                self.assertIsNone(home_control.fuzzy_match(phrase, "kitchen"))
+        # The generic forms still work, fuzzed or not.
+        self.assertEqual(home_control.fuzzy_match("close the blinds", "kitchen"),
+                         "blinds_kitchen_close")
+        self.assertEqual(home_control.fuzzy_match("close the blind", "kitchen"),
+                         "blinds_kitchen_close")
+        self.assertEqual(home_control.fuzzy_match("close all the blinds", "kitchen")
+                         .startswith("blinds"), True)
+        self.assertEqual(home_control.fuzzy_match("close the kitchen blinds", "familyroom"),
+                         "blinds_kitchen_close")
 
     def test_apostrophes_and_the_asr_split_artefact_still_match(self):
         for phrase in ("it's story time", "its story time", "it s story time",

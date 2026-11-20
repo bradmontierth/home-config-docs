@@ -3,7 +3,7 @@ set -u
 
 STATE_DIR="${STATE_DIR:-/home/pi/.local/state/kitchen-display}"
 LOG_FILE="${LOG_FILE:-${STATE_DIR}/chromium.log}"
-URL="${KITCHEN_DISPLAY_URL:-http://192.168.10.217:8123/photo-viewer/kitchen-display}"
+URL="${KITCHEN_DISPLAY_URL:-http://192.168.10.217:8777/}"
 
 mkdir -p "$STATE_DIR"
 
@@ -18,9 +18,10 @@ mkdir -p "$STATE_DIR"
 exec chromium \
   --ozone-platform=wayland \
   --kiosk \
+  --disable-accelerated-video-decode \
   --password-store=basic \
   --noerrdialogs \
   --disable-infobars \
   --no-first-run \
-  --force-device-scale-factor=1.25 \
+  --force-device-scale-factor=1.0 \
   "$URL" >>"$LOG_FILE" 2>&1

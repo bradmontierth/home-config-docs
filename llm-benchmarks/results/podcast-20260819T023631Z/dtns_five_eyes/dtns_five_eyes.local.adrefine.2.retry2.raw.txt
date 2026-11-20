@@ -1,0 +1,1 @@
+{"intervals":[{"start": 57.68, "end": 166.8, "reason": "Sponsor reads for Sephora, Granger, and Alienware."}]}

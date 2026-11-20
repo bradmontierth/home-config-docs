@@ -30,11 +30,15 @@ import httpx
 from fastapi import Body, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse
 
+from . import animals as animals_mod
 from . import answers as answers_mod
 from . import ask as ask_mod
 from . import climate as climate_mod
 from . import covers as covers_mod
 from . import home_control as home_mod
+from . import home_status as status_mod
+from . import nap_status as nap_mod
+from . import main_comfort as comfort_mod
 from . import lists as lists_mod
 from . import music as music_mod
 from . import broadcast as broadcast_mod
@@ -48,7 +52,7 @@ from . import speaker as speaker_mod
 from . import sports as sports_mod
 from . import weather as weather_mod
 from . import clients, config, events, format as fmt, intent as intent_mod, verify
-from . import loudness, timing, turns as turns_mod, zones
+from . import loudness, timing, turns as turns_mod, zones, quality
 from .timers import RINGING, TimerEngine
 
 logging.basicConfig(
@@ -57,6 +61,7 @@ logging.basicConfig(
 log = logging.getLogger("orchestrator.app")
 
 app = FastAPI(title="Household Voice Orchestrator")
+app.include_router(quality.router)
 ENGINE: TimerEngine
 
 
@@ -450,8 +455,8 @@ async def _startup() -> None:
     ENGINE = TimerEngine(on_expire=_on_timer_expire)
     ENGINE.start()
     music_mod.start()
-    # Render the ask filler WAVs now so the first ask doesn't pay TTS latency.
-    asyncio.create_task(ask_mod.ensure_fillers())
+    if config.ASK_FILLER:
+        asyncio.create_task(ask_mod.ensure_fillers())
     # A restart during a find-phone ring skips its volume restore; undo it.
     asyncio.create_task(phone_mod.restore_stranded())
     log.info("orchestrator up; %d active timer(s) restored", len(ENGINE.active()))
@@ -564,11 +569,18 @@ def _summarize_turn(intent: str, result: dict) -> str:
         return f"you told the music player: {parsed.get('music_action')}"
     if intent == "music_query":
         return "you asked what music is playing"
+    if intent == "home_status":
+        return f"you asked whether the house is closed up and heard: " \
+               f"{(result.get('response') or '')[:160]}"
+    if intent == "nap_status":
+        return f"you asked about the kids' naps and heard: {(result.get('response') or '')[:160]}"
     if intent in ("home_control", "cover_set", "climate_set"):
         return f"you gave a home command and heard: {(result.get('response') or '')[:100]}"
     if intent == "broadcast" and result.get("broadcast"):
         b = result["broadcast"]
         return f"you broadcast {parsed.get('query')!r} to {b['spoken']}"
+    if intent == "animal_sound":
+        return f"you played the {result.get("animal") or parsed.get("animal")} animal video on the kitchen display"
     if intent == "show_camera" and result.get("camera"):
         # Worth a real summary rather than the generic tail: it is what lets a
         # follow-up "close it" resolve to the camera and not the music.
@@ -595,7 +607,7 @@ async def _finalize(result: dict, intent: str) -> dict:
     own TTS entirely there — Node-RED re-renders from text — so this path is a
     render cheaper, not more expensive."""
     route = zones.route_for(_CUR_SAT.get())
-    if _NO_TTS.get():
+    if result.get("skip_tts") or _NO_TTS.get():
         result["audio_url"] = None
     elif route and result.get("response"):
         try:
@@ -668,6 +680,16 @@ async def _parse_clarify_reply(clarify: dict, reply: str) -> dict:
                 "sound_theme": clarify.get("sound_theme"),
             })
     if clarify.get("kind") == "timer_rename":
+        # "What should I call it?" answered with a duration means the user
+        # wanted the time changed, not the name.
+        seconds = intent_mod.timer_target_seconds(reply)
+        if seconds is not None:
+            parsed = intent_mod.validate({
+                "intent": "timer_adjust", "label": clarify.get("label"),
+                "duration_seconds": seconds})
+            parsed["set_remaining"] = True
+            log.info("rename clarify got a duration: %r -> %ss", reply, seconds)
+            return parsed
         parsed = intent_mod.fast_parse_timer_rename(
             f"{clarify['partial']} {reply}".strip())
         if parsed is not None and parsed.get("new_label"):
@@ -712,6 +734,18 @@ async def handle_command(command: str, followup: bool = False,
     # strips the filler. Anything that is neither a name nor a "no" means
     # the user moved on -> abandon and fall through to a normal parse.
     pending = session_pending()
+    if pending and pending["op"] == "main_comfort":
+        # Only the asking satellite's immediate follow-up can approve this
+        # exact proposal. A fresh wake or unrelated reply abandons it.
+        session_clear_pending()
+        decision = comfort_mod.affirmation(command)
+        if followup and decision == "yes":
+            await _turn_event("transcript", text=command)
+            result = await comfort_mod.apply(pending["proposal"], confirmed=True)
+            return await _finalize({"intent": "home_control", **result}, "home_control")
+        if decision == "no":
+            return await _finalize({"intent": "none", "response": "Okay, I left the thermostat alone.", "ok": True}, "none")
+        pending = None
     if pending and pending["op"] == "find_phone":
         session_clear_pending()
         entry = phone_mod.resolve(command)
@@ -768,7 +802,11 @@ async def handle_command(command: str, followup: bool = False,
     # matching. An exact curated alias needs neither classifier latency nor a
     # probabilistic label; fuzzy aliases still go through the classifier and
     # can never override another intent.
-    if (intent_mod.is_camera_back(command)
+    animal_context = (await animals_mod.contextual(command)
+                      if events.on_dashboard(_CUR_SAT.get()) else None)
+    if animal_context:
+        parsed = intent_mod.validate(animal_context)
+    elif (intent_mod.is_camera_back(command)
             and events.on_dashboard(_CUR_SAT.get())
             and await camera_mod.is_open()):
         # "go back" is a camera command only while a camera is actually up, and
@@ -778,7 +816,9 @@ async def handle_command(command: str, followup: bool = False,
         # normal turn.
         parsed = intent_mod.validate({"intent": "close_camera"})
         log.info("camera dismissal bypassed classifier: %r", command)
-    elif home_mod.has_exact_match(command, _CUR_SAT.get()):
+    elif (home_mod.chaos.parse(command) is not None
+          or home_mod.tree.parse(command) is not None
+          or home_mod.has_exact_match(command, _CUR_SAT.get())):
         log.info("exact home command bypassed classifier: %r", command)
         parsed = intent_mod.validate({
             "intent": "home_control",
@@ -791,6 +831,10 @@ async def handle_command(command: str, followup: bool = False,
         # intent here, not a shortcut around one.
         parsed = cover
         log.info("deterministic cover_set bypassed classifier: %r", command)
+    elif covers_mod.has_level_request(command):
+        # An unsupported position request must not lose its amount in the
+        # classifier and become a fully-open/closed button press.
+        parsed = intent_mod.validate({"intent": "home_control", "query": command})
     elif (clim := intent_mod.fast_parse_climate_setpoint(
             command, _CUR_SAT.get())) is not None:
         # Same idea one appliance over: a thermostat word plus a degree in a
@@ -800,6 +844,11 @@ async def handle_command(command: str, followup: bool = False,
         log.info("deterministic climate_set bypassed classifier: %r", command)
     elif clarify:
         parsed = await _parse_clarify_reply(clarify, command)
+    elif followup and (
+            set_to := intent_mod.fast_parse_timer_set_to(command)) is not None:
+        parsed = set_to
+        log.info("deterministic timer set-to bypassed follow-up classifier: %r",
+                 command)
     elif followup and (
             rename := intent_mod.fast_parse_timer_rename(command)) is not None:
         parsed = rename
@@ -934,7 +983,11 @@ async def handle_command(command: str, followup: bool = False,
 
     elif intent == "timer_adjust":
         delta = parsed["duration_seconds"] or 0
-        timer = await ENGINE.adjust(parsed["label"], delta, _CUR_SAT.get())
+        if parsed.get("set_remaining"):
+            timer = await ENGINE.set_remaining(parsed["label"], delta,
+                                               _CUR_SAT.get())
+        else:
+            timer = await ENGINE.adjust(parsed["label"], delta, _CUR_SAT.get())
         if timer:
             result["timer"] = timer
             result["response"] = fmt.confirm_adjust(timer)
@@ -1171,8 +1224,9 @@ async def handle_command(command: str, followup: bool = False,
     elif intent == "play_music":
         target = zones.music_target(_CUR_SAT.get())
         try:
-            sel = await music_mod.play(parsed.get("query"), parsed.get("media_type"),
-                                       target)
+            sel = await music_mod.play(
+                music_mod.keep_version_words(parsed.get("query"), command),
+                parsed.get("media_type"), target)
         except music_mod.MusicUnavailable:
             result["response"] = "Sorry, I can't reach the music player."
             result["ok"] = False
@@ -1237,6 +1291,11 @@ async def handle_command(command: str, followup: bool = False,
         except Exception as exc:  # noqa: BLE001 — HA down/slow; still refuse below
             log.warning("home control failed: %s", exc)
         if hc_result:
+            proposal = hc_result.pop("_comfort_proposal", None)
+            if proposal is not None:
+                session = _session()
+                session["pending"] = {"op": "main_comfort", "proposal": proposal}
+                session["ts"] = time.time()
             result.update(hc_result)
         else:
             # Deliberately NOT the ask fallback (contrast with sports/weather):
@@ -1272,6 +1331,28 @@ async def handle_command(command: str, followup: bool = False,
             result["response"] = "Sorry, I couldn't set the temperature."
             result["ok"] = False
 
+    elif intent == "nap_status":
+        # Answered from Lookout's nap detector; no ask fallback (a web search can't know).
+        try:
+            result.update(await nap_mod.handle(parsed))
+            ask_mod.remember(command, result["response"], sat=_CUR_SAT.get())
+        except Exception as exc:  # noqa: BLE001 — Lookout down/slow; refuse below
+            log.warning("nap status failed: %s", exc)
+            result["response"] = "Sorry, I couldn't check the nap tracker."
+            result["ok"] = False
+
+    elif intent == "home_status":
+        # No ask fallback: a security question answered by a web search or a
+        # guess is worse than "I couldn't check". The module itself names
+        # anything it cannot confirm; this branch only covers HA unreachable.
+        try:
+            result.update(await status_mod.handle(parsed))
+            ask_mod.remember(command, result["response"], sat=_CUR_SAT.get())
+        except Exception as exc:  # noqa: BLE001 — HA down/slow; refuse below
+            log.warning("home status failed: %s", exc)
+            result["response"] = "Sorry, I couldn't check the house sensors."
+            result["ok"] = False
+
     elif intent == "broadcast":
         # Like home_control: no ask fallback — a relay phrase must never turn
         # into a web search. Delivery is Node-RED's job past the MQTT publish.
@@ -1300,6 +1381,19 @@ async def handle_command(command: str, followup: bool = False,
         result.update(fp_result)
         if fp_result.get("needs_owner"):
             session_set_pending("find_phone", [])
+
+    elif intent == "animal_sound":
+        if not events.on_dashboard(_CUR_SAT.get()):
+            result.update(ok=False, response="Animal videos are available on the kitchen display.")
+        else:
+            # A camera is a VLC window above Chromium; close it before showing
+            # a clip so its audio cannot play behind an invisible dashboard.
+            if parsed.get("animal") != "stop" and await camera_mod.is_open():
+                closed = await camera_mod.handle_close()
+                if not closed.get("ok"):
+                    result.update(closed)
+                    return await _finalize(result, intent)
+            result.update(await animals_mod.handle(parsed.get("animal")))
 
     elif intent == "show_camera":
         # There is one display and it is in the kitchen, so this is gated the
@@ -1410,7 +1504,7 @@ async def handle_command(command: str, followup: bool = False,
         result["ok"] = False
 
     else:  # none / out of scope
-        result["response"] = "Sorry, I can only handle timers, lists, and questions right now."
+        result["response"] = "Sorry, I can't do that yet."
         result["ok"] = False
 
     return await _finalize(result, intent)
@@ -1459,6 +1553,9 @@ async def session_idle(sat: str | None = None) -> dict:
     a peer's cold wake stops deferring to a conversation that is over."""
     if sat:
         _FOLLOWUP_LISTEN.pop(sat, None)
+        session = _SESSIONS.get(sat)
+        if session and (session.get("pending") or {}).get("op") == "main_comfort":
+            session["pending"] = None
     return {"ok": True}
 
 
@@ -1606,7 +1703,8 @@ async def verify_wake(request: Request, sat: str = "kitchen",
                                   arb_turn_id=_ARB["turn_id"])
         _shadow_expect(_ARB["turn_id"])
         asyncio.create_task(_note_wake_loudness(turn_id, wav, sat, winner, peak))
-        return {"verified": False, "suppressed": True, "winner": winner}
+        return {"verified": False, "suppressed": True, "winner": winner,
+                    "arb_turn_id": _ARB["turn_id"], "turn_id": turn_id}
     # Fire-and-forget: this POST to the dashboard sat serially BEFORE the ASR
     # call, putting a cosmetic badge (with a 4s timeout tail) on the chime path.
     asyncio.create_task(_turn_event("verifying", sat=sat))
@@ -1634,7 +1732,8 @@ async def verify_wake(request: Request, sat: str = "kitchen",
                                       **_wake_timings())
             _shadow_expect(_ARB["turn_id"])
             asyncio.create_task(_note_wake_loudness(turn_id, wav, sat, winner, peak))
-            return {"verified": False, "suppressed": True, "winner": winner}
+            return {"verified": False, "suppressed": True, "winner": winner,
+                    "arb_turn_id": _ARB["turn_id"], "turn_id": turn_id}
         # Same-hardware peers compare wake loudness at hand-off time, and the
         # peer's /verify can land ~10 ms behind this claim -- too soon for
         # the background reading below. A few ms of pure-Python RMS, only for
@@ -1727,9 +1826,22 @@ async def command_audio(request: Request, followup: bool = False,
                     "transcript": "", "response": "", "intent": "none"}
     # The final decode: hedged Cohere/Parakeet when FINAL_ASR_URL is set,
     # plain Parakeet otherwise (clients.transcribe_final). Partials, verify
-    # and the shadow paths above stay on Parakeet.
-    asr = await clients.transcribe_final(wav)
+    # and the handoff shadows above stay on Parakeet. Paired kitchen shadows
+    # use Cohere only when quality observation is enabled.
+    obs = quality.begin(turn_id, sat, "primary", wav) if stitched and not followup else None
+    token = quality.context.set(obs)
+    try:
+        asr = await clients.transcribe_final(wav)
+    finally:
+        quality.context.reset(token)
+        quality.complete(obs, error="cohere_unavailable_or_cancelled")
     transcript = asr.text
+    selected = await quality.select_candidate(
+        obs, text=transcript, model=asr.model, fallback_reason=asr.fallback_reason,
+        sanity_check=clients._sanity_reason)
+    if selected is not None:
+        transcript = selected["asr"]["transcript_text"]
+        wav = selected["wav"]  # speaker ID must use the chosen recording too
     log.info("command sat=%s followup=%s transcript=%r%s", sat, followup,
              transcript,
              f" asr={asr.model} primary_ms={asr.primary_ms} "
@@ -1905,13 +2017,30 @@ async def command_shadow(request: Request, sat: str = "unknown",
                          turn_id: str | None = None) -> dict:
     """The arbitration LOSER's capture of the utterance the winner is already
     handling. Transcribe and log only — no intents, no events, no reply. The
-    point is the paper trail: grep 'shadow command' next to the winner's
-    'command sat=' line to see which mic had the cleaner take (the go/no-go
-    data for the v2 dual-transcribe chooser)."""
+    Paired kitchen/family-room observations use Cohere and persist both
+    recordings/scores in mic_quality; legacy/unpaired uploads still use
+    Parakeet and log only. No path here dispatches or changes the winner."""
     wav = await request.body()
     if not wav:
         raise HTTPException(400, "empty audio body")
-    transcript = await clients.transcribe(wav)
+    obs = quality.begin(arb_turn_id, sat, "shadow", wav, turn_id)
+    token = quality.context.set(obs)
+    try:
+        if obs is not None:
+            try:
+                # One decode, using the same model/settings as the primary.
+                transcript, _, _ = await asyncio.wait_for(
+                    clients._asr_request(config.FINAL_ASR_URL, wav, None),
+                    timeout=config.FINAL_ASR_HARD_CAP_MS / 1000)
+            except Exception as exc:
+                quality.complete(obs, error=type(exc).__name__)
+                log.warning("quality shadow sat=%s failed: %s", sat, exc)
+                transcript = ""
+        else:
+            transcript = await clients.transcribe(wav)
+    finally:
+        quality.context.reset(token)
+        quality.complete(obs, error="cancelled")
     # Same wake-phrase strip as stitched wake turns, so the two log lines are
     # directly comparable.
     wake_found, command, _ = verify.verify_and_extract(transcript)

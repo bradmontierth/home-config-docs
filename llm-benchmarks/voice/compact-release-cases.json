@@ -1,0 +1,890 @@
+[
+  {
+    "id": "timer_basic",
+    "text": "set a timer for eight minutes",
+    "expected": {
+      "intent": "set_timer",
+      "duration_seconds": 480
+    },
+    "expected_route": "deterministic"
+  },
+  {
+    "id": "timer_named",
+    "text": "set a chicken timer for twelve minutes",
+    "expected": {
+      "intent": "set_timer",
+      "duration_seconds": 720,
+      "label": "chicken",
+      "sound_theme": "cluck"
+    },
+    "expected_route": "deterministic"
+  },
+  {
+    "id": "timer_missing",
+    "text": "set the timer for",
+    "expected": {
+      "intent": "set_timer",
+      "duration_seconds": null
+    },
+    "expected_route": "llm"
+  },
+  {
+    "id": "timer_query",
+    "text": "how much time is left on the chicken timer",
+    "expected": {
+      "intent": "timer_query",
+      "label": "chicken"
+    },
+    "expected_route": "llm"
+  },
+  {
+    "id": "timer_add",
+    "text": "add five minutes to the chicken timer",
+    "expected": {
+      "intent": "timer_adjust",
+      "duration_seconds": 300,
+      "label": "chicken"
+    },
+    "expected_route": "llm"
+  },
+  {
+    "id": "timer_subtract",
+    "text": "take two minutes off the pasta timer",
+    "expected": {
+      "intent": "timer_adjust",
+      "duration_seconds": -120,
+      "label": "pasta"
+    },
+    "expected_route": "llm"
+  },
+  {
+    "id": "timer_rename",
+    "text": "rename the chicken timer to pasta",
+    "expected": {
+      "intent": "timer_rename",
+      "label": "chicken",
+      "new_label": "pasta"
+    },
+    "expected_route": "deterministic"
+  },
+  {
+    "id": "timer_cancel_one",
+    "text": "cancel the rice timer",
+    "expected": {
+      "intent": "timer_cancel",
+      "label": "rice",
+      "scope": "one"
+    },
+    "expected_route": "llm",
+    "risk": "destructive"
+  },
+  {
+    "id": "timer_cancel_all",
+    "text": "cancel all timers",
+    "expected": {
+      "intent": "timer_cancel",
+      "scope": "all"
+    },
+    "expected_route": "llm",
+    "risk": "destructive"
+  },
+  {
+    "id": "list_add_shopping",
+    "text": "add eggs and milk to the shopping list",
+    "expected": {
+      "intent": "add_items",
+      "missing_content": false
+    },
+    "expected_route": "llm"
+  },
+  {
+    "id": "list_add_missing",
+    "text": "put on the shopping list",
+    "expected": {
+      "intent": "add_items",
+      "missing_content": true
+    },
+    "expected_route": "llm"
+  },
+  {
+    "id": "reminder_set",
+    "text": "remind me to call mom tomorrow morning",
+    "expected": {
+      "intent": "set_reminder",
+      "missing_content": false
+    },
+    "expected_route": "llm"
+  },
+  {
+    "id": "reminder_missing",
+    "text": "remind me to",
+    "expected": {
+      "intent": "set_reminder",
+      "missing_content": true
+    },
+    "expected_route": "llm"
+  },
+  {
+    "id": "show_todos",
+    "text": "what's on my to-do list",
+    "expected": {
+      "intent": "show_todos"
+    },
+    "expected_route": "llm"
+  },
+  {
+    "id": "show_shopping",
+    "text": "show the shopping list",
+    "expected": {
+      "intent": "show_shopping"
+    },
+    "expected_route": "llm"
+  },
+  {
+    "id": "show_reminders",
+    "text": "what reminders do I have",
+    "expected": {
+      "intent": "show_reminders"
+    },
+    "expected_route": "llm"
+  },
+  {
+    "id": "complete_item",
+    "text": "mark eggs as done",
+    "expected": {
+      "intent": "complete_item",
+      "item_text": "eggs"
+    },
+    "expected_route": "llm"
+  },
+  {
+    "id": "remove_items",
+    "text": "remove milk and bread",
+    "expected": {
+      "intent": "remove_items",
+      "item_text": "milk and bread"
+    },
+    "expected_route": "llm",
+    "risk": "destructive"
+  },
+  {
+    "id": "remove_undo",
+    "text": "scratch that",
+    "expected": {
+      "intent": "remove_items",
+      "item_text": null
+    },
+    "expected_route": "llm",
+    "risk": "destructive"
+  },
+  {
+    "id": "clear_shopping",
+    "text": "clear the shopping list",
+    "expected": {
+      "intent": "clear_list",
+      "list_type": "shopping"
+    },
+    "expected_route": "llm",
+    "risk": "destructive"
+  },
+  {
+    "id": "music_play_artist",
+    "text": "play Raffi",
+    "expected": {
+      "intent": "play_music",
+      "query": "Raffi"
+    },
+    "expected_route": "llm"
+  },
+  {
+    "id": "music_play_album",
+    "text": "play the album Baby Beluga",
+    "expected": {
+      "intent": "play_music",
+      "query": "Baby Beluga",
+      "media_type": "album"
+    },
+    "expected_route": "llm"
+  },
+  {
+    "id": "music_pause",
+    "text": "pause the music",
+    "expected": {
+      "intent": "music_control",
+      "music_action": "pause"
+    },
+    "expected_route": "deterministic"
+  },
+  {
+    "id": "music_resume",
+    "text": "keep playing",
+    "expected": {
+      "intent": "music_control",
+      "music_action": "resume"
+    },
+    "expected_route": "deterministic"
+  },
+  {
+    "id": "music_stop",
+    "text": "stop the music",
+    "expected": {
+      "intent": "music_control",
+      "music_action": "stop"
+    },
+    "expected_route": "deterministic",
+    "risk": "destructive"
+  },
+  {
+    "id": "music_next",
+    "text": "skip this song",
+    "expected": {
+      "intent": "music_control",
+      "music_action": "next"
+    },
+    "expected_route": "deterministic"
+  },
+  {
+    "id": "music_volume",
+    "text": "set the volume to eighty",
+    "expected": {
+      "intent": "music_control",
+      "music_action": "volume_set",
+      "music_volume": 80
+    },
+    "expected_route": "deterministic"
+  },
+  {
+    "id": "music_query",
+    "text": "what song is this",
+    "expected": {
+      "intent": "music_query"
+    },
+    "expected_route": "deterministic"
+  },
+  {
+    "id": "sports_last",
+    "text": "what was the score of the Jazz game",
+    "expected": {
+      "intent": "sports",
+      "sports_action": "last"
+    },
+    "expected_route": "llm"
+  },
+  {
+    "id": "sports_next",
+    "text": "when do the Brewers play next",
+    "expected": {
+      "intent": "sports",
+      "sports_action": "next"
+    },
+    "expected_route": "llm"
+  },
+  {
+    "id": "weather_now",
+    "text": "what's the weather outside",
+    "expected": {
+      "intent": "weather",
+      "weather_when": "now"
+    },
+    "expected_route": "llm"
+  },
+  {
+    "id": "weather_tomorrow",
+    "text": "what's the weather tomorrow",
+    "expected": {
+      "intent": "weather",
+      "weather_when": "tomorrow"
+    },
+    "expected_route": "deterministic"
+  },
+  {
+    "id": "weather_remote",
+    "text": "what's the weather in Park City today",
+    "expected": {
+      "intent": "weather",
+      "weather_when": "today",
+      "weather_location": "park city"
+    },
+    "expected_route": "deterministic"
+  },
+  {
+    "id": "clock_time",
+    "text": "what time is it",
+    "expected": {
+      "intent": "time_query",
+      "time_kind": "time",
+      "time_day": "today"
+    },
+    "expected_route": "deterministic"
+  },
+  {
+    "id": "clock_date",
+    "text": "what is today's date",
+    "expected": {
+      "intent": "time_query",
+      "time_kind": "date",
+      "time_day": "today"
+    },
+    "expected_route": "deterministic"
+  },
+  {
+    "id": "business_close",
+    "text": "what time does Home Depot close",
+    "expected": {
+      "intent": "business_hours",
+      "hours_when": "close"
+    },
+    "expected_route": "llm"
+  },
+  {
+    "id": "business_service",
+    "text": "when does Costco tire center close",
+    "expected": {
+      "intent": "business_hours",
+      "hours_when": "close",
+      "place_modifier": "tire center"
+    },
+    "expected_route": "llm"
+  },
+  {
+    "id": "place_nearby",
+    "text": "where is the closest Walgreens",
+    "expected": {
+      "intent": "place_search"
+    },
+    "expected_route": "llm"
+  },
+  {
+    "id": "place_service",
+    "text": "where is Costco gas",
+    "expected": {
+      "intent": "place_search",
+      "place_modifier": "gas"
+    },
+    "expected_route": "llm"
+  },
+  {
+    "id": "home_blinds",
+    "text": "close the blinds",
+    "expected": {
+      "intent": "home_control"
+    },
+    "expected_route": "llm"
+  },
+  {
+    "id": "home_lights",
+    "text": "make it brighter in here",
+    "expected": {
+      "intent": "home_control"
+    },
+    "expected_route": "llm"
+  },
+  {
+    "id": "cover_level",
+    "text": "set the sink blind to thirty percent",
+    "expected": {
+      "intent": "cover_set",
+      "cover_position": 30
+    },
+    "expected_route": "deterministic",
+    "sat": "kitchen"
+  },
+  {
+    "id": "broadcast_person",
+    "text": "tell Simon to come eat dinner",
+    "expected": {
+      "intent": "broadcast",
+      "broadcast_target": "simon"
+    },
+    "expected_route": "llm"
+  },
+  {
+    "id": "broadcast_all",
+    "text": "broadcast that dinner is ready",
+    "expected": {
+      "intent": "broadcast",
+      "broadcast_target": null
+    },
+    "expected_route": "llm"
+  },
+  {
+    "id": "find_phone",
+    "text": "where's my phone",
+    "expected": {
+      "intent": "find_phone",
+      "phone_owner": "my",
+      "phone_action": "ring"
+    },
+    "expected_route": "llm"
+  },
+  {
+    "id": "find_phone_stop",
+    "text": "I found my phone",
+    "expected": {
+      "intent": "find_phone",
+      "phone_owner": "my",
+      "phone_action": "stop"
+    },
+    "expected_route": "llm"
+  },
+  {
+    "id": "camera_simon",
+    "text": "show me Simon",
+    "expected": {
+      "intent": "show_camera",
+      "camera_target": "simon"
+    },
+    "expected_route": "deterministic"
+  },
+  {
+    "id": "camera_close",
+    "text": "close the camera",
+    "expected": {
+      "intent": "close_camera"
+    },
+    "expected_route": "deterministic"
+  },
+  {
+    "id": "general_ask",
+    "text": "how many tablespoons are in a cup",
+    "expected": {
+      "intent": "ask"
+    },
+    "expected_route": "llm"
+  },
+  {
+    "id": "house_state_ask",
+    "text": "are the kitchen lights on",
+    "expected": {
+      "intent": "ask"
+    },
+    "expected_route": "llm"
+  },
+  {
+    "id": "show_answer",
+    "text": "show that answer again",
+    "expected": {
+      "intent": "show_answer"
+    },
+    "expected_route": "llm"
+  },
+  {
+    "id": "unsupported_command",
+    "text": "book me a flight to Denver",
+    "expected": {
+      "intent": "none"
+    },
+    "expected_route": "llm"
+  },
+  {
+    "id": "followup_weather",
+    "text": "what about tomorrow",
+    "expected": {
+      "intent": "ask"
+    },
+    "expected_route": "llm",
+    "mode": "followup",
+    "context": "I just answered the local weather question."
+  },
+  {
+    "id": "followup_add",
+    "text": "also add butter",
+    "expected": {
+      "intent": "add_items"
+    },
+    "expected_route": "llm",
+    "mode": "followup",
+    "context": "I added eggs to the shopping list."
+  },
+  {
+    "id": "followup_timer_rename",
+    "text": "call the timer pasta",
+    "expected": {
+      "intent": "timer_rename",
+      "new_label": "pasta"
+    },
+    "expected_route": "deterministic",
+    "mode": "followup",
+    "context": "I set an eight minute timer."
+  },
+  {
+    "id": "followup_background",
+    "text": "yeah I think he left it over there",
+    "expected": {
+      "intent": "none"
+    },
+    "expected_route": "llm",
+    "mode": "followup",
+    "context": "I just answered a question.",
+    "risk": "noise"
+  },
+  {
+    "id": "followup_fragment",
+    "text": "and then the other one",
+    "expected": {
+      "intent": "none"
+    },
+    "expected_route": "llm",
+    "mode": "followup",
+    "context": "I just answered a question.",
+    "risk": "noise"
+  },
+  {
+    "id": "followup_unclear_addressed",
+    "text": "can you do the thing from yesterday",
+    "expected": {
+      "intent": "unclear"
+    },
+    "expected_route": "llm",
+    "mode": "followup",
+    "context": "I just answered a question."
+  },
+  {
+    "id": "clarify_timer",
+    "text": "eight minutes",
+    "expected": {
+      "intent": "set_timer",
+      "duration_seconds": 480
+    },
+    "expected_route": "llm",
+    "mode": "clarify",
+    "partial": "set the timer for",
+    "question": "For how long?"
+  },
+  {
+    "id": "clarify_named_timer",
+    "text": "about twenty minutes",
+    "expected": {
+      "intent": "set_timer",
+      "duration_seconds": 1200,
+      "label": "chicken"
+    },
+    "expected_route": "llm",
+    "mode": "clarify",
+    "partial": "set a chicken timer for",
+    "question": "For how long?"
+  },
+  {
+    "id": "clarify_abandon",
+    "text": "never mind",
+    "expected": {
+      "intent": "none"
+    },
+    "expected_route": "llm",
+    "mode": "clarify",
+    "partial": "set the timer for",
+    "question": "For how long?",
+    "risk": "noise"
+  },
+  {
+    "id": "clarify_new_command",
+    "text": "actually what's the weather",
+    "expected": {
+      "intent": "weather"
+    },
+    "expected_route": "llm",
+    "mode": "clarify",
+    "partial": "set the timer for",
+    "question": "For how long?"
+  },
+  {
+    "id": "climate_missing_target",
+    "text": "set the thermostat to seventy two degrees",
+    "expected": {
+      "intent": "climate_set"
+    },
+    "expected_route": "llm"
+  },
+  {
+    "id": "ask_lime",
+    "text": "How much juice is in a lime?",
+    "expected": {
+      "intent": "ask"
+    },
+    "expected_route": "llm"
+  },
+  {
+    "id": "ask_apple",
+    "text": "How should I serve an apple to a one-year-old, according to Solid Starts?",
+    "expected": {
+      "intent": "ask"
+    },
+    "expected_route": "llm"
+  },
+  {
+    "id": "ask_light",
+    "text": "When red and blue LEDs make purple, do their wavelengths average into one purple wavelength, or are my eyes seeing two separate wavelengths as purple?",
+    "expected": {
+      "intent": "ask"
+    },
+    "expected_route": "llm"
+  },
+  {
+    "id": "multispeaker_01",
+    "text": "how much time s on my timer what time it s a clear timer",
+    "expected": {
+      "intent": "timer_query"
+    },
+    "expected_route": "llm",
+    "sat": "kitchen",
+    "risk": "multispeaker"
+  },
+  {
+    "id": "multispeaker_02",
+    "text": "what time is it clear the timer",
+    "expected": {
+      "intent": "time_query",
+      "time_kind": "time"
+    },
+    "expected_route": "llm",
+    "sat": "kitchen",
+    "risk": "multispeaker"
+  },
+  {
+    "id": "multispeaker_03",
+    "text": "set a timer for ten minutes no mommy i want the blue cup",
+    "expected": {
+      "intent": "set_timer",
+      "duration_seconds": 600
+    },
+    "expected_route": "llm",
+    "sat": "kitchen",
+    "risk": "multispeaker"
+  },
+  {
+    "id": "multispeaker_04",
+    "text": "Set a timer for 15 minutes. Find a kid's bag.",
+    "expected": {
+      "intent": "set_timer",
+      "duration_seconds": 900
+    },
+    "expected_route": "llm",
+    "sat": "kitchen",
+    "risk": "multispeaker"
+  },
+  {
+    "id": "multispeaker_05",
+    "text": "I was distracted. Set a coffee timer for twelve minutes.",
+    "expected": {
+      "intent": "set_timer",
+      "duration_seconds": 720,
+      "label": "coffee"
+    },
+    "expected_route": "llm",
+    "sat": "kitchen",
+    "risk": "multispeaker"
+  },
+  {
+    "id": "multispeaker_06",
+    "text": "add prunes to my shopping list but why can t why can why can",
+    "expected": {
+      "intent": "add_items"
+    },
+    "expected_route": "llm",
+    "sat": "kitchen",
+    "risk": "multispeaker"
+  },
+  {
+    "id": "multispeaker_07",
+    "text": "clear timer",
+    "expected": {
+      "intent": "timer_cancel"
+    },
+    "expected_route": "llm",
+    "sat": "kitchen",
+    "risk": "multispeaker"
+  },
+  {
+    "id": "multispeaker_08",
+    "text": "cancel all timers",
+    "expected": {
+      "intent": "timer_cancel",
+      "scope": "all"
+    },
+    "expected_route": "llm",
+    "sat": "kitchen",
+    "risk": "multispeaker"
+  },
+  {
+    "id": "multispeaker_09",
+    "text": "actually never mind cancel all the timers",
+    "expected": {
+      "intent": "timer_cancel",
+      "scope": "all"
+    },
+    "expected_route": "llm",
+    "sat": "kitchen",
+    "risk": "multispeaker"
+  },
+  {
+    "id": "multispeaker_10",
+    "text": "stop the music",
+    "expected": {
+      "intent": "music_control",
+      "music_action": "stop"
+    },
+    "expected_route": "llm",
+    "sat": "kitchen",
+    "risk": "multispeaker"
+  },
+  {
+    "id": "multispeaker_11",
+    "text": "what time is it",
+    "expected": {
+      "intent": "time_query",
+      "time_kind": "time"
+    },
+    "expected_route": "llm",
+    "sat": "kitchen",
+    "risk": "multispeaker"
+  },
+  {
+    "id": "multispeaker_12",
+    "text": "how much time is left on my timer",
+    "expected": {
+      "intent": "timer_query"
+    },
+    "expected_route": "llm",
+    "sat": "kitchen",
+    "risk": "multispeaker"
+  },
+  {
+    "id": "multispeaker_13",
+    "text": "Okay, you go",
+    "expected": {
+      "intent": "none"
+    },
+    "expected_route": "llm",
+    "sat": "kitchen",
+    "context": "You said: Timer set for ten minutes.",
+    "mode": "followup",
+    "risk": "multispeaker"
+  },
+  {
+    "id": "multispeaker_14",
+    "text": "How were they out? I mean they were just kind of spread out.",
+    "expected": {
+      "intent": "none"
+    },
+    "expected_route": "llm",
+    "sat": "kitchen",
+    "context": "You said: It's 72 and sunny.",
+    "mode": "followup",
+    "risk": "multispeaker"
+  },
+  {
+    "id": "named_rice_query",
+    "text": "how much time remains on the rice timer",
+    "expected": {
+      "intent": "timer_query",
+      "label": "rice"
+    },
+    "expected_route": "llm",
+    "sat": "kitchen"
+  },
+  {
+    "id": "named_pasta_query",
+    "text": "check on my pasta timer",
+    "expected": {
+      "intent": "timer_query",
+      "label": "pasta"
+    },
+    "expected_route": "llm",
+    "sat": "kitchen"
+  },
+  {
+    "id": "named_cancel",
+    "text": "cancel my potato timer",
+    "expected": {
+      "intent": "timer_cancel",
+      "label": "potato"
+    },
+    "expected_route": "llm",
+    "sat": "kitchen"
+  },
+  {
+    "id": "music_query_preserved",
+    "text": "play the song Baby Beluga",
+    "expected": {
+      "intent": "play_music",
+      "query": "Baby Beluga",
+      "media_type": "track"
+    },
+    "expected_route": "llm",
+    "sat": "kitchen"
+  },
+  {
+    "id": "broadcast_payload",
+    "text": "tell Simon dinner is ready, come downstairs",
+    "expected": {
+      "intent": "broadcast",
+      "broadcast_target": "simon",
+      "query": "Simon, dinner is ready, come downstairs"
+    },
+    "expected_route": "llm",
+    "sat": "kitchen",
+    "fixture_note": "Corrected to existing broadcast rule: address a named person by name in rewritten direct speech."
+  },
+  {
+    "id": "business_payload",
+    "text": "when does Costco pharmacy close",
+    "expected": {
+      "intent": "business_hours",
+      "query": "Costco",
+      "place_modifier": "pharmacy",
+      "hours_when": "close"
+    },
+    "expected_route": "llm",
+    "sat": "kitchen"
+  },
+  {
+    "id": "list_payload",
+    "text": "remove milk and bread from the shopping list",
+    "expected": {
+      "intent": "remove_items",
+      "item_text": "milk and bread"
+    },
+    "expected_route": "llm",
+    "sat": "kitchen",
+    "fixture_note": "list_type applies to clear/show, not remove_items; removal handler uses item_text. Do not add a new dispatch requirement in this format change."
+  },
+  {
+    "id": "negative_adjust",
+    "text": "take thirty seconds off the rice timer",
+    "expected": {
+      "intent": "timer_adjust",
+      "duration_seconds": -30,
+      "label": "rice"
+    },
+    "expected_route": "llm",
+    "sat": "kitchen"
+  },
+  {
+    "id": "plain_ask",
+    "text": "why does bread rise",
+    "expected": {
+      "intent": "ask"
+    },
+    "expected_route": "llm",
+    "sat": "kitchen"
+  },
+  {
+    "id": "no_speech",
+    "text": "",
+    "expected": {
+      "intent": "none"
+    },
+    "expected_route": "llm",
+    "sat": "kitchen"
+  },
+  {
+    "id": "ambiguous_followup_paraphrase",
+    "text": "could you do that thing for me",
+    "context": "I just answered a question.",
+    "mode": "followup",
+    "expected": {
+      "intent": "unclear"
+    },
+    "expected_route": "llm"
+  }
+]

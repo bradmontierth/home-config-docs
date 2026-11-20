@@ -1,0 +1,88 @@
+{
+"chapters": [
+{
+"start": 0.0,
+"title": "(Ad) Smith's, Alienware",
+"summary": "Sponsor reads for grocery pickup and gaming hardware discounts.",
+"is_ad": true
+},
+{
+"start": 117.6,
+"title": "Five Eyes Security Warning",
+"summary": "Discusses the urgent need for companies to update risk assumptions amid rapid cyber threats.",
+"is_ad": false
+},
+{
+"start": 231.6,
+"title": "Integrating AI in Defense",
+"summary": "Explores the necessity of integrating foundational AI models to respond to attacks quickly.",
+"is_ad": false
+},
+{
+"start": 464.56,
+"title": "AI Risks for CISOs",
+"summary": "Analyzes the high stakes for CISOs in an era where hackers only need to be right once.",
+"is_ad": false
+},
+{
+"start": 582.56,
+"title": "(Ad) Smith's, Paylocity, Babel",
+"summary": "Sponsor reads for grocery shopping, payroll software, and language learning apps.",
+"is_ad": true
+},
+{
+"start": 819.92,
+"title": "(Ad) Babel, Giggly Squad",
+"summary": "Continued sponsorship reads for language learning and other partners.",
+"is_ad": true
+},
+{
+"start": 937.68,
+"title": "Payments Strategy in India",
+"summary": "Discusses the potential for payments apps in the Indian market and leadership changes.",
+"is_ad": false
+},
+{
+"start": 1050.32,
+"title": "Microsoft's AI Strategy",
+"summary": "Examines Microsoft's rollout of lower-cost AI models and Copilot agents.",
+"is_ad": false
+},
+{
+"start": 1284.32,
+"title": "Corporate AI Adoption",
+"summary": "Considers the long-term organizational impact of AI integration and workforce changes.",
+"is_ad": false
+},
+{
+"start": 1518.16,
+"title": "Apple Product Design",
+"summary": "Reflects on the longevity and potential staleness of Apple's current hardware designs.",
+"is_ad": false
+},
+{
+"start": 1742.72,
+"title": "Podcast Updates and Streams",
+"summary": "Announces upcoming live streams and weekend episodes with special guests.",
+"is_ad": false
+},
+{
+"start": 1979.68,
+"title": "Tech IPOs and Innovation",
+"summary": "Covers Lime's IPO roadshow and new ultrasound coffee brewing technology.",
+"is_ad": false
+},
+{
+"start": 2214.96,
+"title": "Listener Corrections and Patreon",
+"summary": "Addresses listener feedback on operating systems and promotes the Patreon community.",
+"is_ad": false
+},
+{
+"start": 2344.64,
+"title": "(Ad) Smith's, Venmo",
+"summary": "Final sponsor reads for grocery services and digital payment platforms.",
+"is_ad": true
+}
+]
+}

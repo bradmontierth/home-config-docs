@@ -1,0 +1,240 @@
+{
+  "id": "bbac52195f2fa042",
+  "label": "Basement Guest Fan Recovery",
+  "info": "Modern Forms fan.basement_fan + light.basement_light. Supply: light.basement_guest_bed_switch (Zooz). Poll live HA every 30s. Either unavailable/unknown for 2m while supply ON -> off 30s -> on -> wait 3m. Maximum 2 attempts, persistent lockout until both healthy 10m. Intentional supply OFF is respected. Restore power is prioritized across deploys/restarts; turn-on failures bounded to 3. Pushover only global.BradPhoneNM; no broadcast fallback. Source and tests: /home/pi/home_config/basement-fan-recovery.",
+  "nodes": [
+    {
+      "type": "inject",
+      "props": [
+        {
+          "p": "kind",
+          "v": "tick",
+          "vt": "str"
+        }
+      ],
+      "repeat": "30",
+      "crontab": "",
+      "once": true,
+      "onceDelay": "45",
+      "topic": "",
+      "id": "bgfr_tick",
+      "z": "bbac52195f2fa042",
+      "name": "Check every 30 seconds",
+      "x": 170,
+      "y": 140,
+      "wires": [
+        [
+          "bgfr_controller"
+        ]
+      ]
+    },
+    {
+      "type": "function",
+      "func": "// Poll-driven recovery. Persistent context retains attempts and pending power restoration.\nconst now = Date.now();\nconst enabled = false;\nlet s = flow.get('recovery') || {phase:'idle', attempts:0};\nconst save = () => { flow.set('recovery', s); node.status({fill:s.phase==='locked'?'red':'blue',shape:'dot',text:s.phase+' / '+s.attempts+' attempts'}); };\nconst out = (i, m={}) => { save(); const a=[null,null,null,null]; a[i]=m; return a; };\nfunction alert(reason) {\n    s.phase='locked'; s.reason=reason;\n    const device=global.get('BradPhoneNM');\n    if (typeof device!=='string' || !device.trim() || device.includes(',')) { save(); node.error('Missing single BradPhoneNM target; refusing Pushover broadcast'); return null; }\n    if (s.alerted) { save(); return null; }\n    s.alerted=true;\n    return out(3,{device,title:'Basement guest room fan needs attention',priority:0,payload:reason+' Automatic power cycling is stopped until both fan and light are healthy for 10 minutes.'});\n}\nif (msg.kind==='off_ok' && s.phase==='off_pending') {\n    s.phase='off'; s.due=now+30000; save(); return null;\n}\nif (msg.kind==='on_ok' && s.phase==='on_pending') {\n    s.phase='waiting'; s.due=now+180000; save(); return null;\n}\nif (msg.kind==='tick') {\n    if (['off','off_pending','on_pending'].includes(s.phase)) {\n        if (now<s.due) return null;\n        if ((s.onTries||0)>=3) return alert('Could not confirm restoring Zooz power after 3 turn-on commands. Check the wall switch.');\n        s.phase='on_pending'; s.onTries=(s.onTries||0)+1; s.due=now+60000;\n        return out(2,{});\n    }\n    return out(0,{kind:'snapshot',requestedAt:now});\n}\nif (msg.kind!=='snapshot' || !Array.isArray(msg.payload) || now-msg.requestedAt>15000) return null;\n// A late read must never interrupt an in-progress power cycle.\nif (['off','off_pending','on_pending'].includes(s.phase)) return null;\nconst ids=['fan.basement_fan','light.basement_light','light.basement_guest_bed_switch'];\nconst e=Object.fromEntries(msg.payload.filter(x=>ids.includes(x.entity_id)).map(x=>[x.entity_id,x]));\nflow.set('lastSnapshot',{at:now,states:Object.fromEntries(ids.map(id=>[id,e[id]?.state||'missing']))});\nif (s.lastSample && now-s.lastSample>90000) { s.badSince=0; s.healthySince=0; }\ns.lastSample=now;\nif (ids.some(id=>!e[id])) { s.badSince=0; s.healthySince=0; save(); return null; }\nconst healthy=ids.slice(0,2).every(id=>['on','off'].includes(e[id].state));\nconst offline=ids.slice(0,2).some(id=>['unavailable','unknown'].includes(e[id].state));\nconst power=e[ids[2]].state;\nif (healthy) {\n    s.badSince=0;\n    if (!s.healthySince) s.healthySince=now;\n    if (now-s.healthySince>=600000) s={phase:'idle',attempts:0,lastSample:now,healthySince:s.healthySince};\n    save(); return null;\n}\ns.healthySince=0;\nif (s.phase==='locked') { save(); return null; }\nif (s.phase==='waiting' && now>=s.due && power==='off') return alert('Zooz supply still reports OFF after power restoration. Check the wall switch.');\nif (!offline || power!=='on') { s.badSince=0; save(); return null; }\nif (s.phase==='waiting' && now<s.due) { save(); return null; }\nif (s.attempts>=2) return alert('Fan/light are still offline after 2 power-cycle attempts with 3 minutes to reconnect after each.');\nif (!s.badSince) { s.badSince=now; save(); return null; }\nif (now-s.badSince<120000 || !enabled) { save(); return null; }\ns.attempts++; s.phase='off_pending'; s.due=now+60000; s.onTries=0;\nreturn out(1,{});\n",
+      "outputs": 4,
+      "timeout": 0,
+      "noerr": 0,
+      "initialize": "",
+      "finalize": "",
+      "libs": [],
+      "id": "bgfr_controller",
+      "z": "bbac52195f2fa042",
+      "name": "Recovery: max 2 / persistent lockout",
+      "x": 480,
+      "y": 140,
+      "wires": [
+        [
+          "bgfr_snapshot"
+        ],
+        [],
+        [],
+        []
+      ]
+    },
+    {
+      "id": "bgfr_snapshot",
+      "type": "ha-api",
+      "z": "bbac52195f2fa042",
+      "name": "Read live HA states",
+      "server": "23fd91e9137b71c5",
+      "version": 1,
+      "debugenabled": false,
+      "protocol": "http",
+      "method": "get",
+      "path": "states",
+      "data": "",
+      "dataType": "json",
+      "responseType": "json",
+      "outputProperties": [
+        {
+          "property": "payload",
+          "propertyType": "msg",
+          "value": "",
+          "valueType": "results"
+        }
+      ],
+      "x": 480,
+      "y": 300,
+      "wires": [
+        [
+          "bgfr_controller"
+        ]
+      ]
+    },
+    {
+      "id": "bgfr_off",
+      "type": "api-call-service",
+      "z": "bbac52195f2fa042",
+      "name": "Zooz power off",
+      "server": "23fd91e9137b71c5",
+      "version": 7,
+      "debugenabled": false,
+      "action": "light.turn_off",
+      "floorId": [],
+      "areaId": [],
+      "deviceId": [],
+      "entityId": [
+        "light.basement_guest_bed_switch"
+      ],
+      "labelId": [],
+      "data": "{}",
+      "dataType": "json",
+      "mergeContext": "",
+      "mustacheAltTags": false,
+      "outputProperties": [],
+      "queue": "none",
+      "blockInputOverrides": true,
+      "domain": "light",
+      "service": "turn_off",
+      "x": 860,
+      "y": 80,
+      "wires": [
+        [
+          "bgfr_off_ok"
+        ]
+      ]
+    },
+    {
+      "type": "change",
+      "rules": [
+        {
+          "t": "set",
+          "p": "kind",
+          "pt": "msg",
+          "to": "off_ok",
+          "tot": "str"
+        }
+      ],
+      "id": "bgfr_off_ok",
+      "z": "bbac52195f2fa042",
+      "name": "Confirm off",
+      "x": 1110,
+      "y": 80,
+      "wires": [
+        [
+          "bgfr_controller"
+        ]
+      ]
+    },
+    {
+      "id": "bgfr_on",
+      "type": "api-call-service",
+      "z": "bbac52195f2fa042",
+      "name": "Zooz power on",
+      "server": "23fd91e9137b71c5",
+      "version": 7,
+      "debugenabled": false,
+      "action": "light.turn_on",
+      "floorId": [],
+      "areaId": [],
+      "deviceId": [],
+      "entityId": [
+        "light.basement_guest_bed_switch"
+      ],
+      "labelId": [],
+      "data": "{}",
+      "dataType": "json",
+      "mergeContext": "",
+      "mustacheAltTags": false,
+      "outputProperties": [],
+      "queue": "none",
+      "blockInputOverrides": true,
+      "domain": "light",
+      "service": "turn_on",
+      "x": 860,
+      "y": 180,
+      "wires": [
+        [
+          "bgfr_on_ok"
+        ]
+      ]
+    },
+    {
+      "type": "change",
+      "rules": [
+        {
+          "t": "set",
+          "p": "kind",
+          "pt": "msg",
+          "to": "on_ok",
+          "tot": "str"
+        }
+      ],
+      "id": "bgfr_on_ok",
+      "z": "bbac52195f2fa042",
+      "name": "Confirm on",
+      "x": 1110,
+      "y": 180,
+      "wires": [
+        [
+          "bgfr_controller"
+        ]
+      ]
+    },
+    {
+      "type": "pushover api",
+      "keys": "a3903de6e20b03dc",
+      "title": "",
+      "wires": [],
+      "id": "bgfr_push",
+      "z": "bbac52195f2fa042",
+      "name": "Brad phone only (guarded)",
+      "x": 850,
+      "y": 280
+    },
+    {
+      "type": "catch",
+      "scope": [
+        "bgfr_off",
+        "bgfr_on",
+        "bgfr_snapshot"
+      ],
+      "uncaught": false,
+      "id": "bgfr_catch",
+      "z": "bbac52195f2fa042",
+      "name": "Log API / command errors",
+      "x": 200,
+      "y": 400,
+      "wires": [
+        [
+          "bgfr_debug"
+        ]
+      ]
+    },
+    {
+      "type": "debug",
+      "active": true,
+      "tosidebar": true,
+      "console": true,
+      "tostatus": false,
+      "complete": "error",
+      "targetType": "msg",
+      "id": "bgfr_debug",
+      "z": "bbac52195f2fa042",
+      "name": "Recovery errors (bounded retries)",
+      "x": 510,
+      "y": 400,
+      "wires": []
+    }
+  ]
+}

@@ -1,0 +1,1 @@
+{"intervals":[{"start":2344.64,"end":2387.36,"reason":"Sponsor read for Smith's pickup grocery service."}]}

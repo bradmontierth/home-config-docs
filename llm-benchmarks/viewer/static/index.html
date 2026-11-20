@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>GX10 Workload Benchmarks</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div class="ambient ambient-one"></div>
+  <div class="ambient ambient-two"></div>
+  <header class="topbar">
+    <a class="brand" href="#overview" aria-label="Benchmark overview">
+      <span class="brand-mark">GX</span>
+      <span><strong>Workload Benchmarks</strong><small>Real data · real prompts · local models</small></span>
+    </a>
+    <nav id="nav" class="nav" aria-label="Benchmarks"></nav>
+    <div class="health"><span id="health-dot" class="health-dot"></span><span id="health-text">Connecting</span></div>
+  </header>
+
+  <main>
+    <section id="overview" class="view">
+      <div class="hero">
+        <div>
+          <p class="eyebrow">GX10 MODEL CHANGE SAFETY</p>
+          <h1>Benchmarks that reflect<br><span>what the house actually does.</span></h1>
+          <p class="hero-copy">Frozen fixtures, production prompts, human-approved truth, and every raw answer retained. Add a result JSON and it appears here for side-by-side review.</p>
+        </div>
+        <div class="hero-stat">
+          <span id="total-cases">—</span>
+          <small>real-world cases</small>
+          <div class="hero-rule"></div>
+          <span id="total-runs">—</span>
+          <small>comparable runs</small>
+        </div>
+      </div>
+      <div id="overview-grid" class="overview-grid loading-card">Loading benchmark catalog…</div>
+      <div class="method-strip">
+        <div><span>01</span><strong>Frozen inputs</strong><small>Same images, utterances, and transcripts.</small></div>
+        <div><span>02</span><strong>Production path</strong><small>Actual prompts, routing, and post-processing.</small></div>
+        <div><span>03</span><strong>Inspectable</strong><small>Every prediction, latency, and boundary.</small></div>
+        <div><span>04</span><strong>Comparable</strong><small>Choose runs and read them side by side.</small></div>
+      </div>
+    </section>
+
+    <section id="benchmark-view" class="view hidden">
+      <div class="bench-title-row">
+        <div>
+          <p id="bench-eyebrow" class="eyebrow"></p>
+          <h1 id="bench-title"></h1>
+          <p id="bench-subtitle" class="bench-subtitle"></p>
+        </div>
+        <a href="#overview" class="quiet-button">← Overview</a>
+      </div>
+
+      <section class="panel run-panel">
+        <div class="panel-heading">
+          <div><p class="eyebrow">COMPARE RUNS</p><h2>Model results</h2></div>
+          <span id="run-count" class="count-pill"></span>
+        </div>
+        <div id="run-picker" class="run-picker"></div>
+        <div id="comparison" class="comparison"></div>
+      </section>
+
+      <div class="dataset-heading">
+        <div><p class="eyebrow">FROZEN DATASET</p><h2 id="dataset-title">Case review</h2></div>
+        <div class="filters">
+          <label class="search"><span>⌕</span><input id="search" type="search" placeholder="Search cases" autocomplete="off"></label>
+          <select id="status-filter" aria-label="Filter case status">
+            <option value="all">All cases</option>
+            <option value="fail">Has a miss</option>
+            <option value="pass">All selected pass</option>
+          </select>
+        </div>
+      </div>
+      <div id="case-count" class="case-count"></div>
+      <div id="cases" class="cases"></div>
+    </section>
+  </main>
+
+  <footer><span>GX10 real-world evaluation suite</span><span id="generated-at"></span></footer>
+  <script src="/app.js" defer></script>
+</body>
+</html>
+

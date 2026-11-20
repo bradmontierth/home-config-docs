@@ -283,8 +283,16 @@ async def speakable_reply(markdown: str, cache_dir: Path) -> list[str]:
 
 
 class Backend:
-    def __init__(self, url: str, voice: str, pause_s: float, slow: bool, batch: bool = False) -> None:
+    def __init__(self, url: str, voice: str, pause_s: float, slow: bool, batch: bool = False,
+                 engine: str = "", group_factor: dict[int, float] | None = None, group_overhead_s: float = 0.0) -> None:
         self.url, self.voice, self.pause_s, self.slow, self.batch = url, voice, pause_s, slow, batch
+        # The long-form service reports its engine and speed (2026-11-12: Ming, ~10x real
+        # time against Breeze's ~1.4x); the Breeze-measured GROUP_FACTOR is the default.
+        self.engine = engine
+        self.group_factor = group_factor or GROUP_FACTOR
+        self.group_overhead_s = group_overhead_s
+        # audio cache key: the same voice name rendered by another engine is different audio
+        self.cache_voice = f"{voice}@{engine}" if engine and engine != "breeze" else voice
 
 
 def fast_backend() -> Backend:
@@ -299,8 +307,11 @@ async def pick_backend() -> Backend:
             async with httpx.AsyncClient(timeout=4.0) as client:
                 response = await client.get(health)
                 if response.status_code == 200:
-                    batch = bool(response.json().get("batch"))
-                    return Backend(LONGFORM_URL, LONGFORM_VOICE, LONGFORM_PAUSE_S, slow=True, batch=batch)
+                    info = response.json()
+                    factor = {int(k): float(v) for k, v in (info.get("group_factor") or {}).items()} or None
+                    return Backend(LONGFORM_URL, LONGFORM_VOICE, LONGFORM_PAUSE_S, slow=True, batch=bool(info.get("batch")),
+                                   engine=str(info.get("backend") or ""), group_factor=factor,
+                                   group_overhead_s=float(info.get("group_overhead_s") or 0))
         except httpx.HTTPError:
             pass
     return fast_backend()
@@ -506,7 +517,8 @@ class SpeechJob:
 
     def _group_render_s(self, group: list[tuple[str, float]]) -> float:
         per_char = self.speech_s / self.done_chars if self.done_chars else AUDIO_S_PER_CHAR
-        return max(len(text) for text, _ in group) * per_char * GROUP_FACTOR[len(group)] * ESTIMATE_MARGIN
+        factor = self.backend.group_factor.get(len(group), max(self.backend.group_factor.values()))
+        return (max(len(text) for text, _ in group) * per_char * factor + self.backend.group_overhead_s) * ESTIMATE_MARGIN
 
     def group_eta_s(self) -> float | None:
         """Seconds until the group being rendered is expected to land, None when nothing is rendering."""

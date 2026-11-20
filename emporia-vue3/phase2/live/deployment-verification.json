@@ -1,0 +1,204 @@
+{
+  "checked_at": 1790553407.2455258,
+  "tabs": [
+    {
+      "id": "ee0f1588760b9b3b",
+      "label": "Dishwasher",
+      "nodes": 102,
+      "sha256": "ab95c0f7a3a1f6cf164c0096b733d25036a135b29c790a27a2d4804f31673250"
+    },
+    {
+      "id": "afea81d223c193eb",
+      "label": "Energy MQTT Sensors",
+      "nodes": 20,
+      "sha256": "49f4bcb436ed78581373946705e8252050eefe48d99711a557cb27b1c640daaa"
+    },
+    {
+      "id": "8123861fc119b96b",
+      "label": "IotaWatt",
+      "nodes": 136,
+      "sha256": "32ae47730c63ed12525e1c2fd138cdd5aee067eee1691b89a0bf34b75002f431"
+    },
+    {
+      "id": "0711e9167e62e249",
+      "label": "Washer Dryer ",
+      "nodes": 121,
+      "sha256": "1095c7b37542261842dbeabc4f8dac926606ceb683d12cc78a729d7ae8e02365"
+    },
+    {
+      "id": "7fa25727b15db1f0",
+      "label": "Tesla",
+      "nodes": 275,
+      "sha256": "01a505f92aa9a5beef5ff27e5c6ad0752bcc60ec9036db8feaa7df5de53def72"
+    }
+  ],
+  "power": {
+    "started": 1790553256733,
+    "now": 1790553407306,
+    "health": {
+      "range": {
+        "watts": 6.72524976730347,
+        "reportedAt": 1790553406548,
+        "available": true,
+        "fresh": true
+      },
+      "dryer": {
+        "watts": 5.01200008392334,
+        "reportedAt": 1790553406537,
+        "available": true,
+        "fresh": true
+      },
+      "dish": {
+        "watts": 1.50893759727478,
+        "reportedAt": 1790553406547,
+        "available": true,
+        "fresh": true
+      },
+      "ev": {
+        "watts": 2.54362487792969,
+        "reportedAt": 1790553406548,
+        "available": true,
+        "fresh": true
+      },
+      "ac": {
+        "watts": 2749.60424804688,
+        "reportedAt": 1790553406547,
+        "available": true,
+        "fresh": true
+      },
+      "furnace": {
+        "watts": 1176.97290039062,
+        "reportedAt": 1790553406549,
+        "available": true,
+        "fresh": true
+      },
+      "a": {
+        "watts": 2168.1923828125,
+        "reportedAt": 1790553406537,
+        "available": true,
+        "fresh": true
+      },
+      "b": {
+        "watts": 3376.74755859375,
+        "reportedAt": 1790553406536,
+        "available": true,
+        "fresh": true
+      },
+      "outdoor": {
+        "watts": 435.2,
+        "reportedAt": 1790553401401,
+        "available": true,
+        "fresh": true
+      },
+      "solar": {
+        "watts": 147,
+        "reportedAt": 1790553394892,
+        "available": true,
+        "fresh": true
+      },
+      "pwout": {
+        "watts": 220,
+        "reportedAt": 1790553394893,
+        "available": true,
+        "fresh": true
+      }
+    },
+    "evTuple": {
+      "ok": true,
+      "totalHome": 6019.762130693361,
+      "nonEv": 6017.973522735235,
+      "availableWatts": -5890.973522735235,
+      "samples": {
+        "mainsA": {
+          "watts": 2181.0933963378934,
+          "reportedAt": 1790553394892,
+          "available": true
+        },
+        "mainsB": {
+          "watts": 3383.3916143554675,
+          "reportedAt": 1790553394892,
+          "available": true
+        },
+        "ev": {
+          "watts": 1.7886079581260677,
+          "reportedAt": 1790553394892,
+          "available": true
+        },
+        "solar": {
+          "watts": 127,
+          "reportedAt": 1790553394892,
+          "available": true
+        },
+        "outdoor": {
+          "watts": 455.27712,
+          "reportedAt": 1790553394892,
+          "available": true
+        }
+      },
+      "windowEnd": 1790553394892,
+      "windowMs": 5000
+    },
+    "history": {
+      "ev": {
+        "count": 61,
+        "last": 1790553406548,
+        "maxGapMs": 1103
+      },
+      "mainsB": {
+        "count": 61,
+        "last": 1790553406536,
+        "maxGapMs": 1092
+      },
+      "mainsA": {
+        "count": 61,
+        "last": 1790553406537,
+        "maxGapMs": 1113
+      },
+      "outdoor": {
+        "count": 7,
+        "last": 1790553401401,
+        "maxGapMs": 10545
+      },
+      "solar": {
+        "count": 5,
+        "last": 1790553394892,
+        "maxGapMs": 15709
+      }
+    },
+    "states": {
+      "range": {
+        "range": false,
+        "ovenOn": false,
+        "indicator": false
+      },
+      "dryer": {},
+      "dishwasher": {
+        "status": "running"
+      }
+    },
+    "transitions": []
+  },
+  "ev": {
+    "now": 1790553407313,
+    "sent": 1,
+    "acks": 1,
+    "errors": 0,
+    "pending": false,
+    "yielded": false,
+    "desired": {
+      "state": "disabled"
+    },
+    "mode": "idle",
+    "reason": "No charging condition met",
+    "lastRead": 1790553391594,
+    "readback": {
+      "state": "disabled",
+      "auto_release": true
+    }
+  },
+  "dashboard": {
+    "ok": true,
+    "ha_connected": true,
+    "ha_error": null
+  }
+}

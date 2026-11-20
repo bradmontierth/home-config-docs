@@ -46,7 +46,7 @@ from pathlib import Path
 import httpx
 from rapidfuzz import fuzz
 
-from . import config
+from . import config, chaos, covers, tree
 from .weather import _token  # same mounted ha_token; avoid a third copy
 
 log = logging.getLogger("orchestrator.home_control")
@@ -78,6 +78,7 @@ def _fold(text: str) -> str:
     """Apostrophe-blind lowercase: "it's", "its" and the ASR artefact "it s"
     all fold to the same thing, so an alias written either way matches."""
     text = text.lower().replace("\u2019", "'").replace("'", "")
+    text = covers.fold_homophones(text)
     return re.sub(r"\b(it|that|what|there|let|he|she|who) s\b", r"\1s", text)
 
 
@@ -119,17 +120,32 @@ _EXCLUDE_WORDS = {
     "fan": ("simon_lights", "claire_lights", "fr_cans",
             "simon_hvac", "claire_hvac"),
     "fans": ("fr_cans",),
-    "light": ("simon_fan", "claire_fan", "fr_fan"),
-    "lights": ("simon_fan", "claire_fan", "fr_fan"),
+    "light": ("simon_fan", "claire_fan", "fr_fan", "fr_cans"),
+    "lights": ("simon_fan", "claire_fan", "fr_fan", "fr_cans"),
     "can": ("fr_fan",),
     "cans": ("fr_fan",),
     # ...and the family-room fan too: "turn on the ac" from the kitchen mic
     # scored 87 against its "turn on the fan" before this (caught by the
     # Simon HVAC tests, 2026-08-31).
-    "air": ("simon_fan", "claire_fan", "fr_fan"),
-    "ac": ("simon_fan", "claire_fan", "fr_fan"),
-    "heat": ("simon_fan", "claire_fan", "fr_fan"),
-    "heater": ("simon_fan", "claire_fan", "fr_fan"),
+    # The family-room cans have the same near-match as the fan (2026-09-12).
+    "air": ("simon_fan", "claire_fan", "fr_fan", "fr_cans"),
+    "ac": ("simon_fan", "claire_fan", "fr_fan", "fr_cans"),
+    "heat": ("simon_fan", "claire_fan", "fr_fan", "fr_cans"),
+    "heater": ("simon_fan", "claire_fan", "fr_fan", "fr_cans"),
+    # "turn off the lights" is one word from "turn on the kitchen lights" /
+    # "turn up the lights" (86) and used to brighten the kitchen from the
+    # master. An "off" phrase never means brighter (2026-11-05).
+    "off": ("kitchen_brighten", "simon_brighter", "claire_brighter",
+            "fr_cans_brighter"),
+}
+
+# ...except when the phrase also names the cans themselves. Bare "turn on the
+# lights" from the kitchen mic scored 90 against "turn on the cans" and lit the
+# family-room cans (2026-11-05, three times); the cans are reachable from the
+# kitchen and checked before the house-wide kitchen_brighten. "lights" alone
+# never means the cans; "can lights" / "recessed lights" still do.
+_EXCLUDE_UNLESS = {
+    "fr_cans": {"can", "cans", "recessed"},
 }
 
 # "All" pins a phrase to the house-wide form of a room-split command. Without
@@ -293,13 +309,16 @@ def _house(commands: dict, sat: str | None) -> dict:
 
 def _best(query: str, commands: dict) -> tuple[str, dict, float] | None:
     """Best (key, entry, score) for an already-cleaned query, no threshold."""
+    if covers.has_level_request(query):
+        return None
     words = set(re.findall(r"[a-z']+", query))
     pins = {_PIN_WORDS[w] for w in words if w in _PIN_WORDS}
     if len(pins) == 1:
         pin = next(iter(pins))
         commands = {k: v for k, v in commands.items()
                     if not k.startswith("blind") or k.startswith(pin)}
-    excluded = tuple(p for w in words for p in _EXCLUDE_WORDS.get(w, ()))
+    excluded = tuple(p for w in words for p in _EXCLUDE_WORDS.get(w, ())
+                     if not (words & _EXCLUDE_UNLESS.get(p, set())))
     if excluded:
         commands = {k: v for k, v in commands.items()
                     if not k.startswith(excluded)}
@@ -310,9 +329,34 @@ def _best(query: str, commands: dict) -> tuple[str, dict, float] | None:
         # query was: "pac man" must hit "give me pac man" at 100, not 64.
         score = max(fuzz.ratio(query, x) for a in entry["aliases"]
                     for x in (_fold(a), _clean(a)))
+        if score < 100 and key.startswith("blind") and _unknown_blind_name(query, entry):
+            continue
         if best is None or score > best[2]:
             best = (key, entry, score)
     return best
+
+
+# Nouns a blind is named by, and words allowed in front of one that are not
+# its name. "close the sync blind" (Cohere's "sink", 2026-10-31) scored past
+# the threshold against the kitchen's "close the blinds" and closed all four:
+# the one word that named the blind was the word ASR got wrong. A fuzzy blind
+# match must not drop the word that says WHICH blind -- if the word in front
+# of the noun appears in none of the winning command's aliases, it named some
+# other blind, and a miss is better than moving the wrong windows.
+_BLIND_NOUNS = {"blind", "blinds", "shade", "shades", "window", "windows"}
+_BLIND_FREE_WORDS = {"the", "all", "both", "my", "our", "those", "these", "of"}
+
+
+def _unknown_blind_name(query: str, entry: dict) -> bool:
+    words = query.split()
+    vocab = {w for a in entry["aliases"] for w in _fold(a).split()}
+    for i, w in enumerate(words):
+        if w in _BLIND_NOUNS and i > 0:
+            prev = words[i - 1]
+            if prev not in vocab and prev not in _BLIND_FREE_WORDS \
+                    and prev not in _ROOM_WORDS:
+                return True
+    return False
 
 
 def _match(query: str, sat: str | None = None) -> tuple[str, dict, float] | None:
@@ -324,6 +368,8 @@ def _match(query: str, sat: str | None = None) -> tuple[str, dict, float] | None
     the house-wide table get a look. The room is whichever one the phrase
     names, falling back to the one the speaker is standing in.
     """
+    if covers.has_level_request(query):
+        return None
     query = _clean(query)
     if not query:
         return None
@@ -337,6 +383,13 @@ def _match(query: str, sat: str | None = None) -> tuple[str, dict, float] | None
     words = set(re.findall(r"[a-z']+", query))
     pools = ((_house(commands, sat),) if words & _ALL_WORDS
              else (_local(commands, sat), _house(commands, sat)))
+    # Honor an explicit reachable alias before a room-local fuzzy near miss:
+    # "chaos off" must not become "cans off" in the kitchen.
+    for pool in pools:
+        if pool:
+            exact = _best(query, pool)
+            if exact and exact[2] == 100:
+                return exact
     for pool in pools:
         if not pool:
             continue
@@ -357,6 +410,8 @@ def has_exact_match(query: str, sat: str | None = None) -> bool:
     an exact curated alias is safe to promote to home_control immediately: it
     cannot make an unrelated phrase operate a device.
     """
+    if covers.has_level_request(query):
+        return False
     query = _clean((query or "").strip().lower())
     if not query:
         return False
@@ -471,7 +526,17 @@ async def handle(parsed: dict, command: str,
                  sat: str | None = None) -> dict | None:
     """Match and press. Returns the spoken confirmation, or None on a miss
     (the app speaks the refusal; nothing to follow up on, so no remember())."""
+    colors = chaos.parse(command)
+    if colors is not None:
+        return await chaos.handle(colors)
+    tree_colors = tree.parse(command)
+    if tree_colors is not None:
+        return await tree.handle(tree_colors)
     query = (parsed.get("query") or command or "").strip().lower()
+    # Check the original too: a classifier can omit the number in its query.
+    if covers.has_level_request(command) or covers.has_level_request(query):
+        return {"response": "Please give a final blind position, like set the sliding door to 50 percent open.",
+                "ok": False}
     if not query:
         return None
     matched = _match(query, sat)
@@ -484,6 +549,9 @@ async def handle(parsed: dict, command: str,
             "response": entry.get("disabled_response") or "That control is disabled.",
             "ok": False,
         }
+    if key in ("main_comfort_hot", "main_comfort_cold"):
+        from . import main_comfort
+        return await main_comfort.request(key.rsplit("_", 1)[1])
     started = time.monotonic()
     await _press(entry["entity"])
     log.info("home control %r -> %s (sat=%s score %.0f, press %.0fms)",

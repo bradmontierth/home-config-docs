@@ -1,0 +1,1 @@
+{"intervals":[{"start": 670.96, "end": 700.72, "reason": "Smith's grocery store promotional read."},{"start": 700.80, "end": 748.24, "reason": "Paylocity podcast ad read with CTA."},{"start": 752.40, "end": 762.56, "reason": "Pablo Torre World Cup promo start."}]}

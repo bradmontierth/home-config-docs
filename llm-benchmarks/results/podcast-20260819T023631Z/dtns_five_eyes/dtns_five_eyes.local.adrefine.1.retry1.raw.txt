@@ -1,0 +1,24 @@
+{
+"intervals": [
+{
+"start": 1.52,
+"end": 30.56,
+"reason": "Smith's pickup delivery sponsor read with offer details and tagline."
+},
+{
+"start": 30.56,
+"end": 69.84,
+"reason": "Sephora beauty products sponsor read with product highlights and CTA."
+},
+{
+"start": 69.84,
+"end": 101.76,
+"reason": "Granger office supplies sponsor read with problem framing and contact info."
+},
+{
+"start": 101.76,
+"end": 166.80,
+"reason": "Alienware gaming gear sponsor read with deals, specs, and deadline."
+}
+]
+}

@@ -1,0 +1,1088 @@
+{
+  "before_states": {
+    "sensor.fridge_energy": {
+      "entity_id": "sensor.fridge_energy",
+      "state": "2084.629864935335638865556056",
+      "attributes": {
+        "state_class": "total",
+        "source": "sensor.iotawatt_fridge_power",
+        "unit_of_measurement": "kWh",
+        "icon": "mdi:chart-histogram",
+        "friendly_name": "Fridge Energy"
+      },
+      "last_changed": "2026-09-27T15:14:48.292156+00:00",
+      "last_reported": "2026-09-27T15:14:48.292156+00:00",
+      "last_updated": "2026-09-27T15:14:48.292156+00:00",
+      "context": {
+        "id": "01M3HPXPV4PM1865J9YRZFM13E",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    "sensor.daily_fridge_energy": {
+      "entity_id": "sensor.daily_fridge_energy",
+      "state": "0.976180985186722223459828",
+      "attributes": {
+        "state_class": "total_increasing",
+        "status": "collecting",
+        "last_period": "3.279592520633847222132538",
+        "last_valid_state": "2084.629864935335638865556056",
+        "last_reset": "2026-09-27T06:00:00.047606+00:00",
+        "next_reset": "2026-09-28T00:00:00-06:00",
+        "unit_of_measurement": "kWh",
+        "device_class": "energy",
+        "friendly_name": "Daily Fridge Energy"
+      },
+      "last_changed": "2026-09-27T15:14:48.294014+00:00",
+      "last_reported": "2026-09-27T15:14:48.294014+00:00",
+      "last_updated": "2026-09-27T15:14:48.294014+00:00",
+      "context": {
+        "id": "01M3HPXPV6J45EGP1NRYG3FPCE",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    "sensor.dryer_energy": {
+      "entity_id": "sensor.dryer_energy",
+      "state": "1504.023927198737389296364839",
+      "attributes": {
+        "state_class": "total",
+        "source": "sensor.iotawatt_dryer_power",
+        "unit_of_measurement": "kWh",
+        "icon": "mdi:chart-histogram",
+        "friendly_name": "Dryer Energy"
+      },
+      "last_changed": "2026-09-27T15:14:48.295756+00:00",
+      "last_reported": "2026-09-27T15:14:48.295756+00:00",
+      "last_updated": "2026-09-27T15:14:48.295756+00:00",
+      "context": {
+        "id": "01M3HPXPV72J0S7ZE82S473YZ4",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    "sensor.daily_dryer_energy": {
+      "entity_id": "sensor.daily_dryer_energy",
+      "state": "0.008367121664930555552478",
+      "attributes": {
+        "state_class": "total_increasing",
+        "status": "collecting",
+        "last_period": "0.031920898800263888837737",
+        "last_valid_state": "1504.023927198737389296364839",
+        "last_reset": "2026-09-27T06:00:00.044967+00:00",
+        "next_reset": "2026-09-28T00:00:00-06:00",
+        "unit_of_measurement": "kWh",
+        "device_class": "energy",
+        "friendly_name": "Daily Dryer Energy"
+      },
+      "last_changed": "2026-09-27T15:14:48.296580+00:00",
+      "last_reported": "2026-09-27T15:14:48.296580+00:00",
+      "last_updated": "2026-09-27T15:14:48.296580+00:00",
+      "context": {
+        "id": "01M3HPXPV86ZTH5T71R521H38D",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    "sensor.ac_energy": {
+      "entity_id": "sensor.ac_energy",
+      "state": "3534.171638428842638617523040",
+      "attributes": {
+        "state_class": "total",
+        "source": "sensor.iotawatt_ac_total_power",
+        "unit_of_measurement": "kWh",
+        "icon": "mdi:chart-histogram",
+        "friendly_name": "AC Energy"
+      },
+      "last_changed": "2026-09-27T15:14:48.294889+00:00",
+      "last_reported": "2026-09-27T15:14:48.294889+00:00",
+      "last_updated": "2026-09-27T15:14:48.294889+00:00",
+      "context": {
+        "id": "01M3HPXPV69WXX0R1SJNCRJ2M9",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    "sensor.daily_ac_energy": {
+      "entity_id": "sensor.daily_ac_energy",
+      "state": "0.026398442774208333334019",
+      "attributes": {
+        "state_class": "total_increasing",
+        "status": "collecting",
+        "last_period": "7.446089046755527768270535",
+        "last_valid_state": "3534.171638428842638617523040",
+        "last_reset": "2026-09-27T06:00:00.005917+00:00",
+        "next_reset": "2026-09-28T00:00:00-06:00",
+        "unit_of_measurement": "kWh",
+        "device_class": "energy",
+        "friendly_name": "Daily AC Energy"
+      },
+      "last_changed": "2026-09-27T15:14:48.295625+00:00",
+      "last_reported": "2026-09-27T15:14:48.295625+00:00",
+      "last_updated": "2026-09-27T15:14:48.295625+00:00",
+      "context": {
+        "id": "01M3HPXPV7KF2DM7W50K6CCX02",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    "sensor.oven_energy": {
+      "entity_id": "sensor.oven_energy",
+      "state": "293.3877133081980692912473731",
+      "attributes": {
+        "state_class": "total",
+        "source": "sensor.iotawatt_range_power",
+        "unit_of_measurement": "kWh",
+        "icon": "mdi:chart-histogram",
+        "friendly_name": "Oven Energy"
+      },
+      "last_changed": "2026-09-27T15:14:48.298188+00:00",
+      "last_reported": "2026-09-27T15:14:48.298188+00:00",
+      "last_updated": "2026-09-27T15:14:48.298188+00:00",
+      "context": {
+        "id": "01M3HPXPVA6TRXAKR1FNK5NQCE",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    "sensor.daily_range_energy": {
+      "entity_id": "sensor.daily_range_energy",
+      "state": "0.0194480184222500000110911",
+      "attributes": {
+        "state_class": "total_increasing",
+        "status": "collecting",
+        "last_period": "0.6105259781852638891033287",
+        "last_valid_state": "293.3877133081980692912473731",
+        "last_reset": "2026-09-27T06:00:00.030776+00:00",
+        "next_reset": "2026-09-28T00:00:00-06:00",
+        "unit_of_measurement": "kWh",
+        "device_class": "energy",
+        "friendly_name": "Daily Range Energy"
+      },
+      "last_changed": "2026-09-27T15:14:48.298830+00:00",
+      "last_reported": "2026-09-27T15:14:48.298830+00:00",
+      "last_updated": "2026-09-27T15:14:48.298830+00:00",
+      "context": {
+        "id": "01M3HPXPVAJ8NV4XYVVDASEGJN",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    "sensor.furnace_energy": {
+      "entity_id": "sensor.furnace_energy",
+      "state": "4125.340309972599097103966687",
+      "attributes": {
+        "state_class": "total",
+        "source": "sensor.iotawatt_furnace_power",
+        "unit_of_measurement": "kWh",
+        "icon": "mdi:chart-histogram",
+        "friendly_name": "Furnace Energy"
+      },
+      "last_changed": "2026-09-27T15:14:18.140245+00:00",
+      "last_reported": "2026-09-27T15:14:18.140245+00:00",
+      "last_updated": "2026-09-27T15:14:18.140245+00:00",
+      "context": {
+        "id": "01M3HPWSCWWDK2FYFV5TE6DQ5D",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    "sensor.daily_furnace_energy": {
+      "entity_id": "sensor.daily_furnace_energy",
+      "state": "0.051141265478638888940552",
+      "attributes": {
+        "state_class": "total_increasing",
+        "status": "collecting",
+        "last_period": "3.938017396559222216128491",
+        "last_valid_state": "4125.340309972599097103966687",
+        "last_reset": "2026-09-27T06:00:00.050227+00:00",
+        "next_reset": "2026-09-28T00:00:00-06:00",
+        "unit_of_measurement": "kWh",
+        "device_class": "energy",
+        "friendly_name": "Daily Furnace Energy"
+      },
+      "last_changed": "2026-09-27T15:14:18.140723+00:00",
+      "last_reported": "2026-09-27T15:14:18.140723+00:00",
+      "last_updated": "2026-09-27T15:14:18.140723+00:00",
+      "context": {
+        "id": "01M3HPWSCWTHWMW2H08F1AF7EZ",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    "sensor.water_heater_energy": {
+      "entity_id": "sensor.water_heater_energy",
+      "state": "239.1947520792524027884597117",
+      "attributes": {
+        "state_class": "total",
+        "source": "sensor.iotawatt_water_heater_power",
+        "unit_of_measurement": "kWh",
+        "icon": "mdi:chart-histogram",
+        "friendly_name": "Water Heater Energy"
+      },
+      "last_changed": "2026-09-27T15:14:48.291102+00:00",
+      "last_reported": "2026-09-27T15:14:48.291102+00:00",
+      "last_updated": "2026-09-27T15:14:48.291102+00:00",
+      "context": {
+        "id": "01M3HPXPV399ZFD8WJFG6BSF78",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    "sensor.daily_water_heater_energy": {
+      "entity_id": "sensor.daily_water_heater_energy",
+      "state": "0.0366481992645694444666246",
+      "attributes": {
+        "state_class": "total_increasing",
+        "status": "collecting",
+        "last_period": "0.2386439946430277775644704",
+        "last_valid_state": "239.1947520792524027884597117",
+        "last_reset": "2026-09-27T06:00:00.031687+00:00",
+        "next_reset": "2026-09-28T00:00:00-06:00",
+        "unit_of_measurement": "kWh",
+        "device_class": "energy",
+        "friendly_name": "Daily Water Heater Energy"
+      },
+      "last_changed": "2026-09-27T15:14:48.291657+00:00",
+      "last_reported": "2026-09-27T15:14:48.291657+00:00",
+      "last_updated": "2026-09-27T15:14:48.291657+00:00",
+      "context": {
+        "id": "01M3HPXPV3ENN94AJA2H23RB2Q",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    "sensor.kitchen_energy": {
+      "entity_id": "sensor.kitchen_energy",
+      "state": "565.1616280632815277299918480",
+      "attributes": {
+        "state_class": "total",
+        "source": "sensor.iotawatt_kitchen_power",
+        "unit_of_measurement": "kWh",
+        "icon": "mdi:chart-histogram",
+        "friendly_name": "Kitchen Energy"
+      },
+      "last_changed": "2026-09-27T15:14:39.279505+00:00",
+      "last_reported": "2026-09-27T15:14:39.279505+00:00",
+      "last_updated": "2026-09-27T15:14:39.279505+00:00",
+      "context": {
+        "id": "01M3HPXE1F0BFHQYJSPT56MKPX",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    "sensor.daily_kitchen_energy": {
+      "entity_id": "sensor.daily_kitchen_energy",
+      "state": "0.0205874660419444444665048",
+      "attributes": {
+        "state_class": "total_increasing",
+        "status": "collecting",
+        "last_period": "0.7912561762470138874099724",
+        "last_valid_state": "565.1616280632815277299918480",
+        "last_reset": "2026-09-27T06:00:00.048125+00:00",
+        "next_reset": "2026-09-28T00:00:00-06:00",
+        "unit_of_measurement": "kWh",
+        "device_class": "energy",
+        "friendly_name": "Daily Kitchen Energy"
+      },
+      "last_changed": "2026-09-27T15:14:39.279985+00:00",
+      "last_reported": "2026-09-27T15:14:39.279985+00:00",
+      "last_updated": "2026-09-27T15:14:39.279985+00:00",
+      "context": {
+        "id": "01M3HPXE1FWBT3P2D8CW8RYFJP",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    "sensor.tesla_energy": {
+      "entity_id": "sensor.tesla_energy",
+      "state": "8411652.310113178638963582316",
+      "attributes": {
+        "state_class": "total",
+        "source": "sensor.iotawatt_ev_charging_power",
+        "unit_of_measurement": "Wh",
+        "icon": "mdi:chart-histogram",
+        "friendly_name": "Tesla Energy"
+      },
+      "last_changed": "2026-09-27T15:14:48.296705+00:00",
+      "last_reported": "2026-09-27T15:14:48.296705+00:00",
+      "last_updated": "2026-09-27T15:14:48.296705+00:00",
+      "context": {
+        "id": "01M3HPXPV8G9F6CK7WYKRYFMR4",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    "sensor.daily_tesla_energy": {
+      "entity_id": "sensor.daily_tesla_energy",
+      "state": "35.8553957415056",
+      "attributes": {
+        "state_class": "total_increasing",
+        "status": "collecting",
+        "last_period": "70725.139413668361081502051",
+        "last_valid_state": "8411652.310113178638963582316",
+        "last_reset": "2026-09-27T06:00:00.017951+00:00",
+        "next_reset": "2026-09-28T00:00:00-06:00",
+        "unit_of_measurement": "kWh",
+        "device_class": "energy",
+        "friendly_name": "Daily Tesla Energy"
+      },
+      "last_changed": "2026-09-27T15:14:48.298053+00:00",
+      "last_reported": "2026-09-27T15:14:48.298053+00:00",
+      "last_updated": "2026-09-27T15:14:48.298053+00:00",
+      "context": {
+        "id": "01M3HPXPVAT4QRYM7BS7CVPFC7",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    "sensor.claire_mini_energy": {
+      "entity_id": "sensor.claire_mini_energy",
+      "state": "428.8632904211693194782855142",
+      "attributes": {
+        "state_class": "total",
+        "source": "sensor.iotawatt_claire_mini_split_power",
+        "unit_of_measurement": "kWh",
+        "icon": "mdi:chart-histogram",
+        "friendly_name": "Claire Mini Energy"
+      },
+      "last_changed": "2026-09-27T15:14:48.307420+00:00",
+      "last_reported": "2026-09-27T15:14:48.307420+00:00",
+      "last_updated": "2026-09-27T15:14:48.307420+00:00",
+      "context": {
+        "id": "01M3HPXPVKQSREDDYPGHBHXPM3",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    "sensor.claire_mini_daily_energy": {
+      "entity_id": "sensor.claire_mini_daily_energy",
+      "state": "0.0377407744132916666968272",
+      "attributes": {
+        "state_class": "total_increasing",
+        "status": "collecting",
+        "last_period": "0.5147476064682361110152542",
+        "last_valid_state": "428.8632904211693194782855142",
+        "last_reset": "2026-09-27T06:00:00.048478+00:00",
+        "next_reset": "2026-09-28T00:00:00-06:00",
+        "unit_of_measurement": "kWh",
+        "device_class": "energy",
+        "friendly_name": "Claire Mini Daily Energy"
+      },
+      "last_changed": "2026-09-27T15:14:48.307685+00:00",
+      "last_reported": "2026-09-27T15:14:48.307685+00:00",
+      "last_updated": "2026-09-27T15:14:48.307685+00:00",
+      "context": {
+        "id": "01M3HPXPVKE7802Q004C2VQJ5A",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    "sensor.office_energy": {
+      "entity_id": "sensor.office_energy",
+      "state": "1409.191464739103569392753297",
+      "attributes": {
+        "state_class": "total",
+        "source": "sensor.iotawatt_office_power",
+        "unit_of_measurement": "kWh",
+        "icon": "mdi:chart-histogram",
+        "friendly_name": "Office Energy"
+      },
+      "last_changed": "2026-09-27T15:14:48.303656+00:00",
+      "last_reported": "2026-09-27T15:14:48.303656+00:00",
+      "last_updated": "2026-09-27T15:14:48.303656+00:00",
+      "context": {
+        "id": "01M3HPXPVFAZE192569ZTP46DP",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    "sensor.office_daily_energy_2": {
+      "entity_id": "sensor.office_daily_energy_2",
+      "state": "0.806759222242083333793242",
+      "attributes": {
+        "state_class": "total_increasing",
+        "status": "collecting",
+        "last_period": "2.750410678782833336412323",
+        "last_valid_state": "1409.191464739103569392753297",
+        "last_reset": "2026-09-27T06:00:00.021885+00:00",
+        "next_reset": "2026-09-28T00:00:00-06:00",
+        "unit_of_measurement": "kWh",
+        "device_class": "energy",
+        "friendly_name": "Office Daily Energy "
+      },
+      "last_changed": "2026-09-27T15:14:48.304887+00:00",
+      "last_reported": "2026-09-27T15:14:48.304887+00:00",
+      "last_updated": "2026-09-27T15:14:48.304887+00:00",
+      "context": {
+        "id": "01M3HPXPVGJTVF8BQG9KNTH9TJ",
+        "parent_id": null,
+        "user_id": null
+      }
+    }
+  },
+  "circuits": [
+    {
+      "port": 1,
+      "label": "Fridge",
+      "live": "sensor.emporia_vue3_fridge_power",
+      "average": "sensor.emporia_vue3_fridge_power_1m_average",
+      "energy": "sensor.fridge_energy",
+      "daily": "sensor.daily_fridge_energy"
+    },
+    {
+      "port": 2,
+      "label": "Dryer",
+      "live": "sensor.emporia_vue3_dryer_power_live",
+      "average": "sensor.emporia_vue3_dryer_power_1m_average",
+      "energy": "sensor.dryer_energy",
+      "daily": "sensor.daily_dryer_energy"
+    },
+    {
+      "port": 3,
+      "label": "AC",
+      "live": "sensor.emporia_vue3_ac_power_live",
+      "average": "sensor.emporia_vue3_ac_power_1m_average",
+      "energy": "sensor.ac_energy",
+      "daily": "sensor.daily_ac_energy"
+    },
+    {
+      "port": 4,
+      "label": "Range Oven",
+      "live": "sensor.emporia_vue3_range_oven_power_live",
+      "average": "sensor.emporia_vue3_range_oven_power_1m_average",
+      "energy": "sensor.oven_energy",
+      "daily": "sensor.daily_range_energy"
+    },
+    {
+      "port": 5,
+      "label": "Microwave",
+      "live": "sensor.emporia_vue3_microwave_power_live",
+      "average": "sensor.emporia_vue3_microwave_power_1m_average",
+      "energy": "sensor.vue_microwave_energy",
+      "daily": "sensor.vue_microwave_daily_energy"
+    },
+    {
+      "port": 6,
+      "label": "Washer Bidet Laundry",
+      "live": "sensor.emporia_vue3_washer_bidet_laundry_power_live",
+      "average": "sensor.emporia_vue3_washer_bidet_laundry_power_1m_average",
+      "energy": "sensor.vue_washer_bidet_laundry_energy",
+      "daily": "sensor.vue_washer_bidet_laundry_daily_energy"
+    },
+    {
+      "port": 7,
+      "label": "Furnace",
+      "live": "sensor.emporia_vue3_furnace_power_live",
+      "average": "sensor.emporia_vue3_furnace_power_1m_average",
+      "energy": "sensor.furnace_energy",
+      "daily": "sensor.daily_furnace_energy"
+    },
+    {
+      "port": 8,
+      "label": "Water Heater",
+      "live": "sensor.emporia_vue3_water_heater_power_live",
+      "average": "sensor.emporia_vue3_water_heater_power_1m_average",
+      "energy": "sensor.water_heater_energy",
+      "daily": "sensor.daily_water_heater_energy"
+    },
+    {
+      "port": 9,
+      "label": "Garage",
+      "live": "sensor.emporia_vue3_garage_power_live",
+      "average": "sensor.emporia_vue3_garage_power_1m_average",
+      "energy": "sensor.vue_garage_energy",
+      "daily": "sensor.vue_garage_daily_energy"
+    },
+    {
+      "port": 10,
+      "label": "Dishwasher",
+      "live": "sensor.emporia_vue3_dishwasher_power_live",
+      "average": "sensor.emporia_vue3_dishwasher_power_1m_average",
+      "energy": "sensor.kitchen_energy",
+      "daily": "sensor.daily_kitchen_energy"
+    },
+    {
+      "port": 11,
+      "label": "EV Charger",
+      "live": "sensor.emporia_vue3_ev_charger_power_live",
+      "average": "sensor.emporia_vue3_ev_charger_power_1m_average",
+      "energy": "sensor.tesla_energy",
+      "daily": "sensor.daily_tesla_energy"
+    },
+    {
+      "port": 12,
+      "label": "Claire Mini Split",
+      "live": "sensor.emporia_vue3_claire_mini_split_power_live",
+      "average": "sensor.emporia_vue3_claire_mini_split_power_1m_average",
+      "energy": "sensor.claire_mini_energy",
+      "daily": "sensor.claire_mini_daily_energy"
+    },
+    {
+      "port": 13,
+      "label": "Office",
+      "live": "sensor.emporia_vue3_office_power_live",
+      "average": "sensor.emporia_vue3_office_power_1m_average",
+      "energy": "sensor.office_energy",
+      "daily": "sensor.office_daily_energy_2"
+    },
+    {
+      "port": 14,
+      "label": "Master Bedroom Closet",
+      "live": "sensor.emporia_vue3_master_bedroom_closet_power_live",
+      "average": "sensor.emporia_vue3_master_bedroom_closet_power_1m_average",
+      "energy": "sensor.vue_master_bedroom_closet_energy",
+      "daily": "sensor.vue_master_bedroom_closet_daily_energy"
+    },
+    {
+      "port": 15,
+      "label": "Basement Bathroom",
+      "live": "sensor.emporia_vue3_basement_bathroom_power_live",
+      "average": "sensor.emporia_vue3_basement_bathroom_power_1m_average",
+      "energy": "sensor.vue_basement_bathroom_energy",
+      "daily": "sensor.vue_basement_bathroom_daily_energy"
+    },
+    {
+      "port": 16,
+      "label": "Loft Kids Bathroom Whole House Fan",
+      "live": "sensor.emporia_vue3_loft_kids_bathroom_whole_house_fan_power_live",
+      "average": "sensor.emporia_vue3_loft_kids_bathroom_whole_house_fan_power_1m_average",
+      "energy": "sensor.vue_loft_kids_bathroom_whole_house_fan_energy",
+      "daily": "sensor.vue_loft_kids_bathroom_whole_house_fan_daily_energy"
+    }
+  ],
+  "changes": [
+    {
+      "entry_id": "01JFKS6Y7NRXK9YKH9DAGFT6B7",
+      "old_options": {
+        "method": "trapezoidal",
+        "name": "Fridge Energy",
+        "source": "sensor.iotawatt_fridge_power",
+        "unit_prefix": "k",
+        "unit_time": "h"
+      },
+      "new_source": "sensor.emporia_vue3_fridge_power_1m_average"
+    },
+    {
+      "entry_id": "01JFKS8WT9C6NMDAXAXA7BGYQD",
+      "old_options": {
+        "method": "trapezoidal",
+        "name": "Dryer Energy",
+        "source": "sensor.iotawatt_dryer_power",
+        "unit_prefix": "k",
+        "unit_time": "h"
+      },
+      "new_source": "sensor.emporia_vue3_dryer_power_1m_average"
+    },
+    {
+      "entry_id": "01JFKS885NTWAMJAQVJ2VY5W3V",
+      "old_options": {
+        "method": "trapezoidal",
+        "name": "AC Energy",
+        "source": "sensor.iotawatt_ac_total_power",
+        "unit_prefix": "k",
+        "unit_time": "h"
+      },
+      "new_source": "sensor.emporia_vue3_ac_power_1m_average"
+    },
+    {
+      "entry_id": "01JFKSACYJ48Y5VFQ1WRGG9QH1",
+      "old_options": {
+        "method": "trapezoidal",
+        "name": "Oven Energy",
+        "source": "sensor.iotawatt_range_power",
+        "unit_prefix": "k",
+        "unit_time": "h"
+      },
+      "new_source": "sensor.emporia_vue3_range_oven_power_1m_average"
+    },
+    {
+      "entry_id": "01JFKS6CHRPYG40JB9AAT2MMQ0",
+      "old_options": {
+        "method": "trapezoidal",
+        "name": "Furnace Energy",
+        "source": "sensor.iotawatt_furnace_power",
+        "unit_prefix": "k",
+        "unit_time": "h"
+      },
+      "new_source": "sensor.emporia_vue3_furnace_power_1m_average"
+    },
+    {
+      "entry_id": "01JFKS5W2HDJAMZM2GHKK48C2K",
+      "old_options": {
+        "method": "trapezoidal",
+        "name": "Water Heater Energy",
+        "source": "sensor.iotawatt_water_heater_power",
+        "unit_prefix": "k",
+        "unit_time": "h"
+      },
+      "new_source": "sensor.emporia_vue3_water_heater_power_1m_average"
+    },
+    {
+      "entry_id": "01JFKS7KC90CD8MKE7CPKJ9JSA",
+      "old_options": {
+        "method": "trapezoidal",
+        "name": "Kitchen Energy",
+        "source": "sensor.iotawatt_kitchen_power",
+        "unit_prefix": "k",
+        "unit_time": "h"
+      },
+      "new_source": "sensor.emporia_vue3_dishwasher_power_1m_average"
+    },
+    {
+      "entry_id": "01JFKS9QZ1TABGD2K99MR1Y07B",
+      "old_options": {
+        "method": "trapezoidal",
+        "name": "Tesla Energy",
+        "source": "sensor.iotawatt_ev_charging_power",
+        "unit_time": "h"
+      },
+      "new_source": "sensor.emporia_vue3_ev_charger_power_1m_average"
+    },
+    {
+      "entry_id": "01K505FACESVMF51PFZS32KXNW",
+      "old_options": {
+        "method": "trapezoidal",
+        "name": "Claire Mini Energy",
+        "round": 0.0,
+        "source": "sensor.iotawatt_claire_mini_split_power",
+        "unit_prefix": "k",
+        "unit_time": "h"
+      },
+      "new_source": "sensor.emporia_vue3_claire_mini_split_power_1m_average"
+    },
+    {
+      "entry_id": "01K00Q8C9ACR8TDSXTTEKFGNFA",
+      "old_options": {
+        "method": "trapezoidal",
+        "name": "Office Energy",
+        "source": "sensor.iotawatt_office_power",
+        "unit_prefix": "k",
+        "unit_time": "h"
+      },
+      "new_source": "sensor.emporia_vue3_office_power_1m_average"
+    }
+  ],
+  "after_states": {
+    "sensor.daily_ac_energy": {
+      "entity_id": "sensor.daily_ac_energy",
+      "state": "0.026398442774208333334019",
+      "attributes": {
+        "state_class": "total_increasing",
+        "status": "collecting",
+        "last_period": "7.446089046755527768270535",
+        "last_valid_state": "3534.171638428842638617523040",
+        "last_reset": "2026-09-27T06:00:00.005917+00:00",
+        "next_reset": "2026-09-28T00:00:00-06:00",
+        "unit_of_measurement": "kWh",
+        "device_class": "energy",
+        "friendly_name": "Daily AC Energy"
+      },
+      "last_changed": "2026-09-28T00:08:34.554543+00:00",
+      "last_reported": "2026-09-28T00:08:34.554543+00:00",
+      "last_updated": "2026-09-28T00:08:34.554543+00:00",
+      "context": {
+        "id": "01M3JNF2FTAAPTR4Q8QXM7D5AT",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    "sensor.daily_dryer_energy": {
+      "entity_id": "sensor.daily_dryer_energy",
+      "state": "0.008367121664930555552478",
+      "attributes": {
+        "state_class": "total_increasing",
+        "status": "collecting",
+        "last_period": "0.031920898800263888837737",
+        "last_valid_state": "1504.023927198737389296364839",
+        "last_reset": "2026-09-27T06:00:00.044967+00:00",
+        "next_reset": "2026-09-28T00:00:00-06:00",
+        "unit_of_measurement": "kWh",
+        "device_class": "energy",
+        "friendly_name": "Daily Dryer Energy"
+      },
+      "last_changed": "2026-09-28T00:08:34.532800+00:00",
+      "last_reported": "2026-09-28T00:08:34.532800+00:00",
+      "last_updated": "2026-09-28T00:08:34.532800+00:00",
+      "context": {
+        "id": "01M3JNF2F48E4D1BT9SJ40PV51",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    "sensor.daily_kitchen_energy": {
+      "entity_id": "sensor.daily_kitchen_energy",
+      "state": "0.0205874660419444444665048",
+      "attributes": {
+        "state_class": "total_increasing",
+        "status": "collecting",
+        "last_period": "0.7912561762470138874099724",
+        "last_valid_state": "565.1616280632815277299918480",
+        "last_reset": "2026-09-27T06:00:00.048125+00:00",
+        "next_reset": "2026-09-28T00:00:00-06:00",
+        "unit_of_measurement": "kWh",
+        "device_class": "energy",
+        "friendly_name": "Daily Kitchen Energy"
+      },
+      "last_changed": "2026-09-28T00:08:35.097582+00:00",
+      "last_reported": "2026-09-28T00:08:35.097582+00:00",
+      "last_updated": "2026-09-28T00:08:35.097582+00:00",
+      "context": {
+        "id": "01M3JNF30S8Q7YZX57H7HABR60",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    "sensor.daily_range_energy": {
+      "entity_id": "sensor.daily_range_energy",
+      "state": "0.0194480184222500000110911",
+      "attributes": {
+        "state_class": "total_increasing",
+        "status": "collecting",
+        "last_period": "0.6105259781852638891033287",
+        "last_valid_state": "293.3877133081980692912473731",
+        "last_reset": "2026-09-27T06:00:00.030776+00:00",
+        "next_reset": "2026-09-28T00:00:00-06:00",
+        "unit_of_measurement": "kWh",
+        "device_class": "energy",
+        "friendly_name": "Daily Range Energy"
+      },
+      "last_changed": "2026-09-28T00:08:34.572010+00:00",
+      "last_reported": "2026-09-28T00:08:34.572010+00:00",
+      "last_updated": "2026-09-28T00:08:34.572010+00:00",
+      "context": {
+        "id": "01M3JNF2GCZYKCE10HV5VPKWRD",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    "sensor.daily_water_heater_energy": {
+      "entity_id": "sensor.daily_water_heater_energy",
+      "state": "0.0366481992645694444666246",
+      "attributes": {
+        "state_class": "total_increasing",
+        "status": "collecting",
+        "last_period": "0.2386439946430277775644704",
+        "last_valid_state": "239.1947520792524027884597117",
+        "last_reset": "2026-09-27T06:00:00.031687+00:00",
+        "next_reset": "2026-09-28T00:00:00-06:00",
+        "unit_of_measurement": "kWh",
+        "device_class": "energy",
+        "friendly_name": "Daily Water Heater Energy"
+      },
+      "last_changed": "2026-09-28T00:08:34.924137+00:00",
+      "last_reported": "2026-09-28T00:08:34.924137+00:00",
+      "last_updated": "2026-09-28T00:08:34.924137+00:00",
+      "context": {
+        "id": "01M3JNF2VC9WRS2HVBQSS27GQH",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    "sensor.daily_fridge_energy": {
+      "entity_id": "sensor.daily_fridge_energy",
+      "state": "0.976180985186722223459828",
+      "attributes": {
+        "state_class": "total_increasing",
+        "status": "collecting",
+        "last_period": "3.279592520633847222132538",
+        "last_valid_state": "2084.629864935335638865556056",
+        "last_reset": "2026-09-27T06:00:00.047606+00:00",
+        "next_reset": "2026-09-28T00:00:00-06:00",
+        "unit_of_measurement": "kWh",
+        "device_class": "energy",
+        "friendly_name": "Daily Fridge Energy"
+      },
+      "last_changed": "2026-09-28T00:08:34.519424+00:00",
+      "last_reported": "2026-09-28T00:08:34.519424+00:00",
+      "last_updated": "2026-09-28T00:08:34.519424+00:00",
+      "context": {
+        "id": "01M3JNF2EQJDT6V1CT9AG56P9S",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    "sensor.daily_furnace_energy": {
+      "entity_id": "sensor.daily_furnace_energy",
+      "state": "0.051141265478638888940552",
+      "attributes": {
+        "state_class": "total_increasing",
+        "status": "collecting",
+        "last_period": "3.938017396559222216128491",
+        "last_valid_state": "4125.340309972599097103966687",
+        "last_reset": "2026-09-27T06:00:00.050227+00:00",
+        "next_reset": "2026-09-28T00:00:00-06:00",
+        "unit_of_measurement": "kWh",
+        "device_class": "energy",
+        "friendly_name": "Daily Furnace Energy"
+      },
+      "last_changed": "2026-09-28T00:08:34.911743+00:00",
+      "last_reported": "2026-09-28T00:08:34.911743+00:00",
+      "last_updated": "2026-09-28T00:08:34.911743+00:00",
+      "context": {
+        "id": "01M3JNF2TZXRR8JKVXFC49E3GM",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    "sensor.daily_tesla_energy": {
+      "entity_id": "sensor.daily_tesla_energy",
+      "state": "35.8553957415056",
+      "attributes": {
+        "state_class": "total_increasing",
+        "status": "collecting",
+        "last_period": "70725.139413668361081502051",
+        "last_valid_state": "8411652.310113178638963582316",
+        "last_reset": "2026-09-27T06:00:00.017951+00:00",
+        "next_reset": "2026-09-28T00:00:00-06:00",
+        "unit_of_measurement": "kWh",
+        "device_class": "energy",
+        "friendly_name": "Daily Tesla Energy"
+      },
+      "last_changed": "2026-09-28T00:08:35.119482+00:00",
+      "last_reported": "2026-09-28T00:08:35.119482+00:00",
+      "last_updated": "2026-09-28T00:08:35.119482+00:00",
+      "context": {
+        "id": "01M3JNF31F1FP33GG29GT1GWXW",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    "sensor.office_daily_energy_2": {
+      "entity_id": "sensor.office_daily_energy_2",
+      "state": "0.806759222242083333793242",
+      "attributes": {
+        "state_class": "total_increasing",
+        "status": "collecting",
+        "last_period": "2.750410678782833336412323",
+        "last_valid_state": "1409.191464739103569392753297",
+        "last_reset": "2026-09-27T06:00:00.021885+00:00",
+        "next_reset": "2026-09-28T00:00:00-06:00",
+        "unit_of_measurement": "kWh",
+        "device_class": "energy",
+        "friendly_name": "Office Daily Energy "
+      },
+      "last_changed": "2026-09-28T00:08:35.162368+00:00",
+      "last_reported": "2026-09-28T00:08:35.162368+00:00",
+      "last_updated": "2026-09-28T00:08:35.162368+00:00",
+      "context": {
+        "id": "01M3JNF32TCP708AEK3SPZAQX3",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    "sensor.claire_mini_daily_energy": {
+      "entity_id": "sensor.claire_mini_daily_energy",
+      "state": "0.0377407744132916666968272",
+      "attributes": {
+        "state_class": "total_increasing",
+        "status": "collecting",
+        "last_period": "0.5147476064682361110152542",
+        "last_valid_state": "428.8632904211693194782855142",
+        "last_reset": "2026-09-27T06:00:00.048478+00:00",
+        "next_reset": "2026-09-28T00:00:00-06:00",
+        "unit_of_measurement": "kWh",
+        "device_class": "energy",
+        "friendly_name": "Claire Mini Daily Energy"
+      },
+      "last_changed": "2026-09-28T00:08:35.130275+00:00",
+      "last_reported": "2026-09-28T00:08:35.130275+00:00",
+      "last_updated": "2026-09-28T00:08:35.130275+00:00",
+      "context": {
+        "id": "01M3JNF31TQ0V5PXJ0D36WJG6H",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    "sensor.water_heater_energy": {
+      "entity_id": "sensor.water_heater_energy",
+      "state": "239.1947520792524027884597117",
+      "attributes": {
+        "state_class": "total",
+        "source": "sensor.emporia_vue3_water_heater_power_1m_average",
+        "unit_of_measurement": "kWh",
+        "device_class": "energy",
+        "friendly_name": "Water Heater Energy"
+      },
+      "last_changed": "2026-09-28T00:08:34.924859+00:00",
+      "last_reported": "2026-09-28T00:08:34.924859+00:00",
+      "last_updated": "2026-09-28T00:08:34.924859+00:00",
+      "context": {
+        "id": "01M3JNF2VC7MX867NPMJZBCSG0",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    "sensor.furnace_energy": {
+      "entity_id": "sensor.furnace_energy",
+      "state": "4125.340309972599097103966687",
+      "attributes": {
+        "state_class": "total",
+        "source": "sensor.emporia_vue3_furnace_power_1m_average",
+        "unit_of_measurement": "kWh",
+        "device_class": "energy",
+        "friendly_name": "Furnace Energy"
+      },
+      "last_changed": "2026-09-28T00:08:34.912482+00:00",
+      "last_reported": "2026-09-28T00:08:34.912482+00:00",
+      "last_updated": "2026-09-28T00:08:34.912482+00:00",
+      "context": {
+        "id": "01M3JNF2V0QVK5AED95GQSHDMJ",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    "sensor.fridge_energy": {
+      "entity_id": "sensor.fridge_energy",
+      "state": "2084.629864935335638865556056",
+      "attributes": {
+        "state_class": "total",
+        "source": "sensor.emporia_vue3_fridge_power_1m_average",
+        "unit_of_measurement": "kWh",
+        "device_class": "energy",
+        "friendly_name": "Fridge Energy"
+      },
+      "last_changed": "2026-09-28T00:08:34.520098+00:00",
+      "last_reported": "2026-09-28T00:08:34.520098+00:00",
+      "last_updated": "2026-09-28T00:08:34.520098+00:00",
+      "context": {
+        "id": "01M3JNF2ER1V3B70JEB11N3QN7",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    "sensor.kitchen_energy": {
+      "entity_id": "sensor.kitchen_energy",
+      "state": "565.1616280632815277299918480",
+      "attributes": {
+        "state_class": "total",
+        "source": "sensor.emporia_vue3_dishwasher_power_1m_average",
+        "unit_of_measurement": "kWh",
+        "device_class": "energy",
+        "friendly_name": "Kitchen Energy"
+      },
+      "last_changed": "2026-09-28T00:08:35.099237+00:00",
+      "last_reported": "2026-09-28T00:08:35.099237+00:00",
+      "last_updated": "2026-09-28T00:08:35.099237+00:00",
+      "context": {
+        "id": "01M3JNF30V6WER67G3YX2K5MZ7",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    "sensor.ac_energy": {
+      "entity_id": "sensor.ac_energy",
+      "state": "3534.171638428842638617523040",
+      "attributes": {
+        "state_class": "total",
+        "source": "sensor.emporia_vue3_ac_power_1m_average",
+        "unit_of_measurement": "kWh",
+        "device_class": "energy",
+        "friendly_name": "AC Energy"
+      },
+      "last_changed": "2026-09-28T00:08:34.555195+00:00",
+      "last_reported": "2026-09-28T00:08:34.555195+00:00",
+      "last_updated": "2026-09-28T00:08:34.555195+00:00",
+      "context": {
+        "id": "01M3JNF2FV6XVV4MYHKBEVB5Y6",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    "sensor.dryer_energy": {
+      "entity_id": "sensor.dryer_energy",
+      "state": "1504.023927198737389296364839",
+      "attributes": {
+        "state_class": "total",
+        "source": "sensor.emporia_vue3_dryer_power_1m_average",
+        "unit_of_measurement": "kWh",
+        "device_class": "energy",
+        "friendly_name": "Dryer Energy"
+      },
+      "last_changed": "2026-09-28T00:08:34.533796+00:00",
+      "last_reported": "2026-09-28T00:08:34.533796+00:00",
+      "last_updated": "2026-09-28T00:08:34.533796+00:00",
+      "context": {
+        "id": "01M3JNF2F5KVSXWDASC8YDF33H",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    "sensor.tesla_energy": {
+      "entity_id": "sensor.tesla_energy",
+      "state": "8411652.310113178638963582316",
+      "attributes": {
+        "state_class": "total",
+        "source": "sensor.emporia_vue3_ev_charger_power_1m_average",
+        "unit_of_measurement": "Wh",
+        "device_class": "energy",
+        "friendly_name": "Tesla Energy"
+      },
+      "last_changed": "2026-09-28T00:08:35.116915+00:00",
+      "last_reported": "2026-09-28T00:08:35.116915+00:00",
+      "last_updated": "2026-09-28T00:08:35.116915+00:00",
+      "context": {
+        "id": "01M3JNF31CB6R2JVE7SX0NDHW8",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    "sensor.oven_energy": {
+      "entity_id": "sensor.oven_energy",
+      "state": "293.3877133081980692912473731",
+      "attributes": {
+        "state_class": "total",
+        "source": "sensor.emporia_vue3_range_oven_power_1m_average",
+        "unit_of_measurement": "kWh",
+        "device_class": "energy",
+        "friendly_name": "Oven Energy"
+      },
+      "last_changed": "2026-09-28T00:08:34.572741+00:00",
+      "last_reported": "2026-09-28T00:08:34.572741+00:00",
+      "last_updated": "2026-09-28T00:08:34.572741+00:00",
+      "context": {
+        "id": "01M3JNF2GCH0JVXRCTNT5PY815",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    "sensor.office_energy": {
+      "entity_id": "sensor.office_energy",
+      "state": "1409.191464739103569392753297",
+      "attributes": {
+        "state_class": "total",
+        "source": "sensor.emporia_vue3_office_power_1m_average",
+        "unit_of_measurement": "kWh",
+        "device_class": "energy",
+        "friendly_name": "Office Energy"
+      },
+      "last_changed": "2026-09-28T00:08:35.163181+00:00",
+      "last_reported": "2026-09-28T00:08:35.163181+00:00",
+      "last_updated": "2026-09-28T00:08:35.163181+00:00",
+      "context": {
+        "id": "01M3JNF32VV48HADTS81SQ4FQX",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    "sensor.claire_mini_energy": {
+      "entity_id": "sensor.claire_mini_energy",
+      "state": "428.8632904211693194782855142",
+      "attributes": {
+        "state_class": "total",
+        "source": "sensor.emporia_vue3_claire_mini_split_power_1m_average",
+        "unit_of_measurement": "kWh",
+        "device_class": "energy",
+        "friendly_name": "Claire Mini Energy"
+      },
+      "last_changed": "2026-09-28T00:08:35.131118+00:00",
+      "last_reported": "2026-09-28T00:08:35.131118+00:00",
+      "last_updated": "2026-09-28T00:08:35.131118+00:00",
+      "context": {
+        "id": "01M3JNF31VPBRGMACJESD70YAW",
+        "parent_id": null,
+        "user_id": null
+      }
+    }
+  }
+}

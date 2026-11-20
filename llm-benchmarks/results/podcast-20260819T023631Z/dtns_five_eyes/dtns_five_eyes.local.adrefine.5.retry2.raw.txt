@@ -1,0 +1,19 @@
+{
+ "intervals": [
+  {
+   "start": 758.00,
+   "end": 794.72,
+   "reason": "McDonald's World Cup meal promotion with legal disclaimers."
+  },
+  {
+   "start": 794.72,
+   "end": 833.84,
+   "reason": "Babel language app advertisement with offer details."
+  },
+  {
+   "start": 833.92,
+   "end": 876.56,
+   "reason": "Sephora beauty products promotion by Giggly Squad."
+  }
+ ]
+}

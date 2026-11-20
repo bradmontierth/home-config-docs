@@ -1,0 +1,236 @@
+{
+  "vue_seconds": 309,
+  "vue_start": 1790525205.0630891,
+  "vue_end": 1790525514.5195923,
+  "vue": {
+    "1": {
+      "mean": 152.85,
+      "median": 150.78,
+      "p10": 149.41,
+      "p90": 157.07,
+      "std": 3.3,
+      "median_step": 0.55
+    },
+    "2": {
+      "mean": 0.93,
+      "median": 0.92,
+      "p10": 0.4,
+      "p90": 1.46,
+      "std": 0.41,
+      "median_step": 0.44
+    },
+    "3": {
+      "mean": 1.09,
+      "median": 1.09,
+      "p10": 0.49,
+      "p90": 1.66,
+      "std": 0.46,
+      "median_step": 0.42
+    },
+    "4": {
+      "mean": 0.54,
+      "median": 0.48,
+      "p10": 0.09,
+      "p90": 1.05,
+      "std": 0.38,
+      "median_step": 0.34
+    },
+    "5": {
+      "mean": 0.6,
+      "median": 0.57,
+      "p10": 0.13,
+      "p90": 1.12,
+      "std": 0.38,
+      "median_step": 0.34
+    },
+    "6": {
+      "mean": 58.34,
+      "median": 57.66,
+      "p10": 53.98,
+      "p90": 63.07,
+      "std": 3.92,
+      "median_step": 5.03
+    },
+    "7": {
+      "mean": 8.16,
+      "median": 8.18,
+      "p10": 7.61,
+      "p90": 8.65,
+      "std": 0.42,
+      "median_step": 0.4
+    },
+    "8": {
+      "mean": 3.06,
+      "median": 3.07,
+      "p10": 2.42,
+      "p90": 3.64,
+      "std": 0.47,
+      "median_step": 0.46
+    },
+    "9": {
+      "mean": 79.08,
+      "median": 79.05,
+      "p10": 78.68,
+      "p90": 79.51,
+      "std": 0.31,
+      "median_step": 0.3
+    },
+    "10": {
+      "mean": 6.35,
+      "median": 6.3,
+      "p10": 6.06,
+      "p90": 6.74,
+      "std": 0.25,
+      "median_step": 0.15
+    },
+    "11": {
+      "mean": 0.84,
+      "median": 0.83,
+      "p10": 0.68,
+      "p90": 1.02,
+      "std": 0.14,
+      "median_step": 0.14
+    },
+    "12": {
+      "mean": 4.67,
+      "median": 4.67,
+      "p10": 4.47,
+      "p90": 4.87,
+      "std": 0.16,
+      "median_step": 0.15
+    },
+    "13": {
+      "mean": 240.02,
+      "median": 239.84,
+      "p10": 229.79,
+      "p90": 250.25,
+      "std": 8.68,
+      "median_step": 2.11
+    },
+    "14": {
+      "mean": 36.52,
+      "median": 36.5,
+      "p10": 36.08,
+      "p90": 36.96,
+      "std": 0.38,
+      "median_step": 0.29
+    },
+    "15": {
+      "mean": 62.08,
+      "median": 61.88,
+      "p10": 56.76,
+      "p90": 68.28,
+      "std": 4.27,
+      "median_step": 5.84
+    },
+    "16": {
+      "mean": 120.37,
+      "median": 115.44,
+      "p10": 114.93,
+      "p90": 115.99,
+      "std": 15.34,
+      "median_step": 0.29
+    }
+  },
+  "iota_last15min": {
+    "WaterHeater": {
+      "mean": 3.94,
+      "median": 3.9,
+      "p10": 3.8,
+      "p90": 4.0,
+      "std": 0.19,
+      "median_step": 0.1
+    },
+    "Furnace": {
+      "mean": 7.25,
+      "median": 7.3,
+      "p10": 7.1,
+      "p90": 7.4,
+      "std": 0.16,
+      "median_step": 0.1
+    },
+    "Fridge": {
+      "mean": 184.66,
+      "median": 183.2,
+      "p10": 179.6,
+      "p90": 189.2,
+      "std": 4.38,
+      "median_step": 0.4
+    },
+    "Kitchen": {
+      "mean": 1.26,
+      "median": 1.2,
+      "p10": 1.1,
+      "p90": 1.5,
+      "std": 0.2,
+      "median_step": 0.1
+    },
+    "ACTotal": {
+      "mean": 2.17,
+      "median": 2.1,
+      "p10": 1.9,
+      "p90": 2.5,
+      "std": 0.3,
+      "median_step": 0.2
+    },
+    "DryerTotal": {
+      "mean": 1.9,
+      "median": 1.8,
+      "p10": 1.6,
+      "p90": 2.3,
+      "std": 0.3,
+      "median_step": 0.2
+    },
+    "EVTotal": {
+      "mean": 2.74,
+      "median": 2.8,
+      "p10": 2.4,
+      "p90": 3.0,
+      "std": 0.33,
+      "median_step": 0.2
+    },
+    "RangeTotal": {
+      "mean": 0.99,
+      "median": 0.9,
+      "p10": 0.7,
+      "p90": 1.2,
+      "std": 0.28,
+      "median_step": 0.2
+    },
+    "UpstairsBeds": {
+      "mean": 118.88,
+      "median": 118.9,
+      "p10": 118.2,
+      "p90": 119.5,
+      "std": 0.55,
+      "median_step": 0.4
+    },
+    "Office": {
+      "mean": 211.1,
+      "median": 210.85,
+      "p10": 200.3,
+      "p90": 222.5,
+      "std": 8.78,
+      "median_step": 7.5
+    },
+    "UtilityCloset": {
+      "mean": 74.47,
+      "median": 74.45,
+      "p10": 73.9,
+      "p90": 75.1,
+      "std": 0.49,
+      "median_step": 0.4
+    },
+    "ClaireMini": {
+      "mean": 2.79,
+      "median": 2.75,
+      "p10": 2.5,
+      "p90": 3.1,
+      "std": 0.32,
+      "median_step": 0.2
+    }
+  },
+  "history_start": "2026-09-25 09:14:40",
+  "history_end": "2026-09-27 09:14:40",
+  "historical_rows": 34183
+}

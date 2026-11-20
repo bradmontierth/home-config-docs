@@ -1,0 +1,62 @@
+# bin 1.12
+{"ad_bins":[{"t": 1.12, "reason": "Contains sponsor reads for 'Lead Human' podcast, 'ACAST', and 'Guardian Football Weekly'"}]}
+
+# bin 113.04
+{"ad_bins":[]}
+
+# bin 231.12
+{"ad_bins": []}
+
+# bin 348.56
+{"ad_bins": []}
+
+# bin 465.20
+{"ad_bins":[]}
+
+# bin 580.72
+{"ad_bins":[{"t": 580.72, "reason": "Contains a full sponsor read for NordVPN, including the phrase 'this episode is brought to you by Nord VPN'."}]}
+
+# bin 699.52
+{"ad_bins":[{"t": 699.52, "reason": "NordVPN sponsor read"}]}
+
+# bin 816.64
+{"ad_bins": []}
+
+# bin 936.40
+{"ad_bins": []}
+
+# bin 1053.60
+{"ad_bins": []}
+
+# bin 1172.40
+{"ad_bins":[]}
+
+# bin 1292.00
+{"ad_bins":[]}
+
+# bin 1412.00
+{"ad_bins": []}
+
+# bin 1526.48
+{"ad_bins":[{"t":1526.48,"reason":"Contains a sponsor read for 'ACAS' and a podcast recommendation for 'Naked Beauty' by Brooke DeVard."}]}
+
+# bin 1644.40
+{"ad_bins":[]}
+
+# bin 1763.36
+{"ad_bins": []}
+
+# bin 1882.48
+{"ad_bins":[]}
+
+# bin 2002.08
+{"ad_bins":[]}
+
+# bin 2121.04
+{"ad_bins":[]}
+
+# bin 2237.36
+{"ad_bins":[{"t": 2237.36, "reason": "Contains sponsor reads for Wealthfront and ACAS/Nutrition Diva podcast"}]}
+
+# bin 2348.64
+{"ad_bins":[{"t":2348.64,"reason":"Contains promotional content for 'Nutrition Diva' podcast and sponsor 'ACAST'"}]}

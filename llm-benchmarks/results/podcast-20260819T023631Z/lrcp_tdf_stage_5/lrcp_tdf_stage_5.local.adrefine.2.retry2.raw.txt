@@ -1,0 +1,1 @@
+{"intervals":[{"start": 633.76, "end": 746.96, "reason": "Sponsor read for NordVPN starting with 'brought to you by' and ending with guarantee details."}]}

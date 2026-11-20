@@ -1,0 +1,55 @@
+[
+  {
+    "id": "a13d8c5f02b74691",
+    "type": "mqtt in",
+    "z": "3453be336e524ff8",
+    "name": "Kitchen display metrics",
+    "topic": "pi/metrics/kitchen-display-pi",
+    "qos": "0",
+    "datatype": "auto-detect",
+    "broker": "4b107de303592735",
+    "nl": false,
+    "rap": true,
+    "rh": 0,
+    "inputs": 0,
+    "x": 180,
+    "y": 1880,
+    "wires": [
+      [
+        "b27e94a163c85fd2"
+      ]
+    ]
+  },
+  {
+    "id": "b27e94a163c85fd2",
+    "type": "function",
+    "z": "3453be336e524ff8",
+    "name": "Build Kitchen display insert",
+    "func": "const stats = msg.payload;\nif (!stats || typeof stats !== 'object' || Array.isArray(stats)) return null;\n\nconst allowed = [\n    'cpu_pct', 'mem_used_kb', 'mem_total_kb', 'mem_pct',\n    'swap_used_kb', 'swap_total_kb',\n    'load1', 'load5', 'load15', 'uptime_s', 'temp_c',\n    'disk_used_root_kb', 'disk_total_root_kb',\n    'disk_avail_root_kb', 'disk_pct_root',\n    'rx_bytes', 'tx_bytes'\n];\n\nfunction statName(key) {\n    return key.replace(/_/g, ' ').replace(/\\b\\w/g, c => c.toUpperCase());\n}\n\nconst values = [];\nfor (const key of allowed) {\n    const value = Number(stats[key]);\n    if (!Number.isFinite(value)) continue;\n    values.push(`('Kitchen Display Pi', '${statName(key)}', '${value}')`);\n}\n\nif (!values.length) return null;\nmsg.topic = 'INSERT INTO DeviceMonitoring(DeviceNM, StatNM, StatNBR) VALUES ' + values.join(', ') + ';';\nreturn msg;",
+    "outputs": 1,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 440,
+    "y": 1880,
+    "wires": [
+      [
+        "c39f06b274da81e3"
+      ]
+    ]
+  },
+  {
+    "id": "c39f06b274da81e3",
+    "type": "mysql",
+    "z": "3453be336e524ff8",
+    "mydb": "cb4207eb6afa62a8",
+    "name": "Kitchen metrics DB insert",
+    "x": 740,
+    "y": 1880,
+    "wires": [
+      []
+    ]
+  }
+]

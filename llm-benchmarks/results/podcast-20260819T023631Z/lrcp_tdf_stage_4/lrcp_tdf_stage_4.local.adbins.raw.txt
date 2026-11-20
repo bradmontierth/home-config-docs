@@ -1,0 +1,59 @@
+# bin 0.80
+{"ad_bins":[{"t": 0.8, "reason": "Contains T-Mobile advertisement and Naked Beauty podcast promotion"}]}
+
+# bin 115.20
+{"ad_bins": [{"t": 115.2, "reason": "Contains a sponsor read for the 'Naked Beauty' podcast."}]}
+
+# bin 234.96
+{"ad_bins":[{"t": 234.96, "reason": "Contains sponsor read for 'joined cycling' and 'Tour to Join'"}]}
+
+# bin 354.16
+{"ad_bins": []}
+
+# bin 470.56
+{"ad_bins": []}
+
+# bin 578.16
+{"ad_bins":[{"t": 578.16, "reason": "Contains a promotional read for 'Tour to join' training plan, mentioning structured workouts, duration options, and a t-shirt draw."}]}
+
+# bin 695.12
+{"ad_bins":[{"t": 695.12, "reason": "Sponsor read for summer preparation and indoor cycling season"}]}
+
+# bin 815.28
+{"ad_bins":[]}
+
+# bin 929.04
+{"ad_bins": []}
+
+# bin 1048.40
+{"ad_bins":[]}
+
+# bin 1163.76
+{"ad_bins":[]}
+
+# bin 1232.40
+{"ad_bins": []}
+
+# bin 1348.96
+{"ad_bins":[{"t": 1348.96, "reason": "Contains a T-Mobile commercial read starting with 'Awkward time to ask this, but hey, did you download the trail map?'"}]}
+
+# bin 1466.64
+{"ad_bins":[{"t": 1466.64, "reason": "Contains T-Mobile and Fantasy Fan Fellas podcast advertisements"}]}
+
+# bin 1584.88
+{"ad_bins":[]}
+
+# bin 1703.28
+{"ad_bins":[]}
+
+# bin 1821.28
+{"ad_bins":[]}
+
+# bin 1937.52
+{"ad_bins":[]}
+
+# bin 2055.60
+{"ad_bins":[{"t": 2055.6, "reason": "Contains T-Mobile advertisement starting with 'Awkward time to ask this, but hey, did you download the trail map?'"}]}
+
+# bin 2175.44
+{"ad_bins":[{"t":2175.44,"reason":"Contains T-Mobile and Zyn advertising reads"}]}

@@ -1,0 +1,1 @@
+{"intervals":[{"start":1890.24,"end":1957.28,"reason":"Sponsor reads for Pura and Venmo with legal disclaimers."}]}

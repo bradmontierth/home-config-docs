@@ -1,0 +1,69 @@
+# bin 1.52
+{"ad_bins":[{"t": 1.52, "reason": "The entire provided text consists of back-to-back sponsor reads for Smith's, Sephora, Granger, and Alienware, covering the start of the episode."}]}
+
+# bin 117.60
+{"ad_bins":[{"t": 117.6, "reason": "Alienware Days of Deals sponsor read"}]}
+
+# bin 231.60
+{"ad_bins":[]}
+
+# bin 348.32
+{"ad_bins":[]}
+
+# bin 464.56
+{"ad_bins": []}
+
+# bin 582.56
+{"ad_bins":[{"t": 582.56, "reason": "Contains Patreon sponsor read, Smith's grocery store ad, and Paylocity ad."}]}
+
+# bin 700.80
+{"ad_bins":[{"t":700.8,"reason":"Contains multiple sponsor reads for Kroger, Paylocity, McDonald's, Babel, and Sephora."}]}
+
+# bin 819.92
+{"ad_bins":[{"t": 819.92, "reason": "Contains sponsor reads for Babel and Sephora"}]}
+
+# bin 937.68
+{"ad_bins":[]}
+
+# bin 1050.32
+{"ad_bins": []}
+
+# bin 1166.88
+{"ad_bins":[]}
+
+# bin 1284.32
+{"ad_bins":[]}
+
+# bin 1402.80
+{"ad_bins": []}
+
+# bin 1518.16
+{"ad_bins":[]}
+
+# bin 1629.44
+{"ad_bins": []}
+
+# bin 1742.72
+{"ad_bins":[]}
+
+# bin 1862.16
+{"ad_bins":[{"t":1862.16,"reason":"Contains sponsor reads for Pura smart diffusers and Venmo debit card."}]}
+
+# bin 1979.68
+{"ad_bins":[]}
+
+# bin 2097.28
+{"ad_bins":[]}
+
+# bin 2214.96
+{
+  "ad_bins": [
+    {
+      "t": 2214.96,
+      "reason": "Contains a sponsor read for Smith's pickup grocery shopping service at the end of the segment."
+    }
+  ]
+}
+
+# bin 2344.64
+{"ad_bins":[{"t": 2344.64, "reason": "Contains sponsor reads for Smith's and Venmo Stash."}]}

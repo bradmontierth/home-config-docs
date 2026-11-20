@@ -1,0 +1,8 @@
+{
+  "runs": {
+    "doorbell-20260819T022609Z": "Qwen 3.6 baseline",
+    "voice-20260819T022644Z": "Qwen 3.6 baseline",
+    "podcast-20260819T023631Z-approved-truth": "Qwen 3.6 baseline"
+  }
+}
+

@@ -1,0 +1,10 @@
+{
+  "review_status":"approved",
+  "reviewed_at":"2026-08-19T02:55:00Z",
+  "reviewed_by":"Codex GPT-5 manual adjudication",
+  "annotation_policy":"../ANNOTATION_POLICY.md",
+  "source_basis":"frozen timestamped transcript; RSS audio is dynamically ad-inserted",
+  "duration_seconds":2424.007,
+  "ad_intervals":[[0.0,166.8],[613.2,876.56],[1890.24,1957.28],[2326.32,2333.44],[2350.64,2424.007]],
+  "review_notes":"Approved from full transcript review. Patron/Patreon monetization is included; routine livestream and feedback plugs are excluded. Pura/Venmo was a clear missed commercial block in the old seed."
+}

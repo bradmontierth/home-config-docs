@@ -1,0 +1,15 @@
+[
+  {"id":"ups_delivery","file":"ups_20260520_1655_+040s.png","expected_role":"package_delivery","expected_carrier":"ups"},
+  {"id":"sales_afternoon","file":"sales_20260519_1455_+070s.png","expected_role":"door_to_door_sales","expected_carrier":null},
+  {"id":"sales_evening","file":"sales_20260519_1824_+010s.png","expected_role":"door_to_door_sales","expected_carrier":null},
+  {"id":"cleaners_arrive","file":"cleaners_arrive_20260518_1114_+060s.png","expected_role":"cleaner","expected_carrier":null},
+  {"id":"cleaners_leave","file":"cleaners_leave_20260518_1336_+020s.png","expected_role":"cleaner","expected_carrier":null},
+  {"id":"amazon_evening","file":"amazon_20260517_1801_+070s.png","expected_role":"package_delivery","expected_carrier":"amazon"},
+  {"id":"amazon_midday","file":"amazon_20260516_1237_+040s.png","expected_role":"package_delivery","expected_carrier":"amazon"},
+  {"id":"empty_steps_morning","file":"doorbell-20260525-095859-e5827e341bfc81d0.jpg","expected_role":"none_unclear","expected_carrier":null},
+  {"id":"adult_child_first","file":"doorbell-20260525-103851-163011bfb633ab3d.jpg","expected_role":"visitor","expected_carrier":null},
+  {"id":"adult_child_second","file":"doorbell-20260525-103953-0dbb7003cdc1d5ee.jpg","expected_role":"visitor","expected_carrier":null},
+  {"id":"empty_steps_later","file":"doorbell-20260525-104224-6ffb1182ab18861f.jpg","expected_role":"none_unclear","expected_carrier":null},
+  {"id":"older_man","file":"doorbell-20260525-155246-c3bcf58de9ccc381.jpg","expected_role":"visitor","expected_carrier":null},
+  {"id":"young_woman","file":"doorbell-20260526-080037-43f008bbf00de9de.jpg","expected_role":"visitor","expected_carrier":null}
+]

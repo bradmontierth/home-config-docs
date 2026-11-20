@@ -3,6 +3,46 @@
 This guide documents monitoring added to `display-pi`, the kitchen touchscreen
 dashboard host.
 
+## Historical metrics through MQTT
+
+The lightweight publisher runs continuously and sends one JSON sample per minute:
+
+```text
+display-pi / kitchen-display-metrics-mqtt.service
+  -> MQTT pi/metrics/kitchen-display-pi
+  -> Beelink Node-RED Device Monitoring tab
+  -> hubitat_logging.DeviceMonitoring
+  -> Grafana Kitchen Display Pi Monitoring
+```
+
+It publishes CPU utilization, memory use/utilization, swap, load, uptime, CPU
+temperature, root filesystem use/utilization, and interface byte counters. The
+database uses `DeviceNM = Kitchen Display Pi`; samples are covered by the shared
+90-day `DeviceMonitoring` retention routine.
+
+Grafana dashboard:
+
+```text
+http://192.168.10.217:3001/d/kitchen-display-pi-monitoring/kitchen-display-pi-monitoring
+```
+
+The dashboard defaults to seven days and refreshes once per minute. Its first
+row shows current/average/maximum temperature, CPU, memory, and root storage;
+the historical panels chart temperature, utilization, system load, storage,
+and memory. Dashboard source is kept in
+`display-pi-monitoring/grafana-kitchen-display-pi-monitoring.json`.
+
+The Beelink subscriber is on the system Node-RED instance at port `1881`, tab
+`Device Monitoring` (`3453be336e524ff8`). Its deployed nodes are documented in
+`display-pi-monitoring/nodered-kitchen-display-metrics-nodes.json`.
+
+Checks:
+
+```bash
+ssh display-pi 'systemctl status kitchen-display-metrics-mqtt.service --no-pager'
+docker exec mosquitto mosquitto_sub -t pi/metrics/kitchen-display-pi -C 1 -W 70 -v
+```
+
 ## Evidence logs
 
 Health samples run once per minute:

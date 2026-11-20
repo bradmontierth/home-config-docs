@@ -1,0 +1,4119 @@
+{
+  "registry": [
+    {
+      "area_id": null,
+      "categories": {},
+      "config_entry_id": "01M359RKEFTVJKDD4JV5KJGDD6",
+      "config_subentry_id": null,
+      "created_at": 1790105636.431333,
+      "device_id": "fc9d6c71bc4aaf9c84a1639db247cbe9",
+      "disabled_by": null,
+      "entity_category": "diagnostic",
+      "entity_id": "binary_sensor.emporia_vue3_status",
+      "has_entity_name": true,
+      "hidden_by": null,
+      "icon": null,
+      "id": "7947b1ac43edbb76dcbaab1184c25466",
+      "labels": [],
+      "modified_at": 1790105636.431968,
+      "name": null,
+      "options": {
+        "conversation": {
+          "should_expose": false
+        }
+      },
+      "original_name": "Status",
+      "platform": "esphome",
+      "translation_key": null,
+      "unique_id": "84:1F:E8:6F:E7:DC-binary_sensor-status"
+    },
+    {
+      "area_id": null,
+      "categories": {},
+      "config_entry_id": "01M359RKEFTVJKDD4JV5KJGDD6",
+      "config_subentry_id": null,
+      "created_at": 1790105636.432479,
+      "device_id": "fc9d6c71bc4aaf9c84a1639db247cbe9",
+      "disabled_by": null,
+      "entity_category": "config",
+      "entity_id": "button.emporia_vue3_restart",
+      "has_entity_name": true,
+      "hidden_by": null,
+      "icon": null,
+      "id": "e41480ceb87513e908b9a818e1b995df",
+      "labels": [],
+      "modified_at": 1790105636.432796,
+      "name": null,
+      "options": {
+        "conversation": {
+          "should_expose": false
+        }
+      },
+      "original_name": "Restart",
+      "platform": "esphome",
+      "translation_key": null,
+      "unique_id": "84:1F:E8:6F:E7:DC-button-restart"
+    },
+    {
+      "area_id": null,
+      "categories": {},
+      "config_entry_id": "01M359RKEFTVJKDD4JV5KJGDD6",
+      "config_subentry_id": null,
+      "created_at": 1790105636.433235,
+      "device_id": "fc9d6c71bc4aaf9c84a1639db247cbe9",
+      "disabled_by": null,
+      "entity_category": "diagnostic",
+      "entity_id": "sensor.emporia_vue3_uptime",
+      "has_entity_name": true,
+      "hidden_by": null,
+      "icon": null,
+      "id": "ec817355a5933ccee1cfc11acd6fa9ee",
+      "labels": [],
+      "modified_at": 1790105636.433658,
+      "name": null,
+      "options": {
+        "sensor": {
+          "suggested_display_precision": 0
+        },
+        "conversation": {
+          "should_expose": false
+        }
+      },
+      "original_name": "Uptime",
+      "platform": "esphome",
+      "translation_key": null,
+      "unique_id": "84:1F:E8:6F:E7:DC-sensor-uptime"
+    },
+    {
+      "area_id": null,
+      "categories": {},
+      "config_entry_id": "01M359RKEFTVJKDD4JV5KJGDD6",
+      "config_subentry_id": null,
+      "created_at": 1790105636.434071,
+      "device_id": "fc9d6c71bc4aaf9c84a1639db247cbe9",
+      "disabled_by": null,
+      "entity_category": "diagnostic",
+      "entity_id": "sensor.emporia_vue3_ip_address",
+      "has_entity_name": true,
+      "hidden_by": null,
+      "icon": null,
+      "id": "8046aedbd181ffc53a6da22f1c72d6cc",
+      "labels": [],
+      "modified_at": 1790105636.434346,
+      "name": null,
+      "options": {
+        "conversation": {
+          "should_expose": false
+        }
+      },
+      "original_name": "IP Address",
+      "platform": "esphome",
+      "translation_key": null,
+      "unique_id": "84:1F:E8:6F:E7:DC-text_sensor-ip_address"
+    },
+    {
+      "area_id": null,
+      "categories": {},
+      "config_entry_id": "01M359RKEFTVJKDD4JV5KJGDD6",
+      "config_subentry_id": null,
+      "created_at": 1790437162.79951,
+      "device_id": "fc9d6c71bc4aaf9c84a1639db247cbe9",
+      "disabled_by": null,
+      "entity_category": null,
+      "entity_id": "sensor.emporia_vue3_l1_voltage",
+      "has_entity_name": true,
+      "hidden_by": null,
+      "icon": null,
+      "id": "d6fc597f1b00bd78d4f42c545c2d8c05",
+      "labels": [],
+      "modified_at": 1790437162.800064,
+      "name": null,
+      "options": {
+        "sensor": {
+          "suggested_display_precision": 1
+        },
+        "conversation": {
+          "should_expose": false
+        }
+      },
+      "original_name": "L1 Voltage",
+      "platform": "esphome",
+      "translation_key": null,
+      "unique_id": "84:1F:E8:6F:E7:DC-sensor-l1_voltage"
+    },
+    {
+      "area_id": null,
+      "categories": {},
+      "config_entry_id": "01M359RKEFTVJKDD4JV5KJGDD6",
+      "config_subentry_id": null,
+      "created_at": 1790437162.800314,
+      "device_id": "fc9d6c71bc4aaf9c84a1639db247cbe9",
+      "disabled_by": null,
+      "entity_category": null,
+      "entity_id": "sensor.emporia_vue3_line_frequency",
+      "has_entity_name": true,
+      "hidden_by": null,
+      "icon": null,
+      "id": "7b039570574de8764002f5abd3410ba3",
+      "labels": [],
+      "modified_at": 1790437162.800671,
+      "name": null,
+      "options": {
+        "sensor": {
+          "suggested_display_precision": 1
+        },
+        "conversation": {
+          "should_expose": false
+        }
+      },
+      "original_name": "Line Frequency",
+      "platform": "esphome",
+      "translation_key": null,
+      "unique_id": "84:1F:E8:6F:E7:DC-sensor-line_frequency"
+    },
+    {
+      "area_id": null,
+      "categories": {},
+      "config_entry_id": "01M359RKEFTVJKDD4JV5KJGDD6",
+      "config_subentry_id": null,
+      "created_at": 1790437162.801054,
+      "device_id": "fc9d6c71bc4aaf9c84a1639db247cbe9",
+      "disabled_by": null,
+      "entity_category": null,
+      "entity_id": "sensor.emporia_vue3_l2_voltage",
+      "has_entity_name": true,
+      "hidden_by": null,
+      "icon": null,
+      "id": "9b6246814f446cd149428221eb98d5d3",
+      "labels": [],
+      "modified_at": 1790437162.801399,
+      "name": null,
+      "options": {
+        "sensor": {
+          "suggested_display_precision": 1
+        },
+        "conversation": {
+          "should_expose": false
+        }
+      },
+      "original_name": "L2 Voltage",
+      "platform": "esphome",
+      "translation_key": null,
+      "unique_id": "84:1F:E8:6F:E7:DC-sensor-l2_voltage"
+    },
+    {
+      "area_id": null,
+      "categories": {},
+      "config_entry_id": "01M359RKEFTVJKDD4JV5KJGDD6",
+      "config_subentry_id": null,
+      "created_at": 1790437162.801613,
+      "device_id": "fc9d6c71bc4aaf9c84a1639db247cbe9",
+      "disabled_by": null,
+      "entity_category": "diagnostic",
+      "entity_id": "sensor.emporia_vue3_l2_phase_angle",
+      "has_entity_name": true,
+      "hidden_by": null,
+      "icon": null,
+      "id": "38934a1b9b103bbda899278e73ae4c82",
+      "labels": [],
+      "modified_at": 1790437162.801926,
+      "name": null,
+      "options": {
+        "sensor": {
+          "suggested_display_precision": 0
+        },
+        "conversation": {
+          "should_expose": false
+        }
+      },
+      "original_name": "L2 Phase Angle",
+      "platform": "esphome",
+      "translation_key": null,
+      "unique_id": "84:1F:E8:6F:E7:DC-sensor-l2_phase_angle"
+    },
+    {
+      "area_id": null,
+      "categories": {},
+      "config_entry_id": "01M359RKEFTVJKDD4JV5KJGDD6",
+      "config_subentry_id": null,
+      "created_at": 1790437162.802132,
+      "device_id": "fc9d6c71bc4aaf9c84a1639db247cbe9",
+      "disabled_by": null,
+      "entity_category": "diagnostic",
+      "entity_id": "sensor.emporia_vue3_input_1_signed_power_l1_reference",
+      "has_entity_name": true,
+      "hidden_by": null,
+      "icon": null,
+      "id": "c5afa4ce5b96ed77ce30efb421185d74",
+      "labels": [],
+      "modified_at": 1790437162.804062,
+      "name": null,
+      "options": {
+        "sensor": {
+          "suggested_display_precision": 1
+        },
+        "conversation": {
+          "should_expose": false
+        }
+      },
+      "original_name": "Input 1 Signed Power L1 Reference",
+      "platform": "esphome",
+      "translation_key": null,
+      "unique_id": "84:1F:E8:6F:E7:DC-sensor-input_1_signed_power_l1_reference"
+    },
+    {
+      "area_id": null,
+      "categories": {},
+      "config_entry_id": "01M359RKEFTVJKDD4JV5KJGDD6",
+      "config_subentry_id": null,
+      "created_at": 1790437316.337221,
+      "device_id": "fc9d6c71bc4aaf9c84a1639db247cbe9",
+      "disabled_by": null,
+      "entity_category": null,
+      "entity_id": "sensor.emporia_vue3_fridge_current",
+      "has_entity_name": true,
+      "hidden_by": null,
+      "icon": null,
+      "id": "9184385761cb3661242fe4387fa694a4",
+      "labels": [],
+      "modified_at": 1790437316.337588,
+      "name": null,
+      "options": {
+        "sensor": {
+          "suggested_display_precision": 2
+        },
+        "conversation": {
+          "should_expose": false
+        }
+      },
+      "original_name": "Fridge Current",
+      "platform": "esphome",
+      "translation_key": null,
+      "unique_id": "84:1F:E8:6F:E7:DC-sensor-fridge_current"
+    },
+    {
+      "area_id": null,
+      "categories": {},
+      "config_entry_id": "01M359RKEFTVJKDD4JV5KJGDD6",
+      "config_subentry_id": null,
+      "created_at": 1790437316.33782,
+      "device_id": "fc9d6c71bc4aaf9c84a1639db247cbe9",
+      "disabled_by": null,
+      "entity_category": null,
+      "entity_id": "sensor.emporia_vue3_fridge_power",
+      "has_entity_name": true,
+      "hidden_by": null,
+      "icon": null,
+      "id": "3fde2f54a36eba1f1f85296a7616a022",
+      "labels": [],
+      "modified_at": 1790437316.338079,
+      "name": null,
+      "options": {
+        "sensor": {
+          "suggested_display_precision": 1
+        },
+        "conversation": {
+          "should_expose": false
+        }
+      },
+      "original_name": "Fridge Power",
+      "platform": "esphome",
+      "translation_key": null,
+      "unique_id": "84:1F:E8:6F:E7:DC-sensor-fridge_power"
+    },
+    {
+      "area_id": null,
+      "categories": {},
+      "config_entry_id": "01M359RKEFTVJKDD4JV5KJGDD6",
+      "config_subentry_id": null,
+      "created_at": 1790437316.338265,
+      "device_id": "fc9d6c71bc4aaf9c84a1639db247cbe9",
+      "disabled_by": null,
+      "entity_category": null,
+      "entity_id": "sensor.emporia_vue3_fridge_daily_energy",
+      "has_entity_name": true,
+      "hidden_by": null,
+      "icon": null,
+      "id": "fd7687b0aeec828e5cba283d8991e7ec",
+      "labels": [],
+      "modified_at": 1790437316.338511,
+      "name": null,
+      "options": {
+        "sensor": {
+          "suggested_display_precision": 3
+        },
+        "conversation": {
+          "should_expose": false
+        }
+      },
+      "original_name": "Fridge Daily Energy",
+      "platform": "esphome",
+      "translation_key": null,
+      "unique_id": "84:1F:E8:6F:E7:DC-sensor-fridge_daily_energy"
+    },
+    {
+      "area_id": null,
+      "categories": {},
+      "config_entry_id": "01M359RKEFTVJKDD4JV5KJGDD6",
+      "config_subentry_id": null,
+      "created_at": 1790521260.091407,
+      "device_id": "fc9d6c71bc4aaf9c84a1639db247cbe9",
+      "disabled_by": null,
+      "entity_category": null,
+      "entity_id": "sensor.emporia_vue3_fridge_power_1m_average",
+      "has_entity_name": true,
+      "hidden_by": null,
+      "icon": null,
+      "id": "fc32f286a76640cc7085b61f65085f84",
+      "labels": [],
+      "modified_at": 1790521260.091885,
+      "name": null,
+      "options": {
+        "sensor": {
+          "suggested_display_precision": 1
+        },
+        "conversation": {
+          "should_expose": false
+        }
+      },
+      "original_name": "Fridge Power 1m Average",
+      "platform": "esphome",
+      "translation_key": null,
+      "unique_id": "84:1F:E8:6F:E7:DC-sensor-fridge_power_1m_average"
+    },
+    {
+      "area_id": null,
+      "categories": {},
+      "config_entry_id": "01M359RKEFTVJKDD4JV5KJGDD6",
+      "config_subentry_id": null,
+      "created_at": 1790521260.092055,
+      "device_id": "fc9d6c71bc4aaf9c84a1639db247cbe9",
+      "disabled_by": null,
+      "entity_category": null,
+      "entity_id": "sensor.emporia_vue3_fridge_current_1m_average",
+      "has_entity_name": true,
+      "hidden_by": null,
+      "icon": null,
+      "id": "cbaed6ccd6fa973b2fb2d22f81b8a03c",
+      "labels": [],
+      "modified_at": 1790521260.092379,
+      "name": null,
+      "options": {
+        "sensor": {
+          "suggested_display_precision": 2
+        },
+        "conversation": {
+          "should_expose": false
+        }
+      },
+      "original_name": "Fridge Current 1m Average",
+      "platform": "esphome",
+      "translation_key": null,
+      "unique_id": "84:1F:E8:6F:E7:DC-sensor-fridge_current_1m_average"
+    },
+    {
+      "area_id": null,
+      "categories": {},
+      "config_entry_id": "01M359RKEFTVJKDD4JV5KJGDD6",
+      "config_subentry_id": null,
+      "created_at": 1790525203.103564,
+      "device_id": "fc9d6c71bc4aaf9c84a1639db247cbe9",
+      "disabled_by": null,
+      "entity_category": null,
+      "entity_id": "sensor.emporia_vue3_mains_a_signed_power_live",
+      "has_entity_name": true,
+      "hidden_by": null,
+      "icon": null,
+      "id": "f33137e74ba2e4050061356ab5c12b8d",
+      "labels": [],
+      "modified_at": 1790525203.104951,
+      "name": null,
+      "options": {
+        "sensor": {
+          "suggested_display_precision": 1
+        },
+        "conversation": {
+          "should_expose": false
+        }
+      },
+      "original_name": "Mains A Signed Power Live",
+      "platform": "esphome",
+      "translation_key": null,
+      "unique_id": "84:1F:E8:6F:E7:DC-sensor-mains_a_signed_power_live"
+    },
+    {
+      "area_id": null,
+      "categories": {},
+      "config_entry_id": "01M359RKEFTVJKDD4JV5KJGDD6",
+      "config_subentry_id": null,
+      "created_at": 1790525203.105346,
+      "device_id": "fc9d6c71bc4aaf9c84a1639db247cbe9",
+      "disabled_by": null,
+      "entity_category": null,
+      "entity_id": "sensor.emporia_vue3_mains_a_signed_power_1m_average",
+      "has_entity_name": true,
+      "hidden_by": null,
+      "icon": null,
+      "id": "bc19e4ee4daddf7ec0f38c19c5fbff4b",
+      "labels": [],
+      "modified_at": 1790525203.105741,
+      "name": null,
+      "options": {
+        "sensor": {
+          "suggested_display_precision": 1
+        },
+        "conversation": {
+          "should_expose": false
+        }
+      },
+      "original_name": "Mains A Signed Power 1m Average",
+      "platform": "esphome",
+      "translation_key": null,
+      "unique_id": "84:1F:E8:6F:E7:DC-sensor-mains_a_signed_power_1m_average"
+    },
+    {
+      "area_id": null,
+      "categories": {},
+      "config_entry_id": "01M359RKEFTVJKDD4JV5KJGDD6",
+      "config_subentry_id": null,
+      "created_at": 1790525203.106962,
+      "device_id": "fc9d6c71bc4aaf9c84a1639db247cbe9",
+      "disabled_by": null,
+      "entity_category": null,
+      "entity_id": "sensor.emporia_vue3_mains_a_current_live",
+      "has_entity_name": true,
+      "hidden_by": null,
+      "icon": null,
+      "id": "3a18a1bb5c67542c6c84fdc03d2875df",
+      "labels": [],
+      "modified_at": 1790525203.108136,
+      "name": null,
+      "options": {
+        "sensor": {
+          "suggested_display_precision": 2
+        },
+        "conversation": {
+          "should_expose": false
+        }
+      },
+      "original_name": "Mains A Current Live",
+      "platform": "esphome",
+      "translation_key": null,
+      "unique_id": "84:1F:E8:6F:E7:DC-sensor-mains_a_current_live"
+    },
+    {
+      "area_id": null,
+      "categories": {},
+      "config_entry_id": "01M359RKEFTVJKDD4JV5KJGDD6",
+      "config_subentry_id": null,
+      "created_at": 1790525203.108333,
+      "device_id": "fc9d6c71bc4aaf9c84a1639db247cbe9",
+      "disabled_by": null,
+      "entity_category": null,
+      "entity_id": "sensor.emporia_vue3_mains_a_current_1m_average",
+      "has_entity_name": true,
+      "hidden_by": null,
+      "icon": null,
+      "id": "b0259f20d770d4dbe0783c71fc10852d",
+      "labels": [],
+      "modified_at": 1790525203.108752,
+      "name": null,
+      "options": {
+        "sensor": {
+          "suggested_display_precision": 2
+        },
+        "conversation": {
+          "should_expose": false
+        }
+      },
+      "original_name": "Mains A Current 1m Average",
+      "platform": "esphome",
+      "translation_key": null,
+      "unique_id": "84:1F:E8:6F:E7:DC-sensor-mains_a_current_1m_average"
+    },
+    {
+      "area_id": null,
+      "categories": {},
+      "config_entry_id": "01M359RKEFTVJKDD4JV5KJGDD6",
+      "config_subentry_id": null,
+      "created_at": 1790525203.108918,
+      "device_id": "fc9d6c71bc4aaf9c84a1639db247cbe9",
+      "disabled_by": null,
+      "entity_category": null,
+      "entity_id": "sensor.emporia_vue3_mains_b_signed_power_live",
+      "has_entity_name": true,
+      "hidden_by": null,
+      "icon": null,
+      "id": "274e662c042f85d96ff32e8dd8dbf4d5",
+      "labels": [],
+      "modified_at": 1790525203.109231,
+      "name": null,
+      "options": {
+        "sensor": {
+          "suggested_display_precision": 1
+        },
+        "conversation": {
+          "should_expose": false
+        }
+      },
+      "original_name": "Mains B Signed Power Live",
+      "platform": "esphome",
+      "translation_key": null,
+      "unique_id": "84:1F:E8:6F:E7:DC-sensor-mains_b_signed_power_live"
+    },
+    {
+      "area_id": null,
+      "categories": {},
+      "config_entry_id": "01M359RKEFTVJKDD4JV5KJGDD6",
+      "config_subentry_id": null,
+      "created_at": 1790525203.109389,
+      "device_id": "fc9d6c71bc4aaf9c84a1639db247cbe9",
+      "disabled_by": null,
+      "entity_category": null,
+      "entity_id": "sensor.emporia_vue3_mains_b_signed_power_1m_average",
+      "has_entity_name": true,
+      "hidden_by": null,
+      "icon": null,
+      "id": "ba87fd8bc4ddcbfc4c40c7968809bab4",
+      "labels": [],
+      "modified_at": 1790525203.10968,
+      "name": null,
+      "options": {
+        "sensor": {
+          "suggested_display_precision": 1
+        },
+        "conversation": {
+          "should_expose": false
+        }
+      },
+      "original_name": "Mains B Signed Power 1m Average",
+      "platform": "esphome",
+      "translation_key": null,
+      "unique_id": "84:1F:E8:6F:E7:DC-sensor-mains_b_signed_power_1m_average"
+    },
+    {
+      "area_id": null,
+      "categories": {},
+      "config_entry_id": "01M359RKEFTVJKDD4JV5KJGDD6",
+      "config_subentry_id": null,
+      "created_at": 1790525203.109843,
+      "device_id": "fc9d6c71bc4aaf9c84a1639db247cbe9",
+      "disabled_by": null,
+      "entity_category": null,
+      "entity_id": "sensor.emporia_vue3_mains_b_current_live",
+      "has_entity_name": true,
+      "hidden_by": null,
+      "icon": null,
+      "id": "5816c484f3e532651d1c49b381a0c621",
+      "labels": [],
+      "modified_at": 1790525203.110413,
+      "name": null,
+      "options": {
+        "sensor": {
+          "suggested_display_precision": 2
+        },
+        "conversation": {
+          "should_expose": false
+        }
+      },
+      "original_name": "Mains B Current Live",
+      "platform": "esphome",
+      "translation_key": null,
+      "unique_id": "84:1F:E8:6F:E7:DC-sensor-mains_b_current_live"
+    },
+    {
+      "area_id": null,
+      "categories": {},
+      "config_entry_id": "01M359RKEFTVJKDD4JV5KJGDD6",
+      "config_subentry_id": null,
+      "created_at": 1790525203.110568,
+      "device_id": "fc9d6c71bc4aaf9c84a1639db247cbe9",
+      "disabled_by": null,
+      "entity_category": null,
+      "entity_id": "sensor.emporia_vue3_mains_b_current_1m_average",
+      "has_entity_name": true,
+      "hidden_by": null,
+      "icon": null,
+      "id": "c6f050f197e569769f0a8bb3e5317af3",
+      "labels": [],
+      "modified_at": 1790525203.110869,
+      "name": null,
+      "options": {
+        "sensor": {
+          "suggested_display_precision": 2
+        },
+        "conversation": {
+          "should_expose": false
+        }
+      },
+      "original_name": "Mains B Current 1m Average",
+      "platform": "esphome",
+      "translation_key": null,
+      "unique_id": "84:1F:E8:6F:E7:DC-sensor-mains_b_current_1m_average"
+    },
+    {
+      "area_id": null,
+      "categories": {},
+      "config_entry_id": "01M359RKEFTVJKDD4JV5KJGDD6",
+      "config_subentry_id": null,
+      "created_at": 1790525203.111026,
+      "device_id": "fc9d6c71bc4aaf9c84a1639db247cbe9",
+      "disabled_by": null,
+      "entity_category": null,
+      "entity_id": "sensor.emporia_vue3_circuit_01_signed_power_live",
+      "has_entity_name": true,
+      "hidden_by": null,
+      "icon": null,
+      "id": "3150714332c6eb732652d2a068d9f3fd",
+      "labels": [],
+      "modified_at": 1790525203.111345,
+      "name": null,
+      "options": {
+        "sensor": {
+          "suggested_display_precision": 1
+        },
+        "conversation": {
+          "should_expose": false
+        }
+      },
+      "original_name": "Circuit 01 Signed Power Live",
+      "platform": "esphome",
+      "translation_key": null,
+      "unique_id": "84:1F:E8:6F:E7:DC-sensor-circuit_01_signed_power_live"
+    },
+    {
+      "area_id": null,
+      "categories": {},
+      "config_entry_id": "01M359RKEFTVJKDD4JV5KJGDD6",
+      "config_subentry_id": null,
+      "created_at": 1790525203.111679,
+      "device_id": "fc9d6c71bc4aaf9c84a1639db247cbe9",
+      "disabled_by": null,
+      "entity_category": null,
+      "entity_id": "sensor.emporia_vue3_circuit_01_signed_power_1m_average",
+      "has_entity_name": true,
+      "hidden_by": null,
+      "icon": null,
+      "id": "03e2c2c1af92d00816d839a271ae7890",
+      "labels": [],
+      "modified_at": 1790525203.112384,
+      "name": null,
+      "options": {
+        "sensor": {
+          "suggested_display_precision": 1
+        },
+        "conversation": {
+          "should_expose": false
+        }
+      },
+      "original_name": "Circuit 01 Signed Power 1m Average",
+      "platform": "esphome",
+      "translation_key": null,
+      "unique_id": "84:1F:E8:6F:E7:DC-sensor-circuit_01_signed_power_1m_average"
+    },
+    {
+      "area_id": null,
+      "categories": {},
+      "config_entry_id": "01M359RKEFTVJKDD4JV5KJGDD6",
+      "config_subentry_id": null,
+      "created_at": 1790525203.112704,
+      "device_id": "fc9d6c71bc4aaf9c84a1639db247cbe9",
+      "disabled_by": null,
+      "entity_category": null,
+      "entity_id": "sensor.emporia_vue3_circuit_01_current_live",
+      "has_entity_name": true,
+      "hidden_by": null,
+      "icon": null,
+      "id": "3319f39902c06a8f690a2e5110fabb29",
+      "labels": [],
+      "modified_at": 1790525203.113162,
+      "name": null,
+      "options": {
+        "sensor": {
+          "suggested_display_precision": 2
+        },
+        "conversation": {
+          "should_expose": false
+        }
+      },
+      "original_name": "Circuit 01 Current Live",
+      "platform": "esphome",
+      "translation_key": null,
+      "unique_id": "84:1F:E8:6F:E7:DC-sensor-circuit_01_current_live"
+    },
+    {
+      "area_id": null,
+      "categories": {},
+      "config_entry_id": "01M359RKEFTVJKDD4JV5KJGDD6",
+      "config_subentry_id": null,
+      "created_at": 1790525203.113508,
+      "device_id": "fc9d6c71bc4aaf9c84a1639db247cbe9",
+      "disabled_by": null,
+      "entity_category": null,
+      "entity_id": "sensor.emporia_vue3_circuit_01_current_1m_average",
+      "has_entity_name": true,
+      "hidden_by": null,
+      "icon": null,
+      "id": "12d8ea076770f7edb913847fd84b4c0d",
+      "labels": [],
+      "modified_at": 1790525203.114246,
+      "name": null,
+      "options": {
+        "sensor": {
+          "suggested_display_precision": 2
+        },
+        "conversation": {
+          "should_expose": false
+        }
+      },
+      "original_name": "Circuit 01 Current 1m Average",
+      "platform": "esphome",
+      "translation_key": null,
+      "unique_id": "84:1F:E8:6F:E7:DC-sensor-circuit_01_current_1m_average"
+    },
+    {
+      "area_id": null,
+      "categories": {},
+      "config_entry_id": "01M359RKEFTVJKDD4JV5KJGDD6",
+      "config_subentry_id": null,
+      "created_at": 1790525203.114411,
+      "device_id": "fc9d6c71bc4aaf9c84a1639db247cbe9",
+      "disabled_by": null,
+      "entity_category": null,
+      "entity_id": "sensor.emporia_vue3_circuit_02_signed_power_live",
+      "has_entity_name": true,
+      "hidden_by": null,
+      "icon": null,
+      "id": "7271f6ad2f6b75135dbe6812f873bea4",
+      "labels": [],
+      "modified_at": 1790525203.114723,
+      "name": null,
+      "options": {
+        "sensor": {
+          "suggested_display_precision": 1
+        },
+        "conversation": {
+          "should_expose": false
+        }
+      },
+      "original_name": "Circuit 02 Signed Power Live",
+      "platform": "esphome",
+      "translation_key": null,
+      "unique_id": "84:1F:E8:6F:E7:DC-sensor-circuit_02_signed_power_live"
+    },
+    {
+      "area_id": null,
+      "categories": {},
+      "config_entry_id": "01M359RKEFTVJKDD4JV5KJGDD6",
+      "config_subentry_id": null,
+      "created_at": 1790525203.114895,
+      "device_id": "fc9d6c71bc4aaf9c84a1639db247cbe9",
+      "disabled_by": null,
+      "entity_category": null,
+      "entity_id": "sensor.emporia_vue3_circuit_02_signed_power_1m_average",
+      "has_entity_name": true,
+      "hidden_by": null,
+      "icon": null,
+      "id": "4cf3d34f03bb9b2742b7c4de209cd07f",
+      "labels": [],
+      "modified_at": 1790525203.115574,
+      "name": null,
+      "options": {
+        "sensor": {
+          "suggested_display_precision": 1
+        },
+        "conversation": {
+          "should_expose": false
+        }
+      },
+      "original_name": "Circuit 02 Signed Power 1m Average",
+      "platform": "esphome",
+      "translation_key": null,
+      "unique_id": "84:1F:E8:6F:E7:DC-sensor-circuit_02_signed_power_1m_average"
+    },
+    {
+      "area_id": null,
+      "categories": {},
+      "config_entry_id": "01M359RKEFTVJKDD4JV5KJGDD6",
+      "config_subentry_id": null,
+      "created_at": 1790525203.115991,
+      "device_id": "fc9d6c71bc4aaf9c84a1639db247cbe9",
+      "disabled_by": null,
+      "entity_category": null,
+      "entity_id": "sensor.emporia_vue3_circuit_02_current_live",
+      "has_entity_name": true,
+      "hidden_by": null,
+      "icon": null,
+      "id": "05dc2289766e9d3a92a8e35a80c26184",
+      "labels": [],
+      "modified_at": 1790525203.117096,
+      "name": null,
+      "options": {
+        "sensor": {
+          "suggested_display_precision": 2
+        },
+        "conversation": {
+          "should_expose": false
+        }
+      },
+      "original_name": "Circuit 02 Current Live",
+      "platform": "esphome",
+      "translation_key": null,
+      "unique_id": "84:1F:E8:6F:E7:DC-sensor-circuit_02_current_live"
+    },
+    {
+      "area_id": null,
+      "categories": {},
+      "config_entry_id": "01M359RKEFTVJKDD4JV5KJGDD6",
+      "config_subentry_id": null,
+      "created_at": 1790525203.117423,
+      "device_id": "fc9d6c71bc4aaf9c84a1639db247cbe9",
+      "disabled_by": null,
+      "entity_category": null,
+      "entity_id": "sensor.emporia_vue3_circuit_02_current_1m_average",
+      "has_entity_name": true,
+      "hidden_by": null,
+      "icon": null,
+      "id": "feefd4139bf2fa9d5c222017e35642c3",
+      "labels": [],
+      "modified_at": 1790525203.122858,
+      "name": null,
+      "options": {
+        "sensor": {
+          "suggested_display_precision": 2
+        },
+        "conversation": {
+          "should_expose": false
+        }
+      },
+      "original_name": "Circuit 02 Current 1m Average",
+      "platform": "esphome",
+      "translation_key": null,
+      "unique_id": "84:1F:E8:6F:E7:DC-sensor-circuit_02_current_1m_average"
+    },
+    {
+      "area_id": null,
+      "categories": {},
+      "config_entry_id": "01M359RKEFTVJKDD4JV5KJGDD6",
+      "config_subentry_id": null,
+      "created_at": 1790525203.123351,
+      "device_id": "fc9d6c71bc4aaf9c84a1639db247cbe9",
+      "disabled_by": null,
+      "entity_category": null,
+      "entity_id": "sensor.emporia_vue3_circuit_03_signed_power_live",
+      "has_entity_name": true,
+      "hidden_by": null,
+      "icon": null,
+      "id": "d86e8cc444dd571b5aff865b625a684e",
+      "labels": [],
+      "modified_at": 1790525203.124225,
+      "name": null,
+      "options": {
+        "sensor": {
+          "suggested_display_precision": 1
+        },
+        "conversation": {
+          "should_expose": false
+        }
+      },
+      "original_name": "Circuit 03 Signed Power Live",
+      "platform": "esphome",
+      "translation_key": null,
+      "unique_id": "84:1F:E8:6F:E7:DC-sensor-circuit_03_signed_power_live"
+    },
+    {
+      "area_id": null,
+      "categories": {},
+      "config_entry_id": "01M359RKEFTVJKDD4JV5KJGDD6",
+      "config_subentry_id": null,
+      "created_at": 1790525203.124635,
+      "device_id": "fc9d6c71bc4aaf9c84a1639db247cbe9",
+      "disabled_by": null,
+      "entity_category": null,
+      "entity_id": "sensor.emporia_vue3_circuit_03_signed_power_1m_average",
+      "has_entity_name": true,
+      "hidden_by": null,
+      "icon": null,
+      "id": "f2b9896ec9fe176f5157ecede336ab8a",
+      "labels": [],
+      "modified_at": 1790525203.125456,
+      "name": null,
+      "options": {
+        "sensor": {
+          "suggested_display_precision": 1
+        },
+        "conversation": {
+          "should_expose": false
+        }
+      },
+      "original_name": "Circuit 03 Signed Power 1m Average",
+      "platform": "esphome",
+      "translation_key": null,
+      "unique_id": "84:1F:E8:6F:E7:DC-sensor-circuit_03_signed_power_1m_average"
+    },
+    {
+      "area_id": null,
+      "categories": {},
+      "config_entry_id": "01M359RKEFTVJKDD4JV5KJGDD6",
+      "config_subentry_id": null,
+      "created_at": 1790525203.133638,
+      "device_id": "fc9d6c71bc4aaf9c84a1639db247cbe9",
+      "disabled_by": null,
+      "entity_category": null,
+      "entity_id": "sensor.emporia_vue3_circuit_03_current_live",
+      "has_entity_name": true,
+      "hidden_by": null,
+      "icon": null,
+      "id": "5ca8b7c582acb710af52b292231deae3",
+      "labels": [],
+      "modified_at": 1790525203.134066,
+      "name": null,
+      "options": {
+        "sensor": {
+          "suggested_display_precision": 2
+        },
+        "conversation": {
+          "should_expose": false
+        }
+      },
+      "original_name": "Circuit 03 Current Live",
+      "platform": "esphome",
+      "translation_key": null,
+      "unique_id": "84:1F:E8:6F:E7:DC-sensor-circuit_03_current_live"
+    },
+    {
+      "area_id": null,
+      "categories": {},
+      "config_entry_id": "01M359RKEFTVJKDD4JV5KJGDD6",
+      "config_subentry_id": null,
+      "created_at": 1790525203.134224,
+      "device_id": "fc9d6c71bc4aaf9c84a1639db247cbe9",
+      "disabled_by": null,
+      "entity_category": null,
+      "entity_id": "sensor.emporia_vue3_circuit_03_current_1m_average",
+      "has_entity_name": true,
+      "hidden_by": null,
+      "icon": null,
+      "id": "ead128e2733d30192a4a3e71698bdd7d",
+      "labels": [],
+      "modified_at": 1790525203.134519,
+      "name": null,
+      "options": {
+        "sensor": {
+          "suggested_display_precision": 2
+        },
+        "conversation": {
+          "should_expose": false
+        }
+      },
+      "original_name": "Circuit 03 Current 1m Average",
+      "platform": "esphome",
+      "translation_key": null,
+      "unique_id": "84:1F:E8:6F:E7:DC-sensor-circuit_03_current_1m_average"
+    },
+    {
+      "area_id": null,
+      "categories": {},
+      "config_entry_id": "01M359RKEFTVJKDD4JV5KJGDD6",
+      "config_subentry_id": null,
+      "created_at": 1790525203.134667,
+      "device_id": "fc9d6c71bc4aaf9c84a1639db247cbe9",
+      "disabled_by": null,
+      "entity_category": null,
+      "entity_id": "sensor.emporia_vue3_circuit_04_signed_power_live",
+      "has_entity_name": true,
+      "hidden_by": null,
+      "icon": null,
+      "id": "58b7b473f17e0f8a5d2c3be912c3d6f5",
+      "labels": [],
+      "modified_at": 1790525203.134949,
+      "name": null,
+      "options": {
+        "sensor": {
+          "suggested_display_precision": 1
+        },
+        "conversation": {
+          "should_expose": false
+        }
+      },
+      "original_name": "Circuit 04 Signed Power Live",
+      "platform": "esphome",
+      "translation_key": null,
+      "unique_id": "84:1F:E8:6F:E7:DC-sensor-circuit_04_signed_power_live"
+    },
+    {
+      "area_id": null,
+      "categories": {},
+      "config_entry_id": "01M359RKEFTVJKDD4JV5KJGDD6",
+      "config_subentry_id": null,
+      "created_at": 1790525203.13524,
+      "device_id": "fc9d6c71bc4aaf9c84a1639db247cbe9",
+      "disabled_by": null,
+      "entity_category": null,
+      "entity_id": "sensor.emporia_vue3_circuit_04_signed_power_1m_average",
+      "has_entity_name": true,
+      "hidden_by": null,
+      "icon": null,
+      "id": "d68d1ec196cbd68cba5b9aeae683adbc",
+      "labels": [],
+      "modified_at": 1790525203.135533,
+      "name": null,
+      "options": {
+        "sensor": {
+          "suggested_display_precision": 1
+        },
+        "conversation": {
+          "should_expose": false
+        }
+      },
+      "original_name": "Circuit 04 Signed Power 1m Average",
+      "platform": "esphome",
+      "translation_key": null,
+      "unique_id": "84:1F:E8:6F:E7:DC-sensor-circuit_04_signed_power_1m_average"
+    },
+    {
+      "area_id": null,
+      "categories": {},
+      "config_entry_id": "01M359RKEFTVJKDD4JV5KJGDD6",
+      "config_subentry_id": null,
+      "created_at": 1790525203.13567,
+      "device_id": "fc9d6c71bc4aaf9c84a1639db247cbe9",
+      "disabled_by": null,
+      "entity_category": null,
+      "entity_id": "sensor.emporia_vue3_circuit_04_current_live",
+      "has_entity_name": true,
+      "hidden_by": null,
+      "icon": null,
+      "id": "bfa6bf211541b8f8b4c5d66dc9da647f",
+      "labels": [],
+      "modified_at": 1790525203.135971,
+      "name": null,
+      "options": {
+        "sensor": {
+          "suggested_display_precision": 2
+        },
+        "conversation": {
+          "should_expose": false
+        }
+      },
+      "original_name": "Circuit 04 Current Live",
+      "platform": "esphome",
+      "translation_key": null,
+      "unique_id": "84:1F:E8:6F:E7:DC-sensor-circuit_04_current_live"
+    },
+    {
+      "area_id": null,
+      "categories": {},
+      "config_entry_id": "01M359RKEFTVJKDD4JV5KJGDD6",
+      "config_subentry_id": null,
+      "created_at": 1790525203.136165,
+      "device_id": "fc9d6c71bc4aaf9c84a1639db247cbe9",
+      "disabled_by": null,
+      "entity_category": null,
+      "entity_id": "sensor.emporia_vue3_circuit_04_current_1m_average",
+      "has_entity_name": true,
+      "hidden_by": null,
+      "icon": null,
+      "id": "85ecd8bfe602a2f4ca94135acfe100a5",
+      "labels": [],
+      "modified_at": 1790525203.136499,
+      "name": null,
+      "options": {
+        "sensor": {
+          "suggested_display_precision": 2
+        },
+        "conversation": {
+          "should_expose": false
+        }
+      },
+      "original_name": "Circuit 04 Current 1m Average",
+      "platform": "esphome",
+      "translation_key": null,
+      "unique_id": "84:1F:E8:6F:E7:DC-sensor-circuit_04_current_1m_average"
+    },
+    {
+      "area_id": null,
+      "categories": {},
+      "config_entry_id": "01M359RKEFTVJKDD4JV5KJGDD6",
+      "config_subentry_id": null,
+      "created_at": 1790525203.136655,
+      "device_id": "fc9d6c71bc4aaf9c84a1639db247cbe9",
+      "disabled_by": null,
+      "entity_category": null,
+      "entity_id": "sensor.emporia_vue3_circuit_05_signed_power_live",
+      "has_entity_name": true,
+      "hidden_by": null,
+      "icon": null,
+      "id": "48c6033af03a2966b671dc21f0e41298",
+      "labels": [],
+      "modified_at": 1790525203.137104,
+      "name": null,
+      "options": {
+        "sensor": {
+          "suggested_display_precision": 1
+        },
+        "conversation": {
+          "should_expose": false
+        }
+      },
+      "original_name": "Circuit 05 Signed Power Live",
+      "platform": "esphome",
+      "translation_key": null,
+      "unique_id": "84:1F:E8:6F:E7:DC-sensor-circuit_05_signed_power_live"
+    },
+    {
+      "area_id": null,
+      "categories": {},
+      "config_entry_id": "01M359RKEFTVJKDD4JV5KJGDD6",
+      "config_subentry_id": null,
+      "created_at": 1790525203.13744,
+      "device_id": "fc9d6c71bc4aaf9c84a1639db247cbe9",
+      "disabled_by": null,
+      "entity_category": null,
+      "entity_id": "sensor.emporia_vue3_circuit_05_signed_power_1m_average",
+      "has_entity_name": true,
+      "hidden_by": null,
+      "icon": null,
+      "id": "7e25eb7f6846c16c82a3a59185aa0e03",
+      "labels": [],
+      "modified_at": 1790525203.138233,
+      "name": null,
+      "options": {
+        "sensor": {
+          "suggested_display_precision": 1
+        },
+        "conversation": {
+          "should_expose": false
+        }
+      },
+      "original_name": "Circuit 05 Signed Power 1m Average",
+      "platform": "esphome",
+      "translation_key": null,
+      "unique_id": "84:1F:E8:6F:E7:DC-sensor-circuit_05_signed_power_1m_average"
+    },
+    {
+      "area_id": null,
+      "categories": {},
+      "config_entry_id": "01M359RKEFTVJKDD4JV5KJGDD6",
+      "config_subentry_id": null,
+      "created_at": 1790525203.138672,
+      "device_id": "fc9d6c71bc4aaf9c84a1639db247cbe9",
+      "disabled_by": null,
+      "entity_category": null,
+      "entity_id": "sensor.emporia_vue3_circuit_05_current_live",
+      "has_entity_name": true,
+      "hidden_by": null,
+      "icon": null,
+      "id": "b83d5bddaa1fb877afb223386edb740c",
+      "labels": [],
+      "modified_at": 1790525203.139326,
+      "name": null,
+      "options": {
+        "sensor": {
+          "suggested_display_precision": 2
+        },
+        "conversation": {
+          "should_expose": false
+        }
+      },
+      "original_name": "Circuit 05 Current Live",
+      "platform": "esphome",
+      "translation_key": null,
+      "unique_id": "84:1F:E8:6F:E7:DC-sensor-circuit_05_current_live"
+    },
+    {
+      "area_id": null,
+      "categories": {},
+      "config_entry_id": "01M359RKEFTVJKDD4JV5KJGDD6",
+      "config_subentry_id": null,
+      "created_at": 1790525203.139816,
+      "device_id": "fc9d6c71bc4aaf9c84a1639db247cbe9",
+      "disabled_by": null,
+      "entity_category": null,
+      "entity_id": "sensor.emporia_vue3_circuit_05_current_1m_average",
+      "has_entity_name": true,
+      "hidden_by": null,
+      "icon": null,
+      "id": "4623c556ab4a199c7fc38564dadcc658",
+      "labels": [],
+      "modified_at": 1790525203.140561,
+      "name": null,
+      "options": {
+        "sensor": {
+          "suggested_display_precision": 2
+        },
+        "conversation": {
+          "should_expose": false
+        }
+      },
+      "original_name": "Circuit 05 Current 1m Average",
+      "platform": "esphome",
+      "translation_key": null,
+      "unique_id": "84:1F:E8:6F:E7:DC-sensor-circuit_05_current_1m_average"
+    },
+    {
+      "area_id": null,
+      "categories": {},
+      "config_entry_id": "01M359RKEFTVJKDD4JV5KJGDD6",
+      "config_subentry_id": null,
+      "created_at": 1790525203.140895,
+      "device_id": "fc9d6c71bc4aaf9c84a1639db247cbe9",
+      "disabled_by": null,
+      "entity_category": null,
+      "entity_id": "sensor.emporia_vue3_circuit_06_signed_power_live",
+      "has_entity_name": true,
+      "hidden_by": null,
+      "icon": null,
+      "id": "aeae919493f28e997dcba18c92ed3156",
+      "labels": [],
+      "modified_at": 1790525203.141554,
+      "name": null,
+      "options": {
+        "sensor": {
+          "suggested_display_precision": 1
+        },
+        "conversation": {
+          "should_expose": false
+        }
+      },
+      "original_name": "Circuit 06 Signed Power Live",
+      "platform": "esphome",
+      "translation_key": null,
+      "unique_id": "84:1F:E8:6F:E7:DC-sensor-circuit_06_signed_power_live"
+    },
+    {
+      "area_id": null,
+      "categories": {},
+      "config_entry_id": "01M359RKEFTVJKDD4JV5KJGDD6",
+      "config_subentry_id": null,
+      "created_at": 1790525203.14184,
+      "device_id": "fc9d6c71bc4aaf9c84a1639db247cbe9",
+      "disabled_by": null,
+      "entity_category": null,
+      "entity_id": "sensor.emporia_vue3_circuit_06_signed_power_1m_average",
+      "has_entity_name": true,
+      "hidden_by": null,
+      "icon": null,
+      "id": "36c8c2e428549dd074ff91ac6d489d77",
+      "labels": [],
+      "modified_at": 1790525203.142399,
+      "name": null,
+      "options": {
+        "sensor": {
+          "suggested_display_precision": 1
+        },
+        "conversation": {
+          "should_expose": false
+        }
+      },
+      "original_name": "Circuit 06 Signed Power 1m Average",
+      "platform": "esphome",
+      "translation_key": null,
+      "unique_id": "84:1F:E8:6F:E7:DC-sensor-circuit_06_signed_power_1m_average"
+    },
+    {
+      "area_id": null,
+      "categories": {},
+      "config_entry_id": "01M359RKEFTVJKDD4JV5KJGDD6",
+      "config_subentry_id": null,
+      "created_at": 1790525203.142675,
+      "device_id": "fc9d6c71bc4aaf9c84a1639db247cbe9",
+      "disabled_by": null,
+      "entity_category": null,
+      "entity_id": "sensor.emporia_vue3_circuit_06_current_live",
+      "has_entity_name": true,
+      "hidden_by": null,
+      "icon": null,
+      "id": "4ab852963d846c4054f1e4ba83d3d42f",
+      "labels": [],
+      "modified_at": 1790525203.143273,
+      "name": null,
+      "options": {
+        "sensor": {
+          "suggested_display_precision": 2
+        },
+        "conversation": {
+          "should_expose": false
+        }
+      },
+      "original_name": "Circuit 06 Current Live",
+      "platform": "esphome",
+      "translation_key": null,
+      "unique_id": "84:1F:E8:6F:E7:DC-sensor-circuit_06_current_live"
+    },
+    {
+      "area_id": null,
+      "categories": {},
+      "config_entry_id": "01M359RKEFTVJKDD4JV5KJGDD6",
+      "config_subentry_id": null,
+      "created_at": 1790525203.14356,
+      "device_id": "fc9d6c71bc4aaf9c84a1639db247cbe9",
+      "disabled_by": null,
+      "entity_category": null,
+      "entity_id": "sensor.emporia_vue3_circuit_06_current_1m_average",
+      "has_entity_name": true,
+      "hidden_by": null,
+      "icon": null,
+      "id": "7aa162ff6ba7e39b773548c4f469a446",
+      "labels": [],
+      "modified_at": 1790525203.145365,
+      "name": null,
+      "options": {
+        "sensor": {
+          "suggested_display_precision": 2
+        },
+        "conversation": {
+          "should_expose": false
+        }
+      },
+      "original_name": "Circuit 06 Current 1m Average",
+      "platform": "esphome",
+      "translation_key": null,
+      "unique_id": "84:1F:E8:6F:E7:DC-sensor-circuit_06_current_1m_average"
+    },
+    {
+      "area_id": null,
+      "categories": {},
+      "config_entry_id": "01M359RKEFTVJKDD4JV5KJGDD6",
+      "config_subentry_id": null,
+      "created_at": 1790525203.14569,
+      "device_id": "fc9d6c71bc4aaf9c84a1639db247cbe9",
+      "disabled_by": null,
+      "entity_category": null,
+      "entity_id": "sensor.emporia_vue3_circuit_07_signed_power_live",
+      "has_entity_name": true,
+      "hidden_by": null,
+      "icon": null,
+      "id": "fb1d51e917c215f2d260b789a058849a",
+      "labels": [],
+      "modified_at": 1790525203.14636,
+      "name": null,
+      "options": {
+        "sensor": {
+          "suggested_display_precision": 1
+        },
+        "conversation": {
+          "should_expose": false
+        }
+      },
+      "original_name": "Circuit 07 Signed Power Live",
+      "platform": "esphome",
+      "translation_key": null,
+      "unique_id": "84:1F:E8:6F:E7:DC-sensor-circuit_07_signed_power_live"
+    },
+    {
+      "area_id": null,
+      "categories": {},
+      "config_entry_id": "01M359RKEFTVJKDD4JV5KJGDD6",
+      "config_subentry_id": null,
+      "created_at": 1790525203.146662,
+      "device_id": "fc9d6c71bc4aaf9c84a1639db247cbe9",
+      "disabled_by": null,
+      "entity_category": null,
+      "entity_id": "sensor.emporia_vue3_circuit_07_signed_power_1m_average",
+      "has_entity_name": true,
+      "hidden_by": null,
+      "icon": null,
+      "id": "b9e7bde53b4d6c0a6aeb47c9ebc70f94",
+      "labels": [],
+      "modified_at": 1790525203.147334,
+      "name": null,
+      "options": {
+        "sensor": {
+          "suggested_display_precision": 1
+        },
+        "conversation": {
+          "should_expose": false
+        }
+      },
+      "original_name": "Circuit 07 Signed Power 1m Average",
+      "platform": "esphome",
+      "translation_key": null,
+      "unique_id": "84:1F:E8:6F:E7:DC-sensor-circuit_07_signed_power_1m_average"
+    },
+    {
+      "area_id": null,
+      "categories": {},
+      "config_entry_id": "01M359RKEFTVJKDD4JV5KJGDD6",
+      "config_subentry_id": null,
+      "created_at": 1790525203.147621,
+      "device_id": "fc9d6c71bc4aaf9c84a1639db247cbe9",
+      "disabled_by": null,
+      "entity_category": null,
+      "entity_id": "sensor.emporia_vue3_circuit_07_current_live",
+      "has_entity_name": true,
+      "hidden_by": null,
+      "icon": null,
+      "id": "0194fe9b1fba45309dbb1a11d8b47df7",
+      "labels": [],
+      "modified_at": 1790525203.148215,
+      "name": null,
+      "options": {
+        "sensor": {
+          "suggested_display_precision": 2
+        },
+        "conversation": {
+          "should_expose": false
+        }
+      },
+      "original_name": "Circuit 07 Current Live",
+      "platform": "esphome",
+      "translation_key": null,
+      "unique_id": "84:1F:E8:6F:E7:DC-sensor-circuit_07_current_live"
+    },
+    {
+      "area_id": null,
+      "categories": {},
+      "config_entry_id": "01M359RKEFTVJKDD4JV5KJGDD6",
+      "config_subentry_id": null,
+      "created_at": 1790525203.148504,
+      "device_id": "fc9d6c71bc4aaf9c84a1639db247cbe9",
+      "disabled_by": null,
+      "entity_category": null,
+      "entity_id": "sensor.emporia_vue3_circuit_07_current_1m_average",
+      "has_entity_name": true,
+      "hidden_by": null,
+      "icon": null,
+      "id": "0f616ab91ed2083e2cd22af0a06ec0ad",
+      "labels": [],
+      "modified_at": 1790525203.14954,
+      "name": null,
+      "options": {
+        "sensor": {
+          "suggested_display_precision": 2
+        },
+        "conversation": {
+          "should_expose": false
+        }
+      },
+      "original_name": "Circuit 07 Current 1m Average",
+      "platform": "esphome",
+      "translation_key": null,
+      "unique_id": "84:1F:E8:6F:E7:DC-sensor-circuit_07_current_1m_average"
+    },
+    {
+      "area_id": null,
+      "categories": {},
+      "config_entry_id": "01M359RKEFTVJKDD4JV5KJGDD6",
+      "config_subentry_id": null,
+      "created_at": 1790525203.149863,
+      "device_id": "fc9d6c71bc4aaf9c84a1639db247cbe9",
+      "disabled_by": null,
+      "entity_category": null,
+      "entity_id": "sensor.emporia_vue3_circuit_08_signed_power_live",
+      "has_entity_name": true,
+      "hidden_by": null,
+      "icon": null,
+      "id": "3c0682546ea6b7640183a06f162d15ed",
+      "labels": [],
+      "modified_at": 1790525203.151909,
+      "name": null,
+      "options": {
+        "sensor": {
+          "suggested_display_precision": 1
+        },
+        "conversation": {
+          "should_expose": false
+        }
+      },
+      "original_name": "Circuit 08 Signed Power Live",
+      "platform": "esphome",
+      "translation_key": null,
+      "unique_id": "84:1F:E8:6F:E7:DC-sensor-circuit_08_signed_power_live"
+    },
+    {
+      "area_id": null,
+      "categories": {},
+      "config_entry_id": "01M359RKEFTVJKDD4JV5KJGDD6",
+      "config_subentry_id": null,
+      "created_at": 1790525203.152309,
+      "device_id": "fc9d6c71bc4aaf9c84a1639db247cbe9",
+      "disabled_by": null,
+      "entity_category": null,
+      "entity_id": "sensor.emporia_vue3_circuit_08_signed_power_1m_average",
+      "has_entity_name": true,
+      "hidden_by": null,
+      "icon": null,
+      "id": "0d4ecad5a4e28cd25bc08fba51aa8875",
+      "labels": [],
+      "modified_at": 1790525203.154437,
+      "name": null,
+      "options": {
+        "sensor": {
+          "suggested_display_precision": 1
+        },
+        "conversation": {
+          "should_expose": false
+        }
+      },
+      "original_name": "Circuit 08 Signed Power 1m Average",
+      "platform": "esphome",
+      "translation_key": null,
+      "unique_id": "84:1F:E8:6F:E7:DC-sensor-circuit_08_signed_power_1m_average"
+    },
+    {
+      "area_id": null,
+      "categories": {},
+      "config_entry_id": "01M359RKEFTVJKDD4JV5KJGDD6",
+      "config_subentry_id": null,
+      "created_at": 1790525203.154747,
+      "device_id": "fc9d6c71bc4aaf9c84a1639db247cbe9",
+      "disabled_by": null,
+      "entity_category": null,
+      "entity_id": "sensor.emporia_vue3_circuit_08_current_live",
+      "has_entity_name": true,
+      "hidden_by": null,
+      "icon": null,
+      "id": "c10c674dd4500be71f990811be3aff90",
+      "labels": [],
+      "modified_at": 1790525203.155253,
+      "name": null,
+      "options": {
+        "sensor": {
+          "suggested_display_precision": 2
+        },
+        "conversation": {
+          "should_expose": false
+        }
+      },
+      "original_name": "Circuit 08 Current Live",
+      "platform": "esphome",
+      "translation_key": null,
+      "unique_id": "84:1F:E8:6F:E7:DC-sensor-circuit_08_current_live"
+    },
+    {
+      "area_id": null,
+      "categories": {},
+      "config_entry_id": "01M359RKEFTVJKDD4JV5KJGDD6",
+      "config_subentry_id": null,
+      "created_at": 1790525203.155474,
+      "device_id": "fc9d6c71bc4aaf9c84a1639db247cbe9",
+      "disabled_by": null,
+      "entity_category": null,
+      "entity_id": "sensor.emporia_vue3_circuit_08_current_1m_average",
+      "has_entity_name": true,
+      "hidden_by": null,
+      "icon": null,
+      "id": "98f9c64767eaac149cb7d8a1fa6cf31e",
+      "labels": [],
+      "modified_at": 1790525203.15592,
+      "name": null,
+      "options": {
+        "sensor": {
+          "suggested_display_precision": 2
+        },
+        "conversation": {
+          "should_expose": false
+        }
+      },
+      "original_name": "Circuit 08 Current 1m Average",
+      "platform": "esphome",
+      "translation_key": null,
+      "unique_id": "84:1F:E8:6F:E7:DC-sensor-circuit_08_current_1m_average"
+    },
+    {
+      "area_id": null,
+      "categories": {},
+      "config_entry_id": "01M359RKEFTVJKDD4JV5KJGDD6",
+      "config_subentry_id": null,
+      "created_at": 1790525203.156139,
+      "device_id": "fc9d6c71bc4aaf9c84a1639db247cbe9",
+      "disabled_by": null,
+      "entity_category": null,
+      "entity_id": "sensor.emporia_vue3_circuit_09_signed_power_live",
+      "has_entity_name": true,
+      "hidden_by": null,
+      "icon": null,
+      "id": "979dc584fe048ce64fb42bc4a729a6be",
+      "labels": [],
+      "modified_at": 1790525203.156517,
+      "name": null,
+      "options": {
+        "sensor": {
+          "suggested_display_precision": 1
+        },
+        "conversation": {
+          "should_expose": false
+        }
+      },
+      "original_name": "Circuit 09 Signed Power Live",
+      "platform": "esphome",
+      "translation_key": null,
+      "unique_id": "84:1F:E8:6F:E7:DC-sensor-circuit_09_signed_power_live"
+    },
+    {
+      "area_id": null,
+      "categories": {},
+      "config_entry_id": "01M359RKEFTVJKDD4JV5KJGDD6",
+      "config_subentry_id": null,
+      "created_at": 1790525203.156702,
+      "device_id": "fc9d6c71bc4aaf9c84a1639db247cbe9",
+      "disabled_by": null,
+      "entity_category": null,
+      "entity_id": "sensor.emporia_vue3_circuit_09_signed_power_1m_average",
+      "has_entity_name": true,
+      "hidden_by": null,
+      "icon": null,
+      "id": "f9032ce392692c08c1b298c8efa3fcc8",
+      "labels": [],
+      "modified_at": 1790525203.157139,
+      "name": null,
+      "options": {
+        "sensor": {
+          "suggested_display_precision": 1
+        },
+        "conversation": {
+          "should_expose": false
+        }
+      },
+      "original_name": "Circuit 09 Signed Power 1m Average",
+      "platform": "esphome",
+      "translation_key": null,
+      "unique_id": "84:1F:E8:6F:E7:DC-sensor-circuit_09_signed_power_1m_average"
+    },
+    {
+      "area_id": null,
+      "categories": {},
+      "config_entry_id": "01M359RKEFTVJKDD4JV5KJGDD6",
+      "config_subentry_id": null,
+      "created_at": 1790525203.157986,
+      "device_id": "fc9d6c71bc4aaf9c84a1639db247cbe9",
+      "disabled_by": null,
+      "entity_category": null,
+      "entity_id": "sensor.emporia_vue3_circuit_09_current_live",
+      "has_entity_name": true,
+      "hidden_by": null,
+      "icon": null,
+      "id": "27b50f5c7b3158cd6537f7fa3f23a26f",
+      "labels": [],
+      "modified_at": 1790525203.160335,
+      "name": null,
+      "options": {
+        "sensor": {
+          "suggested_display_precision": 2
+        },
+        "conversation": {
+          "should_expose": false
+        }
+      },
+      "original_name": "Circuit 09 Current Live",
+      "platform": "esphome",
+      "translation_key": null,
+      "unique_id": "84:1F:E8:6F:E7:DC-sensor-circuit_09_current_live"
+    },
+    {
+      "area_id": null,
+      "categories": {},
+      "config_entry_id": "01M359RKEFTVJKDD4JV5KJGDD6",
+      "config_subentry_id": null,
+      "created_at": 1790525203.160786,
+      "device_id": "fc9d6c71bc4aaf9c84a1639db247cbe9",
+      "disabled_by": null,
+      "entity_category": null,
+      "entity_id": "sensor.emporia_vue3_circuit_09_current_1m_average",
+      "has_entity_name": true,
+      "hidden_by": null,
+      "icon": null,
+      "id": "02e07be1707b04240695cada060b4402",
+      "labels": [],
+      "modified_at": 1790525203.161267,
+      "name": null,
+      "options": {
+        "sensor": {
+          "suggested_display_precision": 2
+        },
+        "conversation": {
+          "should_expose": false
+        }
+      },
+      "original_name": "Circuit 09 Current 1m Average",
+      "platform": "esphome",
+      "translation_key": null,
+      "unique_id": "84:1F:E8:6F:E7:DC-sensor-circuit_09_current_1m_average"
+    },
+    {
+      "area_id": null,
+      "categories": {},
+      "config_entry_id": "01M359RKEFTVJKDD4JV5KJGDD6",
+      "config_subentry_id": null,
+      "created_at": 1790525203.161454,
+      "device_id": "fc9d6c71bc4aaf9c84a1639db247cbe9",
+      "disabled_by": null,
+      "entity_category": null,
+      "entity_id": "sensor.emporia_vue3_circuit_10_signed_power_live",
+      "has_entity_name": true,
+      "hidden_by": null,
+      "icon": null,
+      "id": "be2e46b2e9f2c5b51f25047cff7360fd",
+      "labels": [],
+      "modified_at": 1790525203.161805,
+      "name": null,
+      "options": {
+        "sensor": {
+          "suggested_display_precision": 1
+        },
+        "conversation": {
+          "should_expose": false
+        }
+      },
+      "original_name": "Circuit 10 Signed Power Live",
+      "platform": "esphome",
+      "translation_key": null,
+      "unique_id": "84:1F:E8:6F:E7:DC-sensor-circuit_10_signed_power_live"
+    },
+    {
+      "area_id": null,
+      "categories": {},
+      "config_entry_id": "01M359RKEFTVJKDD4JV5KJGDD6",
+      "config_subentry_id": null,
+      "created_at": 1790525203.161979,
+      "device_id": "fc9d6c71bc4aaf9c84a1639db247cbe9",
+      "disabled_by": null,
+      "entity_category": null,
+      "entity_id": "sensor.emporia_vue3_circuit_10_signed_power_1m_average",
+      "has_entity_name": true,
+      "hidden_by": null,
+      "icon": null,
+      "id": "bc416295236bdd4c5eae3c98f8de88b4",
+      "labels": [],
+      "modified_at": 1790525203.162307,
+      "name": null,
+      "options": {
+        "sensor": {
+          "suggested_display_precision": 1
+        },
+        "conversation": {
+          "should_expose": false
+        }
+      },
+      "original_name": "Circuit 10 Signed Power 1m Average",
+      "platform": "esphome",
+      "translation_key": null,
+      "unique_id": "84:1F:E8:6F:E7:DC-sensor-circuit_10_signed_power_1m_average"
+    },
+    {
+      "area_id": null,
+      "categories": {},
+      "config_entry_id": "01M359RKEFTVJKDD4JV5KJGDD6",
+      "config_subentry_id": null,
+      "created_at": 1790525203.162471,
+      "device_id": "fc9d6c71bc4aaf9c84a1639db247cbe9",
+      "disabled_by": null,
+      "entity_category": null,
+      "entity_id": "sensor.emporia_vue3_circuit_10_current_live",
+      "has_entity_name": true,
+      "hidden_by": null,
+      "icon": null,
+      "id": "30969fc101e9219f7702bbf63034ac9c",
+      "labels": [],
+      "modified_at": 1790525203.162808,
+      "name": null,
+      "options": {
+        "sensor": {
+          "suggested_display_precision": 2
+        },
+        "conversation": {
+          "should_expose": false
+        }
+      },
+      "original_name": "Circuit 10 Current Live",
+      "platform": "esphome",
+      "translation_key": null,
+      "unique_id": "84:1F:E8:6F:E7:DC-sensor-circuit_10_current_live"
+    },
+    {
+      "area_id": null,
+      "categories": {},
+      "config_entry_id": "01M359RKEFTVJKDD4JV5KJGDD6",
+      "config_subentry_id": null,
+      "created_at": 1790525203.162979,
+      "device_id": "fc9d6c71bc4aaf9c84a1639db247cbe9",
+      "disabled_by": null,
+      "entity_category": null,
+      "entity_id": "sensor.emporia_vue3_circuit_10_current_1m_average",
+      "has_entity_name": true,
+      "hidden_by": null,
+      "icon": null,
+      "id": "e11c624788190fdb9b2aedd5a5c7a1cc",
+      "labels": [],
+      "modified_at": 1790525203.16329,
+      "name": null,
+      "options": {
+        "sensor": {
+          "suggested_display_precision": 2
+        },
+        "conversation": {
+          "should_expose": false
+        }
+      },
+      "original_name": "Circuit 10 Current 1m Average",
+      "platform": "esphome",
+      "translation_key": null,
+      "unique_id": "84:1F:E8:6F:E7:DC-sensor-circuit_10_current_1m_average"
+    },
+    {
+      "area_id": null,
+      "categories": {},
+      "config_entry_id": "01M359RKEFTVJKDD4JV5KJGDD6",
+      "config_subentry_id": null,
+      "created_at": 1790525203.163459,
+      "device_id": "fc9d6c71bc4aaf9c84a1639db247cbe9",
+      "disabled_by": null,
+      "entity_category": null,
+      "entity_id": "sensor.emporia_vue3_circuit_11_signed_power_live",
+      "has_entity_name": true,
+      "hidden_by": null,
+      "icon": null,
+      "id": "1c6f11b0912c8c22c2c3ce3fe38255bd",
+      "labels": [],
+      "modified_at": 1790525203.16379,
+      "name": null,
+      "options": {
+        "sensor": {
+          "suggested_display_precision": 1
+        },
+        "conversation": {
+          "should_expose": false
+        }
+      },
+      "original_name": "Circuit 11 Signed Power Live",
+      "platform": "esphome",
+      "translation_key": null,
+      "unique_id": "84:1F:E8:6F:E7:DC-sensor-circuit_11_signed_power_live"
+    },
+    {
+      "area_id": null,
+      "categories": {},
+      "config_entry_id": "01M359RKEFTVJKDD4JV5KJGDD6",
+      "config_subentry_id": null,
+      "created_at": 1790525203.163963,
+      "device_id": "fc9d6c71bc4aaf9c84a1639db247cbe9",
+      "disabled_by": null,
+      "entity_category": null,
+      "entity_id": "sensor.emporia_vue3_circuit_11_signed_power_1m_average",
+      "has_entity_name": true,
+      "hidden_by": null,
+      "icon": null,
+      "id": "adc4ba126a2c09416af9d0360c902e69",
+      "labels": [],
+      "modified_at": 1790525203.16436,
+      "name": null,
+      "options": {
+        "sensor": {
+          "suggested_display_precision": 1
+        },
+        "conversation": {
+          "should_expose": false
+        }
+      },
+      "original_name": "Circuit 11 Signed Power 1m Average",
+      "platform": "esphome",
+      "translation_key": null,
+      "unique_id": "84:1F:E8:6F:E7:DC-sensor-circuit_11_signed_power_1m_average"
+    },
+    {
+      "area_id": null,
+      "categories": {},
+      "config_entry_id": "01M359RKEFTVJKDD4JV5KJGDD6",
+      "config_subentry_id": null,
+      "created_at": 1790525203.164616,
+      "device_id": "fc9d6c71bc4aaf9c84a1639db247cbe9",
+      "disabled_by": null,
+      "entity_category": null,
+      "entity_id": "sensor.emporia_vue3_circuit_11_current_live",
+      "has_entity_name": true,
+      "hidden_by": null,
+      "icon": null,
+      "id": "04a12e7b55169418ac621c18b1bf5294",
+      "labels": [],
+      "modified_at": 1790525203.165177,
+      "name": null,
+      "options": {
+        "sensor": {
+          "suggested_display_precision": 2
+        },
+        "conversation": {
+          "should_expose": false
+        }
+      },
+      "original_name": "Circuit 11 Current Live",
+      "platform": "esphome",
+      "translation_key": null,
+      "unique_id": "84:1F:E8:6F:E7:DC-sensor-circuit_11_current_live"
+    },
+    {
+      "area_id": null,
+      "categories": {},
+      "config_entry_id": "01M359RKEFTVJKDD4JV5KJGDD6",
+      "config_subentry_id": null,
+      "created_at": 1790525203.165446,
+      "device_id": "fc9d6c71bc4aaf9c84a1639db247cbe9",
+      "disabled_by": null,
+      "entity_category": null,
+      "entity_id": "sensor.emporia_vue3_circuit_11_current_1m_average",
+      "has_entity_name": true,
+      "hidden_by": null,
+      "icon": null,
+      "id": "7b135421ebb89dc2d070ea3b4ffe4c0e",
+      "labels": [],
+      "modified_at": 1790525203.166137,
+      "name": null,
+      "options": {
+        "sensor": {
+          "suggested_display_precision": 2
+        },
+        "conversation": {
+          "should_expose": false
+        }
+      },
+      "original_name": "Circuit 11 Current 1m Average",
+      "platform": "esphome",
+      "translation_key": null,
+      "unique_id": "84:1F:E8:6F:E7:DC-sensor-circuit_11_current_1m_average"
+    },
+    {
+      "area_id": null,
+      "categories": {},
+      "config_entry_id": "01M359RKEFTVJKDD4JV5KJGDD6",
+      "config_subentry_id": null,
+      "created_at": 1790525203.169311,
+      "device_id": "fc9d6c71bc4aaf9c84a1639db247cbe9",
+      "disabled_by": null,
+      "entity_category": null,
+      "entity_id": "sensor.emporia_vue3_circuit_12_signed_power_live",
+      "has_entity_name": true,
+      "hidden_by": null,
+      "icon": null,
+      "id": "0c67a3e0bc216dde61ce699e83d3c6f5",
+      "labels": [],
+      "modified_at": 1790525203.169811,
+      "name": null,
+      "options": {
+        "sensor": {
+          "suggested_display_precision": 1
+        },
+        "conversation": {
+          "should_expose": false
+        }
+      },
+      "original_name": "Circuit 12 Signed Power Live",
+      "platform": "esphome",
+      "translation_key": null,
+      "unique_id": "84:1F:E8:6F:E7:DC-sensor-circuit_12_signed_power_live"
+    },
+    {
+      "area_id": null,
+      "categories": {},
+      "config_entry_id": "01M359RKEFTVJKDD4JV5KJGDD6",
+      "config_subentry_id": null,
+      "created_at": 1790525203.169988,
+      "device_id": "fc9d6c71bc4aaf9c84a1639db247cbe9",
+      "disabled_by": null,
+      "entity_category": null,
+      "entity_id": "sensor.emporia_vue3_circuit_12_signed_power_1m_average",
+      "has_entity_name": true,
+      "hidden_by": null,
+      "icon": null,
+      "id": "023579a63df122ad30aecc88b0437214",
+      "labels": [],
+      "modified_at": 1790525203.170314,
+      "name": null,
+      "options": {
+        "sensor": {
+          "suggested_display_precision": 1
+        },
+        "conversation": {
+          "should_expose": false
+        }
+      },
+      "original_name": "Circuit 12 Signed Power 1m Average",
+      "platform": "esphome",
+      "translation_key": null,
+      "unique_id": "84:1F:E8:6F:E7:DC-sensor-circuit_12_signed_power_1m_average"
+    },
+    {
+      "area_id": null,
+      "categories": {},
+      "config_entry_id": "01M359RKEFTVJKDD4JV5KJGDD6",
+      "config_subentry_id": null,
+      "created_at": 1790525203.170472,
+      "device_id": "fc9d6c71bc4aaf9c84a1639db247cbe9",
+      "disabled_by": null,
+      "entity_category": null,
+      "entity_id": "sensor.emporia_vue3_circuit_12_current_live",
+      "has_entity_name": true,
+      "hidden_by": null,
+      "icon": null,
+      "id": "2dabbfece848aa00d05cab528a3b7d77",
+      "labels": [],
+      "modified_at": 1790525203.170877,
+      "name": null,
+      "options": {
+        "sensor": {
+          "suggested_display_precision": 2
+        },
+        "conversation": {
+          "should_expose": false
+        }
+      },
+      "original_name": "Circuit 12 Current Live",
+      "platform": "esphome",
+      "translation_key": null,
+      "unique_id": "84:1F:E8:6F:E7:DC-sensor-circuit_12_current_live"
+    },
+    {
+      "area_id": null,
+      "categories": {},
+      "config_entry_id": "01M359RKEFTVJKDD4JV5KJGDD6",
+      "config_subentry_id": null,
+      "created_at": 1790525203.171062,
+      "device_id": "fc9d6c71bc4aaf9c84a1639db247cbe9",
+      "disabled_by": null,
+      "entity_category": null,
+      "entity_id": "sensor.emporia_vue3_circuit_12_current_1m_average",
+      "has_entity_name": true,
+      "hidden_by": null,
+      "icon": null,
+      "id": "84b949e8b7c4f14c895f43a25c0881df",
+      "labels": [],
+      "modified_at": 1790525203.171458,
+      "name": null,
+      "options": {
+        "sensor": {
+          "suggested_display_precision": 2
+        },
+        "conversation": {
+          "should_expose": false
+        }
+      },
+      "original_name": "Circuit 12 Current 1m Average",
+      "platform": "esphome",
+      "translation_key": null,
+      "unique_id": "84:1F:E8:6F:E7:DC-sensor-circuit_12_current_1m_average"
+    },
+    {
+      "area_id": null,
+      "categories": {},
+      "config_entry_id": "01M359RKEFTVJKDD4JV5KJGDD6",
+      "config_subentry_id": null,
+      "created_at": 1790525203.171627,
+      "device_id": "fc9d6c71bc4aaf9c84a1639db247cbe9",
+      "disabled_by": null,
+      "entity_category": null,
+      "entity_id": "sensor.emporia_vue3_circuit_13_signed_power_live",
+      "has_entity_name": true,
+      "hidden_by": null,
+      "icon": null,
+      "id": "1f3c2738988beb5b3619032c173ddc09",
+      "labels": [],
+      "modified_at": 1790525203.171936,
+      "name": null,
+      "options": {
+        "sensor": {
+          "suggested_display_precision": 1
+        },
+        "conversation": {
+          "should_expose": false
+        }
+      },
+      "original_name": "Circuit 13 Signed Power Live",
+      "platform": "esphome",
+      "translation_key": null,
+      "unique_id": "84:1F:E8:6F:E7:DC-sensor-circuit_13_signed_power_live"
+    },
+    {
+      "area_id": null,
+      "categories": {},
+      "config_entry_id": "01M359RKEFTVJKDD4JV5KJGDD6",
+      "config_subentry_id": null,
+      "created_at": 1790525203.172076,
+      "device_id": "fc9d6c71bc4aaf9c84a1639db247cbe9",
+      "disabled_by": null,
+      "entity_category": null,
+      "entity_id": "sensor.emporia_vue3_circuit_13_signed_power_1m_average",
+      "has_entity_name": true,
+      "hidden_by": null,
+      "icon": null,
+      "id": "44657373c4dff791a737b1f502f3210a",
+      "labels": [],
+      "modified_at": 1790525203.172363,
+      "name": null,
+      "options": {
+        "sensor": {
+          "suggested_display_precision": 1
+        },
+        "conversation": {
+          "should_expose": false
+        }
+      },
+      "original_name": "Circuit 13 Signed Power 1m Average",
+      "platform": "esphome",
+      "translation_key": null,
+      "unique_id": "84:1F:E8:6F:E7:DC-sensor-circuit_13_signed_power_1m_average"
+    },
+    {
+      "area_id": null,
+      "categories": {},
+      "config_entry_id": "01M359RKEFTVJKDD4JV5KJGDD6",
+      "config_subentry_id": null,
+      "created_at": 1790525203.172503,
+      "device_id": "fc9d6c71bc4aaf9c84a1639db247cbe9",
+      "disabled_by": null,
+      "entity_category": null,
+      "entity_id": "sensor.emporia_vue3_circuit_13_current_live",
+      "has_entity_name": true,
+      "hidden_by": null,
+      "icon": null,
+      "id": "b0e91c37dd424112a791145aa42e2896",
+      "labels": [],
+      "modified_at": 1790525203.172781,
+      "name": null,
+      "options": {
+        "sensor": {
+          "suggested_display_precision": 2
+        },
+        "conversation": {
+          "should_expose": false
+        }
+      },
+      "original_name": "Circuit 13 Current Live",
+      "platform": "esphome",
+      "translation_key": null,
+      "unique_id": "84:1F:E8:6F:E7:DC-sensor-circuit_13_current_live"
+    },
+    {
+      "area_id": null,
+      "categories": {},
+      "config_entry_id": "01M359RKEFTVJKDD4JV5KJGDD6",
+      "config_subentry_id": null,
+      "created_at": 1790525203.172908,
+      "device_id": "fc9d6c71bc4aaf9c84a1639db247cbe9",
+      "disabled_by": null,
+      "entity_category": null,
+      "entity_id": "sensor.emporia_vue3_circuit_13_current_1m_average",
+      "has_entity_name": true,
+      "hidden_by": null,
+      "icon": null,
+      "id": "bb9d8c3edef6009f9f761a15ace84c55",
+      "labels": [],
+      "modified_at": 1790525203.173223,
+      "name": null,
+      "options": {
+        "sensor": {
+          "suggested_display_precision": 2
+        },
+        "conversation": {
+          "should_expose": false
+        }
+      },
+      "original_name": "Circuit 13 Current 1m Average",
+      "platform": "esphome",
+      "translation_key": null,
+      "unique_id": "84:1F:E8:6F:E7:DC-sensor-circuit_13_current_1m_average"
+    },
+    {
+      "area_id": null,
+      "categories": {},
+      "config_entry_id": "01M359RKEFTVJKDD4JV5KJGDD6",
+      "config_subentry_id": null,
+      "created_at": 1790525203.173427,
+      "device_id": "fc9d6c71bc4aaf9c84a1639db247cbe9",
+      "disabled_by": null,
+      "entity_category": null,
+      "entity_id": "sensor.emporia_vue3_circuit_14_signed_power_live",
+      "has_entity_name": true,
+      "hidden_by": null,
+      "icon": null,
+      "id": "e38e94ec335736e2d2c44374eb9a50ed",
+      "labels": [],
+      "modified_at": 1790525203.173695,
+      "name": null,
+      "options": {
+        "sensor": {
+          "suggested_display_precision": 1
+        },
+        "conversation": {
+          "should_expose": false
+        }
+      },
+      "original_name": "Circuit 14 Signed Power Live",
+      "platform": "esphome",
+      "translation_key": null,
+      "unique_id": "84:1F:E8:6F:E7:DC-sensor-circuit_14_signed_power_live"
+    },
+    {
+      "area_id": null,
+      "categories": {},
+      "config_entry_id": "01M359RKEFTVJKDD4JV5KJGDD6",
+      "config_subentry_id": null,
+      "created_at": 1790525203.173925,
+      "device_id": "fc9d6c71bc4aaf9c84a1639db247cbe9",
+      "disabled_by": null,
+      "entity_category": null,
+      "entity_id": "sensor.emporia_vue3_circuit_14_signed_power_1m_average",
+      "has_entity_name": true,
+      "hidden_by": null,
+      "icon": null,
+      "id": "00abdf651387f8fce4f4370bec2375a7",
+      "labels": [],
+      "modified_at": 1790525203.174256,
+      "name": null,
+      "options": {
+        "sensor": {
+          "suggested_display_precision": 1
+        },
+        "conversation": {
+          "should_expose": false
+        }
+      },
+      "original_name": "Circuit 14 Signed Power 1m Average",
+      "platform": "esphome",
+      "translation_key": null,
+      "unique_id": "84:1F:E8:6F:E7:DC-sensor-circuit_14_signed_power_1m_average"
+    },
+    {
+      "area_id": null,
+      "categories": {},
+      "config_entry_id": "01M359RKEFTVJKDD4JV5KJGDD6",
+      "config_subentry_id": null,
+      "created_at": 1790525203.174421,
+      "device_id": "fc9d6c71bc4aaf9c84a1639db247cbe9",
+      "disabled_by": null,
+      "entity_category": null,
+      "entity_id": "sensor.emporia_vue3_circuit_14_current_live",
+      "has_entity_name": true,
+      "hidden_by": null,
+      "icon": null,
+      "id": "38f03414665abe9ffcafea2fb7a518bb",
+      "labels": [],
+      "modified_at": 1790525203.174766,
+      "name": null,
+      "options": {
+        "sensor": {
+          "suggested_display_precision": 2
+        },
+        "conversation": {
+          "should_expose": false
+        }
+      },
+      "original_name": "Circuit 14 Current Live",
+      "platform": "esphome",
+      "translation_key": null,
+      "unique_id": "84:1F:E8:6F:E7:DC-sensor-circuit_14_current_live"
+    },
+    {
+      "area_id": null,
+      "categories": {},
+      "config_entry_id": "01M359RKEFTVJKDD4JV5KJGDD6",
+      "config_subentry_id": null,
+      "created_at": 1790525203.17495,
+      "device_id": "fc9d6c71bc4aaf9c84a1639db247cbe9",
+      "disabled_by": null,
+      "entity_category": null,
+      "entity_id": "sensor.emporia_vue3_circuit_14_current_1m_average",
+      "has_entity_name": true,
+      "hidden_by": null,
+      "icon": null,
+      "id": "aaa756cb05ee704878f764981d5a4f09",
+      "labels": [],
+      "modified_at": 1790525203.175253,
+      "name": null,
+      "options": {
+        "sensor": {
+          "suggested_display_precision": 2
+        },
+        "conversation": {
+          "should_expose": false
+        }
+      },
+      "original_name": "Circuit 14 Current 1m Average",
+      "platform": "esphome",
+      "translation_key": null,
+      "unique_id": "84:1F:E8:6F:E7:DC-sensor-circuit_14_current_1m_average"
+    },
+    {
+      "area_id": null,
+      "categories": {},
+      "config_entry_id": "01M359RKEFTVJKDD4JV5KJGDD6",
+      "config_subentry_id": null,
+      "created_at": 1790525203.175419,
+      "device_id": "fc9d6c71bc4aaf9c84a1639db247cbe9",
+      "disabled_by": null,
+      "entity_category": null,
+      "entity_id": "sensor.emporia_vue3_circuit_15_signed_power_live",
+      "has_entity_name": true,
+      "hidden_by": null,
+      "icon": null,
+      "id": "d02381bcefd6f07254c45dc030a6eb39",
+      "labels": [],
+      "modified_at": 1790525203.176249,
+      "name": null,
+      "options": {
+        "sensor": {
+          "suggested_display_precision": 1
+        },
+        "conversation": {
+          "should_expose": false
+        }
+      },
+      "original_name": "Circuit 15 Signed Power Live",
+      "platform": "esphome",
+      "translation_key": null,
+      "unique_id": "84:1F:E8:6F:E7:DC-sensor-circuit_15_signed_power_live"
+    },
+    {
+      "area_id": null,
+      "categories": {},
+      "config_entry_id": "01M359RKEFTVJKDD4JV5KJGDD6",
+      "config_subentry_id": null,
+      "created_at": 1790525203.177892,
+      "device_id": "fc9d6c71bc4aaf9c84a1639db247cbe9",
+      "disabled_by": null,
+      "entity_category": null,
+      "entity_id": "sensor.emporia_vue3_circuit_15_signed_power_1m_average",
+      "has_entity_name": true,
+      "hidden_by": null,
+      "icon": null,
+      "id": "c36cfac67af7d097857847b6add3149f",
+      "labels": [],
+      "modified_at": 1790525203.178415,
+      "name": null,
+      "options": {
+        "sensor": {
+          "suggested_display_precision": 1
+        },
+        "conversation": {
+          "should_expose": false
+        }
+      },
+      "original_name": "Circuit 15 Signed Power 1m Average",
+      "platform": "esphome",
+      "translation_key": null,
+      "unique_id": "84:1F:E8:6F:E7:DC-sensor-circuit_15_signed_power_1m_average"
+    },
+    {
+      "area_id": null,
+      "categories": {},
+      "config_entry_id": "01M359RKEFTVJKDD4JV5KJGDD6",
+      "config_subentry_id": null,
+      "created_at": 1790525203.178638,
+      "device_id": "fc9d6c71bc4aaf9c84a1639db247cbe9",
+      "disabled_by": null,
+      "entity_category": null,
+      "entity_id": "sensor.emporia_vue3_circuit_15_current_live",
+      "has_entity_name": true,
+      "hidden_by": null,
+      "icon": null,
+      "id": "1ae74b9674fcff77d86f8b839ca30584",
+      "labels": [],
+      "modified_at": 1790525203.17903,
+      "name": null,
+      "options": {
+        "sensor": {
+          "suggested_display_precision": 2
+        },
+        "conversation": {
+          "should_expose": false
+        }
+      },
+      "original_name": "Circuit 15 Current Live",
+      "platform": "esphome",
+      "translation_key": null,
+      "unique_id": "84:1F:E8:6F:E7:DC-sensor-circuit_15_current_live"
+    },
+    {
+      "area_id": null,
+      "categories": {},
+      "config_entry_id": "01M359RKEFTVJKDD4JV5KJGDD6",
+      "config_subentry_id": null,
+      "created_at": 1790525203.179208,
+      "device_id": "fc9d6c71bc4aaf9c84a1639db247cbe9",
+      "disabled_by": null,
+      "entity_category": null,
+      "entity_id": "sensor.emporia_vue3_circuit_15_current_1m_average",
+      "has_entity_name": true,
+      "hidden_by": null,
+      "icon": null,
+      "id": "ed14d1bdf245a3bf1bbc4454adcd1cab",
+      "labels": [],
+      "modified_at": 1790525203.17954,
+      "name": null,
+      "options": {
+        "sensor": {
+          "suggested_display_precision": 2
+        },
+        "conversation": {
+          "should_expose": false
+        }
+      },
+      "original_name": "Circuit 15 Current 1m Average",
+      "platform": "esphome",
+      "translation_key": null,
+      "unique_id": "84:1F:E8:6F:E7:DC-sensor-circuit_15_current_1m_average"
+    },
+    {
+      "area_id": null,
+      "categories": {},
+      "config_entry_id": "01M359RKEFTVJKDD4JV5KJGDD6",
+      "config_subentry_id": null,
+      "created_at": 1790525203.179717,
+      "device_id": "fc9d6c71bc4aaf9c84a1639db247cbe9",
+      "disabled_by": null,
+      "entity_category": null,
+      "entity_id": "sensor.emporia_vue3_circuit_16_signed_power_live",
+      "has_entity_name": true,
+      "hidden_by": null,
+      "icon": null,
+      "id": "dd67c48baed2124de4ec42f432ebb280",
+      "labels": [],
+      "modified_at": 1790525203.180176,
+      "name": null,
+      "options": {
+        "sensor": {
+          "suggested_display_precision": 1
+        },
+        "conversation": {
+          "should_expose": false
+        }
+      },
+      "original_name": "Circuit 16 Signed Power Live",
+      "platform": "esphome",
+      "translation_key": null,
+      "unique_id": "84:1F:E8:6F:E7:DC-sensor-circuit_16_signed_power_live"
+    },
+    {
+      "area_id": null,
+      "categories": {},
+      "config_entry_id": "01M359RKEFTVJKDD4JV5KJGDD6",
+      "config_subentry_id": null,
+      "created_at": 1790525203.180349,
+      "device_id": "fc9d6c71bc4aaf9c84a1639db247cbe9",
+      "disabled_by": null,
+      "entity_category": null,
+      "entity_id": "sensor.emporia_vue3_circuit_16_signed_power_1m_average",
+      "has_entity_name": true,
+      "hidden_by": null,
+      "icon": null,
+      "id": "9d91afcfc448eb3e5ffd802c6f179c95",
+      "labels": [],
+      "modified_at": 1790525203.180872,
+      "name": null,
+      "options": {
+        "sensor": {
+          "suggested_display_precision": 1
+        },
+        "conversation": {
+          "should_expose": false
+        }
+      },
+      "original_name": "Circuit 16 Signed Power 1m Average",
+      "platform": "esphome",
+      "translation_key": null,
+      "unique_id": "84:1F:E8:6F:E7:DC-sensor-circuit_16_signed_power_1m_average"
+    },
+    {
+      "area_id": null,
+      "categories": {},
+      "config_entry_id": "01M359RKEFTVJKDD4JV5KJGDD6",
+      "config_subentry_id": null,
+      "created_at": 1790525203.181119,
+      "device_id": "fc9d6c71bc4aaf9c84a1639db247cbe9",
+      "disabled_by": null,
+      "entity_category": null,
+      "entity_id": "sensor.emporia_vue3_circuit_16_current_live",
+      "has_entity_name": true,
+      "hidden_by": null,
+      "icon": null,
+      "id": "4a0030a5451e23ff3059f9dd7622d18d",
+      "labels": [],
+      "modified_at": 1790525203.181808,
+      "name": null,
+      "options": {
+        "sensor": {
+          "suggested_display_precision": 2
+        },
+        "conversation": {
+          "should_expose": false
+        }
+      },
+      "original_name": "Circuit 16 Current Live",
+      "platform": "esphome",
+      "translation_key": null,
+      "unique_id": "84:1F:E8:6F:E7:DC-sensor-circuit_16_current_live"
+    },
+    {
+      "area_id": null,
+      "categories": {},
+      "config_entry_id": "01M359RKEFTVJKDD4JV5KJGDD6",
+      "config_subentry_id": null,
+      "created_at": 1790525203.182058,
+      "device_id": "fc9d6c71bc4aaf9c84a1639db247cbe9",
+      "disabled_by": null,
+      "entity_category": null,
+      "entity_id": "sensor.emporia_vue3_circuit_16_current_1m_average",
+      "has_entity_name": true,
+      "hidden_by": null,
+      "icon": null,
+      "id": "069cbfcd46654058ac666520e7d6fecf",
+      "labels": [],
+      "modified_at": 1790525203.182529,
+      "name": null,
+      "options": {
+        "sensor": {
+          "suggested_display_precision": 2
+        },
+        "conversation": {
+          "should_expose": false
+        }
+      },
+      "original_name": "Circuit 16 Current 1m Average",
+      "platform": "esphome",
+      "translation_key": null,
+      "unique_id": "84:1F:E8:6F:E7:DC-sensor-circuit_16_current_1m_average"
+    }
+  ],
+  "states": [
+    {
+      "entity_id": "binary_sensor.emporia_vue3_status",
+      "state": "on",
+      "attributes": {
+        "device_class": "connectivity",
+        "friendly_name": "Emporia Vue 3 Status"
+      },
+      "last_changed": "2026-09-27T16:06:43.194567+00:00",
+      "last_reported": "2026-09-27T16:06:43.194567+00:00",
+      "last_updated": "2026-09-27T16:06:43.194567+00:00",
+      "context": {
+        "id": "01M3HSWRQTERJ5YMPEY2D3S9XY",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "button.emporia_vue3_restart",
+      "state": "unknown",
+      "attributes": {
+        "device_class": "restart",
+        "icon": "mdi:restart",
+        "friendly_name": "Emporia Vue 3 Restart"
+      },
+      "last_changed": "2026-09-27T16:06:43.100882+00:00",
+      "last_reported": "2026-09-27T16:06:43.100882+00:00",
+      "last_updated": "2026-09-27T16:06:43.100882+00:00",
+      "context": {
+        "id": "01M3HSWRMWFHRMHKZJVNRZXDAH",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "sensor.emporia_vue3_l1_voltage",
+      "state": "119.902465820312",
+      "attributes": {
+        "state_class": "measurement",
+        "unit_of_measurement": "V",
+        "device_class": "voltage",
+        "friendly_name": "Emporia Vue 3 L1 Voltage"
+      },
+      "last_changed": "2026-09-27T23:07:01.499508+00:00",
+      "last_reported": "2026-09-27T23:07:01.499508+00:00",
+      "last_updated": "2026-09-27T23:07:01.499508+00:00",
+      "context": {
+        "id": "01M3JHYBZVQXEADM2CVQ09N22V",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "sensor.emporia_vue3_line_frequency",
+      "state": "59.7865829467773",
+      "attributes": {
+        "state_class": "measurement",
+        "unit_of_measurement": "Hz",
+        "device_class": "frequency",
+        "friendly_name": "Emporia Vue 3 Line Frequency"
+      },
+      "last_changed": "2026-09-27T23:06:41.489043+00:00",
+      "last_reported": "2026-09-27T23:06:41.489043+00:00",
+      "last_updated": "2026-09-27T23:06:41.489043+00:00",
+      "context": {
+        "id": "01M3JHXREHJ0WWR5WVVVK5EF6E",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "sensor.emporia_vue3_l2_voltage",
+      "state": "119.700355529785",
+      "attributes": {
+        "state_class": "measurement",
+        "unit_of_measurement": "V",
+        "device_class": "voltage",
+        "friendly_name": "Emporia Vue 3 L2 Voltage"
+      },
+      "last_changed": "2026-09-27T23:07:01.499307+00:00",
+      "last_reported": "2026-09-27T23:07:01.499307+00:00",
+      "last_updated": "2026-09-27T23:07:01.499307+00:00",
+      "context": {
+        "id": "01M3JHYBZV8P358MY22MWF52GC",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "sensor.emporia_vue3_l2_phase_angle",
+      "state": "180.0",
+      "attributes": {
+        "state_class": "measurement",
+        "unit_of_measurement": "\u00b0",
+        "friendly_name": "Emporia Vue 3 L2 Phase Angle"
+      },
+      "last_changed": "2026-09-27T23:06:56.483411+00:00",
+      "last_reported": "2026-09-27T23:06:56.483411+00:00",
+      "last_updated": "2026-09-27T23:06:56.483411+00:00",
+      "context": {
+        "id": "01M3JHY733WDTX1WAQ1C5G00B3",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "sensor.emporia_vue3_fridge_current",
+      "state": "2.38641977310181",
+      "attributes": {
+        "state_class": "measurement",
+        "unit_of_measurement": "A",
+        "device_class": "current",
+        "friendly_name": "Emporia Vue 3 Fridge Current"
+      },
+      "last_changed": "2026-09-27T23:07:03.738279+00:00",
+      "last_reported": "2026-09-27T23:07:03.738279+00:00",
+      "last_updated": "2026-09-27T23:07:03.738279+00:00",
+      "context": {
+        "id": "01M3JHYE5TM2DDMK1H8GWXBEGM",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "sensor.emporia_vue3_input_1_signed_power_l1_reference",
+      "state": "-192.199432373047",
+      "attributes": {
+        "state_class": "measurement",
+        "unit_of_measurement": "W",
+        "device_class": "power",
+        "friendly_name": "Emporia Vue 3 Input 1 Signed Power L1 Reference"
+      },
+      "last_changed": "2026-09-27T23:07:03.727664+00:00",
+      "last_reported": "2026-09-27T23:07:03.727664+00:00",
+      "last_updated": "2026-09-27T23:07:03.727664+00:00",
+      "context": {
+        "id": "01M3JHYE5FGH6D7RCP37K8PTMQ",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "sensor.emporia_vue3_fridge_power",
+      "state": "192.199432373047",
+      "attributes": {
+        "state_class": "measurement",
+        "unit_of_measurement": "W",
+        "device_class": "power",
+        "friendly_name": "Emporia Vue 3 Fridge Power"
+      },
+      "last_changed": "2026-09-27T23:07:03.737990+00:00",
+      "last_reported": "2026-09-27T23:07:03.737990+00:00",
+      "last_updated": "2026-09-27T23:07:03.737990+00:00",
+      "context": {
+        "id": "01M3JHYE5SEPFSN8W36DK730NR",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "sensor.emporia_vue3_fridge_daily_energy",
+      "state": "1.16758573055267",
+      "attributes": {
+        "state_class": "total_increasing",
+        "unit_of_measurement": "kWh",
+        "device_class": "energy",
+        "friendly_name": "Emporia Vue 3 Fridge Daily Energy"
+      },
+      "last_changed": "2026-09-27T23:07:00.930694+00:00",
+      "last_reported": "2026-09-27T23:07:00.930694+00:00",
+      "last_updated": "2026-09-27T23:07:00.930694+00:00",
+      "context": {
+        "id": "01M3JHYBE2AVDEKYSQNMR7V13R",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "sensor.emporia_vue3_uptime",
+      "state": "25203.83984375",
+      "attributes": {
+        "state_class": "total_increasing",
+        "unit_of_measurement": "s",
+        "device_class": "duration",
+        "icon": "mdi:timer-outline",
+        "friendly_name": "Emporia Vue 3 Uptime"
+      },
+      "last_changed": "2026-09-27T23:06:39.362156+00:00",
+      "last_reported": "2026-09-27T23:06:39.362156+00:00",
+      "last_updated": "2026-09-27T23:06:39.362156+00:00",
+      "context": {
+        "id": "01M3JHXPC27FRG011V3WZNN7FW",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "sensor.emporia_vue3_ip_address",
+      "state": "192.168.10.226",
+      "attributes": {
+        "friendly_name": "Emporia Vue 3 IP Address"
+      },
+      "last_changed": "2026-09-27T16:06:43.194361+00:00",
+      "last_reported": "2026-09-27T16:06:43.194361+00:00",
+      "last_updated": "2026-09-27T16:06:43.194361+00:00",
+      "context": {
+        "id": "01M3HSWRQTXWDJD4PK4R8FG27C",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "sensor.emporia_vue3_fridge_power_1m_average",
+      "state": "195.994079589844",
+      "attributes": {
+        "state_class": "measurement",
+        "unit_of_measurement": "W",
+        "device_class": "power",
+        "friendly_name": "Emporia Vue 3 Fridge Power 1m Average"
+      },
+      "last_changed": "2026-09-27T23:06:40.788417+00:00",
+      "last_reported": "2026-09-27T23:06:40.788417+00:00",
+      "last_updated": "2026-09-27T23:06:40.788417+00:00",
+      "context": {
+        "id": "01M3JHXQRMSKRK5R1A675ACCCQ",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "sensor.emporia_vue3_fridge_current_1m_average",
+      "state": "2.41600322723389",
+      "attributes": {
+        "state_class": "measurement",
+        "unit_of_measurement": "A",
+        "device_class": "current",
+        "friendly_name": "Emporia Vue 3 Fridge Current 1m Average"
+      },
+      "last_changed": "2026-09-27T23:06:39.362490+00:00",
+      "last_reported": "2026-09-27T23:06:39.362490+00:00",
+      "last_updated": "2026-09-27T23:06:39.362490+00:00",
+      "context": {
+        "id": "01M3JHXPC2TVFKTFSJG6NKWJHR",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "sensor.emporia_vue3_mains_a_signed_power_live",
+      "state": "-3838.04052734375",
+      "attributes": {
+        "state_class": "measurement",
+        "unit_of_measurement": "W",
+        "device_class": "power",
+        "friendly_name": "Emporia Vue 3 Mains A Signed Power Live"
+      },
+      "last_changed": "2026-09-27T23:07:03.727120+00:00",
+      "last_reported": "2026-09-27T23:07:03.727120+00:00",
+      "last_updated": "2026-09-27T23:07:03.727120+00:00",
+      "context": {
+        "id": "01M3JHYE5FW1TACRG9F7Z4JZKH",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "sensor.emporia_vue3_mains_a_signed_power_1m_average",
+      "state": "-3864.50219726562",
+      "attributes": {
+        "state_class": "measurement",
+        "unit_of_measurement": "W",
+        "device_class": "power",
+        "friendly_name": "Emporia Vue 3 Mains A Signed Power 1m Average"
+      },
+      "last_changed": "2026-09-27T23:06:40.579715+00:00",
+      "last_reported": "2026-09-27T23:06:40.579715+00:00",
+      "last_updated": "2026-09-27T23:06:40.579715+00:00",
+      "context": {
+        "id": "01M3JHXQJ39Q6AJ74VZJ52WFRM",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "sensor.emporia_vue3_mains_a_current_live",
+      "state": "32.22802734375",
+      "attributes": {
+        "state_class": "measurement",
+        "unit_of_measurement": "A",
+        "device_class": "current",
+        "friendly_name": "Emporia Vue 3 Mains A Current Live"
+      },
+      "last_changed": "2026-09-27T23:07:03.736901+00:00",
+      "last_reported": "2026-09-27T23:07:03.736901+00:00",
+      "last_updated": "2026-09-27T23:07:03.736901+00:00",
+      "context": {
+        "id": "01M3JHYE5RX74ZCYNV5G174XT5",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "sensor.emporia_vue3_mains_a_current_1m_average",
+      "state": "32.4831962585449",
+      "attributes": {
+        "state_class": "measurement",
+        "unit_of_measurement": "A",
+        "device_class": "current",
+        "friendly_name": "Emporia Vue 3 Mains A Current 1m Average"
+      },
+      "last_changed": "2026-09-27T23:06:39.366179+00:00",
+      "last_reported": "2026-09-27T23:06:39.366179+00:00",
+      "last_updated": "2026-09-27T23:06:39.366179+00:00",
+      "context": {
+        "id": "01M3JHXPC6AB5JSJNZGPWM8Q4E",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "sensor.emporia_vue3_mains_b_signed_power_live",
+      "state": "-3613.6552734375",
+      "attributes": {
+        "state_class": "measurement",
+        "unit_of_measurement": "W",
+        "device_class": "power",
+        "friendly_name": "Emporia Vue 3 Mains B Signed Power Live"
+      },
+      "last_changed": "2026-09-27T23:07:03.738984+00:00",
+      "last_reported": "2026-09-27T23:07:03.738984+00:00",
+      "last_updated": "2026-09-27T23:07:03.738984+00:00",
+      "context": {
+        "id": "01M3JHYE5T3AQMF6MGD49V7ZZM",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "sensor.emporia_vue3_mains_b_signed_power_1m_average",
+      "state": "-3638.56591796875",
+      "attributes": {
+        "state_class": "measurement",
+        "unit_of_measurement": "W",
+        "device_class": "power",
+        "friendly_name": "Emporia Vue 3 Mains B Signed Power 1m Average"
+      },
+      "last_changed": "2026-09-27T23:06:40.579477+00:00",
+      "last_reported": "2026-09-27T23:06:40.579477+00:00",
+      "last_updated": "2026-09-27T23:06:40.579477+00:00",
+      "context": {
+        "id": "01M3JHXQJ3BPJS62FS2JYZPPB3",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "sensor.emporia_vue3_mains_b_current_live",
+      "state": "30.6279907226562",
+      "attributes": {
+        "state_class": "measurement",
+        "unit_of_measurement": "A",
+        "device_class": "current",
+        "friendly_name": "Emporia Vue 3 Mains B Current Live"
+      },
+      "last_changed": "2026-09-27T23:07:03.725889+00:00",
+      "last_reported": "2026-09-27T23:07:03.725889+00:00",
+      "last_updated": "2026-09-27T23:07:03.725889+00:00",
+      "context": {
+        "id": "01M3JHYE5DT69RGASFPWC6JEPA",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "sensor.emporia_vue3_mains_b_current_1m_average",
+      "state": "30.8054580688477",
+      "attributes": {
+        "state_class": "measurement",
+        "unit_of_measurement": "A",
+        "device_class": "current",
+        "friendly_name": "Emporia Vue 3 Mains B Current 1m Average"
+      },
+      "last_changed": "2026-09-27T23:06:41.498782+00:00",
+      "last_reported": "2026-09-27T23:06:41.498782+00:00",
+      "last_updated": "2026-09-27T23:06:41.498782+00:00",
+      "context": {
+        "id": "01M3JHXRETDX14FR5B33T4VJ5K",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "sensor.emporia_vue3_circuit_01_signed_power_live",
+      "state": "-192.199432373047",
+      "attributes": {
+        "state_class": "measurement",
+        "unit_of_measurement": "W",
+        "device_class": "power",
+        "friendly_name": "Emporia Vue 3 Circuit 01 Signed Power Live"
+      },
+      "last_changed": "2026-09-27T23:07:03.727572+00:00",
+      "last_reported": "2026-09-27T23:07:03.727572+00:00",
+      "last_updated": "2026-09-27T23:07:03.727572+00:00",
+      "context": {
+        "id": "01M3JHYE5FQRAVCEC4E2FWM0D8",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "sensor.emporia_vue3_circuit_01_signed_power_1m_average",
+      "state": "-196.179870605469",
+      "attributes": {
+        "state_class": "measurement",
+        "unit_of_measurement": "W",
+        "device_class": "power",
+        "friendly_name": "Emporia Vue 3 Circuit 01 Signed Power 1m Average"
+      },
+      "last_changed": "2026-09-27T23:06:39.365519+00:00",
+      "last_reported": "2026-09-27T23:06:39.365519+00:00",
+      "last_updated": "2026-09-27T23:06:39.365519+00:00",
+      "context": {
+        "id": "01M3JHXPC50CPCS4H1NJ341HTB",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "sensor.emporia_vue3_circuit_01_current_live",
+      "state": "2.38641977310181",
+      "attributes": {
+        "state_class": "measurement",
+        "unit_of_measurement": "A",
+        "device_class": "current",
+        "friendly_name": "Emporia Vue 3 Circuit 01 Current Live"
+      },
+      "last_changed": "2026-09-27T23:07:03.737760+00:00",
+      "last_reported": "2026-09-27T23:07:03.737760+00:00",
+      "last_updated": "2026-09-27T23:07:03.737760+00:00",
+      "context": {
+        "id": "01M3JHYE5SH5XQEKMWKM5N13JV",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "sensor.emporia_vue3_circuit_01_current_1m_average",
+      "state": "2.41600322723389",
+      "attributes": {
+        "state_class": "measurement",
+        "unit_of_measurement": "A",
+        "device_class": "current",
+        "friendly_name": "Emporia Vue 3 Circuit 01 Current 1m Average"
+      },
+      "last_changed": "2026-09-27T23:06:39.364446+00:00",
+      "last_reported": "2026-09-27T23:06:39.364446+00:00",
+      "last_updated": "2026-09-27T23:06:39.364446+00:00",
+      "context": {
+        "id": "01M3JHXPC4M2SS4GVT7JW3R1W0",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "sensor.emporia_vue3_circuit_02_signed_power_live",
+      "state": "-2794.53735351562",
+      "attributes": {
+        "state_class": "measurement",
+        "unit_of_measurement": "W",
+        "device_class": "power",
+        "friendly_name": "Emporia Vue 3 Circuit 02 Signed Power Live"
+      },
+      "last_changed": "2026-09-27T23:07:03.738893+00:00",
+      "last_reported": "2026-09-27T23:07:03.738893+00:00",
+      "last_updated": "2026-09-27T23:07:03.738893+00:00",
+      "context": {
+        "id": "01M3JHYE5TK6D0QXRT758X1M26",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "sensor.emporia_vue3_circuit_02_signed_power_1m_average",
+      "state": "-2822.23120117188",
+      "attributes": {
+        "state_class": "measurement",
+        "unit_of_measurement": "W",
+        "device_class": "power",
+        "friendly_name": "Emporia Vue 3 Circuit 02 Signed Power 1m Average"
+      },
+      "last_changed": "2026-09-27T23:06:40.932815+00:00",
+      "last_reported": "2026-09-27T23:06:40.932815+00:00",
+      "last_updated": "2026-09-27T23:06:40.932815+00:00",
+      "context": {
+        "id": "01M3JHXQX4K2MD8PMG5648V1GS",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "sensor.emporia_vue3_circuit_02_current_live",
+      "state": "23.4619140625",
+      "attributes": {
+        "state_class": "measurement",
+        "unit_of_measurement": "A",
+        "device_class": "current",
+        "friendly_name": "Emporia Vue 3 Circuit 02 Current Live"
+      },
+      "last_changed": "2026-09-27T23:07:03.726533+00:00",
+      "last_reported": "2026-09-27T23:07:03.726533+00:00",
+      "last_updated": "2026-09-27T23:07:03.726533+00:00",
+      "context": {
+        "id": "01M3JHYE5E66G7X6KYHWCNZE3P",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "sensor.emporia_vue3_circuit_02_current_1m_average",
+      "state": "23.6750106811523",
+      "attributes": {
+        "state_class": "measurement",
+        "unit_of_measurement": "A",
+        "device_class": "current",
+        "friendly_name": "Emporia Vue 3 Circuit 02 Current 1m Average"
+      },
+      "last_changed": "2026-09-27T23:06:41.498922+00:00",
+      "last_reported": "2026-09-27T23:06:41.498922+00:00",
+      "last_updated": "2026-09-27T23:06:41.498922+00:00",
+      "context": {
+        "id": "01M3JHXRETJ0DNWH76S4KGH2MV",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "sensor.emporia_vue3_circuit_03_signed_power_live",
+      "state": "1.28799998760223",
+      "attributes": {
+        "state_class": "measurement",
+        "unit_of_measurement": "W",
+        "device_class": "power",
+        "friendly_name": "Emporia Vue 3 Circuit 03 Signed Power Live"
+      },
+      "last_changed": "2026-09-27T23:07:03.727211+00:00",
+      "last_reported": "2026-09-27T23:07:03.727211+00:00",
+      "last_updated": "2026-09-27T23:07:03.727211+00:00",
+      "context": {
+        "id": "01M3JHYE5F35DAGJRKCNRMM89Q",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "sensor.emporia_vue3_circuit_03_signed_power_1m_average",
+      "state": "0.614146113395691",
+      "attributes": {
+        "state_class": "measurement",
+        "unit_of_measurement": "W",
+        "device_class": "power",
+        "friendly_name": "Emporia Vue 3 Circuit 03 Signed Power 1m Average"
+      },
+      "last_changed": "2026-09-27T23:06:39.366482+00:00",
+      "last_reported": "2026-09-27T23:06:39.366482+00:00",
+      "last_updated": "2026-09-27T23:06:39.366482+00:00",
+      "context": {
+        "id": "01M3JHXPC6VM96BSZHQD188692",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "sensor.emporia_vue3_circuit_03_current_live",
+      "state": "0.184095233678818",
+      "attributes": {
+        "state_class": "measurement",
+        "unit_of_measurement": "A",
+        "device_class": "current",
+        "friendly_name": "Emporia Vue 3 Circuit 03 Current Live"
+      },
+      "last_changed": "2026-09-27T23:07:03.726039+00:00",
+      "last_reported": "2026-09-27T23:07:03.726039+00:00",
+      "last_updated": "2026-09-27T23:07:03.726039+00:00",
+      "context": {
+        "id": "01M3JHYE5ET2KVHSRZCRJDS4ZX",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "sensor.emporia_vue3_circuit_03_current_1m_average",
+      "state": "0.185674697160721",
+      "attributes": {
+        "state_class": "measurement",
+        "unit_of_measurement": "A",
+        "device_class": "current",
+        "friendly_name": "Emporia Vue 3 Circuit 03 Current 1m Average"
+      },
+      "last_changed": "2026-09-27T23:06:39.533974+00:00",
+      "last_reported": "2026-09-27T23:06:39.533974+00:00",
+      "last_updated": "2026-09-27T23:06:39.533974+00:00",
+      "context": {
+        "id": "01M3JHXPHD847EPJGRBMQED8G4",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "sensor.emporia_vue3_circuit_04_signed_power_live",
+      "state": "2.82887506484985",
+      "attributes": {
+        "state_class": "measurement",
+        "unit_of_measurement": "W",
+        "device_class": "power",
+        "friendly_name": "Emporia Vue 3 Circuit 04 Signed Power Live"
+      },
+      "last_changed": "2026-09-27T23:07:03.727301+00:00",
+      "last_reported": "2026-09-27T23:07:03.727301+00:00",
+      "last_updated": "2026-09-27T23:07:03.727301+00:00",
+      "context": {
+        "id": "01M3JHYE5FCKBHDCA8FE0TPWNS",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "sensor.emporia_vue3_circuit_04_signed_power_1m_average",
+      "state": "2.54137086868286",
+      "attributes": {
+        "state_class": "measurement",
+        "unit_of_measurement": "W",
+        "device_class": "power",
+        "friendly_name": "Emporia Vue 3 Circuit 04 Signed Power 1m Average"
+      },
+      "last_changed": "2026-09-27T23:06:39.366581+00:00",
+      "last_reported": "2026-09-27T23:06:39.366581+00:00",
+      "last_updated": "2026-09-27T23:06:39.366581+00:00",
+      "context": {
+        "id": "01M3JHXPC6YED8MX5YRPDCEG1Z",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "sensor.emporia_vue3_circuit_04_current_live",
+      "state": "0.184095233678818",
+      "attributes": {
+        "state_class": "measurement",
+        "unit_of_measurement": "A",
+        "device_class": "current",
+        "friendly_name": "Emporia Vue 3 Circuit 04 Current Live"
+      },
+      "last_changed": "2026-09-27T23:07:03.738136+00:00",
+      "last_reported": "2026-09-27T23:07:03.738136+00:00",
+      "last_updated": "2026-09-27T23:07:03.738136+00:00",
+      "context": {
+        "id": "01M3JHYE5T2SDANEGBYDBDDDT7",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "sensor.emporia_vue3_circuit_04_current_1m_average",
+      "state": "0.185413181781769",
+      "attributes": {
+        "state_class": "measurement",
+        "unit_of_measurement": "A",
+        "device_class": "current",
+        "friendly_name": "Emporia Vue 3 Circuit 04 Current 1m Average"
+      },
+      "last_changed": "2026-09-27T23:06:41.498569+00:00",
+      "last_reported": "2026-09-27T23:06:41.498569+00:00",
+      "last_updated": "2026-09-27T23:06:41.498569+00:00",
+      "context": {
+        "id": "01M3JHXRETQ4YTV3TKV72F09MN",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "sensor.emporia_vue3_circuit_05_signed_power_live",
+      "state": "0.0507500022649765",
+      "attributes": {
+        "state_class": "measurement",
+        "unit_of_measurement": "W",
+        "device_class": "power",
+        "friendly_name": "Emporia Vue 3 Circuit 05 Signed Power Live"
+      },
+      "last_changed": "2026-09-27T23:07:03.727028+00:00",
+      "last_reported": "2026-09-27T23:07:03.727028+00:00",
+      "last_updated": "2026-09-27T23:07:03.727028+00:00",
+      "context": {
+        "id": "01M3JHYE5FSTXHZXVEJARP7YPZ",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "sensor.emporia_vue3_circuit_05_signed_power_1m_average",
+      "state": "-0.326634556055069",
+      "attributes": {
+        "state_class": "measurement",
+        "unit_of_measurement": "W",
+        "device_class": "power",
+        "friendly_name": "Emporia Vue 3 Circuit 05 Signed Power 1m Average"
+      },
+      "last_changed": "2026-09-27T23:06:40.471017+00:00",
+      "last_reported": "2026-09-27T23:06:40.471017+00:00",
+      "last_updated": "2026-09-27T23:06:40.471017+00:00",
+      "context": {
+        "id": "01M3JHXQEQ7SZ31V3MJBP1GN2K",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "sensor.emporia_vue3_circuit_05_current_live",
+      "state": "0.181822448968887",
+      "attributes": {
+        "state_class": "measurement",
+        "unit_of_measurement": "A",
+        "device_class": "current",
+        "friendly_name": "Emporia Vue 3 Circuit 05 Current Live"
+      },
+      "last_changed": "2026-09-27T23:07:03.738387+00:00",
+      "last_reported": "2026-09-27T23:07:03.738387+00:00",
+      "last_updated": "2026-09-27T23:07:03.738387+00:00",
+      "context": {
+        "id": "01M3JHYE5TFEBJ9XZH87WG87HC",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "sensor.emporia_vue3_circuit_05_current_1m_average",
+      "state": "0.184480562806129",
+      "attributes": {
+        "state_class": "measurement",
+        "unit_of_measurement": "A",
+        "device_class": "current",
+        "friendly_name": "Emporia Vue 3 Circuit 05 Current 1m Average"
+      },
+      "last_changed": "2026-09-27T23:06:39.364248+00:00",
+      "last_reported": "2026-09-27T23:06:39.364248+00:00",
+      "last_updated": "2026-09-27T23:06:39.364248+00:00",
+      "context": {
+        "id": "01M3JHXPC4PCNFZNDD9BRZ9PQT",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "sensor.emporia_vue3_circuit_06_signed_power_live",
+      "state": "51.8665008544922",
+      "attributes": {
+        "state_class": "measurement",
+        "unit_of_measurement": "W",
+        "device_class": "power",
+        "friendly_name": "Emporia Vue 3 Circuit 06 Signed Power Live"
+      },
+      "last_changed": "2026-09-27T23:07:03.738588+00:00",
+      "last_reported": "2026-09-27T23:07:03.738588+00:00",
+      "last_updated": "2026-09-27T23:07:03.738588+00:00",
+      "context": {
+        "id": "01M3JHYE5T0TH90VSGX4NA95Q1",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "sensor.emporia_vue3_circuit_06_signed_power_1m_average",
+      "state": "47.2569351196289",
+      "attributes": {
+        "state_class": "measurement",
+        "unit_of_measurement": "W",
+        "device_class": "power",
+        "friendly_name": "Emporia Vue 3 Circuit 06 Signed Power 1m Average"
+      },
+      "last_changed": "2026-09-27T23:06:39.362595+00:00",
+      "last_reported": "2026-09-27T23:06:39.362595+00:00",
+      "last_updated": "2026-09-27T23:06:39.362595+00:00",
+      "context": {
+        "id": "01M3JHXPC2T7Q4WVAZZGVSMMB4",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "sensor.emporia_vue3_circuit_06_current_live",
+      "state": "0.604559659957886",
+      "attributes": {
+        "state_class": "measurement",
+        "unit_of_measurement": "A",
+        "device_class": "current",
+        "friendly_name": "Emporia Vue 3 Circuit 06 Current Live"
+      },
+      "last_changed": "2026-09-27T23:07:03.737867+00:00",
+      "last_reported": "2026-09-27T23:07:03.737867+00:00",
+      "last_updated": "2026-09-27T23:07:03.737867+00:00",
+      "context": {
+        "id": "01M3JHYE5SH88Q5G4GFNPZFV1V",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "sensor.emporia_vue3_circuit_06_current_1m_average",
+      "state": "0.568618953227997",
+      "attributes": {
+        "state_class": "measurement",
+        "unit_of_measurement": "A",
+        "device_class": "current",
+        "friendly_name": "Emporia Vue 3 Circuit 06 Current 1m Average"
+      },
+      "last_changed": "2026-09-27T23:06:39.366382+00:00",
+      "last_reported": "2026-09-27T23:06:39.366382+00:00",
+      "last_updated": "2026-09-27T23:06:39.366382+00:00",
+      "context": {
+        "id": "01M3JHXPC6TAC2HDDDTCDQASWN",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "sensor.emporia_vue3_circuit_07_signed_power_live",
+      "state": "-9.04181289672852",
+      "attributes": {
+        "state_class": "measurement",
+        "unit_of_measurement": "W",
+        "device_class": "power",
+        "friendly_name": "Emporia Vue 3 Circuit 07 Signed Power Live"
+      },
+      "last_changed": "2026-09-27T23:07:03.726417+00:00",
+      "last_reported": "2026-09-27T23:07:03.726417+00:00",
+      "last_updated": "2026-09-27T23:07:03.726417+00:00",
+      "context": {
+        "id": "01M3JHYE5EDGYZ37PEZBSJZDKK",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "sensor.emporia_vue3_circuit_07_signed_power_1m_average",
+      "state": "-8.6180362701416",
+      "attributes": {
+        "state_class": "measurement",
+        "unit_of_measurement": "W",
+        "device_class": "power",
+        "friendly_name": "Emporia Vue 3 Circuit 07 Signed Power 1m Average"
+      },
+      "last_changed": "2026-09-27T23:06:39.666313+00:00",
+      "last_reported": "2026-09-27T23:06:39.666313+00:00",
+      "last_updated": "2026-09-27T23:06:39.666313+00:00",
+      "context": {
+        "id": "01M3JHXPNJZ6Q9HPJM7FPQ3H2D",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "sensor.emporia_vue3_circuit_07_current_live",
+      "state": "0.238641962409019",
+      "attributes": {
+        "state_class": "measurement",
+        "unit_of_measurement": "A",
+        "device_class": "current",
+        "friendly_name": "Emporia Vue 3 Circuit 07 Current Live"
+      },
+      "last_changed": "2026-09-27T23:07:03.738484+00:00",
+      "last_reported": "2026-09-27T23:07:03.738484+00:00",
+      "last_updated": "2026-09-27T23:07:03.738484+00:00",
+      "context": {
+        "id": "01M3JHYE5T4ZDSVE22WYK8HCAP",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "sensor.emporia_vue3_circuit_07_current_1m_average",
+      "state": "0.236253783106804",
+      "attributes": {
+        "state_class": "measurement",
+        "unit_of_measurement": "A",
+        "device_class": "current",
+        "friendly_name": "Emporia Vue 3 Circuit 07 Current 1m Average"
+      },
+      "last_changed": "2026-09-27T23:06:39.362025+00:00",
+      "last_reported": "2026-09-27T23:06:39.362025+00:00",
+      "last_updated": "2026-09-27T23:06:39.362025+00:00",
+      "context": {
+        "id": "01M3JHXPC2AFW7AM48JJZSTWMG",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "sensor.emporia_vue3_circuit_08_signed_power_live",
+      "state": "1.57368755340576",
+      "attributes": {
+        "state_class": "measurement",
+        "unit_of_measurement": "W",
+        "device_class": "power",
+        "friendly_name": "Emporia Vue 3 Circuit 08 Signed Power Live"
+      },
+      "last_changed": "2026-09-27T23:07:03.726633+00:00",
+      "last_reported": "2026-09-27T23:07:03.726633+00:00",
+      "last_updated": "2026-09-27T23:07:03.726633+00:00",
+      "context": {
+        "id": "01M3JHYE5EJQGW8HJ73ZJ195PJ",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "sensor.emporia_vue3_circuit_08_signed_power_1m_average",
+      "state": "1.71055090427399",
+      "attributes": {
+        "state_class": "measurement",
+        "unit_of_measurement": "W",
+        "device_class": "power",
+        "friendly_name": "Emporia Vue 3 Circuit 08 Signed Power 1m Average"
+      },
+      "last_changed": "2026-09-27T23:06:39.363989+00:00",
+      "last_reported": "2026-09-27T23:06:39.363989+00:00",
+      "last_updated": "2026-09-27T23:06:39.363989+00:00",
+      "context": {
+        "id": "01M3JHXPC3K4JWGR6J14VH5H6F",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "sensor.emporia_vue3_circuit_08_current_live",
+      "state": "0.184095233678818",
+      "attributes": {
+        "state_class": "measurement",
+        "unit_of_measurement": "A",
+        "device_class": "current",
+        "friendly_name": "Emporia Vue 3 Circuit 08 Current Live"
+      },
+      "last_changed": "2026-09-27T23:07:02.736502+00:00",
+      "last_reported": "2026-09-27T23:07:02.736502+00:00",
+      "last_updated": "2026-09-27T23:07:02.736502+00:00",
+      "context": {
+        "id": "01M3JHYD6G8DE4FF7RWR8SA6EM",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "sensor.emporia_vue3_circuit_08_current_1m_average",
+      "state": "0.186136960983276",
+      "attributes": {
+        "state_class": "measurement",
+        "unit_of_measurement": "A",
+        "device_class": "current",
+        "friendly_name": "Emporia Vue 3 Circuit 08 Current 1m Average"
+      },
+      "last_changed": "2026-09-27T23:06:39.364351+00:00",
+      "last_reported": "2026-09-27T23:06:39.364351+00:00",
+      "last_updated": "2026-09-27T23:06:39.364351+00:00",
+      "context": {
+        "id": "01M3JHXPC4E8PDTS28JEEX8E6F",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "sensor.emporia_vue3_circuit_09_signed_power_live",
+      "state": "-79.0461883544922",
+      "attributes": {
+        "state_class": "measurement",
+        "unit_of_measurement": "W",
+        "device_class": "power",
+        "friendly_name": "Emporia Vue 3 Circuit 09 Signed Power Live"
+      },
+      "last_changed": "2026-09-27T23:07:03.726274+00:00",
+      "last_reported": "2026-09-27T23:07:03.726274+00:00",
+      "last_updated": "2026-09-27T23:07:03.726274+00:00",
+      "context": {
+        "id": "01M3JHYE5ETWNQPETV4W3ZZTSZ",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "sensor.emporia_vue3_circuit_09_signed_power_1m_average",
+      "state": "-78.7766799926758",
+      "attributes": {
+        "state_class": "measurement",
+        "unit_of_measurement": "W",
+        "device_class": "power",
+        "friendly_name": "Emporia Vue 3 Circuit 09 Signed Power 1m Average"
+      },
+      "last_changed": "2026-09-27T23:06:39.362693+00:00",
+      "last_reported": "2026-09-27T23:06:39.362693+00:00",
+      "last_updated": "2026-09-27T23:06:39.362693+00:00",
+      "context": {
+        "id": "01M3JHXPC2SCQ21JXT954GNQYG",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "sensor.emporia_vue3_circuit_09_current_live",
+      "state": "0.911384999752045",
+      "attributes": {
+        "state_class": "measurement",
+        "unit_of_measurement": "A",
+        "device_class": "current",
+        "friendly_name": "Emporia Vue 3 Circuit 09 Current Live"
+      },
+      "last_changed": "2026-09-27T23:07:03.737644+00:00",
+      "last_reported": "2026-09-27T23:07:03.737644+00:00",
+      "last_updated": "2026-09-27T23:07:03.737644+00:00",
+      "context": {
+        "id": "01M3JHYE5SEDHZVA0C5KEGCJZE",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "sensor.emporia_vue3_circuit_09_current_1m_average",
+      "state": "0.911500453948975",
+      "attributes": {
+        "state_class": "measurement",
+        "unit_of_measurement": "A",
+        "device_class": "current",
+        "friendly_name": "Emporia Vue 3 Circuit 09 Current 1m Average"
+      },
+      "last_changed": "2026-09-27T23:06:40.932561+00:00",
+      "last_reported": "2026-09-27T23:06:40.932561+00:00",
+      "last_updated": "2026-09-27T23:06:40.932561+00:00",
+      "context": {
+        "id": "01M3JHXQX48YBM39SSYCP328J2",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "sensor.emporia_vue3_circuit_10_signed_power_live",
+      "state": "-780.625122070312",
+      "attributes": {
+        "state_class": "measurement",
+        "unit_of_measurement": "W",
+        "device_class": "power",
+        "friendly_name": "Emporia Vue 3 Circuit 10 Signed Power Live"
+      },
+      "last_changed": "2026-09-27T23:07:03.725630+00:00",
+      "last_reported": "2026-09-27T23:07:03.725630+00:00",
+      "last_updated": "2026-09-27T23:07:03.725630+00:00",
+      "context": {
+        "id": "01M3JHYE5DX8FW8H3TB3G20QQM",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "sensor.emporia_vue3_circuit_10_signed_power_1m_average",
+      "state": "-781.870788574219",
+      "attributes": {
+        "state_class": "measurement",
+        "unit_of_measurement": "W",
+        "device_class": "power",
+        "friendly_name": "Emporia Vue 3 Circuit 10 Signed Power 1m Average"
+      },
+      "last_changed": "2026-09-27T23:06:39.364637+00:00",
+      "last_reported": "2026-09-27T23:06:39.364637+00:00",
+      "last_updated": "2026-09-27T23:06:39.364637+00:00",
+      "context": {
+        "id": "01M3JHXPC4C84GVJ8R4XPA8CP9",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "sensor.emporia_vue3_circuit_10_current_live",
+      "state": "6.53651714324951",
+      "attributes": {
+        "state_class": "measurement",
+        "unit_of_measurement": "A",
+        "device_class": "current",
+        "friendly_name": "Emporia Vue 3 Circuit 10 Current Live"
+      },
+      "last_changed": "2026-09-27T23:07:03.727480+00:00",
+      "last_reported": "2026-09-27T23:07:03.727480+00:00",
+      "last_updated": "2026-09-27T23:07:03.727480+00:00",
+      "context": {
+        "id": "01M3JHYE5FMNK75Y1K09VC652X",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "sensor.emporia_vue3_circuit_10_current_1m_average",
+      "state": "6.54707098007202",
+      "attributes": {
+        "state_class": "measurement",
+        "unit_of_measurement": "A",
+        "device_class": "current",
+        "friendly_name": "Emporia Vue 3 Circuit 10 Current 1m Average"
+      },
+      "last_changed": "2026-09-27T23:06:39.364139+00:00",
+      "last_reported": "2026-09-27T23:06:39.364139+00:00",
+      "last_updated": "2026-09-27T23:06:39.364139+00:00",
+      "context": {
+        "id": "01M3JHXPC4ZXNDCAY88XYHHS98",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "sensor.emporia_vue3_circuit_11_signed_power_live",
+      "state": "-1.48531246185303",
+      "attributes": {
+        "state_class": "measurement",
+        "unit_of_measurement": "W",
+        "device_class": "power",
+        "friendly_name": "Emporia Vue 3 Circuit 11 Signed Power Live"
+      },
+      "last_changed": "2026-09-27T23:07:03.738683+00:00",
+      "last_reported": "2026-09-27T23:07:03.738683+00:00",
+      "last_updated": "2026-09-27T23:07:03.738683+00:00",
+      "context": {
+        "id": "01M3JHYE5TF29EQ62QGA7TN99X",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "sensor.emporia_vue3_circuit_11_signed_power_1m_average",
+      "state": "-1.53872466087341",
+      "attributes": {
+        "state_class": "measurement",
+        "unit_of_measurement": "W",
+        "device_class": "power",
+        "friendly_name": "Emporia Vue 3 Circuit 11 Signed Power 1m Average"
+      },
+      "last_changed": "2026-09-27T23:06:40.264269+00:00",
+      "last_reported": "2026-09-27T23:06:40.264269+00:00",
+      "last_updated": "2026-09-27T23:06:40.264269+00:00",
+      "context": {
+        "id": "01M3JHXQ88AM862Y8G24476XKG",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "sensor.emporia_vue3_circuit_11_current_live",
+      "state": "0.0681834146380424",
+      "attributes": {
+        "state_class": "measurement",
+        "unit_of_measurement": "A",
+        "device_class": "current",
+        "friendly_name": "Emporia Vue 3 Circuit 11 Current Live"
+      },
+      "last_changed": "2026-09-27T23:06:57.717309+00:00",
+      "last_reported": "2026-09-27T23:06:57.717309+00:00",
+      "last_updated": "2026-09-27T23:06:57.717309+00:00",
+      "context": {
+        "id": "01M3JHY89NKC90KM1YNVJD6993",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "sensor.emporia_vue3_circuit_11_current_1m_average",
+      "state": "0.0681063756346703",
+      "attributes": {
+        "state_class": "measurement",
+        "unit_of_measurement": "A",
+        "device_class": "current",
+        "friendly_name": "Emporia Vue 3 Circuit 11 Current 1m Average"
+      },
+      "last_changed": "2026-09-27T23:06:39.365862+00:00",
+      "last_reported": "2026-09-27T23:06:39.365862+00:00",
+      "last_updated": "2026-09-27T23:06:39.365862+00:00",
+      "context": {
+        "id": "01M3JHXPC5C17DT2C56Z8Z0Z1D",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "sensor.emporia_vue3_circuit_12_signed_power_live",
+      "state": "-35.6142501831055",
+      "attributes": {
+        "state_class": "measurement",
+        "unit_of_measurement": "W",
+        "device_class": "power",
+        "friendly_name": "Emporia Vue 3 Circuit 12 Signed Power Live"
+      },
+      "last_changed": "2026-09-27T23:07:03.737275+00:00",
+      "last_reported": "2026-09-27T23:07:03.737275+00:00",
+      "last_updated": "2026-09-27T23:07:03.737275+00:00",
+      "context": {
+        "id": "01M3JHYE5SK52QEP91CBAB6G3E",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "sensor.emporia_vue3_circuit_12_signed_power_1m_average",
+      "state": "-36.5786094665527",
+      "attributes": {
+        "state_class": "measurement",
+        "unit_of_measurement": "W",
+        "device_class": "power",
+        "friendly_name": "Emporia Vue 3 Circuit 12 Signed Power 1m Average"
+      },
+      "last_changed": "2026-09-27T23:06:39.366085+00:00",
+      "last_reported": "2026-09-27T23:06:39.366085+00:00",
+      "last_updated": "2026-09-27T23:06:39.366085+00:00",
+      "context": {
+        "id": "01M3JHXPC6SBN7928J6Q191V0G",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "sensor.emporia_vue3_circuit_12_current_live",
+      "state": "0.452283322811127",
+      "attributes": {
+        "state_class": "measurement",
+        "unit_of_measurement": "A",
+        "device_class": "current",
+        "friendly_name": "Emporia Vue 3 Circuit 12 Current Live"
+      },
+      "last_changed": "2026-09-27T23:07:03.726931+00:00",
+      "last_reported": "2026-09-27T23:07:03.726931+00:00",
+      "last_updated": "2026-09-27T23:07:03.726931+00:00",
+      "context": {
+        "id": "01M3JHYE5ERH99KX2CJ5JHAPF3",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "sensor.emporia_vue3_circuit_12_current_1m_average",
+      "state": "0.460103392601013",
+      "attributes": {
+        "state_class": "measurement",
+        "unit_of_measurement": "A",
+        "device_class": "current",
+        "friendly_name": "Emporia Vue 3 Circuit 12 Current 1m Average"
+      },
+      "last_changed": "2026-09-27T23:06:39.362385+00:00",
+      "last_reported": "2026-09-27T23:06:39.362385+00:00",
+      "last_updated": "2026-09-27T23:06:39.362385+00:00",
+      "context": {
+        "id": "01M3JHXPC2R03A0B0X5DB1YGBS",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "sensor.emporia_vue3_circuit_13_signed_power_live",
+      "state": "-116.882064819336",
+      "attributes": {
+        "state_class": "measurement",
+        "unit_of_measurement": "W",
+        "device_class": "power",
+        "friendly_name": "Emporia Vue 3 Circuit 13 Signed Power Live"
+      },
+      "last_changed": "2026-09-27T23:07:03.727389+00:00",
+      "last_reported": "2026-09-27T23:07:03.727389+00:00",
+      "last_updated": "2026-09-27T23:07:03.727389+00:00",
+      "context": {
+        "id": "01M3JHYE5F1EJG67QEQD3Q394D",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "sensor.emporia_vue3_circuit_13_signed_power_1m_average",
+      "state": "-115.67936706543",
+      "attributes": {
+        "state_class": "measurement",
+        "unit_of_measurement": "W",
+        "device_class": "power",
+        "friendly_name": "Emporia Vue 3 Circuit 13 Signed Power 1m Average"
+      },
+      "last_changed": "2026-09-27T23:06:39.666033+00:00",
+      "last_reported": "2026-09-27T23:06:39.666033+00:00",
+      "last_updated": "2026-09-27T23:06:39.666033+00:00",
+      "context": {
+        "id": "01M3JHXPNJ961H52K5ZPF4CXKG",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "sensor.emporia_vue3_circuit_13_current_live",
+      "state": "1.22730147838593",
+      "attributes": {
+        "state_class": "measurement",
+        "unit_of_measurement": "A",
+        "device_class": "current",
+        "friendly_name": "Emporia Vue 3 Circuit 13 Current Live"
+      },
+      "last_changed": "2026-09-27T23:07:03.737122+00:00",
+      "last_reported": "2026-09-27T23:07:03.737122+00:00",
+      "last_updated": "2026-09-27T23:07:03.737122+00:00",
+      "context": {
+        "id": "01M3JHYE5S93643K3PS5BK954S",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "sensor.emporia_vue3_circuit_13_current_1m_average",
+      "state": "1.22337234020233",
+      "attributes": {
+        "state_class": "measurement",
+        "unit_of_measurement": "A",
+        "device_class": "current",
+        "friendly_name": "Emporia Vue 3 Circuit 13 Current 1m Average"
+      },
+      "last_changed": "2026-09-27T23:06:39.361786+00:00",
+      "last_reported": "2026-09-27T23:06:39.361786+00:00",
+      "last_updated": "2026-09-27T23:06:39.361786+00:00",
+      "context": {
+        "id": "01M3JHXPC1BQNMWTYRHBG0BD98",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "sensor.emporia_vue3_circuit_14_signed_power_live",
+      "state": "-35.0419998168945",
+      "attributes": {
+        "state_class": "measurement",
+        "unit_of_measurement": "W",
+        "device_class": "power",
+        "friendly_name": "Emporia Vue 3 Circuit 14 Signed Power Live"
+      },
+      "last_changed": "2026-09-27T23:07:03.737411+00:00",
+      "last_reported": "2026-09-27T23:07:03.737411+00:00",
+      "last_updated": "2026-09-27T23:07:03.737411+00:00",
+      "context": {
+        "id": "01M3JHYE5SCJSVC6SFFG0HZ6XG",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "sensor.emporia_vue3_circuit_14_signed_power_1m_average",
+      "state": "-34.4405746459961",
+      "attributes": {
+        "state_class": "measurement",
+        "unit_of_measurement": "W",
+        "device_class": "power",
+        "friendly_name": "Emporia Vue 3 Circuit 14 Signed Power 1m Average"
+      },
+      "last_changed": "2026-09-27T23:06:39.362273+00:00",
+      "last_reported": "2026-09-27T23:06:39.362273+00:00",
+      "last_updated": "2026-09-27T23:06:39.362273+00:00",
+      "context": {
+        "id": "01M3JHXPC2CTQPMCWBY6236TR0",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "sensor.emporia_vue3_circuit_14_current_live",
+      "state": "0.459101676940918",
+      "attributes": {
+        "state_class": "measurement",
+        "unit_of_measurement": "A",
+        "device_class": "current",
+        "friendly_name": "Emporia Vue 3 Circuit 14 Current Live"
+      },
+      "last_changed": "2026-09-27T23:07:03.726739+00:00",
+      "last_reported": "2026-09-27T23:07:03.726739+00:00",
+      "last_updated": "2026-09-27T23:07:03.726739+00:00",
+      "context": {
+        "id": "01M3JHYE5E7BSEX3BCXJ629Y6P",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "sensor.emporia_vue3_circuit_14_current_1m_average",
+      "state": "0.449586868286133",
+      "attributes": {
+        "state_class": "measurement",
+        "unit_of_measurement": "A",
+        "device_class": "current",
+        "friendly_name": "Emporia Vue 3 Circuit 14 Current 1m Average"
+      },
+      "last_changed": "2026-09-27T23:06:39.366271+00:00",
+      "last_reported": "2026-09-27T23:06:39.366271+00:00",
+      "last_updated": "2026-09-27T23:06:39.366271+00:00",
+      "context": {
+        "id": "01M3JHXPC665PWDKMESF7VZEEQ",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "sensor.emporia_vue3_circuit_15_signed_power_live",
+      "state": "-23.3870010375977",
+      "attributes": {
+        "state_class": "measurement",
+        "unit_of_measurement": "W",
+        "device_class": "power",
+        "friendly_name": "Emporia Vue 3 Circuit 15 Signed Power Live"
+      },
+      "last_changed": "2026-09-27T23:07:03.737537+00:00",
+      "last_reported": "2026-09-27T23:07:03.737537+00:00",
+      "last_updated": "2026-09-27T23:07:03.737537+00:00",
+      "context": {
+        "id": "01M3JHYE5SP7RD7VVC2QTW15ZM",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "sensor.emporia_vue3_circuit_15_signed_power_1m_average",
+      "state": "-25.4029350280762",
+      "attributes": {
+        "state_class": "measurement",
+        "unit_of_measurement": "W",
+        "device_class": "power",
+        "friendly_name": "Emporia Vue 3 Circuit 15 Signed Power 1m Average"
+      },
+      "last_changed": "2026-09-27T23:06:41.186568+00:00",
+      "last_reported": "2026-09-27T23:06:41.186568+00:00",
+      "last_updated": "2026-09-27T23:06:41.186568+00:00",
+      "context": {
+        "id": "01M3JHXR527ZK1ZJ183GT4NPM8",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "sensor.emporia_vue3_circuit_15_current_live",
+      "state": "0.420464396476746",
+      "attributes": {
+        "state_class": "measurement",
+        "unit_of_measurement": "A",
+        "device_class": "current",
+        "friendly_name": "Emporia Vue 3 Circuit 15 Current Live"
+      },
+      "last_changed": "2026-09-27T23:07:03.726162+00:00",
+      "last_reported": "2026-09-27T23:07:03.726162+00:00",
+      "last_updated": "2026-09-27T23:07:03.726162+00:00",
+      "context": {
+        "id": "01M3JHYE5EZNEWHY62YB9TTZW4",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "sensor.emporia_vue3_circuit_15_current_1m_average",
+      "state": "0.434387594461441",
+      "attributes": {
+        "state_class": "measurement",
+        "unit_of_measurement": "A",
+        "device_class": "current",
+        "friendly_name": "Emporia Vue 3 Circuit 15 Current 1m Average"
+      },
+      "last_changed": "2026-09-27T23:06:40.579865+00:00",
+      "last_reported": "2026-09-27T23:06:40.579865+00:00",
+      "last_updated": "2026-09-27T23:06:40.579865+00:00",
+      "context": {
+        "id": "01M3JHXQJ3EYJP99F66ZGFRY2V",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "sensor.emporia_vue3_circuit_16_signed_power_live",
+      "state": "-167.804443359375",
+      "attributes": {
+        "state_class": "measurement",
+        "unit_of_measurement": "W",
+        "device_class": "power",
+        "friendly_name": "Emporia Vue 3 Circuit 16 Signed Power Live"
+      },
+      "last_changed": "2026-09-27T23:07:03.738795+00:00",
+      "last_reported": "2026-09-27T23:07:03.738795+00:00",
+      "last_updated": "2026-09-27T23:07:03.738795+00:00",
+      "context": {
+        "id": "01M3JHYE5TEWKF5G04PK9JCACR",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "sensor.emporia_vue3_circuit_16_signed_power_1m_average",
+      "state": "-167.609298706055",
+      "attributes": {
+        "state_class": "measurement",
+        "unit_of_measurement": "W",
+        "device_class": "power",
+        "friendly_name": "Emporia Vue 3 Circuit 16 Signed Power 1m Average"
+      },
+      "last_changed": "2026-09-27T23:06:39.364542+00:00",
+      "last_reported": "2026-09-27T23:06:39.364542+00:00",
+      "last_updated": "2026-09-27T23:06:39.364542+00:00",
+      "context": {
+        "id": "01M3JHXPC4D9GNN5A8EC97B1T6",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "sensor.emporia_vue3_circuit_16_current_live",
+      "state": "1.69549429416656",
+      "attributes": {
+        "state_class": "measurement",
+        "unit_of_measurement": "A",
+        "device_class": "current",
+        "friendly_name": "Emporia Vue 3 Circuit 16 Current Live"
+      },
+      "last_changed": "2026-09-27T23:07:03.726840+00:00",
+      "last_reported": "2026-09-27T23:07:03.726840+00:00",
+      "last_updated": "2026-09-27T23:07:03.726840+00:00",
+      "context": {
+        "id": "01M3JHYE5EXW8PNPSSAQ9YTSHA",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "sensor.emporia_vue3_circuit_16_current_1m_average",
+      "state": "1.68975400924683",
+      "attributes": {
+        "state_class": "measurement",
+        "unit_of_measurement": "A",
+        "device_class": "current",
+        "friendly_name": "Emporia Vue 3 Circuit 16 Current 1m Average"
+      },
+      "last_changed": "2026-09-27T23:06:39.365979+00:00",
+      "last_reported": "2026-09-27T23:06:39.365979+00:00",
+      "last_updated": "2026-09-27T23:06:39.365979+00:00",
+      "context": {
+        "id": "01M3JHXPC50KBGAH6ZAQCN1ZPK",
+        "parent_id": null,
+        "user_id": null
+      }
+    }
+  ]
+}

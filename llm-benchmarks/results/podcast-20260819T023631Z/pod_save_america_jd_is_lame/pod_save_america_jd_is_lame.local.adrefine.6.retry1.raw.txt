@@ -1,0 +1,14 @@
+{
+"intervals": [
+{
+"start": 2860.24,
+"end": 2945.76,
+"reason": "ZipRecruiter sponsor read with host endorsement and CTA."
+},
+{
+"start": 2945.76,
+"end": 2975.60,
+"reason": "Minky Couture blanket sponsor read with CTA."
+}
+]
+}

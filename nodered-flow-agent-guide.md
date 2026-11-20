@@ -240,6 +240,11 @@ As of 2026-05-16, the active host Node-RED `Backup Flows` tab at port `1881` has
 - It is scheduled at `04:05`.
 - The old direct S3 upload nodes for Home Assistant, Joplin, Paperless, Grafana SQL, and Docker Compose are disabled.
 - The source backup generation jobs remain enabled.
+- 2026-10-15: exec outputs 1/2 (stderr, rc) also feed `hcb_err` -> `hcb_rc` ->
+  `hcb_push` (pushover api, same config node as the media-center alert).
+  `hcb_rc` pushes only for exit codes other than 0 and 3; rc 3 means the script
+  already sent its own Pushover. Pre-change tab JSON saved under
+  `/home/pi/backups/homelab-config/nodered-backup-flows-tab.before_pushover_*.json`.
 
 The older Compose-only backup command was:
 

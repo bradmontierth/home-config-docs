@@ -1,0 +1,1 @@
+{"intervals":[{"start": 1890.24, "end": 1918.16, "reason": "Sponsor read for Pura smart diffusers."},{"start": 1918.16, "end": 1952.96, "reason": "Sponsor read for Venmo debit card and Stash."}]}

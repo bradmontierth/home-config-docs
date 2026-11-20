@@ -1,0 +1,71 @@
+[
+  {
+    "panel": 3,
+    "query": "A",
+    "rows": 38,
+    "latest_age_seconds": 83,
+    "populated_series": [
+      "WaterHeater",
+      "Furnace",
+      "Fridge",
+      "Dishwasher",
+      "AC",
+      "Dryer",
+      "Tesla",
+      "Oven",
+      "Office",
+      "Unmetered / legacy Other",
+      "Claire mini split",
+      "Microwave",
+      "Washer / bidet / laundry",
+      "Garage",
+      "Master bedroom / closet",
+      "Basement bathroom",
+      "Loft / kids bath / whole-house fan"
+    ]
+  },
+  {
+    "panel": 3,
+    "query": "B",
+    "rows": 236,
+    "latest_age_seconds": 8,
+    "populated_series": [
+      "HeatPump",
+      "Total"
+    ]
+  },
+  {
+    "panel": 22,
+    "query": "B",
+    "rows": 61,
+    "latest_age_seconds": 24,
+    "populated_series": [
+      "HeatPump"
+    ]
+  },
+  {
+    "panel": 22,
+    "query": "A",
+    "rows": 38,
+    "latest_age_seconds": 84,
+    "populated_series": [
+      "WaterHeater",
+      "Furnace",
+      "Fridge",
+      "Dishwasher",
+      "AC",
+      "Dryer",
+      "Tesla",
+      "Oven",
+      "Unmetered / legacy Other",
+      "Claire mini split",
+      "Office",
+      "Microwave",
+      "Washer / bidet / laundry",
+      "Garage",
+      "Master bedroom / closet",
+      "Basement bathroom",
+      "Loft / kids bath / whole-house fan"
+    ]
+  }
+]

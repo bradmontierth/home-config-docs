@@ -1,0 +1,14 @@
+{
+"intervals": [
+{
+"start": 4364.40,
+"end": 4445.92,
+"reason": "Sponsor reads for Quince and Minky Couture."
+},
+{
+"start": 4445.92,
+"end": 4498.96,
+"reason": "Host intro and sponsor read for MessageBox Pro."
+}
+]
+}

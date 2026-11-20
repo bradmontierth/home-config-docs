@@ -1,0 +1,46 @@
+{
+  "start": 1790521259.678277,
+  "end": 1790521405.8548462,
+  "entities": {
+    "sensor.emporia_vue3_fridge_power": {
+      "rows": 0,
+      "last": null
+    },
+    "sensor.emporia_vue3_fridge_current": {
+      "rows": 0,
+      "last": null
+    },
+    "sensor.emporia_vue3_input_1_signed_power_l1_reference": {
+      "rows": 0,
+      "last": null
+    },
+    "sensor.emporia_vue3_fridge_power_1m_average": {
+      "rows": 4,
+      "last": [
+        "185.054351806641",
+        1790521375.9002986
+      ]
+    },
+    "sensor.emporia_vue3_fridge_current_1m_average": {
+      "rows": 4,
+      "last": [
+        "2.27239513397217",
+        1790521375.061432
+      ]
+    },
+    "sensor.emporia_vue3_fridge_daily_energy": {
+      "rows": 3,
+      "last": [
+        "0.00620704796165228",
+        1790521373.2323081
+      ]
+    },
+    "sensor.emporia_vue3_l1_voltage": {
+      "rows": 29,
+      "last": [
+        "122.514694213867",
+        1790521400.1265512
+      ]
+    }
+  }
+}

@@ -1,0 +1,1 @@
+{"intervals":[{"start": 37.92, "end": 86.0, "reason": "ACAST ad read and Guardian Football Weekly promo."}]}

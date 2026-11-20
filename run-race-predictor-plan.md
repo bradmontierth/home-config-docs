@@ -314,3 +314,32 @@ Brad approved a permanent public path for the webhook (Tailscale Funnel, not the
   - Subscription CREATED 2026-09-30 18:38 MT (id 374803; Strava's public challenge passed through Funnel). Earlier it waited because the daily read limit was exhausted (2010/2000 by Rachel's 590-run backfill plus Adrienne's ride walk overnight). The hourly `ensure_subscription` creates it after the reset at 18:00 MT; check the log line "strava webhook subscription: subscribed now".
   - Adrienne is live: device from Node-RED, endpoint added to the Configuration Variables tab 2026-09-30. Rachel needs her own Pushover account and user key.
   - Tests: test_portal HookTests, strava-hook/test_hook.py.
+
+## Remote portal for Rachel: phone-code sign-in gate (2026-09-30 eve)
+
+Brad chose a public login page over Tailscale-on-her-phone (setup friction). Design agreed in chat:
+
+- **Container `trainermax-portal-gate`** (companion/portal-gate/gate.py, stdlib), 127.0.0.1:8101, same lockdown
+  as the webhook receiver (uid 65534, read-only, no caps, 64 MB). Holds no Strava tokens, DB, Claude or
+  Pushover key. State in `strava-proxy/data/gate` (sessions/requests 600; `outbox/` 777 for the host worker).
+- **Funnel** forwards one secret prefix (`GATE_PREFIX=/tm-<random>` in `cecret_lake/trainer_max/portal_gate.env`),
+  kept open by strava-gate.service. The hostname is in certificate logs; the prefix isn't, so scanners get
+  Tailscale's 404 and never see a login page. The portal (:8093) is never funnelled directly.
+- **Sign-in**: type email → same answer whether it matches or not → code + one-tap link to her own Pushover
+  (sent by trainermax-notifyd from the gate outbox, only kinds `login`/`alert`, wording fixed in notifyd).
+  Code or link works once, 10 min; 5 wrong codes kill it; the link only works in the browser that asked
+  (marker cookie), so a leaked Pushover message is useless. 3 codes/person/day, then one heads-up to Brad.
+- **Session**: random cookie, HttpOnly/Secure/SameSite=Lax, path = prefix, 90 days sliding.
+  `docker exec trainermax-portal-gate python3 gate.py --logout-all` ends all.
+- **Reach**: her own `/a/<me>` + `/api/portal/<me>/*`, `/api/team`, teammates read-only (GET calendar,
+  season, fitness, races, adjustments, run/<id>; `/a/<other>` always redirected to `?viewer=<me>`).
+  Not: teammates' chat/profile/settings, /coach, /runs, /api/runs, invites, worker endpoints. Chat capped
+  40 sends/day. Referrer-Policy no-referrer so the prefix never leaks to strava.com links.
+- **Portal changes**: portal.js builds every URL on the path prefix (works on LAN and behind the gate); invite
+  card hidden remotely; Records ✕ now `PUT /api/portal/<me>/run/<id>/nobest` (own runs only).
+- **Coach-note links**: athletes in `portal_gate_users.json` get the public link (`PORTAL_PUBLIC` + prefix).
+- Verified 2026-09-30 from kitchen display-pi (not on the tailnet, so the real public path): wrong email and
+  right email look identical, code sign-in, Team + Brad read-only views render, blocked paths 404.
+  Phone screenshots reviewed.
+- **To go live**: Rachel's email → `cecret_lake/trainer_max/portal_gate_users.json` `{"rachel": {"email": "..."}}`;
+  her Pushover user key → `pushover_recipients.json`; Brad texts her the gate URL (`https://beelink.tail65546d.ts.net` + prefix).

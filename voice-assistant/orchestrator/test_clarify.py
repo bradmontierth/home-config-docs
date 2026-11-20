@@ -124,6 +124,31 @@ class DeterministicDispatchTest(_SlotTestBase):
         self.assertEqual(renamed["timer"]["label"], "pasta")
         self.assertEqual(renamed["response"], "Okay, it's now the pasta timer.")
 
+    def test_duration_followup_sets_time_left_instead_of_renaming(self):
+        # Live 2026-10-03: "Change the timer to be 10 minutes." renamed a
+        # 20-minute timer to "10 minutes" and left its clock alone.
+        created = self._run("set a timer for twenty minutes")
+        with patch.object(app.intent_mod, "parse", new=AsyncMock()) as parse:
+            changed = self._run("Change the timer to be 10 minutes.",
+                                followup=True)
+        parse.assert_not_awaited()
+        self.assertEqual(changed["intent"], "timer_adjust")
+        self.assertEqual(changed["timer"]["id"], created["timer"]["id"])
+        self.assertIsNone(changed["timer"]["label"])
+        self.assertAlmostEqual(changed["timer"]["remaining_seconds"], 600,
+                               delta=2)
+        self.assertEqual(changed["response"],
+                         "Updated the timer. 10 minutes left.")
+
+    def test_rename_slot_answered_with_a_duration_sets_time_left(self):
+        self._run("set a timer for twenty minutes")
+        first = self._run("change the timer to be a", followup=True)
+        self.assertEqual(first["intent"], "timer_rename")
+        second = self._run("ten minutes", followup=True)
+        self.assertEqual(second["intent"], "timer_adjust")
+        self.assertAlmostEqual(second["timer"]["remaining_seconds"], 600,
+                               delta=2)
+
 
 class ClarifyFlowTest(_SlotTestBase):
 

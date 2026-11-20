@@ -1,0 +1,128 @@
+[
+  {
+    "channel": 1,
+    "label": "Fridge",
+    "entity": "sensor.emporia_vue3_fridge_power_1m_average",
+    "power": true
+  },
+  {
+    "channel": 2,
+    "label": "Dryer",
+    "entity": "sensor.emporia_vue3_dryer_power_1m_average",
+    "power": true
+  },
+  {
+    "channel": 3,
+    "label": "AC",
+    "entity": "sensor.emporia_vue3_ac_power_1m_average",
+    "power": true
+  },
+  {
+    "channel": 4,
+    "label": "Range Oven",
+    "entity": "sensor.emporia_vue3_range_oven_power_1m_average",
+    "power": true
+  },
+  {
+    "channel": 5,
+    "label": "Microwave",
+    "entity": "sensor.emporia_vue3_microwave_power_1m_average",
+    "power": true
+  },
+  {
+    "channel": 6,
+    "label": "Washer Bidet Laundry",
+    "entity": "sensor.emporia_vue3_washer_bidet_laundry_power_1m_average",
+    "power": true
+  },
+  {
+    "channel": 7,
+    "label": "Furnace",
+    "entity": "sensor.emporia_vue3_furnace_power_1m_average",
+    "power": true
+  },
+  {
+    "channel": 8,
+    "label": "Water Heater",
+    "entity": "sensor.emporia_vue3_water_heater_power_1m_average",
+    "power": true
+  },
+  {
+    "channel": 9,
+    "label": "Garage",
+    "entity": "sensor.emporia_vue3_garage_power_1m_average",
+    "power": true
+  },
+  {
+    "channel": 10,
+    "label": "Dishwasher",
+    "entity": "sensor.emporia_vue3_dishwasher_power_1m_average",
+    "power": true
+  },
+  {
+    "channel": 11,
+    "label": "EV Charger",
+    "entity": "sensor.emporia_vue3_ev_charger_power_1m_average",
+    "power": true
+  },
+  {
+    "channel": 12,
+    "label": "Claire Mini Split",
+    "entity": "sensor.emporia_vue3_claire_mini_split_power_1m_average",
+    "power": true
+  },
+  {
+    "channel": 13,
+    "label": "Office",
+    "entity": "sensor.emporia_vue3_office_power_1m_average",
+    "power": true
+  },
+  {
+    "channel": 14,
+    "label": "Master Bedroom Closet",
+    "entity": "sensor.emporia_vue3_master_bedroom_closet_power_1m_average",
+    "power": true
+  },
+  {
+    "channel": 15,
+    "label": "Basement Bathroom",
+    "entity": "sensor.emporia_vue3_basement_bathroom_power_1m_average",
+    "power": true
+  },
+  {
+    "channel": 16,
+    "label": "Loft Kids Bathroom Whole House Fan",
+    "entity": "sensor.emporia_vue3_loft_kids_bathroom_whole_house_fan_power_1m_average",
+    "power": true
+  },
+  {
+    "channel": 17,
+    "label": "Mains A",
+    "entity": "sensor.emporia_vue3_mains_a_power_1m_average",
+    "power": true
+  },
+  {
+    "channel": 18,
+    "label": "Mains B",
+    "entity": "sensor.emporia_vue3_mains_b_power_1m_average",
+    "power": true
+  },
+  {
+    "channel": 19,
+    "label": "L1 Voltage",
+    "entity": "sensor.emporia_vue3_l1_voltage",
+    "power": false
+  },
+  {
+    "channel": 20,
+    "label": "Frequency",
+    "entity": "sensor.emporia_vue3_line_frequency",
+    "power": false
+  },
+  {
+    "channel": 21,
+    "label": "L2 Voltage",
+    "entity": "sensor.emporia_vue3_l2_voltage",
+    "power": false
+  }
+]

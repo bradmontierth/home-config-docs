@@ -194,12 +194,24 @@ class TimerEngine:
 
     async def adjust(self, label: str | None, delta_seconds: int,
                      sat: str | None = None) -> dict[str, Any] | None:
+        return await self._move(label, sat, lambda row: delta_seconds)
+
+    async def set_remaining(self, label: str | None, seconds: int,
+                            sat: str | None = None) -> dict[str, Any] | None:
+        """Set a timer's time left to ``seconds`` ("change the timer to be 10
+        minutes") — an adjust by whatever delta lands it there."""
+        return await self._move(
+            label, sat, lambda row: time.time() + seconds - row["ends_at"])
+
+    async def _move(self, label: str | None, sat: str | None,
+                    delta_of) -> dict[str, Any] | None:
         async with self._lock:
             row = self._resolve(label, sat)
             if not row:
                 return None
+            delta_seconds = delta_of(row)
             ends_at = max(time.time(), row["ends_at"] + delta_seconds)
-            duration = max(0, row["duration_seconds"] + delta_seconds)
+            duration = max(0, round(row["duration_seconds"] + delta_seconds))
             # coming back from ringing to running if we added time
             new_state = RUNNING if ends_at > time.time() else row["state"]
             self._db.execute(
