@@ -217,6 +217,9 @@ _ARB_HANDOFF_MAX = 32
 _SHADOW_PENDING: dict[str, float] = {}
 _SHADOWS: dict[str, dict] = {}
 _SHADOW_TTL_S = 60.0
+# Intents a recovery path (salvage of the winner's own ch1, or a shadow
+# rescue) may NOT act on; see handle_command.
+SALVAGE_DROP_INTENTS = frozenset({"ask", "none", "unclear"})
 
 
 def _shadow_prune(now: float) -> None:
@@ -718,7 +721,8 @@ async def _speaker_name(speaker_task: asyncio.Task | None) -> str | None:
 
 
 async def handle_command(command: str, followup: bool = False,
-                         speaker_task: asyncio.Task | None = None) -> dict:
+                         speaker_task: asyncio.Task | None = None,
+                         salvage: bool = False) -> dict:
     """Parse a command and act on it. Emits thinking/response events; returns a
     structured result. `followup` = a continued-conversation turn (no wake word):
     parse with session context and drop non-actionable speech silently.
@@ -733,7 +737,10 @@ async def handle_command(command: str, followup: bool = False,
     # answer is one word ("Brad's", "adrienne"), and find_phone.resolve
     # strips the filler. Anything that is neither a name nor a "no" means
     # the user moved on -> abandon and fall through to a normal parse.
-    pending = session_pending()
+    # A salvaged/rescued turn never answers a pending question: its words were
+    # not vetted as addressed to us, and a stray "yeah" must not confirm a
+    # bulk delete. The pending op is left as it was.
+    pending = None if salvage else session_pending()
     if pending and pending["op"] == "main_comfort":
         # Only the asking satellite's immediate follow-up can approve this
         # exact proposal. A fresh wake or unrelated reply abandons it.
@@ -796,7 +803,7 @@ async def handle_command(command: str, followup: bool = False,
         session_clear_pending()   # user moved on -> abandon the pending op
 
     context = session_context() if followup else None
-    if not followup:
+    if not followup and not salvage:
         await _turn_event("thinking", command=command)
     # Deterministic room-scoped fast path, analogous to HA's local intent
     # matching. An exact curated alias needs neither classifier latency nor a
@@ -919,6 +926,21 @@ async def handle_command(command: str, followup: bool = False,
                 parsed = {**parsed, "intent": "home_control", "query": text}
                 intent = "home_control"
                 break
+    if salvage and intent in SALVAGE_DROP_INTENTS:
+        # Recovery path (salvage/shadow rescue): the winning mic's VAD heard no
+        # command, so the text came from audio nobody vetted as addressed to
+        # us. The bug it rescues is SHORT local commands said on the ding; an
+        # LLM question is long enough to survive the ch0 clamp on its own.
+        # Background talk ("come on kids, do you want food", false wake
+        # 2026-11-20 16:03) lands here as ask/none -- drop it silently.
+        log.info("salvage dropped intent=%s: %r", intent, command)
+        return {"intent": intent, "response": "", "ok": False, "silent": True,
+                "salvage_dropped": True}
+    if salvage:
+        # Passed the gate: now it may show (held back above so dropped
+        # background talk never flashes on the dashboard).
+        await _turn_event("transcript", text=command)
+        await _turn_event("thinking", command=command)
     if followup and intent == "none":
         # Background chatter / not addressed to us. Drop silently: no events, no
         # audio, no dashboard flash — a dropped follow-up must be invisible. The
@@ -2053,6 +2075,74 @@ async def command_shadow(request: Request, sat: str = "unknown",
     return {"ok": True, "transcript": transcript}
 
 
+async def _await_shadow(turn_id: str) -> dict | None:
+    """The suppressed loser's take for this winner turn, waiting up to
+    RESCUE_WAIT_S only if a loser was actually suppressed on it."""
+    deadline = time.time() + config.RESCUE_WAIT_S
+    shadow = _SHADOWS.pop(turn_id, None)
+    while shadow is None and turn_id in _SHADOW_PENDING and time.time() < deadline:
+        await asyncio.sleep(0.1)
+        shadow = _SHADOWS.pop(turn_id, None)
+    _SHADOW_PENDING.pop(turn_id, None)
+    return shadow if shadow and shadow["text"] else None
+
+
+async def _recover(sat: str, turn_id: str, text: str, wav: bytes,
+                   source: str, asr_fields: dict | None = None) -> dict | None:
+    """Dispatch recovered command text as the winner's turn, behind the
+    salvage intent gate. Returns the result, or None if the gate dropped it
+    (nothing said, nothing shown)."""
+    _CUR_SAT.set(sat)
+    t0 = time.time()
+    timing.start()
+    spk_task = None
+    if config.SPEAKER_MODE == "active":
+        spk_task = asyncio.create_task(speaker_mod.identify(wav))
+    result = await _dispatch(text, followup=False, speaker_task=spk_task,
+                             salvage=True)
+    if result.get("salvage_dropped"):
+        if spk_task is not None:
+            spk_task.cancel()
+        log.info("recovery sat=%s source=%s dropped (intent=%s): %r",
+                 sat, source, result.get("intent"), text)
+        return None
+    log.info("recovery sat=%s source=%s -> %s: %r",
+             sat, source, result.get("intent"), text)
+    result["transcript"] = text
+    result["rescued"] = True
+    result["rescued_from"] = source
+    result["latency_ms"] = round((time.time() - t0) * 1000)
+    turns_mod.update(turn_id, command=text, **(asr_fields or {}),
+                     asr_model=f"{'salvage' if source == 'ch1' else 'shadow'}:{source}",
+                     asr_fallback_reason="own_capture_empty")
+    turns_mod.finish(turn_id, result, timings=timing.snapshot(),
+                     total_ms=result["latency_ms"])
+    if spk_task is not None:
+        asyncio.create_task(_note_turn_speaker(turn_id, spk_task))
+    return result
+
+
+_RECOVERY_MISS = {"ok": False, "rescued": False, "transcript": "", "response": "",
+                  "intent": "none"}
+
+
+async def _rescue_or_miss(sat: str, turn_id: str, dropped: str | None = None) -> dict:
+    """Last step of every recovery: the loser's shadow, else a silent miss
+    (the row keeps what salvage heard and dropped, for voice-ops)."""
+    shadow = await _await_shadow(turn_id)
+    if shadow:
+        result = await _recover(sat, turn_id, shadow["text"], shadow["wav"],
+                                shadow["sat"])
+        if result is not None:
+            return result
+        dropped = dropped or shadow["text"]
+    log.info("recovery sat=%s turn=%s: nothing usable -> miss", sat, turn_id)
+    turns_mod.update(turn_id, intent="none", ok=False,
+                     reject_reason="salvage_dropped" if dropped else "no_command",
+                     **({"command": dropped} if dropped else {}))
+    return dict(_RECOVERY_MISS)
+
+
 @app.post("/command/rescue")
 async def command_rescue(sat: str = "kitchen", turn_id: str | None = None) -> dict:
     """The winner's own capture came back EMPTY (its VAD heard no speech).
@@ -2060,49 +2150,51 @@ async def command_rescue(sat: str = "kitchen", turn_id: str | None = None) -> di
     that transcript as the winner's command and reply through the winner, as
     if its own capture had worked. Waits up to RESCUE_WAIT_S for a shadow
     still in flight, but only when a loser was actually suppressed for this
-    turn; otherwise answers at once so the "didn't hear" cue isn't delayed.
-    `rescued: false` = nothing to use; the satellite plays its miss cue."""
-    miss = {"ok": False, "rescued": False, "transcript": "", "response": "",
-            "intent": "none"}
+    turn; otherwise answers at once so the turn isn't held open. Same intent
+    gate as /command/salvage (no ask/none/unclear).
+    `rescued: false` = nothing to use; the satellite ends the turn quietly."""
     if not turn_id:
-        return miss
-    deadline = time.time() + config.RESCUE_WAIT_S
-    shadow = _SHADOWS.pop(turn_id, None)
-    while shadow is None and turn_id in _SHADOW_PENDING and time.time() < deadline:
-        await asyncio.sleep(0.1)
-        shadow = _SHADOWS.pop(turn_id, None)
-    _SHADOW_PENDING.pop(turn_id, None)
-    if not shadow or not shadow["text"]:
-        log.info("rescue sat=%s turn=%s: no shadow -> miss", sat, turn_id)
-        turns_mod.update(turn_id, intent="none", ok=False, reject_reason="no_command")
-        return miss
+        return dict(_RECOVERY_MISS)
     decision = await policy_mod.evaluate(sat)
     if not decision["allowed"]:
         log.info("rescue sat=%s silent no-op policy=%s", sat, decision["reason"])
-        return {**miss, "silent": True, "policy": decision}
-    text = shadow["text"]
-    log.info("rescue sat=%s: own capture empty, using %s shadow %r",
-             sat, shadow["sat"], text)
-    _CUR_SAT.set(sat)
-    t0 = time.time()
-    timing.start()
-    await _turn_event("transcript", text=text)
-    spk_task = None
-    if config.SPEAKER_MODE == "active":
-        spk_task = asyncio.create_task(speaker_mod.identify(shadow["wav"]))
-    result = await _dispatch(text, followup=False, speaker_task=spk_task)
-    result["transcript"] = text
-    result["rescued"] = True
-    result["rescued_from"] = shadow["sat"]
-    result["latency_ms"] = round((time.time() - t0) * 1000)
-    turns_mod.update(turn_id, command=text,
-                     asr_model=f"shadow:{shadow['sat']}",
-                     asr_fallback_reason="own_capture_empty")
-    turns_mod.finish(turn_id, result, timings=timing.snapshot(),
-                     total_ms=result["latency_ms"])
-    if spk_task is not None:
-        asyncio.create_task(_note_turn_speaker(turn_id, spk_task))
-    return result
+        return {**_RECOVERY_MISS, "silent": True, "policy": decision}
+    return await _rescue_or_miss(sat, turn_id)
+
+
+@app.post("/command/salvage")
+async def command_salvage(request: Request, sat: str = "kitchen",
+                          turn_id: str | None = None) -> dict:
+    """The winner's VAD (ch0, clamped by the XVF3800 right after the chime)
+    found no speech, but its command channel kept recording. The body is that
+    audio (ch0 pre-roll + ch1 capture, stitched like a normal wake turn).
+    Transcribe it; a real LOCAL command is acted on, anything that classifies
+    as ask/none/unclear is dropped. Nothing usable -> the shadow rescue.
+    Live 2026-11-20 16:00: "did the kids sleep today" said straight onto the
+    ding; the camera mic transcribed it perfectly, the satellite dropped it."""
+    if not turn_id:
+        return dict(_RECOVERY_MISS)
+    decision = await policy_mod.evaluate(sat)
+    if not decision["allowed"]:
+        log.info("salvage sat=%s silent no-op policy=%s", sat, decision["reason"])
+        return {**_RECOVERY_MISS, "silent": True, "policy": decision}
+    wav = await request.body()
+    text, asr_fields = "", {}
+    if wav:
+        try:
+            asr = await clients.transcribe_final(wav)
+            asr_fields = asr.turn_fields()
+            heard = (asr.text or "").strip()
+            wake_found, command, _ = verify.verify_and_extract(heard)
+            text = (command if wake_found else heard).strip()
+            log.info("salvage sat=%s heard %r -> command %r", sat, heard, text)
+        except Exception as exc:  # noqa: BLE001 — fall through to the shadow
+            log.warning("salvage sat=%s ASR failed: %s", sat, exc)
+    if text:
+        result = await _recover(sat, turn_id, text, wav, "ch1", asr_fields)
+        if result is not None:
+            return result
+    return await _rescue_or_miss(sat, turn_id, dropped=text or None)
 
 
 @app.post("/partial")

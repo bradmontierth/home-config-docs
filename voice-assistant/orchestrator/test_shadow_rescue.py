@@ -15,7 +15,7 @@ import unittest
 from contextlib import ExitStack
 from unittest.mock import AsyncMock, patch
 
-from . import app, config, turns
+from . import app, clients, config, turns
 
 
 class _Req:
@@ -26,7 +26,7 @@ class _Req:
         return self._body
 
 
-class ShadowRescueTest(unittest.IsolatedAsyncioTestCase):
+class _RecoveryBase(unittest.IsolatedAsyncioTestCase):
     def setUp(self) -> None:
         self._dir = tempfile.TemporaryDirectory()
         self._prev_db = config.DB_PATH
@@ -68,6 +68,9 @@ class ShadowRescueTest(unittest.IsolatedAsyncioTestCase):
             await app.command_shadow(_Req(b"RIFF"), sat="familyroom",
                                      arb_turn_id=winner_turn, turn_id="loser")
 
+
+
+class ShadowRescueTest(_RecoveryBase):
     async def test_shadow_already_in_is_dispatched(self):
         tid = turns.start("kitchen", "wake", verified=True)
         app._shadow_expect(tid)
@@ -118,6 +121,145 @@ class ShadowRescueTest(unittest.IsolatedAsyncioTestCase):
         await self._shadow("some-other-turn", "turn off the lights")
         resp = await app.command_rescue(sat="kitchen", turn_id=tid)
         self.assertFalse(resp["rescued"])
+
+
+    async def test_rescued_ask_is_dropped(self):
+        tid = turns.start("kitchen", "wake", verified=True)
+        app._shadow_expect(tid)
+        await self._shadow(tid, "come on kids do you want food")
+        self.dispatch.return_value = {"intent": "ask", "salvage_dropped": True,
+                                      "silent": True, "ok": False, "response": ""}
+        resp = await app.command_rescue(sat="kitchen", turn_id=tid)
+        self.assertFalse(resp["rescued"])
+        self.assertTrue(self.dispatch.await_args.kwargs["salvage"])
+        row = turns.recent(limit=1)[0]
+        self.assertEqual(row["reject_reason"], "salvage_dropped")
+
+
+class SalvageTest(_RecoveryBase):
+    """/command/salvage: the winner's own ch1 audio, transcribed after its ch0
+    VAD found nothing (2026-11-20 16:00, "did the kids sleep today" on the ding)."""
+
+    def _asr(self, text):
+        return patch.object(app.clients, "transcribe_final",
+                            new=AsyncMock(return_value=clients.AsrResult(text)))
+
+    def _by_text(self, local_words):
+        async def dispatch(text, **kw):
+            if any(w in text.lower() for w in local_words):
+                return {"intent": "nap_status", "response": "Claire napped twice.", "ok": True}
+            return {"intent": "ask", "response": "", "ok": False, "silent": True,
+                    "salvage_dropped": True}
+        self.dispatch.side_effect = dispatch
+
+    async def test_local_command_on_ch1_is_answered(self):
+        tid = turns.start("kitchen", "wake", verified=True)
+        with self._asr("Okay, computer. Did the kids sleep today?"):
+            resp = await app.command_salvage(_Req(b"RIFF"), sat="kitchen", turn_id=tid)
+        self.assertTrue(resp["rescued"])
+        self.assertEqual(resp["rescued_from"], "ch1")
+        self.assertEqual(self.dispatch.await_args.args[0].lower().strip("?"),
+                         "did the kids sleep today")
+        self.assertTrue(self.dispatch.await_args.kwargs["salvage"])
+        row = turns.recent(limit=1)[0]
+        self.assertEqual(row["asr_model"], "salvage:ch1")
+        self.assertEqual(row["intent"], "nap_status")
+
+    async def test_llm_bound_salvage_is_dropped_silently(self):
+        tid = turns.start("kitchen", "wake", verified=True)
+        self._by_text(["kids sleep"])
+        with self._asr("Come on, kids. Do you want food?"):
+            resp = await app.command_salvage(_Req(b"RIFF"), sat="kitchen", turn_id=tid)
+        self.assertFalse(resp["rescued"])
+        app._turn_event.assert_not_awaited()
+        row = turns.recent(limit=1)[0]
+        self.assertEqual(row["reject_reason"], "salvage_dropped")
+        self.assertIn("food", row["command"].lower())
+
+    async def test_dropped_salvage_falls_back_to_a_good_shadow(self):
+        tid = turns.start("kitchen", "wake", verified=True)
+        app._shadow_expect(tid)
+        await self._shadow(tid, "did the kids sleep today")
+        self._by_text(["kids sleep"])
+        with self._asr("mumble mumble what"):
+            resp = await app.command_salvage(_Req(b"RIFF"), sat="kitchen", turn_id=tid)
+        self.assertTrue(resp["rescued"])
+        self.assertEqual(resp["rescued_from"], "familyroom")
+
+    async def test_empty_or_bare_wake_goes_to_shadow_then_miss(self):
+        for heard in ("", "Okay, computer."):
+            with self.subTest(heard=heard):
+                tid = turns.start("kitchen", "wake", verified=True)
+                with self._asr(heard):
+                    resp = await app.command_salvage(_Req(b"RIFF"), sat="kitchen",
+                                                     turn_id=tid)
+                self.assertFalse(resp["rescued"])
+                self.dispatch.assert_not_awaited()
+                self.assertEqual(turns.recent(limit=1)[0]["reject_reason"], "no_command")
+
+    async def test_asr_failure_is_a_quiet_miss(self):
+        tid = turns.start("kitchen", "wake", verified=True)
+        with patch.object(app.clients, "transcribe_final",
+                          new=AsyncMock(side_effect=RuntimeError("gx10 down"))):
+            resp = await app.command_salvage(_Req(b"RIFF"), sat="kitchen", turn_id=tid)
+        self.assertFalse(resp["rescued"])
+
+
+class SalvageGateTest(unittest.IsolatedAsyncioTestCase):
+    """The real handle_command gate (only the classifier/handlers stubbed)."""
+
+    def setUp(self) -> None:
+        self.events = AsyncMock()
+        for p in (patch.object(app, "_turn_event", new=self.events),
+                  patch.object(app.events, "on_dashboard", return_value=False)):
+            p.start()
+            self.addCleanup(p.stop)
+        app._CUR_SAT.set("kitchen")
+        app.session_clear_pending()
+        self.addCleanup(app.session_clear_pending)
+
+    async def test_ask_none_unclear_are_dropped_before_any_event(self):
+        for label in ("ask", "none", "unclear"):
+            with self.subTest(label=label):
+                self.events.reset_mock()
+                parse = AsyncMock(return_value=app.intent_mod.validate({"intent": label}))
+                with patch.object(app.intent_mod, "fast_parse", return_value=None), \
+                     patch.object(app.intent_mod, "parse", new=parse), \
+                     patch.object(app.home_mod, "fuzzy_match", return_value=None):
+                    r = await app.handle_command("come on kids do you want food",
+                                                 salvage=True)
+                self.assertTrue(r.get("salvage_dropped"), r)
+                self.events.assert_not_awaited()
+
+    async def test_without_salvage_ask_is_not_gated(self):
+        parse = AsyncMock(return_value=app.intent_mod.validate({"intent": "ask"}))
+        ask = AsyncMock(return_value={"response": "x", "full": "x", "ok": True})
+        with patch.object(app.intent_mod, "fast_parse", return_value=None), \
+             patch.object(app.intent_mod, "parse", new=parse), \
+             patch.object(app.ask_mod, "handle_ask", new=ask):
+            r = await app.handle_command("is it normal for x or y")
+        self.assertFalse(r.get("salvage_dropped"))
+
+    async def test_local_fast_path_passes_the_gate_and_shows(self):
+        nap = AsyncMock(return_value={"response": "Claire napped.", "ok": True})
+        with patch.object(app.nap_mod, "handle", new=nap):
+            r = await app.handle_command("did the kids sleep today", salvage=True)
+        self.assertFalse(r.get("salvage_dropped"), r)
+        self.assertEqual(r["intent"], "nap_status")
+        shown = [c.args[0] for c in self.events.await_args_list]
+        self.assertIn("transcript", shown)
+
+    async def test_salvage_never_confirms_a_pending_bulk_op(self):
+        app.session_set_pending("clear", [{"id": "1"}], list_type="todo")
+        run = AsyncMock(return_value={"intent": "clear_list", "response": "Cleared.", "ok": True})
+        parse = AsyncMock(return_value=app.intent_mod.validate({"intent": "none"}))
+        with patch.object(app, "_run_pending", new=run), \
+             patch.object(app.intent_mod, "parse", new=parse), \
+             patch.object(app.home_mod, "fuzzy_match", return_value=None):
+            r = await app.handle_command("yeah", salvage=True)
+        run.assert_not_awaited()
+        self.assertTrue(r.get("salvage_dropped"))
+        self.assertIsNotNone(app.session_pending())   # left as it was
 
 
 if __name__ == "__main__":

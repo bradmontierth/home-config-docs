@@ -1299,12 +1299,12 @@ def run_turn(preroll_pcm: bytes, stdout, vad, trigger_t0: float,
             threading.Thread(target=_persist_miss,
                              args=(LAST_CAPTURE["miss_ch0"], LAST_CAPTURE["miss_ch1"],
                                    cmd_clip), daemon=True).start()
-            # Our VAD heard nothing, but the arbitration loser may have
-            # captured the whole command (2026-11-20). Use its take if so.
-            resp = rescue_from_shadow(turn_id)
+            # Our VAD heard nothing, but the command channel or the peer mic
+            # may hold the whole command (2026-11-20). Recover it if so.
+            resp = recover_turn(turn_id, preroll_pcm, LAST_CAPTURE["miss_ch1"])
             if not resp:
                 return
-            log(f"rescued from {resp.get('rescued_from')} shadow: "
+            log(f"recovered from {resp.get('rescued_from')}: "
                 f"{resp.get('transcript')!r}")
         else:
             try:
@@ -1737,8 +1737,40 @@ def _persist_cmd(pcm: bytes, clip_name: str) -> None:
 
 
 MISS_CLIPS_KEEP = int(os.getenv("MISS_CLIPS_KEEP", "60"))
+# Salvage (2026-11-20): an empty wake capture whose COMMAND channel holds
+# speech is sent to the orchestrator's ASR anyway (/command/salvage), which
+# acts only on local intents. The live VAD judges ch0, which the XVF3800
+# clamps right after the chime -- a short command said on the ding vanishes
+# there but is intact on ch1. Speech must start within SALVAGE_ONSET_MS of
+# the capture start (a person answering the ding does; background talk
+# usually doesn't). 3.5 s: Adrienne's patient retry started 2.9 s in. The
+# orchestrator's intent gate (no ask/none/unclear) is the main chatter guard.
+SALVAGE_ENABLED = os.getenv("SALVAGE_ENABLED", "1") == "1"
+SALVAGE_ONSET_MS = int(os.getenv("SALVAGE_ONSET_MS", "3500"))
 _MISS_VAD = None
 _MISS_VAD_LOCK = threading.Lock()
+
+
+def _ms(v: int | None) -> str:
+    return "-" if v is None else f"{v}ms"
+
+
+def _vad_scan(pcm: bytes) -> tuple[int, int | None]:
+    """Offline Silero pass over a finished buffer: (voiced ms, ms position of
+    the first voiced frame or None). Own model instance -- never the hot one."""
+    global _MISS_VAD
+    step = SileroVad.CHUNK * 2
+    voiced, first = 0, None
+    with _MISS_VAD_LOCK:
+        if _MISS_VAD is None:
+            _MISS_VAD = SileroVad(SILERO_MODEL)
+        _MISS_VAD.reset()
+        for k, i in enumerate(range(0, len(pcm) - step + 1, step)):
+            if _MISS_VAD.is_speech(pcm[i:i + step]):
+                voiced += VAD_FRAME_MS
+                if first is None:
+                    first = k * VAD_FRAME_MS
+    return voiced, first
 
 
 def _rms_dbfs(pcm: bytes) -> float | None:
@@ -1754,7 +1786,6 @@ def _persist_miss(ch0: bytes, ch1: bytes, clip_name: str) -> None:
     channel) and log what a second, offline Silero pass makes of each. The
     live VAD judges ch0 only; this is the evidence for whether it should --
     measured, logged, decided later. Off the hot path (own thread, own VAD)."""
-    global _MISS_VAD
     try:
         mono = not ch0
         n = len(ch1) if mono else min(len(ch0), len(ch1))
@@ -1774,20 +1805,37 @@ def _persist_miss(ch0: bytes, ch1: bytes, clip_name: str) -> None:
         for old in sorted(CLIP_DIR.glob("miss-*.wav"))[:-MISS_CLIPS_KEEP]:
             old.unlink(missing_ok=True)
         stats = []
-        with _MISS_VAD_LOCK:
-            if _MISS_VAD is None:
-                _MISS_VAD = SileroVad(SILERO_MODEL)
-            for name, pcm in (("ch0", ch0[:n]), ("ch1", ch1[:n])):
-                if not pcm:
-                    continue
-                _MISS_VAD.reset()
-                step = SileroVad.CHUNK * 2
-                voiced = sum(VAD_FRAME_MS for i in range(0, len(pcm) - step + 1, step)
-                             if _MISS_VAD.is_speech(pcm[i:i + step]))
-                stats.append(f"{name} voiced={voiced}ms rms={_rms_dbfs(pcm)}dBFS")
+        for name, pcm in (("ch0", ch0[:n]), ("ch1", ch1[:n])):
+            if not pcm:
+                continue
+            voiced, first = _vad_scan(pcm)
+            stats.append(f"{name} voiced={voiced}ms first={_ms(first)} "
+                         f"rms={_rms_dbfs(pcm)}dBFS")
         log(f"miss clip {clip_name}: {' | '.join(stats)}")
     except Exception as exc:  # noqa: BLE001
         log(f"miss clip persist failed: {exc}")
+
+
+def recover_turn(turn_id: str | None, preroll: bytes, cmd: bytes) -> dict | None:
+    """Our VAD found no command. Salvage our own command-channel audio if it
+    holds speech that starts like an answer to the ding; the orchestrator
+    falls back to the peer mic's shadow by itself. Otherwise go straight to
+    the shadow rescue. Returns a normal command response, or None."""
+    if not turn_id:
+        return None
+    if SALVAGE_ENABLED and cmd:
+        voiced, first = _vad_scan(cmd)
+        if voiced >= MIN_VOICED_MS and first is not None and first <= SALVAGE_ONSET_MS:
+            log(f"salvage: command channel voiced={voiced}ms first={_ms(first)} -> ASR")
+            try:
+                resp = post_wav(sat_path("/command/salvage") + f"&turn_id={turn_id}",
+                                wrap_wav(preroll + cmd), timeout=COMMAND_TIMEOUT_S)
+            except Exception as exc:  # noqa: BLE001
+                log(f"/command/salvage failed: {exc}")
+                return None
+            return resp if resp.get("rescued") else None
+        log(f"salvage skipped: command channel voiced={voiced}ms first={_ms(first)}")
+    return rescue_from_shadow(turn_id)
 
 
 def rescue_from_shadow(turn_id: str | None) -> dict | None:
