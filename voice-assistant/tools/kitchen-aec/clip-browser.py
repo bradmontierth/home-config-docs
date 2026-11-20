@@ -5,7 +5,8 @@ with an <audio> player per clip and the transcript/intent the orchestrator
 returned (joined from events.jsonl by clip name). Nothing here can write.
 
   http://192.168.10.251:8782/            newest 60 command clips (pre-roll + full command)
-  ?kind=cmd|verify-ok|verify-rej|all      which clips (default cmd; verify-* are the 2.5 s pre-roll only)
+  ?kind=cmd|verify-ok|verify-rej|miss|all  which clips (default cmd; verify-* are the 2.5 s pre-roll only;
+                                          miss-* = empty wake captures, stereo L=ch0 processed R=ch1)
   ?date=20260826                          one day
   ?q=text                                 substring of transcript/name
   ?limit=200
@@ -35,7 +36,7 @@ except Exception:  # noqa: BLE001
 DATA = os.getenv("CLIP_DATA", "/home/pi/voice-pipeline/data")
 CLIPS = os.path.join(DATA, "clips")
 EVENTS = os.path.join(DATA, "events.jsonl")
-NAME_RE = re.compile(r"^(cmd|verify-ok|verify-rej|near|mark)-(\d{8})-(\d{6})\.wav$")
+NAME_RE = re.compile(r"^(cmd|verify-ok|verify-rej|near|mark|miss)-(\d{8})-(\d{6})\.wav$")
 PREROLL_S = float(os.getenv("PREROLL_S", "2.5"))   # must match satellite PREROLL_S
 FRAME_S = 0.05
 CHIME_LEN_S = 0.97          # sounds/wake.wav
@@ -261,14 +262,14 @@ class H(SimpleHTTPRequestHandler):
             "<!doctype html><meta charset=utf-8><title>kitchen clips</title>",
             "<style>body{font:14px system-ui;margin:1em;max-width:1400px}table{border-collapse:collapse;width:100%}",
             "td,th{border-bottom:1px solid #ddd;padding:6px;vertical-align:top;text-align:left}",
-            ".k-cmd{color:#06c}.k-verify-rej{color:#a00}.k-verify-ok{color:#080}.k-near{color:#a60}audio{width:260px}",
+            ".k-cmd{color:#06c}.k-verify-rej{color:#a00}.k-verify-ok{color:#080}.k-near{color:#a60}.k-miss{color:#c0c}audio{width:260px}",
             ".sus{background:#fff1f0}.tag{color:#c00;font-weight:600}.num{font-variant-numeric:tabular-nums;white-space:nowrap}",
             "form input{margin-right:.5em}</style>",
             "<h2>Kitchen satellite clips (.251)</h2>",
             "<form>kind <input name=kind value='%s' size=16> date <input name=date value='%s' size=9 placeholder=YYYYMMDD> "
             "q <input name=q value='%s'> limit <input name=limit value='%d' size=4> "
             "<label><input type=checkbox name=only value=suspect %s> suspect only</label> <button>go</button> "
-            "<small>kind = cmd | verify-ok | verify-rej | near | all (comma-join)</small></form>"
+            "<small>kind = cmd | verify-ok | verify-rej | near | miss | all (comma-join)</small></form>"
             % (html.escape(kind), html.escape(date), html.escape(needle), limit,
                "checked" if only == "suspect" else ""),
             "<p><small>cmd clips = 2.5 s pre-roll (wake phrase) + command capture, exactly what the orchestrator transcribed. "

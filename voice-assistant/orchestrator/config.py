@@ -472,6 +472,10 @@ ARB_PEERS = [
     for grp in os.getenv("ARB_PEERS", "kitchen,familyroom").split(";") if grp.strip()
 ]
 REWAKE_ARB_WAIT_S = float(os.getenv("REWAKE_ARB_WAIT_S", "0.9"))
+# /command/rescue: how long a winner whose own capture came back empty waits
+# for the suppressed loser's shadow take (2026-11-20). Only waited when a
+# loser was actually suppressed on that turn.
+RESCUE_WAIT_S = float(os.getenv("RESCUE_WAIT_S", "3"))
 # Loudness hand-off (2026-08-31). The verify race is a hop race, not a
 # statement about which room the speaker is in: Claire's mic won a wake at
 # -41 dBFS over Simon's at -21 and answered in the wrong room. Between mics

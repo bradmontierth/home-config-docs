@@ -202,6 +202,31 @@ _ARB = {"sat": None, "until": 0.0, "turn_id": None, "rms_db": None,
 _ARB_HANDOFF: dict[str, str] = {}
 _ARB_HANDOFF_MAX = 32
 
+# Shadow-capture rescue (2026-11-20). The arbitration loser keeps capturing
+# and posts its take to /command/shadow. When the WINNER's own capture comes
+# back empty (kitchen ch0 VAD heard nothing at -41 dBFS while the family room
+# transcribed "did the kids sleep today" perfectly), the winner calls
+# /command/rescue and the loser's transcript is dispatched as the command.
+# _SHADOW_PENDING: winner turn_id -> time a loser was suppressed (a shadow MAY
+# arrive; no entry = don't wait). _SHADOWS: winner turn_id -> the loser's take.
+_SHADOW_PENDING: dict[str, float] = {}
+_SHADOWS: dict[str, dict] = {}
+_SHADOW_TTL_S = 60.0
+
+
+def _shadow_prune(now: float) -> None:
+    for d, key in ((_SHADOW_PENDING, None), (_SHADOWS, "at")):
+        for k in [k for k, v in d.items()
+                  if now - (v if key is None else v[key]) > _SHADOW_TTL_S]:
+            del d[k]
+
+
+def _shadow_expect(winner_turn: str | None) -> None:
+    if winner_turn:
+        now = time.time()
+        _shadow_prune(now)
+        _SHADOW_PENDING.setdefault(winner_turn, now)
+
 
 def _loudness_peers(a: str | None, b: str | None) -> bool:
     """Same hardware class, so wake loudness is directly comparable."""
@@ -1579,6 +1604,7 @@ async def verify_wake(request: Request, sat: str = "kitchen",
         turn_id = turns_mod.start(sat, "wake", verified=False, stage1_score=peak,
                                   reject_reason="suppressed", arb_winner=winner,
                                   arb_turn_id=_ARB["turn_id"])
+        _shadow_expect(_ARB["turn_id"])
         asyncio.create_task(_note_wake_loudness(turn_id, wav, sat, winner, peak))
         return {"verified": False, "suppressed": True, "winner": winner}
     # Fire-and-forget: this POST to the dashboard sat serially BEFORE the ASR
@@ -1606,6 +1632,7 @@ async def verify_wake(request: Request, sat: str = "kitchen",
                                       reject_reason="suppressed", arb_winner=winner,
                                       arb_turn_id=_ARB["turn_id"],
                                       **_wake_timings())
+            _shadow_expect(_ARB["turn_id"])
             asyncio.create_task(_note_wake_loudness(turn_id, wav, sat, winner, peak))
             return {"verified": False, "suppressed": True, "winner": winner}
         # Same-hardware peers compare wake loudness at hand-off time, and the
@@ -1873,7 +1900,9 @@ async def satellite_play(request: Request, alarm: int = 0) -> dict:
 
 
 @app.post("/command/shadow")
-async def command_shadow(request: Request, sat: str = "unknown") -> dict:
+async def command_shadow(request: Request, sat: str = "unknown",
+                         arb_turn_id: str | None = None,
+                         turn_id: str | None = None) -> dict:
     """The arbitration LOSER's capture of the utterance the winner is already
     handling. Transcribe and log only — no intents, no events, no reply. The
     point is the paper trail: grep 'shadow command' next to the winner's
@@ -1888,7 +1917,63 @@ async def command_shadow(request: Request, sat: str = "unknown") -> dict:
     wake_found, command, _ = verify.verify_and_extract(transcript)
     log.info("shadow command sat=%s transcript=%r",
              sat, command if wake_found else transcript)
+    if arb_turn_id:
+        _shadow_prune(time.time())
+        _SHADOWS[arb_turn_id] = {"sat": sat, "wav": wav, "at": time.time(),
+                                 "text": (command if wake_found else transcript).strip()}
     return {"ok": True, "transcript": transcript}
+
+
+@app.post("/command/rescue")
+async def command_rescue(sat: str = "kitchen", turn_id: str | None = None) -> dict:
+    """The winner's own capture came back EMPTY (its VAD heard no speech).
+    If the arbitration loser captured this utterance as a shadow, dispatch
+    that transcript as the winner's command and reply through the winner, as
+    if its own capture had worked. Waits up to RESCUE_WAIT_S for a shadow
+    still in flight, but only when a loser was actually suppressed for this
+    turn; otherwise answers at once so the "didn't hear" cue isn't delayed.
+    `rescued: false` = nothing to use; the satellite plays its miss cue."""
+    miss = {"ok": False, "rescued": False, "transcript": "", "response": "",
+            "intent": "none"}
+    if not turn_id:
+        return miss
+    deadline = time.time() + config.RESCUE_WAIT_S
+    shadow = _SHADOWS.pop(turn_id, None)
+    while shadow is None and turn_id in _SHADOW_PENDING and time.time() < deadline:
+        await asyncio.sleep(0.1)
+        shadow = _SHADOWS.pop(turn_id, None)
+    _SHADOW_PENDING.pop(turn_id, None)
+    if not shadow or not shadow["text"]:
+        log.info("rescue sat=%s turn=%s: no shadow -> miss", sat, turn_id)
+        turns_mod.update(turn_id, intent="none", ok=False, reject_reason="no_command")
+        return miss
+    decision = await policy_mod.evaluate(sat)
+    if not decision["allowed"]:
+        log.info("rescue sat=%s silent no-op policy=%s", sat, decision["reason"])
+        return {**miss, "silent": True, "policy": decision}
+    text = shadow["text"]
+    log.info("rescue sat=%s: own capture empty, using %s shadow %r",
+             sat, shadow["sat"], text)
+    _CUR_SAT.set(sat)
+    t0 = time.time()
+    timing.start()
+    await _turn_event("transcript", text=text)
+    spk_task = None
+    if config.SPEAKER_MODE == "active":
+        spk_task = asyncio.create_task(speaker_mod.identify(shadow["wav"]))
+    result = await _dispatch(text, followup=False, speaker_task=spk_task)
+    result["transcript"] = text
+    result["rescued"] = True
+    result["rescued_from"] = shadow["sat"]
+    result["latency_ms"] = round((time.time() - t0) * 1000)
+    turns_mod.update(turn_id, command=text,
+                     asr_model=f"shadow:{shadow['sat']}",
+                     asr_fallback_reason="own_capture_empty")
+    turns_mod.finish(turn_id, result, timings=timing.snapshot(),
+                     total_ms=result["latency_ms"])
+    if spk_task is not None:
+        asyncio.create_task(_note_turn_speaker(turn_id, spk_task))
+    return result
 
 
 @app.post("/partial")

@@ -832,7 +832,8 @@ class SileroVad:
 # --- command capture (min window, then Silero endpointing) -----------------
 # What the last capture_command did, for the caller that needs to know whether
 # the re-wake chime already played (run_followups must not ding twice).
-LAST_CAPTURE: dict = {"reason": "", "rewake_dinged": False, "yield_to": None}
+LAST_CAPTURE: dict = {"reason": "", "rewake_dinged": False, "yield_to": None,
+                      "miss_ch0": b"", "miss_ch1": b""}
 
 
 def _rewake_chime() -> None:
@@ -877,6 +878,8 @@ def capture_command(stdout, vad, min_capture_ms: int = MIN_CAPTURE_MS,
     frame_bytes = SileroVad.CHUNK * 2   # 512 samples * int16
     vad.reset()                         # fresh recurrent state per utterance
     frames: list[bytes] = []
+    frames0: list[bytes] = []           # ch0 alongside, kept only for miss clips
+    two_stream = getattr(stdout, "use_side", False)
     speech = False
     speech_t0 = 0.0
     onset_at_ms = 0                     # buffer position of the speech onset
@@ -906,7 +909,9 @@ def capture_command(stdout, vad, min_capture_ms: int = MIN_CAPTURE_MS,
         total_ms += VAD_FRAME_MS
         # Command bytes come from the side channel when there is one (see
         # MIC_CHANNELS); the VAD below keeps judging the processed channel.
-        frames.append(stdout.last_side if getattr(stdout, "use_side", False) else b)
+        frames.append(stdout.last_side if two_stream else b)
+        if two_stream:
+            frames0.append(b)
         try:
             is_speech = vad.is_speech(b)
         except Exception:  # noqa: BLE001
@@ -1028,7 +1033,15 @@ def capture_command(stdout, vad, min_capture_ms: int = MIN_CAPTURE_MS,
     LAST_CAPTURE["reason"] = reason
     LAST_CAPTURE["rewake_dinged"] = dinged
     LAST_CAPTURE["yield_to"] = PARTIALS.yield_to if rewake_on else None
-    return b"".join(frames) if voiced_ms >= MIN_VOICED_MS else b""
+    if voiced_ms >= MIN_VOICED_MS:
+        LAST_CAPTURE["miss_ch0"] = LAST_CAPTURE["miss_ch1"] = b""
+        return b"".join(frames)
+    # Empty capture: keep what the mic actually heard, both channels, for
+    # _persist_miss (2026-11-20: a whole kitchen command was dropped and only
+    # the ch0 pre-roll survived, so ch1's level during the miss was a guess).
+    LAST_CAPTURE["miss_ch1"] = b"".join(frames)
+    LAST_CAPTURE["miss_ch0"] = b"".join(frames0) if two_stream else b""
+    return b""
 
 
 # --- one wake turn ---------------------------------------------------------
@@ -1198,34 +1211,45 @@ def run_turn(preroll_pcm: bytes, stdout, vad, trigger_t0: float,
         play_file(SOUNDS_DIR / "vad.wav")
         if not cmd_pcm:
             log("no command captured")
-            return
-        try:
-            # Stitch the pre-roll in front of the command. Capture starts AT the
-            # stage-1 trigger, but a run-together command ("okay computer set a
-            # timer…") begins DURING the ~0.5s detect lag, so its first word(s)
-            # exist only in the pre-roll (live bug 2026-07-12: "set a" showed in
-            # /verify's transcript, command decoded as just "timer for 30
-            # seconds"). The buffers are gapless — the pre-roll ends on the last
-            # frame the main loop read, capture reads the pipe from the next — so
-            # prepending reassembles the utterance; the orchestrator strips the
-            # leading wake phrase from the stitched transcript (?stitched=1).
-            # Long timeout on purpose: a searched ask can run ~60s and the reply
-            # audio only exists in this response. Wake detection is paused while we
-            # wait (single mic reader) — acceptable; alarms still fire (HTTP thread).
-            # turn_id continues the row /verify opened, so the wake numbers and
-            # the command's intent/reply/timings end up on one row.
-            path = "/command/audio?stitched=1"
-            if turn_id:
-                path += f"&turn_id={turn_id}"
-            resp = post_wav(sat_path(path), wrap_wav(preroll_pcm + cmd_pcm),
-                            timeout=COMMAND_TIMEOUT_S)
-        except Exception as exc:  # noqa: BLE001
-            log(f"/command/audio failed: {exc}")
-            return
+            cmd_clip = f"miss-{datetime.now().strftime('%Y%m%d-%H%M%S')}.wav"
+            threading.Thread(target=_persist_miss,
+                             args=(LAST_CAPTURE["miss_ch0"], LAST_CAPTURE["miss_ch1"],
+                                   cmd_clip), daemon=True).start()
+            # Our VAD heard nothing, but the arbitration loser may have
+            # captured the whole command (2026-11-20). Use its take if so.
+            resp = rescue_from_shadow(turn_id)
+            if not resp:
+                return
+            log(f"rescued from {resp.get('rescued_from')} shadow: "
+                f"{resp.get('transcript')!r}")
+        else:
+            try:
+                # Stitch the pre-roll in front of the command. Capture starts AT the
+                # stage-1 trigger, but a run-together command ("okay computer set a
+                # timer…") begins DURING the ~0.5s detect lag, so its first word(s)
+                # exist only in the pre-roll (live bug 2026-07-12: "set a" showed in
+                # /verify's transcript, command decoded as just "timer for 30
+                # seconds"). The buffers are gapless — the pre-roll ends on the last
+                # frame the main loop read, capture reads the pipe from the next — so
+                # prepending reassembles the utterance; the orchestrator strips the
+                # leading wake phrase from the stitched transcript (?stitched=1).
+                # Long timeout on purpose: a searched ask can run ~60s and the reply
+                # audio only exists in this response. Wake detection is paused while we
+                # wait (single mic reader) — acceptable; alarms still fire (HTTP thread).
+                # turn_id continues the row /verify opened, so the wake numbers and
+                # the command's intent/reply/timings end up on one row.
+                path = "/command/audio?stitched=1"
+                if turn_id:
+                    path += f"&turn_id={turn_id}"
+                resp = post_wav(sat_path(path), wrap_wav(preroll_pcm + cmd_pcm),
+                                timeout=COMMAND_TIMEOUT_S)
+            except Exception as exc:  # noqa: BLE001
+                log(f"/command/audio failed: {exc}")
+                return
+            cmd_clip = f"cmd-{datetime.now().strftime('%Y%m%d-%H%M%S')}.wav"
+            threading.Thread(target=_persist_cmd, args=(preroll_pcm + cmd_pcm, cmd_clip),
+                             daemon=True).start()
         log(f"command -> {resp.get('intent')}: {resp.get('response')}")
-        cmd_clip = f"cmd-{datetime.now().strftime('%Y%m%d-%H%M%S')}.wav"
-        threading.Thread(target=_persist_cmd, args=(preroll_pcm + cmd_pcm, cmd_clip),
-                         daemon=True).start()
         append_event({"type": "command", "intent": resp.get("intent"),
                       "transcript": resp.get("transcript"), "response": resp.get("response"),
                       "clip": cmd_clip})
@@ -1623,6 +1647,77 @@ def _persist_cmd(pcm: bytes, clip_name: str) -> None:
             old.unlink(missing_ok=True)
     except Exception as exc:  # noqa: BLE001
         log(f"cmd clip persist failed: {exc}")
+
+
+MISS_CLIPS_KEEP = int(os.getenv("MISS_CLIPS_KEEP", "60"))
+_MISS_VAD = None
+_MISS_VAD_LOCK = threading.Lock()
+
+
+def _rms_dbfs(pcm: bytes) -> float | None:
+    if not pcm:
+        return None
+    x = np.frombuffer(pcm, dtype=np.int16).astype(np.float32) / 32768.0
+    return round(float(10 * np.log10(np.mean(x * x) + 1e-12)), 1)
+
+
+def _persist_miss(ch0: bytes, ch1: bytes, clip_name: str) -> None:
+    """A wake turn whose capture came back empty (2026-11-20). Keep both
+    channels as a stereo miss-*.wav (L = ch0 processed, R = ch1 command
+    channel) and log what a second, offline Silero pass makes of each. The
+    live VAD judges ch0 only; this is the evidence for whether it should --
+    measured, logged, decided later. Off the hot path (own thread, own VAD)."""
+    global _MISS_VAD
+    try:
+        mono = not ch0
+        n = len(ch1) if mono else min(len(ch0), len(ch1))
+        if mono:
+            data, chans = ch1, 1
+        else:
+            a = np.frombuffer(ch0[:n], dtype=np.int16)
+            b = np.frombuffer(ch1[:n], dtype=np.int16)
+            data, chans = np.column_stack([a, b]).tobytes(), 2
+        buf = io.BytesIO()
+        with wave.open(buf, "wb") as w:
+            w.setnchannels(chans)
+            w.setsampwidth(2)
+            w.setframerate(SAMPLE_RATE)
+            w.writeframes(data)
+        (CLIP_DIR / clip_name).write_bytes(buf.getvalue())
+        for old in sorted(CLIP_DIR.glob("miss-*.wav"))[:-MISS_CLIPS_KEEP]:
+            old.unlink(missing_ok=True)
+        stats = []
+        with _MISS_VAD_LOCK:
+            if _MISS_VAD is None:
+                _MISS_VAD = SileroVad(SILERO_MODEL)
+            for name, pcm in (("ch0", ch0[:n]), ("ch1", ch1[:n])):
+                if not pcm:
+                    continue
+                _MISS_VAD.reset()
+                step = SileroVad.CHUNK * 2
+                voiced = sum(VAD_FRAME_MS for i in range(0, len(pcm) - step + 1, step)
+                             if _MISS_VAD.is_speech(pcm[i:i + step]))
+                stats.append(f"{name} voiced={voiced}ms rms={_rms_dbfs(pcm)}dBFS")
+        log(f"miss clip {clip_name}: {' | '.join(stats)}")
+    except Exception as exc:  # noqa: BLE001
+        log(f"miss clip persist failed: {exc}")
+
+
+def rescue_from_shadow(turn_id: str | None) -> dict | None:
+    """Ask the orchestrator to answer this turn from the arbitration loser's
+    shadow capture. Returns the normal command response, or None (no shadow,
+    policy-silenced, or any error -> the turn just ends as before)."""
+    if not turn_id:
+        return None
+    try:
+        resp = post_json(sat_path("/command/rescue") + f"&turn_id={turn_id}", {},
+                         timeout=COMMAND_TIMEOUT_S)
+    except Exception as exc:  # noqa: BLE001
+        log(f"/command/rescue failed: {exc}")
+        return None
+    if not resp.get("rescued"):
+        return None
+    return resp
 
 
 _SCORER_LOCK = threading.Lock()
