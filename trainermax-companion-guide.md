@@ -103,6 +103,14 @@ on every refresh; a second refresher would break the live proxy.
 
 - Coach (2026-09-27): `coachfacts.py` in the container (facts + `coach_messages`/`coach_run_class` tables), host generator `trainer_max/companion/coach/coach.py` using the machine `claude` login; grading page `/coach`. Replay: `coach/coach.py replay --athlete brad --start 2025-01-01 --end 2025-05-10 --batch <tag>`. Rollback tag `strava-proxy-strava-proxy:pre-coach-20260928t013446z`. Tests: `test_coach.py` (run alone, temp RUNS_DB).
 
+- Race messages (`raceeve.py`, table `race_messages`, column `kind`): **race-week note** (`kind='week'`, prompt
+  `coach/prompts/race_week_v1.md`) on the Monday of a race week for races Tue–Sun, sent in the Monday push hours;
+  once pushed it replaces that Monday's plan push. **Race-eve plan** (`kind='eve'`, `race_eve_v2.md`) 18:00–22:00
+  the evening before. Both need the athlete's coach push on. Both get `recentRacesSay` (each clean race of the
+  last year moved to this race by the athlete's curve) and rep paces from watch laps on recent runs.
+  Preview without sending: `coach.py race-eve --athlete A --race-id N --kind week|eve --batch <test>` against a
+  scratch companion (:8199 recipe above).
+
 ## Who rides, who runs (per-athlete setting)
 
 **Deployed 2026-11-20** (trainer_max b1c6deb). Each athlete has cycling and running on or off:
