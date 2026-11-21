@@ -109,9 +109,9 @@ on every refresh; a second refresher would break the live proxy.
   the evening before. Both need the athlete's coach push on. Both get `recentRacesSay` (each clean race of the
   last year moved to this race by the athlete's curve) and rep paces from watch laps on recent runs.
   Preview without sending: `coach.py race-eve --athlete A --race-id N --kind week|eve --batch <test>` against a
-  scratch companion on a DB copy at 127.0.0.1:8199 (`docker run --rm -e TZ=America/Denver -e CHAT_WORKER_TOKEN=x
+  scratch companion on a DB copy at 127.0.0.1:8199 (`docker run --rm -e TZ=America/Denver --env-file ~/cecret_lake/trainer_max/chat_worker.env
   -e ATHLETES=... --network strava-proxy_default -v <copy dir>:/data -p 127.0.0.1:8199:8080 <image>`, no `.env`, so no
-  Strava sync; the worker endpoints need the token and the compose network).
+  Strava sync; the worker endpoints need coach.py's token and the compose network; `TRAINERMAX_URL=http://127.0.0.1:8199` for coach.py).
 
 ## Who rides, who runs (per-athlete setting)
 
