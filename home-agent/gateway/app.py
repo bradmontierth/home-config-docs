@@ -573,6 +573,15 @@ async def list_sessions(request: Request, limit: int = 50) -> list[dict]:
 
 
 def enrich_session_info(info: dict) -> dict:
+    # The runner already resolves the conversation root, title and preview
+    # (from its in-memory index); redoing it here walked every resume chain
+    # with a glob per hop and doubled the cost of a list.
+    if info.get("display_title") and info.get("root_session_id"):
+        enriched = dict(info)
+        enriched.setdefault("latest_title", enriched.get("title"))
+        enriched.setdefault("preview", "")
+        enriched.setdefault("agent", "codex")
+        return enriched
     session_id = str(info.get("session_id") or "")
     metadata = read_session_metadata(session_id)
     root_id, display_title, preview = session_display_context(session_id, metadata or info)
@@ -854,8 +863,12 @@ async def monitor_session_for_push(session_id: str) -> None:
 
 
 async def scan_running_sessions_once() -> None:
+    # Only sessions the runner holds in memory can be running; /sessions/live
+    # answers from memory instead of reading 200 records off disk every minute.
     async with httpx.AsyncClient(timeout=10.0) as client:
-        response = await client.get(f"{RUNNER_URL.rstrip('/')}/sessions", params={"limit": 200})
+        response = await client.get(f"{RUNNER_URL.rstrip('/')}/sessions/live")
+        if response.status_code == 404:
+            response = await client.get(f"{RUNNER_URL.rstrip('/')}/sessions", params={"limit": 200})
     if response.status_code >= 400:
         LOGGER.warning("runner session scan failed: %s", response.text)
         return

@@ -230,6 +230,7 @@ class CodexSession:
         self.waiting_since: Optional[float] = None
         self.session_dir = DEFAULT_SESSION_ROOT / time.strftime("%Y-%m-%d") / session_id
         self.session_dir.mkdir(parents=True, exist_ok=True)
+        remember_session_dir(session_id, self.session_dir)
         self.log_path = self.session_dir / "codex.log"
         self.prompt_path = self.session_dir / "prompt.txt"
         self.meta_path = self.session_dir / "metadata.json"
@@ -1659,10 +1660,92 @@ def dedupe_preserving_order(values: list[str]) -> list[str]:
     return result
 
 
-def session_info_from_metadata(path: Path) -> Optional[SessionInfo]:
+# --- Session index -------------------------------------------------------
+# The store holds 1000+ sessions in date folders. Globbing "*/<id>/..." per
+# lookup scanned every date folder, and walking a 60-deep resume chain did that
+# once per hop, so a 50-row list cost ~2000 scans (4-8 s) and froze the event
+# loop. One scandir of the whole store takes ~15 ms, so keep an id -> folder
+# map, rescan on a miss (throttled), and cache parsed metadata by mtime.
+_SESSION_DIRS: dict[str, Path] = {}
+_SESSION_DIRS_AT = 0.0
+_SESSION_DIRS_LOCK = threading.Lock()
+_SESSION_RESCAN_MIN_S = 2.0
+_META_CACHE: dict[Path, tuple[int, dict]] = {}
+_THREAD_ID_CACHE: dict[str, str] = {}
+
+
+def _rescan_session_dirs(force: bool = False) -> None:
+    global _SESSION_DIRS, _SESSION_DIRS_AT
+    with _SESSION_DIRS_LOCK:
+        if not force and time.monotonic() - _SESSION_DIRS_AT < _SESSION_RESCAN_MIN_S:
+            return
+        found: dict[str, Path] = {}
+        try:
+            day_dirs = sorted(
+                (entry for entry in os.scandir(DEFAULT_SESSION_ROOT) if entry.is_dir()),
+                key=lambda entry: entry.name,
+            )
+        except OSError:
+            day_dirs = []
+        for day in day_dirs:
+            try:
+                for entry in os.scandir(day.path):
+                    if entry.is_dir() and os.path.exists(os.path.join(entry.path, "metadata.json")):
+                        found[entry.name] = Path(entry.path)
+            except OSError:
+                continue
+        _SESSION_DIRS = found
+        _SESSION_DIRS_AT = time.monotonic()
+
+
+def remember_session_dir(session_id: str, directory: Path) -> None:
+    _SESSION_DIRS[session_id] = directory
+
+
+def indexed_session_dir(session_id: str) -> Optional[Path]:
+    if not session_id or "/" in session_id:
+        return None
+    directory = _SESSION_DIRS.get(session_id)
+    if directory is not None and (directory / "metadata.json").exists():
+        return directory
+    _rescan_session_dirs()
+    directory = _SESSION_DIRS.get(session_id)
+    return directory if directory is not None and (directory / "metadata.json").exists() else None
+
+
+def all_metadata_paths(newest_first: bool = False) -> list[Path]:
+    """Every metadata.json in the store, ordered by date folder then id."""
+    _rescan_session_dirs()
+    paths = sorted(
+        (directory / "metadata.json" for directory in _SESSION_DIRS.values()),
+        key=lambda path: (path.parent.parent.name, path.parent.name),
+        reverse=newest_first,
+    )
+    return paths
+
+
+def load_metadata(path: Path) -> Optional[dict]:
+    try:
+        mtime = path.stat().st_mtime_ns
+    except OSError:
+        _META_CACHE.pop(path, None)
+        return None
+    cached = _META_CACHE.get(path)
+    if cached and cached[0] == mtime:
+        return cached[1]
     try:
         metadata = json.loads(path.read_text(encoding="utf-8"))
-    except (FileNotFoundError, json.JSONDecodeError):
+    except (OSError, json.JSONDecodeError):
+        return None
+    if not isinstance(metadata, dict):
+        return None
+    _META_CACHE[path] = (mtime, metadata)
+    return metadata
+
+
+def session_info_from_metadata(path: Path) -> Optional[SessionInfo]:
+    metadata = load_metadata(path)
+    if metadata is None:
         return None
     session_id = str(metadata.get("session_id") or path.parent.name)
     log_path = str(path.parent / "codex.log")
@@ -1719,12 +1802,9 @@ def session_metadata_chain(session_id: str, metadata: dict) -> list[tuple[str, d
     seen = {session_id}
     parent_id = metadata.get("resume_from")
     while isinstance(parent_id, str) and parent_id and parent_id not in seen:
-        parent_path = next(DEFAULT_SESSION_ROOT.glob(f"*/{parent_id}/metadata.json"), None)
-        if not parent_path:
-            break
-        try:
-            parent_metadata = json.loads(parent_path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
+        parent_dir = indexed_session_dir(parent_id)
+        parent_metadata = load_metadata(parent_dir / "metadata.json") if parent_dir else None
+        if parent_metadata is None:
             break
         seen.add(parent_id)
         chain.append((parent_id, parent_metadata))
@@ -1733,8 +1813,7 @@ def session_metadata_chain(session_id: str, metadata: dict) -> list[tuple[str, d
 
 
 def session_dir_for_id(session_id: str) -> Optional[Path]:
-    meta_path = next(DEFAULT_SESSION_ROOT.glob(f"*/{session_id}/metadata.json"), None)
-    return meta_path.parent if meta_path else None
+    return indexed_session_dir(session_id)
 
 
 def clean_session_title(value: object) -> str:
@@ -1758,13 +1837,16 @@ def prompt_request_preview(session_dir: Optional[Path]) -> str:
 
 
 def find_session_info(session_id: str) -> Optional[SessionInfo]:
-    for path in DEFAULT_SESSION_ROOT.glob(f"*/{session_id}/metadata.json"):
-        return session_info_from_metadata(path)
-    return None
+    directory = indexed_session_dir(session_id)
+    return session_info_from_metadata(directory / "metadata.json") if directory else None
 
 
 def find_codex_thread_id(session_id: str) -> Optional[str]:
-    log_path = next(DEFAULT_SESSION_ROOT.glob(f"*/{session_id}/codex.log"), None)
+    cached = _THREAD_ID_CACHE.get(session_id)
+    if cached:
+        return cached
+    directory = indexed_session_dir(session_id)
+    log_path = directory / "codex.log" if directory else None
     if not log_path:
         return None
     try:
@@ -1778,6 +1860,7 @@ def find_codex_thread_id(session_id: str) -> Optional[str]:
                     continue
                 thread_id = extract_thread_id(event)
                 if thread_id:
+                    _THREAD_ID_CACHE[session_id] = thread_id
                     return thread_id
     except FileNotFoundError:
         return None
@@ -1854,10 +1937,9 @@ def live_claude_sessions() -> dict[str, str]:
 def known_thread_sessions() -> dict[str, str]:
     """agent thread id -> newest Home Agent session id that uses it."""
     known: dict[str, str] = {}
-    for path in sorted(DEFAULT_SESSION_ROOT.glob("*/*/metadata.json")):
-        try:
-            metadata = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
+    for path in all_metadata_paths():
+        metadata = load_metadata(path)
+        if metadata is None:
             continue
         thread_id = metadata.get("codex_thread_id")
         if thread_id:
@@ -2098,10 +2180,9 @@ def terminal_turns_since(info: "SessionInfo", since: float) -> str:
 
 def has_newer_session(info: "SessionInfo") -> bool:
     """Whether a later Home Agent session continues the same agent thread."""
-    for path in DEFAULT_SESSION_ROOT.glob("*/*/metadata.json"):
-        try:
-            metadata = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
+    for path in all_metadata_paths():
+        metadata = load_metadata(path)
+        if metadata is None:
             continue
         if (
             metadata.get("codex_thread_id") == info.codex_thread_id
@@ -2201,10 +2282,9 @@ async def start_session(request: StartRequest) -> SessionInfo:
     return session.info()
 
 
-@app.get("/sessions", response_model=list[SessionInfo])
-async def list_sessions(limit: int = 50) -> list[SessionInfo]:
+def list_session_records(limit: int) -> list[SessionInfo]:
     records: list[SessionInfo] = []
-    for path in sorted(DEFAULT_SESSION_ROOT.glob("*/*/metadata.json"), reverse=True):
+    for path in all_metadata_paths(newest_first=True):
         info = session_info_from_metadata(path)
         if info:
             live = sessions.get(info.session_id)
@@ -2212,6 +2292,20 @@ async def list_sessions(limit: int = 50) -> list[SessionInfo]:
         if len(records) >= limit:
             break
     return records
+
+
+@app.get("/sessions", response_model=list[SessionInfo])
+async def list_sessions(limit: int = 50) -> list[SessionInfo]:
+    return await asyncio.to_thread(list_session_records, limit)
+
+
+@app.get("/sessions/live", response_model=list[SessionInfo])
+async def list_live_sessions() -> list[SessionInfo]:
+    """Sessions this runner process holds in memory (no disk scan).
+
+    The gateway polls this every minute to find turns to watch for pushes.
+    """
+    return [session.info() for session in list(sessions.values())]
 
 
 @app.get("/sessions/{session_id}", response_model=SessionInfo)
@@ -2230,11 +2324,15 @@ async def get_session_log(session_id: str, max_chars: int = 200000) -> SessionLo
     path = find_session_log_path(session_id)
     if not path:
         raise HTTPException(status_code=404, detail="unknown session")
-    text, truncated = format_session_log(path, max_chars=max_chars)
+    text, truncated = await asyncio.to_thread(format_session_log, path, max_chars)
     # Turns taken in a terminal since this session last wrote its log (only
     # for the conversation's latest, finished session: a resumed child
     # carries them at the top of its own log instead).
-    info = sessions[session_id].info() if session_id in sessions else find_session_info(session_id)
+    info = (
+        sessions[session_id].info()
+        if session_id in sessions
+        else await asyncio.to_thread(find_session_info, session_id)
+    )
     if info and info.status not in {"starting", "running", "waiting", "idle"}:
         try:
             log_mtime = path.stat().st_mtime
@@ -2389,6 +2487,7 @@ async def adopt_external_session(request: AdoptRequest) -> SessionInfo:
     if described.model:
         metadata["codex_model"] = described.model
     (session_dir / "metadata.json").write_text(json.dumps(metadata, indent=2) + "\n", encoding="utf-8")
+    remember_session_dir(session_id, session_dir)
     info = find_session_info(session_id)
     assert info is not None
     return info
