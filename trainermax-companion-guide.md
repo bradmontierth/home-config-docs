@@ -103,6 +103,31 @@ on every refresh; a second refresher would break the live proxy.
 
 - Coach (2026-09-27): `coachfacts.py` in the container (facts + `coach_messages`/`coach_run_class` tables), host generator `trainer_max/companion/coach/coach.py` using the machine `claude` login; grading page `/coach`. Replay: `coach/coach.py replay --athlete brad --start 2025-01-01 --end 2025-05-10 --batch <tag>`. Rollback tag `strava-proxy-strava-proxy:pre-coach-20260928t013446z`. Tests: `test_coach.py` (run alone, temp RUNS_DB).
 
+## Who rides, who runs (per-athlete setting)
+
+**Deployed 2026-11-20** (trainer_max b1c6deb). Each athlete has cycling and running on or off:
+`sports.py`, stored in runs.db `meta` as `sports:<athlete>`, set on the LAN page
+`http://192.168.10.217:8093/athletes` (nav: People) or `PUT /api/sports/<athlete>` with
+`{"bike": bool, "run": bool}`; `GET /api/sports` lists everyone. Not reachable through the portal gate.
+
+- Running off: no coach notes, Monday or race-eve messages, no Monday check-in, no run import,
+  not on the Team page; `/a/<athlete>` goes to the bike dashboard. Turning it back on catches up
+  the run import and only notes runs from then on.
+- Cycling off: no hourly ride import, no Strava upload scope, not in the group-ride invite list.
+  A runner's ride that arrives by Strava webhook is still mirrored (the running plan uses it).
+- The gate (`portal-gate`, a compose service) re-reads `/api/sports` every 30 s and forwards only
+  the side that is on. If the companion can't answer, the last answer stands.
+- `RIDE_ATHLETES` / `WRITE_ATHLETES` in `.env` are now only the default for athletes never set.
+- Nothing is deleted when a sport is turned off.
+- Adding a cycling-only rider: add the key to `ATHLETES` in `.env` and recreate `strava-proxy`,
+  set Cycling on / Running off on the People page BEFORE sending the Strava connect link (the
+  link's upload scope and the run backfill follow the setting), then add them to
+  `cecret_lake/trainer_max/portal_gate_users.json` and verify their SES address if they sign in by email.
+- State 2026-11-20: brad, adrienne = both; rachel = running only; corbin = cycling only.
+- Rollback images: `strava-proxy-strava-proxy:pre-sports-20261121t021014z`,
+  `strava-proxy-portal-gate:pre-sports-20261121t021014z`.
+- Tests: `test_sports.py` (companion; run in the image with `--tmpfs /data`), `portal-gate/test_gate.py`.
+
 ## Read-only troubleshooting
 
 ```bash
