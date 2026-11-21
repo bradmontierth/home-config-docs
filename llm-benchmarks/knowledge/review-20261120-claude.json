@@ -1,0 +1,52 @@
+{
+ "reviewer": "Claude agent (Opus 5.5)",
+ "status": "provisional_agent_review_not_human_approved",
+ "policy": "Same as review-20260912: core answer, named-source fidelity and unsupported extras reviewed separately; both reps read. Not an automated score.",
+ "run": "knowledge-20261120T235422Z / T235955Z (claude CLI, subscription, warm process, WebSearch only, frozen 2026-09-12 prompt)",
+ "cross_cutting": {
+  "sonnet55-low": "Spoke the CLI WebSearch tool's appended 'include markdown source links' instruction aloud as an injection notice (apple r1, skin r1 SPOKEN part; tour r1 full). Disqualifying for voice without a prompt fix.",
+  "haiku55-low": "One spoken answer began with a literal '<br>' (tour r2).",
+  "opus55-low": "Answered the named-source Solid Starts question from memory (0 searches, both reps) while the spoken part still says 'Solid Starts says'. Content matched the source, but retrieval was skipped.",
+  "all": "Pancake: every candidate gives the 1/4 tsp per tsp ratio in the spoken answer (same caution GPT-5.4 got). Tour: all reject the September premise; Opus/Fable consistently name Eddie Dunbar for Vuelta stage 19 (6/6 runs agree; not independently verified)."
+ },
+ "haiku55-low": {
+  "lime_juice": "pass",
+  "apple_one_year": "caution - could not read the Solid Starts page, said so; matchsticks from other sites",
+  "apple_skin_followup": "fail - says peel it; Solid Starts permits skin on thin slices",
+  "tour_yesterday": "pass (r2 '<br>' artifact)",
+  "pancake_substitution": "caution",
+  "led_purple": "pass"
+ },
+ "sonnet55-low": {
+  "lime_juice": "pass",
+  "apple_one_year": "caution - partial retrieval; r1 spoken injection notice",
+  "apple_skin_followup": "caution - r2 accurate; r1 spoken injection notice",
+  "tour_yesterday": "pass (r2 unverified Vuelta 'today' claim)",
+  "pancake_substitution": "caution",
+  "led_purple": "pass"
+ },
+ "opus55-low": {
+  "lime_juice": "pass",
+  "apple_one_year": "caution - accurate but from memory, no retrieval",
+  "apple_skin_followup": "caution - reasonable, from memory",
+  "tour_yesterday": "pass",
+  "pancake_substitution": "caution",
+  "led_purple": "pass"
+ },
+ "opus55-medium": {
+  "lime_juice": "pass",
+  "apple_one_year": "pass - r2 exact 9+ month tier",
+  "apple_skin_followup": "pass",
+  "tour_yesterday": "pass",
+  "pancake_substitution": "caution",
+  "led_purple": "pass"
+ },
+ "fable52-low": {
+  "lime_juice": "pass",
+  "apple_one_year": "pass - exact tiers (6/9/18/24 mo), rounds/half-rounds, skin optional",
+  "apple_skin_followup": "pass",
+  "tour_yesterday": "pass",
+  "pancake_substitution": "caution - spoken says 'a third as much' then 1/4 tsp",
+  "led_purple": "pass - notes average of red+blue would be green"
+ }
+}

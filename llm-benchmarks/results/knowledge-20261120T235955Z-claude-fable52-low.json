@@ -1,0 +1,397 @@
+{
+ "benchmark": "knowledge_qa",
+ "benchmark_version": "1.0.0",
+ "run_label": "claude fable52-low rep2",
+ "started_at": "2026-11-20T23:59:55+00:00",
+ "requested_model": "claude-fable-5-2",
+ "reasoning_effort": "low",
+ "transport": "claude CLI (subscription), stream-json, warm process",
+ "prompt": "You are the knowledge engine for a household voice assistant. The user asked a spoken question. Answer it directly and factually.\n\nThe request originated in kitchen. This is routing context only; do not assume facts about that room or import context from any other room.\n\nRight now it is Saturday, September 12, 2026, 08:40 PM in the user's home timezone. Resolve every relative time word in the question — 'today', 'yesterday', 'last night', 'this morning' — against THIS local date/time, NEVER against dates implied by search results: web pages and search tools often run on UTC or other timezones where it may already be a different day. If search results suggest a different current date, trust the date given here.\n\nYour built-in knowledge ends months before this date. You have a web search tool: for ANYTHING that may have changed since your training — sports results, news, weather, prices, schedules, anything 'today', 'yesterday', 'last night', or 'latest' — you MUST search the web before answering. Never answer such questions from memory and never say you don't know without having searched. If a search comes back unclear or inconclusive, search again with different terms — do not give up or report failure after one attempt, and report only facts (scores, numbers) actually stated in results, never guessed. Before claiming that something did NOT happen (no game, no event, nothing scheduled), confirm with a second search — absence from one set of results is not proof. But remember this is a live voice conversation with someone standing in a kitchen waiting: every extra search adds seconds. ONE well-chosen search is usually enough — answer as soon as the results support a clear answer, and never run more than three searches for a single question. Only skip the search for timeless general knowledge (conversions, definitions, how-tos), where searching just adds delay.\n\nReturn your answer in TWO parts separated by a line containing only ===MORE===\nPart 1 (before the separator): the SPOKEN answer — 1 to 2 short sentences, plain and direct, the way you'd say it out loud across a kitchen. Lead with the actual answer. Never include URLs, citations, or source names here.\nPart 2 (after ===MORE===): the FULL answer for reading on a screen — more detail, useful specifics, short lists or steps where helpful. Plain text, no markdown headers or links; if you searched, you may name sources here.\n\nDo not offer follow-ups, do not ask questions back, do not mention that you are an AI. Always include the separator line.\n\nEarlier questions and answers from the last few minutes may precede the current question — use them to resolve references like 'they', 'it', or 'the game' in follow-ups.",
+ "prompt_sha256": "3a65e03652d6c4fc2ed6ef86bc96b85f81defae50c08f488a1bacb8ef2ac94c8",
+ "case_sha256": "dbb8460f96fd85c6a9c48eafbab40e4149f012fa93103d7a548b15c25bf53602",
+ "cases": [
+  {
+   "id": "lime_juice",
+   "text": "How much juice is in a lime?",
+   "checks": [
+    "Gives an approximate kitchen quantity with units; acknowledges size/juiciness variation",
+    "Short spoken answer answers directly"
+   ],
+   "search_policy": "optional",
+   "reference_status": "review_required",
+   "error": null,
+   "raw_text": "An average lime gives about 2 tablespoons of juice, which is roughly 1 fluid ounce.\n\n===MORE===\nOne medium lime yields about 2 tablespoons (1 fluid ounce, or about 30 ml) of juice. The range is roughly 1 to 3 tablespoons depending on size and ripeness.\n\nHandy amounts:\n- 1 tablespoon juice: about half a lime\n- 1/4 cup juice: about 2 limes\n- 1/2 cup juice: about 4 limes\n- 1 cup juice: about 8 limes\n\nKey limes are much smaller, giving about 2 to 3 teaspoons each, so you need around 16 to 20 for 1/2 cup.\n\nTo get more juice:\n- Pick limes that feel heavy for their size and give slightly when squeezed.\n- Bring them to room temperature, or microwave for 10 to 15 seconds.\n- Roll firmly on the counter with your palm before cutting.\n- Cut lengthwise or use a citrus press or reamer.\n\nOne lime also gives about 2 teaspoons of zest.",
+   "first_token_ms": 483.0,
+   "spoken_ready_ms": 868.0,
+   "separator_seen": true,
+   "total_ms": 3846.7,
+   "web_searches": 0,
+   "num_turns": 1,
+   "api_duration_ms": 3711,
+   "usage": {
+    "input_tokens": 2,
+    "cache_creation_input_tokens": 338,
+    "cache_read_input_tokens": 2005,
+    "output_tokens": 360,
+    "output_tokens_details": {
+     "thinking_tokens": 0
+    },
+    "server_tool_use": {
+     "web_search_requests": 0,
+     "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+     "ephemeral_1h_input_tokens": 338,
+     "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "global",
+    "iterations": [
+     {
+      "input_tokens": 2,
+      "output_tokens": 360,
+      "cache_read_input_tokens": 2005,
+      "cache_creation_input_tokens": 338,
+      "cache_creation": {
+       "ephemeral_5m_input_tokens": 0,
+       "ephemeral_1h_input_tokens": 338
+      },
+      "type": "message"
+     }
+    ],
+    "speed": "standard",
+    "fallback_credit": null
+   },
+   "notional_cost_usd": 0.020225,
+   "served_model": "claude-fable-5-2",
+   "spoken": "An average lime gives about 2 tablespoons of juice, which is roughly 1 fluid ounce."
+  },
+  {
+   "id": "apple_one_year",
+   "text": "How should I serve an apple to a one-year-old, according to Solid Starts?",
+   "checks": [
+    "Retrieves and attributes Solid Starts rather than inventing its recommendation",
+    "Age-appropriate preparation; does not recommend raw chunks or wedges for a one-year-old",
+    "Distinguishes the source's thin raw slices/grated options from soft cooked apple"
+   ],
+   "search_policy": "required_named_source",
+   "reference_urls": [
+    "https://solidstarts.com/foods/apple/"
+   ],
+   "reference_notes": "Checked 2026-09-12: source's 9+ month section permits cooked sections, grated raw apple, thin rounds or half-rounds, with or without skin. Whole apples discussed at 18+ months; wedges at 24+ months with readiness qualifications.",
+   "reference_status": "agent_source_checked_not_human_approved",
+   "error": null,
+   "raw_text": "Solid Starts suggests paper-thin slices of raw apple, shredded raw apple, or apple cooked until soft for a one-year-old. Skip raw chunks and wedges, which are a top choking hazard until after age two.\n\n===MORE===\nSolid Starts' guidance for apple at around 12 months is roughly:\n\n- Paper-thin slices of raw apple, with the skin on or off.\n- Shredded or grated raw apple, on its own or mixed into foods like yogurt or oatmeal.\n- Cooked apple, steamed, baked or simmered until soft enough to squish between your fingers, served as halves or bite-sized pieces.\n- No raw chunks, cubes or thick wedges. Solid Starts lists raw apple as one of the top choking hazards for children under 3.\n- Quartered apples and wedges come sometime after the second birthday, once the child chews well.\n\nKeep the child seated and supervised while eating.\n\nThe search confirmed the choking-hazard warning and the after-age-two guidance for wedges directly from the Solid Starts apple page. The 12-month section did not come back in the results, so those details are from my recollection of the page, and they match a Once Upon a Farm summary listing paper-thin slices for 12 to 24 months. The exact wording is at solidstarts.com/foods/apple.\n\nSources: Solid Starts (solidstarts.com/foods/apple), Once Upon a Farm (onceuponafarmorganics.com/blogs/upon-a-blog/baby-kid-friendly-ways-to-serve-apples)",
+   "first_token_ms": 17226.9,
+   "spoken_ready_ms": 17231.1,
+   "separator_seen": true,
+   "total_ms": 17276.5,
+   "web_searches": 1,
+   "num_turns": 2,
+   "api_duration_ms": 17121,
+   "usage": {
+    "input_tokens": 4,
+    "cache_creation_input_tokens": 2052,
+    "cache_read_input_tokens": 4378,
+    "output_tokens": 1050,
+    "output_tokens_details": {
+     "thinking_tokens": 443
+    },
+    "server_tool_use": {
+     "web_search_requests": 0,
+     "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+     "ephemeral_1h_input_tokens": 2052,
+     "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "global",
+    "iterations": [
+     {
+      "input_tokens": 2,
+      "output_tokens": 704,
+      "cache_read_input_tokens": 2358,
+      "cache_creation_input_tokens": 1714,
+      "cache_creation": {
+       "ephemeral_5m_input_tokens": 0,
+       "ephemeral_1h_input_tokens": 1714
+      },
+      "type": "message"
+     }
+    ],
+    "speed": "standard",
+    "fallback_credit": null
+   },
+   "notional_cost_usd": 0.0876768,
+   "served_model": "claude-fable-5-2",
+   "spoken": "Solid Starts suggests paper-thin slices of raw apple, shredded raw apple, or apple cooked until soft for a one-year-old. Skip raw chunks and wedges, which are a top choking hazard until after age two."
+  },
+  {
+   "id": "apple_skin_followup",
+   "text": "What about with the skin on?",
+   "follows": "apple_one_year",
+   "checks": [
+    "Keeps one-year-old apple context",
+    "Accurately represents the named source: skin is permitted for the thin raw slices in its 9+ month section",
+    "Does not turn skin permission into permission for thick raw pieces"
+   ],
+   "search_policy": "source_in_history_or_retrieval",
+   "reference_urls": [
+    "https://solidstarts.com/foods/apple/"
+   ],
+   "reference_status": "agent_source_checked_not_human_approved",
+   "error": null,
+   "raw_text": "Skin on is fine, according to Solid Starts, as long as the slices are thin. If your child struggles with the skin, peel it off or peel it in stripes.\n\n===MORE===\nSolid Starts' apple page says thin raw apple slices can be served with or without the skin from about 9 months on, so skin-on is fine for a one-year-old.\n\n- Why leave it on: the skin helps a thin slice hold together, and it gives toddlers practice chewing and spitting out tougher bits.\n- If the skin is a problem: peel the apple fully, or peel it in stripes so only some skin remains.\n- Expect some spitting: it is normal for a one-year-old to chew the flesh and spit the skin back out.\n- Keep the slices thin: the skin does not change the main rule. Raw apple is firm and slippery, so avoid chunks and wedges whether peeled or not.\n\nOther baby-feeding sites vary a little on timing; one suggests introducing skin-on apple anywhere between 9 and 18 months.\n\nSources: Solid Starts (solidstarts.com/foods/apple), My Little Eater (mylittleeater.com/apples)",
+   "first_token_ms": 12054.8,
+   "spoken_ready_ms": 12058.0,
+   "separator_seen": true,
+   "total_ms": 12078.0,
+   "web_searches": 1,
+   "num_turns": 2,
+   "api_duration_ms": 29144,
+   "usage": {
+    "input_tokens": 6,
+    "cache_creation_input_tokens": 2407,
+    "cache_read_input_tokens": 8858,
+    "output_tokens": 644,
+    "output_tokens_details": {
+     "thinking_tokens": 165
+    },
+    "server_tool_use": {
+     "web_search_requests": 0,
+     "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+     "ephemeral_1h_input_tokens": 2407,
+     "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "global",
+    "iterations": [
+     {
+      "input_tokens": 2,
+      "output_tokens": 376,
+      "cache_read_input_tokens": 4786,
+      "cache_creation_input_tokens": 1693,
+      "cache_creation": {
+       "ephemeral_5m_input_tokens": 0,
+       "ephemeral_1h_input_tokens": 1693
+      },
+      "type": "message"
+     }
+    ],
+    "speed": "standard",
+    "fallback_credit": null
+   },
+   "notional_cost_usd": 0.16562449999999998,
+   "served_model": "claude-fable-5-2",
+   "spoken": "Skin on is fine, according to Solid Starts, as long as the slices are thin. If your child struggles with the skin, peel it off or peel it in stripes."
+  },
+  {
+   "id": "tour_yesterday",
+   "text": "Who won yesterday's Tour de France stage?",
+   "checks": [
+    "Resolves yesterday using supplied home date",
+    "Verifies race schedule through search",
+    "Does not invent a September Tour stage winner or silently substitute another race"
+   ],
+   "search_policy": "required_current",
+   "reference_urls": [
+    "https://racecenter.letour.fr/fr"
+   ],
+   "reference_notes": "For the frozen September 12 2026 run, yesterday is September 11. Men's 2026 Tour ran July 4-26. Re-adjudicate on later runs.",
+   "reference_status": "agent_source_checked_not_human_approved",
+   "error": null,
+   "raw_text": "There was no Tour de France stage yesterday; the Tour ended July 26 with Tadej Pogačar winning overall. If you meant the Vuelta a España, Eddie Dunbar won yesterday's stage 19.\n===MORE===\nThe 2026 Tour de France finished on Sunday, July 26, so no stage was raced yesterday (Friday, September 11).\n\nTour de France 2026 final results:\n- Overall winner: Tadej Pogačar, his fifth Tour title, 6:26 ahead of Remco Evenepoel, with Isaac del Toro third at 9:42.\n- Final stage (stage 21, Paris): won by Mathieu van der Poel in a sprint on the Champs-Élysées, ahead of Jasper Philipsen and Mads Pedersen.\n\nThe Grand Tour racing right now is the Vuelta a España. Yesterday's stage 19 (Vélez-Málaga to Peñas Blancas, 210.8 km):\n- Winner: Eddie Dunbar (Pinarello-Q36.5), from the breakaway, in 5:00:54.\n- Second: Santiago Buitrago, caught by Dunbar inside the final 400 metres.\n- Third: Thomas Gloag, at 23 seconds.\n- Overall after the stage: Enric Mas (Movistar) kept the red jersey, 1:37 ahead of Primož Roglič, with Felix Gall third at 3:01.\n\nSources: Euronews, NBC, Cyclingnews, Escape Collective, CyclingUpToDate.",
+   "first_token_ms": 12726.7,
+   "spoken_ready_ms": 12729.1,
+   "separator_seen": true,
+   "total_ms": 12757.7,
+   "web_searches": 2,
+   "num_turns": 3,
+   "api_duration_ms": 15353,
+   "usage": {
+    "input_tokens": 4,
+    "cache_creation_input_tokens": 5057,
+    "cache_read_input_tokens": 4360,
+    "output_tokens": 851,
+    "output_tokens_details": {
+     "thinking_tokens": 148
+    },
+    "server_tool_use": {
+     "web_search_requests": 0,
+     "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+     "ephemeral_1h_input_tokens": 5057,
+     "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "global",
+    "iterations": [
+     {
+      "input_tokens": 2,
+      "output_tokens": 524,
+      "cache_read_input_tokens": 2349,
+      "cache_creation_input_tokens": 4719,
+      "cache_creation": {
+       "ephemeral_5m_input_tokens": 0,
+       "ephemeral_1h_input_tokens": 4719
+      },
+      "type": "message"
+     }
+    ],
+    "speed": "standard",
+    "fallback_credit": null
+   },
+   "notional_cost_usd": 0.1395517,
+   "served_model": "claude-fable-5-2",
+   "spoken": "There was no Tour de France stage yesterday; the Tour ended July 26 with Tadej Pogačar winning overall. If you meant the Vuelta a España, Eddie Dunbar won yesterday's stage 19."
+  },
+  {
+   "id": "pancake_substitution",
+   "text": "Can I substitute baking soda for baking powder in pancakes?",
+   "checks": [
+    "Explains not a direct one-for-one substitution",
+    "Baking soda needs acid; baking powder contains an acid component",
+    "Avoids prescribing an unconditional replacement ratio without recipe context"
+   ],
+   "search_policy": "optional",
+   "reference_status": "review_required",
+   "error": null,
+   "raw_text": "Yes, but only if you add an acid. Use about a third as much baking soda as the baking powder called for, plus something acidic like buttermilk, yogurt, lemon juice, vinegar, or cream of tartar.\n===MORE===\nYes, with an adjustment. Baking soda is about three times stronger than baking powder and needs an acid to activate, otherwise the pancakes come out flat and taste soapy or metallic.\n\nFor each 1 teaspoon of baking powder the recipe calls for, use one of these:\n\n- 1/4 teaspoon baking soda plus 1/2 teaspoon cream of tartar (the closest match).\n- 1/4 teaspoon baking soda plus 1/2 teaspoon lemon juice or white vinegar, stirred into the wet ingredients.\n- 1/4 teaspoon baking soda, and swap about 1/2 cup of the milk for buttermilk or plain yogurt.\n\nTips:\n\n- Mix the baking soda into the dry ingredients and the acid into the wet ones, then combine just before cooking.\n- Cook the batter right away. Baking soda reacts immediately, so the batter loses its lift if it sits.\n- Don't add extra baking soda to compensate. Too much gives a bitter, soapy taste and makes the pancakes brown too quickly.",
+   "first_token_ms": 620.6,
+   "spoken_ready_ms": 1414.8,
+   "separator_seen": true,
+   "total_ms": 4411.6,
+   "web_searches": 0,
+   "num_turns": 1,
+   "api_duration_ms": 4308,
+   "usage": {
+    "input_tokens": 2,
+    "cache_creation_input_tokens": 338,
+    "cache_read_input_tokens": 2016,
+    "output_tokens": 435,
+    "output_tokens_details": {
+     "thinking_tokens": 0
+    },
+    "server_tool_use": {
+     "web_search_requests": 0,
+     "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+     "ephemeral_1h_input_tokens": 338,
+     "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "global",
+    "iterations": [
+     {
+      "input_tokens": 2,
+      "output_tokens": 435,
+      "cache_read_input_tokens": 2016,
+      "cache_creation_input_tokens": 338,
+      "cache_creation": {
+       "ephemeral_5m_input_tokens": 0,
+       "ephemeral_1h_input_tokens": 338
+      },
+      "type": "message"
+     }
+    ],
+    "speed": "standard",
+    "fallback_credit": null
+   },
+   "notional_cost_usd": 0.023227199999999996,
+   "served_model": "claude-fable-5-2",
+   "spoken": "Yes, but only if you add an acid. Use about a third as much baking soda as the baking powder called for, plus something acidic like buttermilk, yogurt, lemon juice, vinegar, or cream of tartar."
+  },
+  {
+   "id": "led_purple",
+   "text": "When I mix blue and red light from an LED strip, I see purple. Are the waveforms collapsing to an average wavelength, the same as a single purple wavelength, or are my eyes seeing purple while red and blue are still emitted separately?",
+   "checks": [
+    "Red and blue spectral components remain; ordinary LED mixing does not average them into a new wavelength",
+    "Explains additive color perception through cone responses and brain interpretation",
+    "Distinguishes nonspectral purple/magenta from spectral violet",
+    "Does not confuse superposition with nonlinear frequency conversion or quantum collapse"
+   ],
+   "search_policy": "optional",
+   "reference_urls": [
+    "https://www.exploratorium.edu/snacks/colored-shadows"
+   ],
+   "reference_status": "agent_source_checked_not_human_approved",
+   "error": null,
+   "raw_text": "It's your eyes and brain: the red and blue light stay completely separate and never merge into one wavelength. In fact, the average of red and blue would be green, and the purple you see is a color your brain invents when red and blue cones fire together.\n\n===MORE===\nThe light waves do not collapse or average. Red light (around 630 nanometers) and blue light (around 460 nanometers) from the LED strip travel through the same space without changing each other. If you pointed a spectrometer or a prism at the purple glow, you would see two distinct peaks, one red and one blue, with nothing in between.\n\nThe purple happens in your visual system:\n- Your retina has three kinds of cone cells, most sensitive to long (reddish), medium (greenish), and short (bluish) wavelengths.\n- Red plus blue light stimulates the long and short cones strongly while leaving the medium cones mostly quiet.\n- Your brain interprets that particular pattern as purple or magenta.\n\nTwo details worth knowing:\n- A true average wavelength of red and blue would land around 540 to 550 nanometers, which is green, not purple. So averaging clearly is not what is happening.\n- Magenta and most purples are \"non-spectral\" colors: no single wavelength of light produces them. They exist only as a mix. Violet, at roughly 400 to 420 nanometers, is a real single wavelength that looks similar, but it is a different physical stimulus than a red-blue mix.\n\nThe same principle explains why a screen can show yellow using only red and green pixels: different mixes of light that trigger the cones in the same way look identical to you, even though the light itself is physically different. This is called metamerism.",
+   "first_token_ms": 488.7,
+   "spoken_ready_ms": 1306.8,
+   "separator_seen": true,
+   "total_ms": 6330.2,
+   "web_searches": 0,
+   "num_turns": 1,
+   "api_duration_ms": 6225,
+   "usage": {
+    "input_tokens": 2,
+    "cache_creation_input_tokens": 338,
+    "cache_read_input_tokens": 2071,
+    "output_tokens": 532,
+    "output_tokens_details": {
+     "thinking_tokens": 0
+    },
+    "server_tool_use": {
+     "web_search_requests": 0,
+     "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+     "ephemeral_1h_input_tokens": 338,
+     "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "global",
+    "iterations": [
+     {
+      "input_tokens": 2,
+      "output_tokens": 532,
+      "cache_read_input_tokens": 2071,
+      "cache_creation_input_tokens": 338,
+      "cache_creation": {
+       "ephemeral_5m_input_tokens": 0,
+       "ephemeral_1h_input_tokens": 338
+      },
+      "type": "message"
+     }
+    ],
+    "speed": "standard",
+    "fallback_credit": null
+   },
+   "notional_cost_usd": 0.0271182,
+   "served_model": "claude-fable-5-2",
+   "spoken": "It's your eyes and brain: the red and blue light stay completely separate and never merge into one wavelength. In fact, the average of red and blue would be green, and the purple you see is a color your brain invents when red and blue cones fire together."
+  }
+ ],
+ "scoring_status": "agent_review_pending_human_approval",
+ "measurement": "times from question write to a pre-warmed process; spoken_ready_ms = separator seen; no audio",
+ "finished_at": "2026-11-21T00:04:56+00:00",
+ "summary": {
+  "first_token_ms": {
+   "count": 6,
+   "p50_ms": 6337.7,
+   "p95_ms": 16101.9,
+   "max_ms": 17226.9
+  },
+  "spoken_ready_ms": {
+   "count": 6,
+   "p50_ms": 6736.4,
+   "p95_ms": 16105.6,
+   "max_ms": 17231.1
+  },
+  "total_ms": {
+   "count": 6,
+   "p50_ms": 9204.1,
+   "p95_ms": 16146.8,
+   "max_ms": 17276.5
+  },
+  "errors": 0,
+  "web_searches": 4,
+  "notional_cost_usd": 0.4634
+ }
+}
