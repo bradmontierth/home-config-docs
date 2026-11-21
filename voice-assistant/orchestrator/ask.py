@@ -172,6 +172,29 @@ def _history_messages(sat: str | None = None) -> list[dict]:
             out.append({"role": "assistant", "content": h["a"]})
     return out
 
+# Follow-up verdicts (Claude backend only). A follow-up is captured by an open
+# mic with no wake word, so before answering Claude says whether the words
+# are for it at all. Either token is the WHOLE reply; see _system_static.
+ESCAPE_NOT_FOR_ME = "===NOT_FOR_ME==="
+ESCAPE_COMMAND = "===COMMAND==="
+_ESCAPES = {ESCAPE_NOT_FOR_ME: "none", ESCAPE_COMMAND: "command"}
+
+
+def _escape_verdict(text: str) -> str | None:
+    """'none' / 'command' once the reply is known to be an escape token,
+    'answer' once it is known not to be, None while it could still be either
+    (the reply so far is a proper prefix of a token)."""
+    head = text.lstrip()
+    if not head:
+        return None
+    for token, verdict in _ESCAPES.items():
+        if head.startswith(token):
+            return verdict
+    if any(token.startswith(head) for token in _ESCAPES):
+        return None
+    return "answer"
+
+
 def _search_and_format_rules() -> str:
     """Everything after the room/date lines: when to search, the two-part
     reply format, the follow-up note. Shared by both backends' prompts."""
@@ -263,18 +286,43 @@ def _system_static() -> str:
         "with the spoken answer itself — no preamble, no HTML, no markdown.\n\n"
         "An <earlier> block, when present, holds the questions and answers "
         "from the last few minutes; the line after 'Question:' is the one to "
-        "answer now."
+        "answer now.\n\n"
+        "FOLLOW-UP TURNS. When <context> says 'Turn: follow-up', the words "
+        "were picked up by an open microphone in the seconds after your last "
+        "answer, with no wake word, so they may not be meant for you at all. "
+        "Decide first, then reply in exactly one of three ways:\n"
+        "1. They follow up on the <earlier> questions and answers, or are a "
+        "new knowledge question for you: answer normally, in the two-part "
+        "format.\n"
+        "2. They ask the house to DO something, or ask about the state of "
+        "this house — timers, alarms, lights, blinds, music or volume, "
+        "lists and reminders, announcements, cameras, the thermostat, the "
+        "time, the weather forecast, whether the kids napped, whether doors "
+        "are locked: reply with exactly "
+        f"{ESCAPE_COMMAND} and nothing else. Another part of the assistant "
+        "handles those.\n"
+        "3. They are not addressed to you — people talking to each other, a "
+        "child, the television, half a sentence, or anything that makes no "
+        "sense as a follow-up or a question: reply with exactly "
+        f"{ESCAPE_NOT_FOR_ME} and nothing else. When in doubt choose this; "
+        "answering a conversation nobody asked you to join is worse than "
+        "staying silent.\n"
+        "Never use those two replies on a turn that is not marked 'Turn: "
+        "follow-up'."
     )
 
 
-def _claude_prompt(query: str, sat: str | None = None) -> str:
+def _claude_prompt(query: str, sat: str | None = None,
+                   followup: bool = False) -> str:
     """One question for the Claude backend, with everything per-request."""
     now = datetime.now(ZoneInfo(config.ASK_TIMEZONE))
     parts = [
         "<context>\n"
         f"Room: {zones.spoken_for(sat)}\n"
         f"Local date and time: {now:%A, %B %d, %Y, %I:%M %p} (the user's home timezone)\n"
-        "</context>"
+        + ("Turn: follow-up (open microphone, no wake word)\n" if followup
+           else "Turn: wake word (addressed to you)\n")
+        + "</context>"
     ]
     history = _history_messages(sat)
     if history:
@@ -285,14 +333,19 @@ def _claude_prompt(query: str, sat: str | None = None) -> str:
     return "\n\n".join(parts)
 
 
-async def _answer_stream(query: str, sat: str | None, stats: dict):
+async def _answer_stream(query: str, sat: str | None, stats: dict,
+                         followup: bool = False):
     """Answer-text deltas from the configured backend. With ASK_BACKEND=claude
     the knowledge service answers; if it fails BEFORE any text (service down,
     every model failed), OpenRouter is tried so the turn still has a chance.
-    A failure after text has streamed propagates: no second, repeated answer."""
+    A failure after text has streamed propagates: no second, repeated answer.
+
+    `followup` (Claude only) marks the turn as an open-mic follow-up, which
+    arms the escape verdicts. There is no OpenRouter fallback for it: that
+    prompt has no verdict rules and would answer background talk."""
     if config.ASK_BACKEND == "claude":
         inner = claude_knowledge.stream_chat(
-            _system_static(), _claude_prompt(query, sat), stats=stats)
+            _system_static(), _claude_prompt(query, sat, followup), stats=stats)
         started = False
         try:
             async for delta in inner:
@@ -300,7 +353,7 @@ async def _answer_stream(query: str, sat: str | None, stats: dict):
                 yield delta
             return
         except Exception as exc:  # noqa: BLE001
-            if started:
+            if started or followup:
                 raise
             log.warning("claude knowledge failed before any text (%s) -> openrouter", exc)
         finally:
@@ -375,11 +428,27 @@ async def _stream_full(query: str, entry: dict, last: dict, initial: str, agen,
     await events.emit("ask_full", query=query, text=_strip_links(acc), done=True)
 
 
-async def handle_ask(query: str, sat: str | None = None) -> dict:
+def followup_direct() -> bool:
+    """Whether a follow-up to a knowledge answer may go straight to Claude."""
+    return config.ASK_BACKEND == "claude" and config.ASK_FOLLOWUP_DIRECT
+
+
+async def handle_ask(query: str, sat: str | None = None, *,
+                     followup: bool = False, on_accept=None) -> dict:
     """Stream the answer up to the sentinel and return the short spoken part.
     Spawns a background task to finish streaming the full part to the dashboard.
 
     Returns {"response": <spoken>, "full": <full-so-far>, "ok": bool}.
+
+    `followup=True` (2026-11-20, Claude backend): the words came from the open
+    mic after a knowledge answer and went past the local intent classifier,
+    so Claude first rules on whether they are for it. The result then may be
+    {"escape": "none"} (not addressed to us: drop silently) or
+    {"escape": "command"} (a household request, or Claude was unreachable:
+    hand the turn to the classifier). Nothing is shown, spoken, remembered or
+    filed for an escape. `on_accept` is awaited once, the moment the reply is
+    known to be a real answer and before any answer event, so the caller can
+    put the transcript on the display first.
     """
     query = query.strip()
     if not query:
@@ -387,18 +456,35 @@ async def handle_ask(query: str, sat: str | None = None) -> dict:
 
     # Use the asking satellite's own endpoint. Zone-routed and unknown rooms
     # stay silent rather than leaking the filler through the kitchen default.
-    if _should_play_legacy_filler(sat):
+    # Never on a follow-up: it may turn out not to be for us.
+    if not followup and _should_play_legacy_filler(sat):
         asyncio.create_task(_play_filler(sat))
 
     stats: dict = {}
-    agen = _answer_stream(query, sat, stats)
+    agen = _answer_stream(query, sat, stats, followup)
     acc = ""
     spoken: str | None = None
     remainder = ""
     stream_alive = False
+    verdict = None if followup else "answer"
+
+    async def _escape(kind: str) -> dict:
+        try:
+            await agen.aclose()
+        except Exception:  # noqa: BLE001
+            pass
+        log.info("ask follow-up verdict=%s: %r", kind, query)
+        return {"escape": kind, "response": "", "full": "", "ok": False}
+
     try:
         async for delta in agen:
             acc += delta
+            if verdict is None:
+                verdict = _escape_verdict(acc)
+                if verdict in ("none", "command"):
+                    return await _escape(verdict)
+                if verdict == "answer" and on_accept is not None:
+                    await on_accept()
             if SENTINEL in acc:
                 idx = acc.index(SENTINEL)
                 spoken = acc[:idx].strip()
@@ -412,11 +498,18 @@ async def handle_ask(query: str, sat: str | None = None) -> dict:
             await agen.aclose()
         except Exception:  # noqa: BLE001
             pass
-        if not acc.strip():
+        if not acc.strip() or verdict is None:
+            if followup:
+                # Claude never ruled: let the classifier decide, as before.
+                return await _escape("command")
             return {
                 "response": "Sorry, I couldn't reach the knowledge service.",
                 "full": "", "ok": False,
             }
+
+    if verdict is None:
+        # Stream ended on nothing, or on a bare fragment of a token.
+        return await _escape("command" if not acc.strip() else "none")
 
     if spoken is None:
         # No sentinel: whole reply is the answer. Speak a truncated version,

@@ -75,7 +75,8 @@ SESSION_TTL_S = 90.0
 
 
 def _new_session() -> dict:
-    return {"ts": 0.0, "summary": "", "last_added": [], "pending": None}
+    return {"ts": 0.0, "summary": "", "last_added": [], "pending": None,
+            "last_intent": None}
 
 
 _SESSION: dict = _new_session()  # kitchen/default compatibility for old callers/tests
@@ -154,11 +155,21 @@ def _affirmation(text: str) -> str | None:
     return None
 
 
-def session_note(summary: str) -> None:
+def session_note(summary: str, intent: str | None = None) -> None:
     """Record a one-line summary of what the last actionable turn did."""
     session = _session()
     session["summary"] = summary
+    session["last_intent"] = intent
     session["ts"] = time.time()
+
+
+def session_last_was_ask() -> bool:
+    """The turn just before this one, in this room, was a knowledge answer
+    and is still fresh. Such a follow-up goes to Claude rather than the local
+    classifier (see handle_command)."""
+    session = _session()
+    return (session.get("last_intent") == "ask"
+            and time.time() - session["ts"] <= SESSION_TTL_S)
 
 
 def session_set_added(items: list[dict]) -> None:
@@ -633,7 +644,7 @@ async def _finalize(result: dict, intent: str) -> dict:
     await _turn_event(
         "response", text=result["response"], audio_url=result["audio_url"], intent=intent
     )
-    session_note(_summarize_turn(intent, result))
+    session_note(_summarize_turn(intent, result), intent)
     return result
 
 
@@ -803,6 +814,7 @@ async def handle_command(command: str, followup: bool = False,
         session_clear_pending()   # user moved on -> abandon the pending op
 
     context = session_context() if followup else None
+    ask_pre: dict | None = None     # a follow-up Claude already answered
     if not followup and not salvage:
         await _turn_event("thinking", command=command)
     # Deterministic room-scoped fast path, analogous to HA's local intent
@@ -865,6 +877,40 @@ async def handle_command(command: str, followup: bool = False,
         parsed = fast
         log.info("deterministic %s bypassed classifier: %r",
                  parsed["intent"], command)
+    elif (followup and not salvage and ask_mod.followup_direct()
+          and session_last_was_ask()):
+        # Follow-up to a knowledge answer (2026-11-20). The local classifier
+        # sees only a one-line summary of that answer and dropped "what about
+        # with the skin on" as not-for-us; Claude has the whole exchange, so
+        # it both judges and answers. Exact commands were already taken by
+        # the deterministic branches above; a full-sentence command matched
+        # here needs no model at all.
+        if (fast := intent_mod.fast_parse(command)) is not None:
+            parsed = fast
+            log.info("deterministic %s on an ask follow-up: %r",
+                     parsed["intent"], command)
+        else:
+            async def _accepted() -> None:
+                # Claude ruled it a real follow-up: only now may it show.
+                await _turn_event("transcript", text=command)
+                await _turn_event("thinking", command=command)
+                await _turn_event("ask_thinking", query=command)
+
+            ask_pre = await ask_mod.handle_ask(
+                command, _CUR_SAT.get(), followup=True, on_accept=_accepted)
+            escape = ask_pre.get("escape")
+            if escape == "none":
+                ask_pre = None
+                parsed = intent_mod.validate({"intent": "none"})
+            elif escape == "command":
+                # A household request (or Claude was unreachable): the
+                # classifier handles it exactly as it always has.
+                ask_pre = None
+                log.info("ask follow-up handed to the classifier: %r", command)
+                parsed = await intent_mod.parse(
+                    command, context=context, sat=_CUR_SAT.get())
+            else:
+                parsed = intent_mod.validate({"intent": "ask", "query": command})
     else:
         parsed = await intent_mod.parse(
             command, context=context, sat=_CUR_SAT.get())
@@ -947,9 +993,10 @@ async def handle_command(command: str, followup: bool = False,
         # satellite reads intent "none" and closes the follow-up window.
         log.info("followup dropped as not-for-us: %r", command)
         return {"intent": "none", "response": "", "ok": False, "silent": True}
-    if followup:
+    if followup and ask_pre is None:
         # Actionable follow-up: surface caption + thinking now (deferred past the
-        # none gate so background chatter never flashes on the dashboard).
+        # none gate so background chatter never flashes on the dashboard). An
+        # ask follow-up Claude accepted has already shown both.
         await _turn_event("transcript", text=command)
         await _turn_event("thinking", command=command)
 
@@ -1505,8 +1552,11 @@ async def handle_command(command: str, followup: bool = False,
 
     elif intent == "ask":
         query = parsed.get("query") or command
-        await _turn_event("ask_thinking", query=query)
-        ask_result = await ask_mod.handle_ask(query, _CUR_SAT.get())
+        if ask_pre is not None:
+            ask_result = ask_pre        # answered while routing the follow-up
+        else:
+            await _turn_event("ask_thinking", query=query)
+            ask_result = await ask_mod.handle_ask(query, _CUR_SAT.get())
         result["response"] = ask_result["response"]
         result["full"] = ask_result.get("full", "")
         result["ok"] = ask_result["ok"]

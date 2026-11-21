@@ -73,6 +73,9 @@ class AskFillerDispatchTest(unittest.IsolatedAsyncioTestCase):
         filler = AsyncMock()
         with (
             patch.object(ask.config, "ASK_FILLER", False),
+            # Pin the backend: the deployed container sets ASK_BACKEND=claude,
+            # and an unpinned run would call the live knowledge service.
+            patch.object(ask.config, "ASK_BACKEND", "openrouter"),
             patch.object(
                 ask.zones,
                 "route_for",

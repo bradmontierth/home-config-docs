@@ -140,6 +140,89 @@ class BackendChainTest(unittest.IsolatedAsyncioTestCase):
         self.assertIn("couldn't reach the knowledge service", result["response"])
 
 
+class FollowupVerdictTest(unittest.IsolatedAsyncioTestCase):
+    """handle_ask(followup=True): Claude rules on an open-mic follow-up before
+    anything is shown, spoken, remembered or filed (2026-11-20)."""
+
+    def setUp(self):
+        self.emit = AsyncMock()
+        self.record = patch.object(ask.answers_mod, "record", return_value=None)
+        for p in (patch.object(config, "ASK_BACKEND", "claude"),
+                  patch.object(ask.config, "ASK_FILLER", False),
+                  patch.object(ask.events, "emit", new=self.emit),
+                  patch.object(ask.answers_mod, "finish")):
+            p.start()
+            self.addCleanup(p.stop)
+        self.record_mock = self.record.start()
+        self.addCleanup(self.record.stop)
+
+    def test_verdict_function(self):
+        v = ask._escape_verdict
+        self.assertIsNone(v(""))
+        self.assertIsNone(v("  \n"))
+        self.assertIsNone(v("=="))                      # could still be a token
+        self.assertIsNone(v("===NOT_FOR"))
+        self.assertEqual(v("===NOT_FOR_ME==="), "none")
+        self.assertEqual(v("\n===NOT_FOR_ME===\n"), "none")
+        self.assertEqual(v("===COMMAND==="), "command")
+        self.assertEqual(v("Skin on is fine."), "answer")
+        self.assertEqual(v("===MORE==="), "answer")     # the answer separator is not an escape
+        self.assertEqual(v("=x"), "answer")
+
+    async def _ask(self, *chunks, fail_with=None, followup=True):
+        accepted = AsyncMock()
+        with patch.object(ask.claude_knowledge, "stream_chat",
+                          return_value=_chunks(*chunks, fail_with=fail_with)) as claude, \
+             patch.object(ask.openrouter, "stream_chat", new=AsyncMock()) as orouter:
+            r = await ask.handle_ask("come on kids do you want food", "kitchen",
+                                     followup=followup, on_accept=accepted)
+        return r, accepted, claude, orouter
+
+    async def test_not_for_me_is_silent(self):
+        r, accepted, claude, _ = await self._ask("===NOT_", "FOR_ME===")
+        self.assertEqual(r["escape"], "none")
+        accepted.assert_not_awaited()
+        self.emit.assert_not_awaited()
+        self.record_mock.assert_not_called()
+        self.assertIn("Turn: follow-up", claude.call_args.args[1])
+
+    async def test_command_verdict(self):
+        r, accepted, _, _ = await self._ask("===COMMAND===")
+        self.assertEqual(r["escape"], "command")
+        accepted.assert_not_awaited()
+        self.emit.assert_not_awaited()
+
+    async def test_real_followup_is_answered_and_accept_fires_first(self):
+        order = []
+        accepted = AsyncMock(side_effect=lambda: order.append("accept"))
+        self.emit.side_effect = lambda *a, **k: order.append("event")
+        with patch.object(ask.claude_knowledge, "stream_chat",
+                          return_value=_chunks("Skin on ", "is fine.\n", ask.SENTINEL,
+                                               "\nThin slices only.")):
+            r = await ask.handle_ask("what about with the skin on", "kitchen",
+                                     followup=True, on_accept=accepted)
+        self.assertNotIn("escape", r)
+        self.assertEqual(r["response"], "Skin on is fine.")
+        accepted.assert_awaited_once()
+        self.assertEqual(order[0], "accept")
+
+    async def test_claude_unreachable_hands_the_turn_to_the_classifier(self):
+        r, accepted, _, orouter = await self._ask(fail_with=RuntimeError("service down"))
+        self.assertEqual(r["escape"], "command")
+        orouter.assert_not_called()         # no verdict-less fallback on a follow-up
+        accepted.assert_not_awaited()
+
+    async def test_wake_turn_prompt_is_not_marked_followup(self):
+        with patch.object(ask, "_history_messages", return_value=[]):
+            self.assertIn("Turn: wake word", ask._claude_prompt("q", "kitchen"))
+            self.assertIn("Turn: follow-up", ask._claude_prompt("q", "kitchen", True))
+
+    def test_static_prompt_defines_both_escapes(self):
+        st = ask._system_static()
+        self.assertIn(ask.ESCAPE_NOT_FOR_ME, st)
+        self.assertIn(ask.ESCAPE_COMMAND, st)
+
+
 class _FakeService(BaseHTTPRequestHandler):
     lines: list[dict] = []
     seen: dict = {}

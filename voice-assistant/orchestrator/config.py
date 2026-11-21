@@ -316,6 +316,11 @@ CLAUDE_KNOWLEDGE_URL = os.getenv(
     "CLAUDE_KNOWLEDGE_URL", "http://127.0.0.1:8816").rstrip("/")
 CLAUDE_KNOWLEDGE_READ_TIMEOUT_S = float(
     os.getenv("CLAUDE_KNOWLEDGE_READ_TIMEOUT_S", "100"))
+# A follow-up right after a knowledge answer skips the local intent classifier
+# and goes to Claude, which also rules on whether the words were for us at all
+# (2026-11-20: the classifier dropped "what about with the skin on" as
+# not-for-us). Claude backend only. 0 = follow-ups use the classifier again.
+ASK_FOLLOWUP_DIRECT = os.getenv("ASK_FOLLOWUP_DIRECT", "1") not in ("0", "false", "no", "")
 # Web search via OpenRouter's web plugin. "native" passes through to the
 # provider's own search tool (OpenAI: model decides per-query whether to
 # search, so no-search questions stay fast). Set OPENROUTER_WEB_SEARCH=0 to

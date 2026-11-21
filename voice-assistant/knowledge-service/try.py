@@ -4,6 +4,8 @@
     ./try.py "how much juice is in a lime"
     ./try.py --room kitchen --when "Saturday, September 12, 2026, 08:40 PM" \
              --earlier "Q: ...|A: ..." "what about with the skin on?"
+    ./try.py --followup --earlier "Q: ...|A: ..." "come on kids, do you want food"
+        (a follow-up may come back as ===NOT_FOR_ME=== or ===COMMAND===)
 
 The system prompt is read from the running orchestrator (ask._system_static),
 so this exercises exactly what production sends. Nothing is spoken, shown on
@@ -25,6 +27,8 @@ ap.add_argument("--earlier", default="", help="'Q: ...|A: ...' lines, | separate
 ap.add_argument("--url", default="http://127.0.0.1:8816")
 ap.add_argument("--orch-root", default="/app", help="package root inside the container")
 ap.add_argument("--full", action="store_true", help="print the full answer too")
+ap.add_argument("--followup", action="store_true",
+                help="mark the turn as an open-mic follow-up (arms the escape verdicts)")
 a = ap.parse_args()
 
 system = subprocess.run(
@@ -32,8 +36,10 @@ system = subprocess.run(
      "import logging; logging.disable(logging.CRITICAL)\n"
      "from orchestrator import ask; print(ask._system_static(), end='')"],
     capture_output=True, text=True, check=True).stdout
+turn = ("Turn: follow-up (open microphone, no wake word)" if a.followup
+        else "Turn: wake word (addressed to you)")
 parts = [f"<context>\nRoom: {a.room}\nLocal date and time: {a.when} "
-         "(the user's home timezone)\n</context>"]
+         f"(the user's home timezone)\n{turn}\n</context>"]
 if a.earlier:
     parts.append("<earlier>\n" + "\n".join(a.earlier.split("|")) + "\n</earlier>")
 parts.append(f"Question: {a.question}")
