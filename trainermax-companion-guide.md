@@ -128,6 +128,15 @@ on every refresh; a second refresher would break the live proxy.
   `strava-proxy-portal-gate:pre-sports-20261121t021014z`.
 - Tests: `test_sports.py` (companion; run in the image with `--tmpfs /data`), `portal-gate/test_gate.py`.
 
+## Cycling Team page
+
+**Deployed 2026-11-21.** `/a/<athlete>/bike/team` (bike nav "Team"; LAN nav "Team" opens it for
+the last-picked athlete). API `GET /api/portal/<athlete>/bike/team` (`ridestore.team_card`):
+every rider with cycling on, the viewer first, with FTP, W/kg (from the player state's weight;
+raw weight is not sent), idle-decayed levels, this week vs last, 12 weeks of TSS and the last 5
+rides of at least 2 min (summary numbers only). Only your own rides link to their detail.
+Running-only athletes get 404. Rollback tags `pre-team-20261121t145150z` (companion + gate).
+
 ## Read-only troubleshooting
 
 ```bash
