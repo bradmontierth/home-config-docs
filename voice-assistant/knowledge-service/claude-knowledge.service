@@ -1,0 +1,15 @@
+[Unit]
+Description=Voice assistant knowledge service (claude CLI on the household subscription, 127.0.0.1:8816)
+After=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/pi/home_config/voice-assistant/knowledge-service
+Environment=KNOWLEDGE_MODELS=claude-fable-5-2:low,claude-opus-5-5:low
+Environment=PATH=/home/pi/.local/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=/usr/bin/python3 /home/pi/home_config/voice-assistant/knowledge-service/server.py
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=default.target

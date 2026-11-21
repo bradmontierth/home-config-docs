@@ -306,6 +306,16 @@ OPENROUTER_MAX_TOKENS = int(os.getenv("OPENROUTER_MAX_TOKENS", "4000"))
 OPENROUTER_REASONING_EFFORT = os.getenv("OPENROUTER_REASONING_EFFORT", "medium")
 # Sentinel separating the short spoken answer from the full dashboard answer.
 ASK_SENTINEL = os.getenv("ASK_SENTINEL", "===MORE===")
+# Which engine answers `ask` (2026-11-20). "claude" = the host-side knowledge
+# service (voice-assistant/knowledge-service: claude CLI on the household
+# subscription, Fable 5.2 low with Opus 5.5 low behind it); OpenRouter is then
+# only the fallback when that service fails before producing any text.
+# "openrouter" = the old direct path.
+ASK_BACKEND = os.getenv("ASK_BACKEND", "openrouter").strip().lower()
+CLAUDE_KNOWLEDGE_URL = os.getenv(
+    "CLAUDE_KNOWLEDGE_URL", "http://127.0.0.1:8816").rstrip("/")
+CLAUDE_KNOWLEDGE_READ_TIMEOUT_S = float(
+    os.getenv("CLAUDE_KNOWLEDGE_READ_TIMEOUT_S", "100"))
 # Web search via OpenRouter's web plugin. "native" passes through to the
 # provider's own search tool (OpenAI: model decides per-query whether to
 # search, so no-search questions stay fast). Set OPENROUTER_WEB_SEARCH=0 to
