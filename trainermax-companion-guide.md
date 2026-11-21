@@ -136,6 +136,8 @@ every rider with cycling on, the viewer first, with FTP, W/kg (from the player s
 raw weight is not sent), idle-decayed levels, this week vs last, 12 weeks of TSS and the last 5
 rides of at least 2 min (summary numbers only). Only your own rides link to their detail.
 Running-only athletes get 404. Rollback tags `pre-team-20261121t145150z` (companion + gate).
+Android app 1.6.0 (published 2026-11-21) shows the page in a Ride-mode **Team** tab (WebView,
+UA tag `TrainerMaxApp`; `tm.js` adds `.inapp`, which hides the web header).
 
 ## Read-only troubleshooting
 
