@@ -227,6 +227,12 @@ Current high-level layout:
 - Cameras are portrait buttons; Doorbell uses `doorbell.png`.
 - The old in-page `Close video` button was removed because VLC is external and
   the display-side overlay is the reliable control surface.
+- Voice `ask` answers (2026-11-20) have two views in `#assistant-popup.ask-mode`:
+  glance (spoken headline auto-fit 88→52px, faded peek + "Full answer" tab) and
+  read (`.ask-read`: tap anywhere; headline becomes a header bar, tap it to go
+  back; full answer fills the screen with ▲/▼ page buttons). Full answers render
+  light markdown via `renderAnswerText()` (DOM only, no innerHTML), shared with
+  the past-answers browser. Logic: `askSetView` / `askFitHeadline` in `app.js`.
 
 Energy / vehicle details:
 
