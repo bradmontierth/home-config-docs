@@ -113,6 +113,17 @@ on every refresh; a second refresher would break the live proxy.
   -e ATHLETES=... --network strava-proxy_default -v <copy dir>:/data -p 127.0.0.1:8199:8080 <image>`, no `.env`, so no
   Strava sync; the worker endpoints need coach.py's token and the compose network; `TRAINERMAX_URL=http://127.0.0.1:8199` for coach.py).
 
+- Coach behaviour (2026-11-21, trainer_max 20f7657): chat prompt `chat_v11.md`; every coach proposal applies at once
+  (Undo; no Apply button), and one the app couldn't apply is told to the coach next turn (`yourLastChangeNotApplied`).
+  The coach can edit the athlete's About list (`about` proposal, 25 lines max). `coach/prompts/app_reference.md`
+  (how the fitness model, race anchor, illness pause, paces and Monday check work) is filled into the chat, race and
+  Monday prompts via `{app_reference}`: update it when the model or the Monday check changes.
+- Monday check (`portal.adapt_week`): routine decisions keep the workouts already on the next `STABLE_WEEKS` (3)
+  weeks (type and day; paces refreshed); sick/hurt/missed/break/recovery/travel/rundown reshape. Paces move at most
+  2 % a week either way (slower only after 3 Mondays). Week mark `hrhigh` holds paces the next Monday.
+  The Monday push is written by the coach (`monday_v1.md`, `coach.monday`), which may hold slowed paces or change
+  this week's days (`/api/coach/monday/{a}/review`); if that fails, the check's own text goes out.
+
 ## Who rides, who runs (per-athlete setting)
 
 **Deployed 2026-11-20** (trainer_max b1c6deb). Each athlete has cycling and running on or off:
