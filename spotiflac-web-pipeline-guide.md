@@ -1,6 +1,6 @@
 # SpotiFLAC Web Pipeline Guide
 
-Last updated: 2026-09-10
+Last updated: 2026-11-22
 
 This documents the SpotiFLAC web app integration built for searching Spotify, queueing music downloads on the Plex Pi, importing validated files into the shared music library, and refreshing Navidrome.
 
@@ -411,6 +411,48 @@ The old file is in `/media/externalHDD/downloads/spotiflac/replaced-20261101/`.
 Tracks downloaded before this patch have no record of which video was used.
 Low loudness alone doesn't prove a live recording; many Mannheim Steamroller
 tracks are just quiet.
+
+### Per-track download provenance (2026-11-22)
+
+Every track now records where it came from and why, in the job database, so
+it survives container restarts (the docker logs only cover the last
+restart, ≤30 MB).
+
+- `job_tracks.download_details` (JSON) per track:
+  - `provider_errors`: why each provider before the winner failed (e.g. tidal
+    TRACK_NOT_FOUND, qobuz UNAVAILABLE, amazon DNS failure, spoti WAF block).
+  - `youtube.searches[]`: query, expected seconds, and **every** search result
+    with title, channel, duration, views and score (≥ 6 is kept as a candidate).
+  - `youtube.attempted`, `youtube.rejected` (validation errors),
+    `youtube.selected_video`, `youtube.via` (yt-dlp / Cobalt / YT1D).
+- One `info` event per track, shown in the job log, e.g.
+  `Mannheim Steamroller - Fum Fum Fum: downloaded via youtube; YouTube video
+  8X8zedKsiPo (yt-dlp); 7 provider(s) failed first`. Its `details_json` holds
+  the same JSON.
+
+How it flows: `youtube.py` `download_track` is a wrapper around
+`_download_track_impl` that attaches the trace to `DownloadResult.details`
+(new optional field in `core/models.py`). `downloader.download_one` adds
+`provider_errors`, and `_record_result` writes `details` into
+`.spotiflac-downloads.jsonl`. `app.py` `record_details()` stores it while it
+applies the manifest. Backups: `*.before-trace-20261122` next to each of the 4
+files, image tag `spotiflac-service-spotiflac-api:before-trace-20261122`.
+
+Query a track:
+
+```bash
+ssh plex "python3 -c \"import sqlite3,json;c=sqlite3.connect('/home/pi/spotiflac-service/state/spotiflac-web.sqlite3');print(json.dumps(json.loads(c.execute(\\\"select download_details from job_tracks where title like '%Fum%' order by id desc\\\").fetchone()[0]),indent=1))\""
+```
+
+Tracks downloaded before 2026-11-22 have no details (and pre-2026-11-01 picks
+have no log at all). To identify which upload an old file came from, download
+the candidates and compare exact duration + mean volume with `ffmpeg
+volumedetect`. That matched Fum Fum Fum to fan upload `SYyetiB4Jh8` (286.1 s,
+−11.6 dB, "Miss Magnolia", 687 views); the old pre-patch picker had chosen it.
+It was replaced on 2026-11-22 with the official `8X8zedKsiPo`
+(mannheimsteamroller channel, 293.5 s, −16.0 dB). The old file is in
+`/media/externalHDD/downloads/spotiflac/replaced-20261122/`. All 7 lossless
+providers still failed for it on 2026-11-22.
 
 Common failure types seen:
 
