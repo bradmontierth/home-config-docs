@@ -145,7 +145,7 @@ on every refresh; a second refresher would break the live proxy.
   link's upload scope and the run backfill follow the setting), then add them to
   `cecret_lake/trainer_max/portal_gate_users.json` and verify their SES address if they sign in by email.
 - State 2026-11-20: brad, adrienne = both; rachel = running only; corbin = cycling only.
-- 2026-11-22: matt (Brad's cousin, mattandelin@gmail.com, email codes) added cycling only; SES recipient verification still owed.
+- 2026-11-22: matt (Brad's cousin, mattandelin@gmail.com, email codes) added cycling only; SES identity created 2026-11-22 (temp root key deleted), Matt must click AWS's verification email.
 - Rollback images: `strava-proxy-strava-proxy:pre-sports-20261121t021014z`,
   `strava-proxy-portal-gate:pre-sports-20261121t021014z`.
 - Tests: `test_sports.py` (companion; run in the image with `--tmpfs /data`), `portal-gate/test_gate.py`.
