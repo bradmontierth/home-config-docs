@@ -161,6 +161,20 @@ Running-only athletes get 404. Rollback tags `pre-team-20261121t145150z` (compan
 Android app 1.6.0 (published 2026-11-21) shows the page in a Ride-mode **Team** tab (WebView,
 UA tag `TrainerMaxApp`; `tm.js` adds `.inapp`, which hides the web header).
 
+## Team workouts + builder
+
+**Deployed 2026-11-23** (trainer_max 4207979, 5c168a4). `workouts.py`, own SQLite `data/workouts.db`.
+Routes under `/api/portal/<athlete>/player/workouts` (riders only): GET list (every rider's), POST
+create, PUT/DELETE `/{id}` (owner only; delete is soft), POST `/{id}/copy`, POST `/generate`
+(`{text, current?}` → a workout, not saved). Generate relays to the GX10 LLM
+(`WORKOUT_LLM_URL`, default `http://192.168.10.187:8095`, model `qwen3-next`), prompt and
+duration fit ported from the app's GenerationClient; 30/day per rider in the companion AND the gate
+(gate timeout 150 s for that path). Ride page: Team + Build tabs (`static/player-workouts.js`; the
+gate's STATIC list must include it). Android 1.7.0 `TeamWorkoutSync` uploads the phone's own
+custom/described workouts keeping their `custom_<ms>`/`gen_<ms>` id, pulls everyone's (Room v4
+owner/ownerName), drops ones deleted on the web. The app has no edit/delete; the web does that.
+Rollback tags `pre-workouts-20261123t145801z` (companion + gate).
+
 ## Read-only troubleshooting
 
 ```bash
