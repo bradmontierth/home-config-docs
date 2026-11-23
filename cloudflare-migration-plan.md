@@ -1,6 +1,6 @@
 # Cloudflare migration plan: own domain, Trainer Max off the Funnel, car audio
 
-2026-11-21. Status: PLAN ONLY. Nothing bought, deployed or changed. Written after reading the live Funnel
+2026-11-21. Status: Phase 0 done 2026-11-23 (domain + token, §0a); nothing deployed yet. Written after reading the live Funnel
 config, `companion/deploy/strava_gate.py`, `companion/portal-gate/gate.py`, `companion/strava-hook/hook.py`,
 `companion/strava-proxy/hooks.py`, `desktop/main.js` and `realtime/CAR-AUDIO-PLAN.md`.
 
@@ -15,7 +15,20 @@ config, `companion/deploy/strava_gate.py`, `companion/portal-gate/gate.py`, `com
   home still fetches the activity from Strava itself. Removes one always-on listener at home.
 - **End state:** WAN = WireGuard + Funnel with ONE always-on path (the portal gate) + outbound-only
   connections to Cloudflare. Phase 0 (domain, account lockdown, card for R2) is still step one.
-- Still open: the domain name; when to do the webhook (any time; car audio first, it's in season).
+- Still open: when to do the webhook (any time; car audio first, it's in season).
+
+## 0a. Phase 0 DONE 2026-11-23
+
+- **Domain: `rooflinehouse.com`**, bought at Cloudflare Registrar in Brad's existing Cloudflare account (the
+  same account/login as illuminatehealthanalytics.com; one account is fine). Show at the apex or `lights.`,
+  webhooks at `hooks.`. Tesla public key stays on illuminatehealthanalytics.com until the Fleet partner app is
+  re-registered.
+- **API token:** `/home/pi/cecret_lake/cloudflare/api_token` (dir 700, file 600). "Edit Cloudflare Workers"
+  template + DNS Edit + Queues Edit, IP-filtered to the home WAN address (135.129.158.82 on 2026-11-23;
+  if the ISP changes it the token fails auth until that field is edited), no expiry.
+- **The token can reach BOTH zones, and Brad chose that on purpose** (2026-11-23: Claude already manages the
+  illuminate side, so per-zone separation adds little; the IP filter covers a leaked token). Don't "fix" it.
+  Still: never change illuminatehealthanalytics.com records from this project unless asked.
 
 ## 1. Review: what we have, and what the earlier proposal got wrong
 
