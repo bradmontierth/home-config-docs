@@ -124,6 +124,16 @@ on every refresh; a second refresher would break the live proxy.
   The Monday push is written by the coach (`monday_v1.md`, `coach.monday`), which may hold slowed paces or change
   this week's days (`/api/coach/monday/{a}/review`); if that fails, the check's own text goes out.
 
+- Strava allowance + Garmin copies (2026-11-24, trainer_max 2b02d0a, d884d20): Strava's limit is one pot for every
+  athlete (200 reads / 15 min, 2,000 / day, reset 00:00 UTC = 5 pm MST). `stravalimit.py` tracks usage; history
+  backfills stop at half of either window, quick syncs and webhook fetches don't. Runs can also come from Garmin:
+  `coach/garmin.py import --athlete A [--dry]` reads the original watch file (keys in `cecret_lake/garmin/`, host only:
+  brad = `personal-api`, others by name; Adrienne has none yet) and posts a "Garmin copy" stored as `g<activity id>`
+  (`garminrun.py`). When Strava's copy of the same run arrives (start within 120 s) it takes over the note, notify
+  state and labels, and the copy is deleted. A Garmin copy's note waits 20 min for Strava's title. Sync requests come
+  from "Sync now" on the portal (`POST /api/portal/{a}/sync`) or from the webhook handler when Strava can't be
+  fetched; `notifyd.garmin_requests()` answers them (log: `garmin sync (button|strava)`).
+
 ## Who rides, who runs (per-athlete setting)
 
 **Deployed 2026-11-20** (trainer_max b1c6deb). Each athlete has cycling and running on or off:
