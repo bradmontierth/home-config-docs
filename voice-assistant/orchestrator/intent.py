@@ -1096,6 +1096,60 @@ def fast_parse_cover_level(command: str, sat: str | None = None) -> dict | None:
     return None
 
 
+# The position alone, after a turn that already named the blind: "fifty
+# percent closed", "make it 30 open", "halfway". 2026-11-25 family room: the
+# blind was heard, the number wasn't, and the follow-up "Fifty percent close."
+# was refused because nothing carried the blind forward. The app supplies the
+# target from the room's session; this only reads the level. A bare number is
+# NOT enough (a follow-up window also hears the TV): it needs "percent", a
+# state word, a verb, or "halfway".
+_COVER_FOLLOW_LEAD = re.compile(
+    r"^(?:(?:actually|no|sorry|um|uh|and|just|i said|i meant|make that|"
+    r"like|okay|ok|oh)\s+)+")
+_COVER_PRONOUN = r"(?:it|them|that|those|this|the blinds?|the shades?|the blind|the shade)"
+_COVER_FOLLOW_RE = re.compile(
+    rf"^(?:(?P<verb>{_COVER_VERBS}|make)\s+(?:{_COVER_PRONOUN}\s+)?)?"
+    r"(?:(?P<prep>to|at)\s+)?(?:about\s+|around\s+|like\s+)?"
+    r"(?P<amount>\d+|[a-z]+(?:\s+[a-z]+)??)"
+    r"(?P<pct>\s*(?:percent|per cent))?"
+    r"(?:\s+(?P<state>open|closed|close|down|up))?$"
+)
+_COVER_FOLLOW_HALF_RE = re.compile(
+    rf"^(?:(?P<verb>{_COVER_VERBS}|make)\s+(?:{_COVER_PRONOUN}\s+)?)?"
+    r"(?:half\s?way|half\s+down|half\s+up|to\s+half|half)"
+    r"(?:\s+(?P<state>open|closed|close|down|up))?$"
+)
+
+
+def fast_parse_cover_followup(command: str, target: str | None) -> dict | None:
+    """A bare blind position for the blind the last turn named, or None."""
+    if not target or re.search(r"(?<!\w)[+-]\s*\d|\d[.,]\d", command or ""):
+        return None
+    text = _COVER_FOLLOW_LEAD.sub("", _fast_clean(command)).strip()
+    match = _COVER_FOLLOW_HALF_RE.fullmatch(text)
+    if match and text == "half":
+        return None   # too common a word to act on alone
+    if match:
+        amount = 50
+    else:
+        match = _COVER_FOLLOW_RE.fullmatch(text)
+        if not match or not (match.group("verb") or match.group("pct")
+                             or match.group("state")):
+            return None
+        amount = _cover_amount(match.group("amount"))
+        if amount is None:
+            return None
+    verb, state = match.group("verb"), match.group("state")
+    if state in ("closed", "close", "down"):
+        closing = True
+    elif state in ("open", "up"):
+        closing = False
+    else:
+        closing = verb in _COVER_VERBS_CLOSE
+    return _validate({"intent": "cover_set", "cover_target": target,
+                      "cover_position": 100 - amount if closing else amount})
+
+
 # "set the temperature to 72" -- the other home command carrying a number.
 # Anchored like the cover grammar: a verb (or a bare "N degrees"), a thing
 # that means the thermostat, then the number after "to"/"at". Two bands: a

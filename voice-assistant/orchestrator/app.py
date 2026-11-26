@@ -187,6 +187,22 @@ def session_last_added() -> list[dict]:
     return session["last_added"]
 
 
+def session_set_cover(target: str | None) -> None:
+    """Remember the blind this room's turn was about (see
+    intent.fast_parse_cover_followup)."""
+    if target:
+        session = _session()
+        session["last_cover"] = target
+        session["cover_ts"] = time.time()
+
+
+def session_last_cover() -> str | None:
+    session = _session()
+    if time.time() - session.get("cover_ts", 0.0) > SESSION_TTL_S:
+        return None
+    return session.get("last_cover")
+
+
 def session_context() -> str | None:
     """The recent-turn summary if still fresh, else None (session expired)."""
     session = _session()
@@ -850,6 +866,13 @@ async def handle_command(command: str, followup: bool = False,
         # intent here, not a shortcut around one.
         parsed = cover
         log.info("deterministic cover_set bypassed classifier: %r", command)
+    elif (cover := intent_mod.fast_parse_cover_followup(
+            command, session_last_cover())) is not None:
+        # The blind came from this room's previous turn; only the level was
+        # said now ("Fifty percent close.", live 2026-11-25).
+        parsed = cover
+        log.info("cover follow-up on %s bypassed classifier: %r",
+                 cover["cover_target"], command)
     elif covers_mod.has_level_request(command):
         # An unsupported position request must not lose its amount in the
         # classifier and become a fully-open/closed button press.
@@ -1359,6 +1382,19 @@ async def handle_command(command: str, followup: bool = False,
             hc_result = await home_mod.handle(parsed, command, _CUR_SAT.get())
         except Exception as exc:  # noqa: BLE001 — HA down/slow; still refuse below
             log.warning("home control failed: %s", exc)
+        named_cover = None
+        for text in (command, parsed.get("query")):
+            named_cover = named_cover or covers_mod.find_target(text or "", _CUR_SAT.get())
+        if (hc_result and not hc_result.get("ok") and named_cover
+                and (covers_mod.has_level_request(command)
+                     or covers_mod.has_level_request(parsed.get("query") or ""))):
+            # The blind was heard and only the position wasn't: name it and
+            # let a bare "fifty percent closed" finish the job.
+            hc_result["response"] = (
+                f"I got the {covers_mod.spoken(named_cover)}, but not the "
+                "position. Say something like 50 percent open.")
+        if named_cover and (hc_result or {}).get("ok") is not None:
+            session_set_cover(named_cover)
         if hc_result:
             proposal = hc_result.pop("_comfort_proposal", None)
             if proposal is not None:
@@ -1382,6 +1418,7 @@ async def handle_command(command: str, followup: bool = False,
             log.warning("cover set failed: %s", exc)
         if cover_result:
             result.update(cover_result)
+            session_set_cover(parsed.get("cover_target"))
         else:
             result["response"] = "Sorry, I couldn't move that blind."
             result["ok"] = False

@@ -163,6 +163,20 @@ def has_level_request(phrase: str) -> bool:
                      phrase[:noun.start()])))
 
 
+def find_target(phrase: str, sat: str | None = None) -> str | None:
+    """The blind a whole command names, or None: the longest run of words
+    that resolve() accepts exactly. Used only to remember which blind a turn
+    was about, so a follow-up "fifty percent closed" has a target. Same exact
+    alias rules as resolve(); no fuzz."""
+    words = re.sub(r"[^a-z0-9' ]+", " ", (phrase or "").lower()).split()
+    for size in range(min(len(words), 6), 0, -1):
+        for start in range(len(words) - size + 1):
+            target = resolve(" ".join(words[start:start + size]), sat)
+            if target is not None:
+                return target
+    return None
+
+
 # Words ASR reliably substitutes for a blind's name. Cohere wrote "sink" as
 # "sync" twice in a row on 2026-10-31 ("close the sync blind" then closed all
 # four kitchen blinds). Nothing the house controls is called "sync", so the

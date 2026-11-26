@@ -307,3 +307,95 @@ class CoverLevelDispatchTest(_SlotTestBase):
         for phrase in ("close the two small blinds", "close the big one",
                        "why is the sliding door 50 percent open"):
             self.assertFalse(covers.has_level_request(phrase))
+
+
+class CoverFollowupParseTest(unittest.TestCase):
+    """The level alone, applied to the blind the previous turn named."""
+
+    def test_bare_levels(self):
+        cases = {
+            "Fifty percent close.": 50,
+            "thirty percent closed": 70,
+            "30 percent": 30,
+            "make it 30 closed": 70,
+            "actually twenty percent open": 20,
+            "close it to 80 percent": 20,
+            "set them to eighty five percent": 85,
+            "halfway": 50,
+            "half closed": 50,
+            "lower it to 60": 40,
+            "no make that 25 percent down": 75,
+        }
+        for text, position in cases.items():
+            with self.subTest(text=text):
+                parsed = intent.fast_parse_cover_followup(text, "blind_slider")
+                self.assertIsNotNone(parsed)
+                self.assertEqual((parsed["intent"], parsed["cover_target"],
+                                  parsed["cover_position"]),
+                                 ("cover_set", "blind_slider", position))
+
+    def test_needs_a_target_and_a_real_level(self):
+        self.assertIsNone(intent.fast_parse_cover_followup("fifty percent", None))
+        for text in ("fifty", "half", "thanks", "turn on the lights",
+                     "set a timer for 5 minutes", "130 percent",
+                     "20.5 percent", "minus 20 percent closed", "-20 percent"):
+            with self.subTest(text=text):
+                self.assertIsNone(
+                    intent.fast_parse_cover_followup(text, "blind_slider"))
+
+    def test_find_target_names_the_blind_in_a_whole_command(self):
+        self.assertEqual(covers.find_target(
+            "Okay, Peter set the sliding kitchen blind to fifty-ish", "familyroom"),
+            "blind_slider")
+        self.assertEqual(covers.find_target("close the sliding window by 20"),
+                         "blind_slider")
+        self.assertIsNone(covers.find_target("turn on the family room lights",
+                                             "familyroom"))
+
+
+class CoverFollowupDispatchTest(_SlotTestBase):
+    def setUp(self):
+        super().setUp()
+        token = app._CUR_SAT.set("familyroom")
+        self.addCleanup(app._CUR_SAT.reset, token)
+        for target, attr in ((covers, "_set_position"),
+                             (home_control, "_press")):
+            p = patch.object(target, attr, new=AsyncMock())
+            setattr(self, attr.strip("_"), p.start())
+            self.addCleanup(p.stop)
+        app._SESSIONS.pop("familyroom", None)
+        self.addCleanup(app._SESSIONS.pop, "familyroom", None)
+
+    def test_level_follows_a_refused_position_request(self):
+        """2026-11-25: blind heard, number missed, then "Fifty percent close."."""
+        with patch.object(intent, "parse", new=AsyncMock()) as classify:
+            first = self._run("close the sliding window by 20")
+            self.assertFalse(first["ok"])
+            self.assertIn("sliding door blind", first["response"])
+            second = self._run("Fifty percent close.", followup=True)
+            classify.assert_not_awaited()
+        self.assertTrue(second["ok"])
+        self.assertEqual(second["intent"], "cover_set")
+        self.set_position.assert_awaited_once_with(
+            ["cover.kitchen_sliding_kitchen_door"], 50)
+
+    def test_level_adjusts_a_blind_just_moved(self):
+        self._run("set the sliding door to 50 percent")
+        self._run("make it 30 closed", followup=True)
+        self.assertEqual(self.set_position.await_args.args,
+                         (["cover.kitchen_sliding_kitchen_door"], 70))
+
+    def test_no_blind_in_session_means_no_move(self):
+        with patch.object(intent, "parse", new=AsyncMock(
+                return_value=intent.validate({"intent": "none"}))):
+            result = self._run("fifty percent closed", followup=True)
+        self.set_position.assert_not_awaited()
+        self.assertNotEqual(result["intent"], "cover_set")
+
+    def test_session_expires(self):
+        self._run("set the sliding door to 50 percent")
+        app._session()["cover_ts"] -= app.SESSION_TTL_S + 1
+        with patch.object(intent, "parse", new=AsyncMock(
+                return_value=intent.validate({"intent": "none"}))):
+            self._run("thirty percent closed", followup=True)
+        self.set_position.assert_awaited_once()   # only the first turn
