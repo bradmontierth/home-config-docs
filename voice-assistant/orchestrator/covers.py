@@ -20,6 +20,9 @@ fully up -- but nobody says "close the blind to 20 percent" meaning "leave it
     "close the blinds to 80"  -> position 20   (mostly down)
     "set the blinds to 80"    -> position 80   (bare verb = openness, as HA
                                                 and the dashboard show it)
+    "set the blinds to 30 closed" -> position 70   (a trailing open/closed/
+                                                up/down says what the number
+                                                measures and beats the verb)
 
 Parsing lives in intent.fast_parse_cover_level, next to the other deterministic
 grammars; this module owns only the targets and the call.
@@ -63,7 +66,7 @@ _TARGETS: dict[str, dict] = {
     "blind_slider": {
         "entities": ["cover.kitchen_sliding_kitchen_door"],
         "aliases": ["sliding door blind", "sliding door", "slider",
-                    "slider blind", "big blind", "big one", "door blind",
+                    "slider blind", "sliding blind", "big blind", "big one", "door blind",
                     "sliding window", "large sliding window",
                     "sliding door shade", "sliding door shades",
                     "sliding door blinds", "sliding window blind",

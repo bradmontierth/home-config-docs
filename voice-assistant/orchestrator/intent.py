@@ -1015,19 +1015,19 @@ _COVER_LEVEL_RE = re.compile(
     rf"^(?P<verb>{_COVER_VERBS})\s+(?P<target>.+?)\s+"
     r"(?:to|at)\s+(?:about\s+|around\s+|like\s+)?"
     r"(?P<amount>[a-z0-9 ]+?)(?:\s*(?:percent|per cent))?"
-    r"(?:\s+(?:open|closed|down|up))?$"
+    r"(?:\s+(?P<state>open|closed|close|down|up))?$"
 )
 _COVER_HALF_RE = re.compile(
     rf"^(?P<verb>{_COVER_VERBS})\s+(?P<target>.+?)\s+"
     r"(?:half\s?way|half\s+down|half\s+up|to\s+half)"
-    r"(?:\s+(?:open|closed|down|up))?$"
+    r"(?:\s+(?P<state>open|closed|close|down|up))?$"
 )
 _COVER_BARE_LEVEL_RE = re.compile(
     rf"^(?P<verb>{_COVER_VERBS})\s+(?P<target>.+?)\s+"
     r"(?P<amount>\d+|(?:twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety)"
     r"\s+(?:one|two|three|four|five|six|seven|eight|nine)|"
     + "|".join(_NUM_WORDS) + r")"
-    r"(?:\s*(?:percent|per cent))?(?:\s+(?:open|closed|down|up))?$"
+    r"(?:\s*(?:percent|per cent))?(?:\s+(?P<state>open|closed|close|down|up))?$"
 )
 
 
@@ -1060,7 +1060,15 @@ def fast_parse_cover_level(command: str, sat: str | None = None) -> dict | None:
     if re.search(r"(?<!\w)[+-]\s*\d|\d[.,]\d", command or ""):
         return None
     text = _fast_clean(command)
-    for pattern in (_COVER_LEVEL_RE, _COVER_HALF_RE, _COVER_BARE_LEVEL_RE):
+    texts = [text]
+    # A wake word the ASR misheard rides along at the front ("Okay, Peter set
+    # the sliding door to 50 percent", 2026-11-25). _fast_clean drops the
+    # "okay"; drop the one stray word after it too, but only as a retry -- the
+    # grammar still has to match from a real verb after it.
+    if re.match(r"^\W*(?:okay|ok|hey)\b", (command or "").lower()) and " " in text:
+        texts.append(text.split(" ", 1)[1])
+    for pattern, text in ((p, t) for t in texts for p in (
+            _COVER_LEVEL_RE, _COVER_HALF_RE, _COVER_BARE_LEVEL_RE)):
         match = pattern.fullmatch(text)
         if not match:
             continue
@@ -1072,8 +1080,17 @@ def fast_parse_cover_level(command: str, sat: str | None = None) -> dict | None:
         if target is None:
             return None
         verb = match.group("verb")
-        # Openness is what HA stores, so a "close" verb is the complement.
-        position = 100 - amount if verb in _COVER_VERBS_CLOSE else amount
+        state = match.group("state")
+        # Openness is what HA stores, so a "close" verb is the complement. A
+        # trailing state word says what the number measures and beats the
+        # verb: "set it to 30 closed" is 70 open, "close it to 70 open" is 70.
+        if state in ("closed", "close", "down"):
+            closing = True
+        elif state in ("open", "up"):
+            closing = False
+        else:
+            closing = verb in _COVER_VERBS_CLOSE
+        position = 100 - amount if closing else amount
         return _validate({"intent": "cover_set", "cover_target": target,
                           "cover_position": position})
     return None

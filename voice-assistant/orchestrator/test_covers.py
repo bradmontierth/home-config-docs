@@ -107,6 +107,40 @@ class CoverLevelParseTest(unittest.TestCase):
             with self.subTest(text=text):
                 self.assertEqual(_parse(text)["cover_position"], position)
 
+    def test_trailing_state_word_beats_the_verb(self):
+        """2026-11-25: "set the sliding door to 30 closed" moved it to 30 open."""
+        cases = {
+            "set the sliding door to 30 closed": 70,
+            "set the sliding door to 30 percent close": 70,
+            "set the sink blind to 20 down": 80,
+            "close the sink blind to 70 percent open": 70,
+            "close the sink blind to 70 percent closed": 30,
+            "set the sink blind halfway closed": 50,
+        }
+        for text, position in cases.items():
+            with self.subTest(text=text):
+                self.assertEqual(_parse(text)["cover_position"], position)
+
+    def test_recorded_2026_11_25_family_room_misses(self):
+        for phrase, position in (
+            ("Okay, Peter set the sliding kitchen blind to 50% close.", 50),
+            ("Okay, Peter set the sliding kitchen blind to 30% close.", 70),
+            ("set the sliding door to 50 closed", 50),
+            ("set the sliding blind to 40 percent", 40),
+        ):
+            with self.subTest(phrase=phrase):
+                parsed = _parse(phrase, "familyroom")
+                self.assertIsNotNone(parsed)
+                self.assertEqual((parsed["cover_target"], parsed["cover_position"]),
+                                 ("blind_slider", position))
+
+    def test_wake_echo_strip_still_needs_a_verb(self):
+        for phrase in ("Okay, Peter the sliding door to 50 percent",
+                       "Peter set the sliding door to 50 percent",
+                       "okay maybe peter set the sliding door to 50"):
+            with self.subTest(phrase=phrase):
+                self.assertIsNone(_parse(phrase))
+
     def test_plain_open_close_still_belongs_to_home_control(self):
         """No level named -> this grammar must not fire at all, or it would
         steal the curated buttons."""
